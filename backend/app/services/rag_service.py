@@ -28,13 +28,14 @@ async def answer_with_rag(
     query_embedding = await get_embedding(query)
 
     # pgvector similarity search — cosine distance
+    # Note: use CAST() instead of ::vector because asyncpg treats :: as a param prefix
     sql = text("""
-        SELECT chunk_text, 1 - (embedding <=> :embedding::vector) AS similarity
+        SELECT chunk_text, 1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
         FROM knowledge_base
         WHERE advertiser_id = :advertiser_id
           AND is_active = TRUE
           AND embedding IS NOT NULL
-        ORDER BY embedding <=> :embedding::vector
+        ORDER BY embedding <=> CAST(:embedding AS vector)
         LIMIT 5
     """)
 
