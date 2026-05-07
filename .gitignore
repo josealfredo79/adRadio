@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables (NEVER commit secrets)
+.env
+.env.*
+!.env.example
+
+# Alembic
+# (keep versions but ignore cache)
+backend/alembic/__pycache__/
+
+# Logs
+*.log
+logs/
+/tmp/
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.vscode/settings.json
+.idea/
+*.sublime-*
+
+# Docker
+*.override.yml
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Uploads / media
+uploads/
+media/

@@ -1,0 +1,139 @@
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import api from '@/lib/api'
+import { CheckCircle, Zap } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils'
+
+interface Plan {
+  name: string
+  price: number
+  messages: number
+  days: number
+}
+
+const PLAN_FEATURES: Record<string, string[]> = {
+  starter: ['200 mensajes/mes', 'Bot IA básico', 'Importar CSV', 'Campañas manuales'],
+  pro: [
+    '1,000 mensajes/mes',
+    'Bot IA con RAG',
+    'Claude genera contenido',
+    'Flyers con IA',
+    'Métricas avanzadas',
+    'Cupones QR',
+  ],
+  business: [
+    '3,000 mensajes/mes',
+    'Todo del plan Pro',
+    'A/B testing',
+    'Sugerencias de leads',
+    'Soporte prioritario',
+  ],
+  enterprise: [
+    '10,000 mensajes/mes',
+    'Todo del plan Business',
+    'Multi-número',
+    'White-label',
+    'API acceso',
+    'Gerente de cuenta dedicado',
+  ],
+}
+
+export default function PlansPage() {
+  const [loading, setLoading] = useState<string | null>(null)
+
+  const { data: plans } = useQuery<Record<string, Plan>>({
+    queryKey: ['plans'],
+    queryFn: () => api.get('/plans').then((r) => r.data),
+  })
+
+  const handleSubscribe = async (planKey: string) => {
+    setLoading(planKey)
+    try {
+      const { data } = await api.post('/checkout/create-session', { plan: planKey })
+      window.location.href = data.checkout_url
+    } catch (err: any) {
+      alert(err.response?.data?.detail ?? 'Error al iniciar pago')
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const planOrder = ['starter', 'pro', 'business', 'enterprise']
+
+  return (
+    <div className="space-y-8">
+      <div className="text-center">
+        <h1 className="text-3xl font-bold text-gray-900">Planes AdRadio</h1>
+        <p className="mt-2 text-gray-500">
+          Elige el plan que mejor se adapte a tu negocio. Sin contratos, cancela cuando quieras.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+        {planOrder.map((key) => {
+          const plan = plans?.[key]
+          if (!plan) return null
+          const isPro = key === 'pro'
+          const features = PLAN_FEATURES[key] ?? []
+
+          return (
+            <div
+              key={key}
+              className={`relative rounded-2xl border p-6 ${
+                isPro
+                  ? 'border-brand-500 shadow-xl shadow-brand-100 bg-white'
+                  : 'border-gray-200 bg-white shadow-sm'
+              }`}
+            >
+              {isPro && (
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-brand-500 px-3 py-1 text-xs font-bold text-white">
+                    <Zap className="h-3 w-3" /> MÁS POPULAR
+                  </span>
+                </div>
+              )}
+
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
+                <div className="mt-2 flex items-baseline gap-1">
+                  <span className="text-4xl font-bold text-gray-900">
+                    {formatCurrency(plan.price)}
+                  </span>
+                  <span className="text-gray-500">/mes</span>
+                </div>
+                <p className="mt-1 text-sm text-gray-500">{plan.messages.toLocaleString()} mensajes</p>
+              </div>
+
+              <ul className="mb-6 space-y-2">
+                {features.map((feat) => (
+                  <li key={feat} className="flex items-start gap-2 text-sm text-gray-600">
+                    <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                    {feat}
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                onClick={() => handleSubscribe(key)}
+                disabled={loading === key}
+                className={`w-full rounded-xl py-2.5 text-sm font-medium transition-colors ${
+                  isPro
+                    ? 'bg-brand-500 text-white hover:bg-brand-600 shadow'
+                    : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                } disabled:opacity-60`}
+              >
+                {loading === key ? 'Procesando...' : 'Suscribirme'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="rounded-xl bg-gray-50 border border-gray-200 p-6 text-center">
+        <p className="text-sm text-gray-600">
+          💳 Pago seguro con Stripe · 🔒 Sin contratos · ↩️ Garantía de devolución 7 días
+        </p>
+      </div>
+    </div>
+  )
+}
