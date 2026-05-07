@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     # PostHog
     POSTHOG_API_KEY: str = ""
 
+    # Backend public base URL (used to generate audio URLs for WhatsApp/Twilio)
+    # Set to the tunnel or production URL, e.g. https://my-tunnel.loca.lt
+    BASE_URL: str = "http://localhost:8000"
+
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
 

@@ -12,7 +12,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.redis import close_redis
-from app.api.v1 import auth, contacts, campaigns, knowledge_base, webhooks, profile, payments
+from app.api.v1 import auth, contacts, campaigns, knowledge_base, webhooks, profile, payments, radio
 
 if settings.SENTRY_DSN:
     sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=0.1)
@@ -52,6 +52,7 @@ app.include_router(campaigns.router, prefix=settings.API_PREFIX)
 app.include_router(knowledge_base.router, prefix=settings.API_PREFIX)
 app.include_router(payments.router, prefix=settings.API_PREFIX)
 app.include_router(webhooks.router, prefix=settings.API_PREFIX)
+app.include_router(radio.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health")

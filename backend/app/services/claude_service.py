@@ -47,7 +47,7 @@ Intención del anunciante: {intent}
 Devuelve solo las 3 variantes, separadas por "---", sin numeración ni explicaciones adicionales."""
 
     message = await client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-opus-4-5",
         max_tokens=600,
         temperature=0.7,
         system=CAMPAIGN_SYSTEM_PROMPT,
@@ -90,7 +90,7 @@ Reglas estrictas:
     ]
 
     response = await client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-opus-4-5",
         max_tokens=300,
         temperature=0.3,
         system=system,
@@ -161,7 +161,7 @@ Usa {{{{nombre}}}} para personalizar con el nombre del cliente cuando sea natura
 Devuelve solo los 3 mensajes separados por "---"."""
 
     message = await client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-opus-4-5",
         max_tokens=800,
         temperature=0.7,
         system=SEQUENCE_SYSTEM_PROMPT,
@@ -211,7 +211,7 @@ Usa {{{{nombre}}}} al final del episodio 4 para personalizar la oferta final.
 Devuelve solo los 4 episodios separados por "---"."""
 
     message = await client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-opus-4-5",
         max_tokens=1200,
         temperature=0.8,
         system=SAGA_SYSTEM_PROMPT,

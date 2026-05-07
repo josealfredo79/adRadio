@@ -18,6 +18,7 @@ from app.models.coupon import Coupon
 from app.models.message import Message
 from app.models.user import User
 from app.services.coupon_service import is_redeem_intent, is_expired
+from app.services.number_pool_service import assign_pool_number, release_pool_number
 from app.services.rag_service import answer_with_rag
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -166,6 +167,9 @@ async def twilio_incoming(
         )
         db.add(contact)
         await db.flush()
+        _is_new_contact = True
+    else:
+        _is_new_contact = False
 
     # Save inbound message
     msg = Message(
@@ -228,11 +232,26 @@ async def twilio_incoming(
     await db.commit()
 
     # Send reply via Twilio (async, humanized delay)
-    from app.workers.tasks import send_whatsapp_message
+    from app.workers.tasks import send_whatsapp_message, send_welcome_cuna
     send_whatsapp_message.apply_async(
         args=[str(out_msg.id), from_number, reply],
+        queue="whatsapp",
         countdown=__import__("random").randint(1, 5),
     )
+
+    # New lead: automatically send a radio cuña ~10 seconds after the text reply
+    # This feels natural — like a radio ad that plays right after the greeting
+    if _is_new_contact and advertiser.business_name:
+        send_welcome_cuna.apply_async(
+            kwargs={
+                "advertiser_id": str(advertiser.id),
+                "to": from_number,
+                "business_name": advertiser.business_name,
+                "from_number": advertiser.whatsapp_number,
+            },
+            queue="whatsapp",
+            countdown=10,
+        )
 
     return {"message": "ok"}
 
@@ -337,21 +356,9 @@ async def stripe_webhook(
             user.messages_remaining = plan_messages.get(plan, 0)
             user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=plan_days)
 
-            # Auto-assign a dedicated number from the pool for Pro+ plans
-            if plan in ("pro", "business") and user.whatsapp_number_source == "shared":
-                pool = settings.twilio_number_pool_list
-                if pool:
-                    taken_result = await db.execute(
-                        select(User.whatsapp_number).where(
-                            User.whatsapp_number_source == "pool",
-                            User.whatsapp_number.isnot(None),
-                        )
-                    )
-                    taken = {row[0] for row in taken_result.all()}
-                    available = [n for n in pool if n not in taken]
-                    if available:
-                        user.whatsapp_number = available[0]
-                        user.whatsapp_number_source = "pool"
+            # Auto-assign a dedicated pool number for any paid plan
+            if user.whatsapp_number_source == "shared":
+                await assign_pool_number(user, db)
 
             # Record transaction
             txn = Transaction(
@@ -401,6 +408,7 @@ async def stripe_webhook(
         if user:
             user.subscription_status = "churned"
             user.messages_remaining = 0
+            await release_pool_number(user, db)  # return number to pool
             await db.commit()
 
     return {"received": True}

@@ -90,6 +90,45 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
 
 
 @celery_app.task(bind=True, max_retries=2)
+def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str, from_number: str | None = None):
+    """Generate a radio cuña and send it as a WhatsApp voice note to a new lead.
+
+    Triggered automatically on first contact — no keyword required.
+    """
+    async def _run():
+        from app.services.radio_service import generate_radio_ad
+        from app.config import settings
+        from app.services.twilio_service import send_whatsapp_media
+
+        # Generate the cuña audio and upload to R2
+        r2_url = await generate_radio_ad(
+            business_name=business_name,
+            message_or_intent=f"Bienvenido a {business_name}. Descubre nuestras ofertas.",
+            country="mx",
+            mode="classic",
+        )
+        if not r2_url:
+            return
+
+        # Build a publicly-accessible proxy URL through this backend
+        # Extract the R2 object key from the full URL (everything after /radio/)
+        key = r2_url.split("/radio/", 1)[-1]
+        audio_url = f"{settings.BASE_URL.rstrip('/')}/api/v1/radio/audio/{key}"
+
+        await send_whatsapp_media(
+            to,
+            audio_url,
+            body="",
+            from_number=from_number,
+        )
+
+    try:
+        run_async(_run())
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(bind=True, max_retries=2)
 def schedule_campaign(self, campaign_id: str):
     """Process and send all messages for a scheduled campaign.
 
@@ -299,7 +338,9 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
             original.chunk_text = chunks[0] if chunks else text
 
             # Create additional records for each chunk
+            # 22s delay between calls to respect Voyage AI free tier (3 RPM)
             for i, chunk in enumerate(chunks[1:], 1):
+                await asyncio.sleep(22)
                 embedding = await get_embedding(chunk)
                 kb_chunk = KnowledgeBase(
                     advertiser_id=original.advertiser_id,

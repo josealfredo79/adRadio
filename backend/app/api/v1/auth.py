@@ -21,6 +21,7 @@ from app.core.security import (
 )
 from app.database import get_db
 from app.models.user import User
+from app.services.number_pool_service import assign_pool_number
 from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -87,6 +88,10 @@ async def verify_email(
     if user.messages_remaining == 0:
         user.messages_remaining = 50
     await db.commit()
+
+    # Assign a pool number if available (enables inbound bot for this user)
+    await assign_pool_number(user, db)
+
     await redis.delete(f"email_verify:{body.email}")
 
     return {"message": "Email verificado correctamente"}

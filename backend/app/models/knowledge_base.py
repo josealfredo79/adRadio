@@ -20,7 +20,7 @@ class KnowledgeBase(Base):
     file_type: Mapped[str] = mapped_column(String(10))
     raw_text: Mapped[str | None] = mapped_column(Text)
     chunk_text: Mapped[str | None] = mapped_column(Text)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(3072))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024))
     version: Mapped[int] = mapped_column(Integer, default=1)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     processing_status: Mapped[str] = mapped_column(String(20), default="processing")

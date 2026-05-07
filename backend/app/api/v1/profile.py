@@ -17,6 +17,7 @@ from app.models.contact import Contact
 from app.models.message import Message
 from app.models.user import User
 from app.schemas.auth import UserOut
+from app.services.number_pool_service import assign_pool_number, release_pool_number, pool_status
 
 router = APIRouter(tags=["profile"])
 
@@ -145,28 +146,7 @@ async def list_number_pool(
     _admin: User = Depends(require_admin),
 ):
     """List all numbers in the pool and their assignment status."""
-    pool = settings.twilio_number_pool_list
-    if not pool:
-        return {"pool": [], "available": [], "assigned": []}
-
-    # Find which numbers are already assigned
-    result = await db.execute(
-        select(User.whatsapp_number, User.email, User.business_name).where(
-            User.whatsapp_number_source == "pool",
-            User.whatsapp_number.in_(pool),
-        )
-    )
-    assigned_rows = result.all()
-    assigned_map = {row.whatsapp_number: {"email": row.email, "business": row.business_name}
-                    for row in assigned_rows}
-
-    available = [n for n in pool if n not in assigned_map]
-
-    return {
-        "pool": pool,
-        "available": available,
-        "assigned": [{"number": n, **info} for n, info in assigned_map.items()],
-    }
+    return await pool_status(db)
 
 
 @router.post("/admin/users/{user_id}/assign-number")
@@ -177,10 +157,9 @@ async def assign_number_to_user(
     _admin: User = Depends(require_admin),
 ):
     """
-    Assign a dedicated WhatsApp number to a user.
-    body: { "number": "+525511111111" }   → assigns specific number
-    body: { "auto": true }                → picks next available from pool
-    body: { "release": true }             → releases back to pool
+    Assign/release a WhatsApp number for a user.
+    body: { "auto": true }    → picks next free number from pool
+    body: { "release": true } → releases number back to pool
     """
     result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()
@@ -188,34 +167,10 @@ async def assign_number_to_user(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     if body.get("release"):
-        user.whatsapp_number = None
-        user.whatsapp_number_source = "shared"
-        await db.commit()
-        return {"message": "Número liberado — vuelve al número compartido"}
+        await release_pool_number(user, db)
+        return {"message": "Número liberado — usuario vuelve al número compartido"}
 
-    pool = settings.twilio_number_pool_list
-    if not pool:
-        raise HTTPException(status_code=503, detail="Pool de números no configurado (TWILIO_NUMBER_POOL)")
-
-    if body.get("auto"):
-        # Find first unassigned number
-        result2 = await db.execute(
-            select(User.whatsapp_number).where(
-                User.whatsapp_number_source == "pool",
-                User.whatsapp_number.in_(pool),
-            )
-        )
-        taken = {row[0] for row in result2.all()}
-        available = [n for n in pool if n not in taken]
-        if not available:
-            raise HTTPException(status_code=409, detail="No hay números disponibles en el pool")
-        number = available[0]
-    else:
-        number = body.get("number", "").strip()
-        if number not in pool:
-            raise HTTPException(status_code=400, detail=f"{number} no está en TWILIO_NUMBER_POOL")
-
-    user.whatsapp_number = number
-    user.whatsapp_number_source = "pool"
-    await db.commit()
-    return {"message": f"Número {number} asignado a {user.email}", "number": number}
+    assigned = await assign_pool_number(user, db)
+    if not assigned:
+        raise HTTPException(status_code=409, detail="Pool agotado o no configurado (TWILIO_NUMBER_POOL)")
+    return {"message": f"Número {user.whatsapp_number} asignado a {user.email}", "number": user.whatsapp_number}
