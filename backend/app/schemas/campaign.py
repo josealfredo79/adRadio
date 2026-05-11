@@ -12,6 +12,7 @@ class CampaignCreate(BaseModel):
     segment: dict = {}
     schedule: dict = {}
     ab_test: dict = {"enabled": False}
+    status: str = "draft"
 
 
 class CampaignUpdate(BaseModel):

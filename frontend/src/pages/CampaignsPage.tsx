@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, ListOrdered, Ticket } from 'lucide-react'
+import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, ListOrdered, Ticket, CalendarClock, BarChart2, X } from 'lucide-react'
 
 interface Campaign {
   id: string
@@ -76,7 +76,9 @@ export default function CampaignsPage() {
   const [radioCountry, setRadioCountry] = useState('mx')
   const [radioAudioUrl, setRadioAudioUrl] = useState('')
   const [radioScript, setRadioScript] = useState('')
+  const [scheduledAt, setScheduledAt] = useState('')
   const [error, setError] = useState('')
+  const [analyticsId, setAnalyticsId] = useState<string | null>(null)
 
   const { data: campaigns, isLoading } = useQuery<Campaign[]>({
     queryKey: ['campaigns'],
@@ -107,7 +109,8 @@ export default function CampaignsPage() {
     setMode('regular'); setVariants([]); setMultiMessages([])
     setIntent(''); setProductDesc(''); setProtagonist('María')
     setHasCoupon(false); setCouponDesc(''); setCouponHours(72)
-    setRadioCountry('mx'); setRadioAudioUrl(''); setRadioScript(''); setError('')
+    setRadioCountry('mx'); setRadioAudioUrl(''); setRadioScript('')
+    setScheduledAt(''); setError('')
   }
 
   const generateContent = async () => {
@@ -159,8 +162,18 @@ export default function CampaignsPage() {
       ab_test.audio_url = radioAudioUrl
       ab_test.radio_script = radioScript
     }
-    createMutation.mutate({ ...form, message_text: form.message_text || radioScript, ab_test })
+    const schedule = scheduledAt ? { start_date: new Date(scheduledAt).toISOString() } : {}
+    const campaignStatus = scheduledAt ? 'scheduled' : 'draft'
+    createMutation.mutate({
+      ...form,
+      message_text: form.message_text || radioScript,
+      ab_test,
+      schedule,
+      status: campaignStatus,
+    })
   }
+
+  const analyticsTarget = campaigns?.find((c) => c.id === analyticsId)
 
   const isMultiMode = mode === 'sequence' || mode === 'saga'
   const isRadioMode = mode === 'radio' || mode === 'comunitaria'
@@ -276,6 +289,10 @@ export default function CampaignsPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 ml-4">
+                  <button onClick={() => setAnalyticsId(campaign.id)}
+                    className="rounded-lg border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-50 transition-colors">
+                    <BarChart2 className="h-3.5 w-3.5" />
+                  </button>
                   {campaign.status === 'running' && (
                     <button onClick={() => pauseMutation.mutate(campaign.id)}
                       className="rounded-lg border border-yellow-200 bg-yellow-50 p-1.5 text-yellow-600 hover:bg-yellow-100">
@@ -523,6 +540,26 @@ export default function CampaignsPage() {
                 )}
               </div>
 
+              {/* Programación */}
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                <label className="mb-2 flex items-center gap-2 text-sm font-medium text-blue-800">
+                  <CalendarClock className="h-4 w-4" />
+                  Programar envío (opcional)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  min={new Date().toISOString().slice(0, 16)}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                />
+                {scheduledAt && (
+                  <p className="mt-1.5 text-xs text-blue-600">
+                    La campaña se enviará el {new Date(scheduledAt).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' })}
+                  </p>
+                )}
+              </div>
+
               {error && <p className="text-sm text-red-600">{error}</p>}
             </div>
 
@@ -534,9 +571,65 @@ export default function CampaignsPage() {
               <button onClick={handleCreate}
                 disabled={createMutation.isPending || !readyToCreate}
                 className="flex-1 rounded-lg bg-brand-500 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60">
-                {createMutation.isPending ? 'Creando...' : 'Crear campaña'}
+                {createMutation.isPending ? 'Creando...' : scheduledAt ? 'Programar campaña' : 'Crear campaña'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Modal */}
+      {analyticsTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAnalyticsId(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">{analyticsTarget.name}</h3>
+                <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[analyticsTarget.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                  {STATUS_LABELS[analyticsTarget.status] ?? analyticsTarget.status}
+                </span>
+              </div>
+              <button onClick={() => setAnalyticsId(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Stat rows */}
+            {(() => {
+              const s = analyticsTarget.stats
+              const sent = s.sent ?? 0
+              const rows = [
+                { label: 'Enviados', value: sent, color: 'bg-blue-400', pct: 100 },
+                { label: 'Entregados', value: s.delivered ?? 0, color: 'bg-green-400', pct: sent > 0 ? ((s.delivered ?? 0) / sent) * 100 : 0 },
+                { label: 'Leídos', value: s.read ?? 0, color: 'bg-indigo-400', pct: sent > 0 ? ((s.read ?? 0) / sent) * 100 : 0 },
+                { label: 'Respondidos', value: s.replied ?? 0, color: 'bg-brand-500', pct: sent > 0 ? ((s.replied ?? 0) / sent) * 100 : 0 },
+                { label: 'Fallidos', value: s.failed ?? 0, color: 'bg-red-400', pct: sent > 0 ? ((s.failed ?? 0) / sent) * 100 : 0 },
+                { label: 'Cupones canjeados', value: s.coupons_redeemed ?? 0, color: 'bg-amber-400', pct: sent > 0 ? ((s.coupons_redeemed ?? 0) / sent) * 100 : 0 },
+              ]
+              return (
+                <div className="space-y-3">
+                  {rows.map((r) => (
+                    <div key={r.label}>
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="text-gray-600">{r.label}</span>
+                        <span className="font-semibold text-gray-900">
+                          {r.value.toLocaleString()} {sent > 0 && r.label !== 'Enviados' && <span className="text-xs font-normal text-gray-400">({Math.round(r.pct)}%)</span>}
+                        </span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                        <div className={`h-full rounded-full transition-all ${r.color}`} style={{ width: `${Math.min(100, r.pct)}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+
+            {analyticsTarget.schedule?.start_date && (
+              <p className="mt-4 text-xs text-gray-400">
+                Programada para {new Date(analyticsTarget.schedule.start_date).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' })}
+              </p>
+            )}
           </div>
         </div>
       )}

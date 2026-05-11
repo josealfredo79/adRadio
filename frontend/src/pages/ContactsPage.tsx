@@ -18,6 +18,7 @@ interface Contact {
 export default function ContactsPage() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', email: '', city: '' })
   const [error, setError] = useState('')
@@ -45,8 +46,11 @@ export default function ContactsPage() {
 
   const filtered = data?.items.filter(
     (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.phone.includes(search)
+      (statusFilter === 'all' || c.status === statusFilter) &&
+      (
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.phone.includes(search)
+      )
   ) ?? []
 
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,6 +113,33 @@ export default function ContactsPage() {
             Agregar
           </button>
         </div>
+      </div>
+
+      {/* Status filter tabs */}
+      <div className="flex gap-1.5 flex-wrap">
+        {[
+          { key: 'all', label: 'Todos', count: data?.total ?? 0 },
+          { key: 'active', label: 'Activos', count: data?.items.filter((c) => c.status === 'active').length ?? 0 },
+          { key: 'unsubscribed', label: 'Bajas', count: data?.items.filter((c) => c.status === 'unsubscribed').length ?? 0 },
+          { key: 'blocked', label: 'Bloqueados', count: data?.items.filter((c) => c.status === 'blocked').length ?? 0 },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setStatusFilter(tab.key)}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              statusFilter === tab.key
+                ? 'bg-brand-500 text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:border-brand-300'
+            }`}
+          >
+            {tab.label}
+            <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[11px] ${
+              statusFilter === tab.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+            }`}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Search */}

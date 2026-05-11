@@ -1,0 +1,43 @@
+{
+  "name": "IaRadio",
+  "short_name": "IaRadio",
+  "description": "Radio Publicitaria Inteligente por WhatsApp",
+  "start_url": "/app/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "categories": ["business", "marketing"],
+  "lang": "es-MX",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Campañas",
+      "short_name": "Campañas",
+      "description": "Ver mis campañas",
+      "url": "/app/campaigns",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Inbox",
+      "short_name": "Inbox",
+      "description": "Mensajes WhatsApp",
+      "url": "/app/inbox",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Contactos",
+      "short_name": "Contactos",
+      "description": "Gestionar contactos",
+      "url": "/app/contacts",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    }
+  ]
+}
