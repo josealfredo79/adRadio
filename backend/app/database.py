@@ -8,6 +8,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=5,       # 3 servicios × 5 = 15 conexiones — seguro en Neon free tier
     max_overflow=10,   # burst máximo de 15 conexiones extra en picos
+    pool_recycle=300,  # recicla conexiones antes del timeout idle de Neon (~5 min)
 )
 
 AsyncSessionLocal = async_sessionmaker(

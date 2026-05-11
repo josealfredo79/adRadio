@@ -109,12 +109,13 @@ export default function RadioSphere3D() {
 
     // ── Animation loop ───────────────────────────────────────
     const RING_DURATION = 3.5 // seconds per ring expansion
-    const clock = new THREE.Clock()
+    const timer = new THREE.Timer()
     let animId: number
 
     const animate = () => {
       animId = requestAnimationFrame(animate)
-      const t = clock.getElapsedTime()
+      timer.update()
+      const t = timer.getElapsed()
 
       // Slowly rotate core
       coreMesh.rotation.y = t * 0.12
@@ -151,6 +152,7 @@ export default function RadioSphere3D() {
 
     return () => {
       cancelAnimationFrame(animId)
+      timer.dispose()
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('resize', onResize)
       renderer.dispose()
