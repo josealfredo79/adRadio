@@ -77,3 +77,4 @@ class GenerateRadioAdRequest(BaseModel):
     intent: str
     country: str = "mx"  # mx | co | ar | es
     mode: str = "classic"  # "classic" | "comunitaria"
+    business_category: str | None = None  # inmobiliaria, restaurante, tienda, etc.

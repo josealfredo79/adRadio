@@ -244,6 +244,36 @@ export default function CampaignsPage() {
                     <span>💬 {campaign.stats.replied ?? 0} respondidos</span>
                     <span>🎫 {campaign.stats.coupons_redeemed ?? 0} canjeados</span>
                   </div>
+                  {(campaign.stats.sent ?? 0) > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center gap-4">
+                      {/* Delivery rate */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 whitespace-nowrap">Entrega</span>
+                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-gray-100">
+                          <div
+                            className="h-full rounded-full bg-green-400 transition-all"
+                            style={{ width: `${Math.min(100, Math.round(((campaign.stats.delivered ?? 0) / campaign.stats.sent) * 100))}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-semibold text-green-600">
+                          {Math.round(((campaign.stats.delivered ?? 0) / campaign.stats.sent) * 100)}%
+                        </span>
+                      </div>
+                      {/* Response rate */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 whitespace-nowrap">Respuesta</span>
+                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-gray-100">
+                          <div
+                            className="h-full rounded-full bg-brand-500 transition-all"
+                            style={{ width: `${Math.min(100, Math.round(((campaign.stats.replied ?? 0) / campaign.stats.sent) * 100))}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-semibold text-brand-600">
+                          {Math.round(((campaign.stats.replied ?? 0) / campaign.stats.sent) * 100)}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 ml-4">
                   {campaign.status === 'running' && (

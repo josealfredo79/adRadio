@@ -1,109 +1,280 @@
-# AdRadio v2.0 — Plataforma SaaS de Publicidad Inteligente por WhatsApp
+<div align="center">
 
-**Stack:** React 18 + FastAPI + Neon PostgreSQL + pgvector + Celery + Redis + Claude 3.5 Sonnet + Twilio
+# IaRadio
+
+**Radio Publicitaria Inteligente por WhatsApp**
+
+Plataforma SaaS que permite a cualquier negocio crear, enviar y medir campañas de audio publicitarias por WhatsApp — con IA generativa, base de conocimiento propia y atención automatizada 24/7.
+
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+pgvector-4169E1?logo=postgresql&logoColor=white)](https://postgresql.org)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docker.com)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+
+</div>
+
+---
+
+## Qué hace IaRadio
+
+| Característica | Descripción |
+|---|---|
+| 🎙️ **Cuñas de radio con IA** | Genera guiones publicitarios con Claude 3.5 y los convierte a audio con Fish Audio TTS |
+| 📢 **Campañas masivas** | Envía mensajes de audio personalizados a segmentos de contactos vía WhatsApp Business |
+| 🤖 **Bot conversacional** | Responde preguntas de clientes usando RAG sobre la base de conocimiento del negocio |
+| 📊 **Analytics en tiempo real** | KPIs de entrega, apertura y respuesta cacheados en Redis |
+| 🛒 **Gestión de pedidos** | Estado de pedidos vía WhatsApp con flujo automatizado de 4 pasos |
+| 💳 **Suscripciones Stripe** | Planes Free → Starter → Pro con pagos y webhooks validados |
+| 📋 **Base de conocimiento** | Sube PDFs, Word o texto plano → embeddings Voyage AI → búsqueda semántica |
+
+---
+
+## Arquitectura
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Railway / Docker                    │
+│                                                         │
+│  ┌───────────────┐   ┌─────────────┐  ┌─────────────┐  │
+│  │ FastAPI :8000 │   │Celery Worker│  │ Celery Beat │  │
+│  │  + React SPA  │   │(tasks async)│  │ (scheduled) │  │
+│  └──────┬────────┘   └──────┬──────┘  └──────┬──────┘  │
+│         │                   │                │          │
+│  ┌──────▼───────────────────▼────────────────▼──────┐   │
+│  │              Redis  (cache + broker)             │   │
+│  └──────────────────────────┬───────────────────────┘   │
+│                             │                           │
+│  ┌──────────────────────────▼───────────────────────┐   │
+│  │         Neon PostgreSQL 16 + pgvector            │   │
+│  └──────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+         │                              │
+    Twilio WhatsApp              Cloudflare R2
+    (envío/recepción)            (audio, archivos)
+```
+
+**Servicios externos:** Anthropic Claude · Voyage AI · Fish Audio · Stripe · Twilio · Cloudflare R2 · Neon · Sentry
+
+---
 
 ## Estructura del proyecto
 
 ```
-adradio/
-├── backend/              # FastAPI + Celery
+iaradio/
+├── Dockerfile                  # Multi-stage: Node 20 build → Python 3.12 serve
+├── docker-entrypoint.sh        # Detecta SERVICE_ROLE (api / worker / beat)
+├── docker-compose.yml          # Stack local completo
+├── railway.toml                # Configuración Railway
+│
+├── backend/
 │   ├── app/
-│   │   ├── api/v1/       # Endpoints REST
-│   │   ├── models/       # SQLAlchemy ORM
-│   │   ├── schemas/      # Pydantic schemas
-│   │   ├── services/     # Claude, RAG, Twilio, Stripe, R2
-│   │   ├── workers/      # Celery tasks
-│   │   ├── core/         # Auth, email, Redis
-│   │   └── main.py
+│   │   ├── api/v1/             # Routers REST (auth, contacts, campaigns…)
+│   │   ├── core/               # JWT, email, Redis
+│   │   ├── models/             # SQLAlchemy ORM (User, Contact, Campaign…)
+│   │   ├── schemas/            # Pydantic v2 schemas
+│   │   ├── services/           # Claude, RAG, Twilio, Stripe, R2, TTS
+│   │   ├── workers/            # Celery app + tasks
+│   │   └── main.py             # FastAPI entry point + SPA catch-all
+│   ├── alembic/                # Migraciones de BD
 │   ├── requirements.txt
-│   ├── Dockerfile
 │   └── .env.example
-├── frontend/             # React + Vite + TailwindCSS
-│   └── src/
-│       ├── pages/        # Login, Register, Dashboard, Campañas, Contactos...
-│       ├── components/   # Layout, componentes reutilizables
-│       ├── contexts/     # AuthContext
-│       └── lib/          # api.ts, utils.ts
-├── docker-compose.yml    # Desarrollo local
-└── railway.toml          # Deploy Railway
+│
+└── frontend/
+    └── src/
+        ├── pages/              # Dashboard, Campañas, Contactos, Inbox, Pedidos…
+        ├── components/         # Layout (mobile-responsive + nav badges)
+        ├── contexts/           # AuthContext (JWT en memoria, XSS-safe)
+        └── lib/                # Axios client con auto-refresh token
 ```
 
-## Setup local rápido
+---
+
+## Inicio rápido (desarrollo local)
+
+### Requisitos
+- Docker Desktop ≥ 24
+
+### 1. Clonar y configurar
 
 ```bash
-# 1. Clonar y entrar al proyecto
-cd adradio
-
-# 2. Configurar backend
-cd backend
-cp .env.example .env
-# Editar .env con tus API keys
-
-# 3. Levantar con Docker Compose (recomendado)
-cd ..
-docker-compose up --build
-
-# 4. Correr migraciones (primera vez)
-docker-compose exec backend alembic upgrade head
-
-# Frontend disponible en: http://localhost:5173
-# API disponible en: http://localhost:8000
-# Docs API: http://localhost:8000/docs (solo en DEBUG=true)
+git clone https://github.com/tu-usuario/iaradio.git
+cd iaradio
+cp backend/.env.example backend/.env
+# Editar backend/.env con tus API keys
 ```
 
-## Variables de entorno requeridas
+### 2. Levantar el stack
 
-Ver `backend/.env.example` para la lista completa.
+```bash
+docker compose up --build
+```
 
-Mínimas para desarrollo:
-- `DATABASE_URL` — Neon PostgreSQL connection string
-- `REDIS_URL` — Redis connection string
-- `SECRET_KEY` — JWT secret (genera con `openssl rand -hex 32`)
-- `ANTHROPIC_API_KEY` — Para Claude IA
-- `OPENAI_API_KEY` — Para embeddings RAG
+| Servicio | URL |
+|---|---|
+| Frontend (React) | http://localhost:5173 |
+| API | http://localhost:8000 |
+| Docs API | http://localhost:8000/docs |
+
+### 3. Primera vez — ejecutar migraciones
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+---
+
+## Variables de entorno
+
+Ver [`backend/.env.example`](backend/.env.example) para la lista completa.
+
+### Mínimas para desarrollo
+
+```env
+DATABASE_URL=postgresql+asyncpg://iaradio:iaradio_dev@localhost/iaradio
+REDIS_URL=redis://localhost:6379/0
+SECRET_KEY=<openssl rand -hex 32>
+ANTHROPIC_API_KEY=sk-ant-...
+VOYAGE_API_KEY=pa-...
+```
+
+### Requeridas en producción
+
+```env
+# Auth & App
+SECRET_KEY=                       # openssl rand -hex 32
+FRONTEND_URL=https://<dominio>.up.railway.app   # para CORS dinámico
+
+# Base de datos
+DATABASE_URL=postgresql+asyncpg://...neon.tech/iaradio?ssl=require
+
+# Cache / broker
+REDIS_URL=redis://...railway.internal:6379
+
+# WhatsApp
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_WHATSAPP_NUMBER=+14155238886
+
+# Pagos
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PUBLISHABLE_KEY=
+
+# IA
+ANTHROPIC_API_KEY=
+VOYAGE_API_KEY=
+FISH_AUDIO_API_KEY=
+
+# Almacenamiento (Cloudflare R2)
+CF_R2_ACCESS_KEY=
+CF_R2_SECRET_KEY=
+CF_R2_BUCKET=iaradio-files
+CF_R2_ENDPOINT=https://<account>.r2.cloudflarestorage.com
+CF_R2_PUBLIC_URL=https://files.iaradio.app
+
+# Email
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=587
+SMTP_USER=resend
+SMTP_PASSWORD=re_...
+FROM_EMAIL=hola@iaradio.app
+```
+
+---
 
 ## Deploy en Railway
 
-1. Crear proyecto en [railway.app](https://railway.app)
-2. Agregar servicio PostgreSQL (o conectar Neon)
-3. Agregar servicio Redis
-4. Conectar repo de GitHub
-5. Configurar variables de entorno
-6. Railway detecta `railway.toml` automáticamente
+### 1 — Sube el código
 
-## API endpoints principales
+```bash
+git add -A && git commit -m "feat: production-ready" && git push
+```
+
+### 2 — Crea el proyecto
+
+[railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → selecciona el repo.
+
+### 3 — Agrega servicios
+
+| Servicio | Cómo crearlo | Variable clave |
+|---|---|---|
+| **Redis** | New Service → Redis (template Railway) | — |
+| **Worker** | New Service → Same Repo | `SERVICE_ROLE=worker` |
+| **Beat** | New Service → Same Repo | `SERVICE_ROLE=beat` |
+
+### 4 — Variables de entorno
+
+Pega el bloque de producción en el servicio principal (`api`).
+
+### 5 — Deploy
+
+Railway ejecuta automáticamente:
+1. `npm run build` (Node 20) → construye la SPA
+2. `pip install` (Python 3.12) → instala dependencias
+3. `alembic upgrade head` → aplica migraciones
+4. `uvicorn app.main:app` → levanta API + SPA en un solo contenedor
+
+---
+
+## API — Endpoints principales
 
 | Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/api/v1/auth/register` | Registro + verificación email |
-| POST | `/api/v1/auth/login` | Login → JWT tokens |
-| GET | `/api/v1/dashboard` | KPIs cacheados en Redis |
-| GET/POST | `/api/v1/contacts` | Gestión de contactos |
-| POST | `/api/v1/contacts/import-csv` | Importación masiva async |
-| GET/POST | `/api/v1/campaigns` | Gestión de campañas |
-| POST | `/api/v1/campaigns/generate-content` | Claude genera 3 variantes |
-| POST | `/api/v1/knowledge-base/upload` | Sube archivo → embeddings |
-| POST | `/api/v1/webhooks/twilio/incoming` | Webhook WhatsApp entrante |
-| POST | `/api/v1/webhooks/stripe` | Webhook pagos Stripe |
-| GET | `/api/v1/plans` | Ver planes disponibles |
-| POST | `/api/v1/checkout/create-session` | Iniciar pago Stripe |
+|---|---|---|
+| `POST` | `/api/v1/auth/register` | Registro + verificación email |
+| `POST` | `/api/v1/auth/login` | Login → JWT tokens |
+| `POST` | `/api/v1/auth/refresh` | Renueva access token con httpOnly cookie |
+| `GET` | `/api/v1/dashboard` | KPIs cacheados en Redis |
+| `GET/POST` | `/api/v1/contacts` | CRUD contactos |
+| `POST` | `/api/v1/contacts/import-csv` | Importación masiva asíncrona |
+| `GET` | `/api/v1/contacts/export-csv` | Exportar contactos a CSV |
+| `GET/POST` | `/api/v1/campaigns` | CRUD campañas |
+| `POST` | `/api/v1/campaigns/generate-content` | Claude genera 3 variantes de guión |
+| `POST` | `/api/v1/campaigns/{id}/send` | Envío masivo vía Celery |
+| `GET` | `/api/v1/conversations` | Inbox WhatsApp paginado |
+| `POST` | `/api/v1/conversations/{id}/reply` | Responder desde el inbox |
+| `POST` | `/api/v1/knowledge-base/upload` | Sube archivo → embeddings automáticos |
+| `POST` | `/api/v1/radio/generate` | Genera cuña de radio con audio |
+| `GET/PATCH` | `/api/v1/orders` | Gestión de pedidos WhatsApp |
+| `POST` | `/api/v1/webhooks/twilio` | Webhook WhatsApp entrante (firma validada) |
+| `POST` | `/api/v1/webhooks/stripe` | Webhook pagos Stripe (firma validada) |
+| `GET` | `/health` | Health check |
 
-## Seguridad implementada
+---
 
-- ✅ JWT access token 1h + refresh token 7d con rotación
-- ✅ bcrypt cost factor 12 para contraseñas
-- ✅ Rate limiting por IP con Redis
-- ✅ Validación MIME real en uploads (no solo extensión)
-- ✅ Validación firma X-Twilio-Signature en webhooks
-- ✅ Validación firma Stripe en webhooks
-- ✅ Verificación de email obligatoria
-- ✅ Auto-unsubscribe en palabras STOP/BAJA
-- ✅ Protección CSRF, XSS, SQL injection (ORM parameterizado)
+## Seguridad
 
-## Anti-baneo WhatsApp
+- **Autenticación:** JWT access token (1 h, en memoria) + refresh token httpOnly cookie (7 d) con rotación
+- **Contraseñas:** bcrypt factor 12
+- **Rate limiting:** 200 req/min por IP
+- **Webhooks:** validación de firma `X-Twilio-Signature` y `Stripe-Signature`
+- **Uploads:** validación MIME real, máx. 20 MB
+- **CORS:** whitelist explícita, ampliable con `FRONTEND_URL`
+- **Email:** verificación obligatoria antes del primer login
+- **Opt-out:** auto-unsubscribe en palabras STOP / BAJA / CANCELAR
 
-- Delays aleatorios 25-90 segundos entre mensajes (Celery countdown)
-- Solo horarios humanos 8am-9pm por zona horaria del contacto
-- Warm-up gradual del número
-- Variación de contenido con Claude por campaña
-- Auto-blacklist en respuestas BAJA/STOP/NO QUIERO
+---
+
+## Stack
+
+| Capa | Tecnología |
+|---|---|
+| Frontend | React 18, TypeScript, Vite 6, TailwindCSS, TanStack Query v5, Radix UI |
+| Backend | FastAPI 0.115, Python 3.12, SQLAlchemy 2 async, Pydantic v2 |
+| Base de datos | Neon PostgreSQL 16 + pgvector (embeddings 1024d) |
+| Cache / Broker | Redis 7 |
+| Workers | Celery 5 |
+| IA | Claude 3.5 Sonnet, Voyage AI, Fish Audio TTS |
+| WhatsApp | Twilio WhatsApp Business API |
+| Pagos | Stripe Checkout + Webhooks |
+| Almacenamiento | Cloudflare R2 (S3-compatible) |
+| Monitoreo | Sentry, PostHog |
+| Deploy | Railway (Docker multi-stage, un contenedor por servicio) |
+
+---
+
+## Licencia
+
+MIT © 2026 IaRadio. Hecho con ❤️ en México.

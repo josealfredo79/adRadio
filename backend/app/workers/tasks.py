@@ -1,7 +1,8 @@
 """
-Celery tasks — background jobs for AdRadio.
+Celery tasks — background jobs for IaRadio.
 """
 import asyncio
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -11,11 +12,7 @@ from app.workers.celery_app import celery_app
 
 def run_async(coro):
     """Helper to run async code in sync Celery task."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+    return asyncio.run(coro)
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
@@ -382,6 +379,9 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
         raise self.retry(exc=exc)
 
 
+logger = logging.getLogger(__name__)
+
+
 def _extract_text(content: bytes, file_type: str) -> str:
     """Extract text from file content in a sandboxed manner."""
     try:
@@ -405,10 +405,26 @@ def _extract_text(content: bytes, file_type: str) -> str:
             return "\n".join(texts)
         elif file_type == "txt":
             return content.decode("utf-8", errors="ignore")
+        elif file_type == "audio":
+            from app.config import settings
+            if not settings.OPENAI_API_KEY:
+                logger.warning("OPENAI_API_KEY not set — skipping Whisper transcription")
+                return ""
+            import io
+            from openai import OpenAI
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            audio_file = io.BytesIO(content)
+            audio_file.name = "audio.mp3"
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language="es",
+            )
+            return transcript.text
         else:
             return ""
     except Exception as e:
-        print(f"[EXTRACT ERROR] file_type={file_type} error={e}")
+        logger.error("[EXTRACT ERROR] file_type=%s error=%s", file_type, e)
         return ""
 
 

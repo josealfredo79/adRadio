@@ -1,7 +1,7 @@
 """
 Auth router — /api/v1/auth
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
@@ -101,6 +101,7 @@ async def verify_email(
 @limiter.limit("10/minute")
 async def login(
     request: Request,
+    response: Response,
     body: LoginRequest,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
@@ -127,22 +128,40 @@ async def login(
         refresh_token,
     )
 
+    # Set refresh_token as httpOnly cookie (not accessible via JS)
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="lax",
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        path="/api/v1/auth",
+    )
+
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
-    body: RefreshRequest,
+    request: Request,
+    response: Response,
+    body: RefreshRequest | None = None,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
-    payload = decode_token(body.refresh_token)
+    # Accept refresh_token from httpOnly cookie (primary) or request body (backward compat)
+    token = request.cookies.get("refresh_token") or (body.refresh_token if body else None)
+    if not token:
+        raise HTTPException(status_code=401, detail="Refresh token requerido")
+
+    payload = decode_token(token)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Refresh token inválido")
 
     user_id = payload.get("sub")
     stored = await redis.get(f"refresh:{user_id}")
-    if stored != body.refresh_token:
+    if stored != token:
         raise HTTPException(status_code=401, detail="Refresh token revocado")
 
     result = await db.execute(select(User).where(User.id == user_id))
@@ -153,11 +172,22 @@ async def refresh(
     access_token = create_access_token(str(user.id), user.role)
     new_refresh = create_refresh_token(str(user.id))
 
-    # Rotate refresh token
+    # Rotate refresh token in Redis
     await redis.setex(
         f"refresh:{user_id}",
         settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         new_refresh,
+    )
+
+    # Rotate the httpOnly cookie
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="lax",
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        path="/api/v1/auth",
     )
 
     return TokenResponse(access_token=access_token, refresh_token=new_refresh)
@@ -165,12 +195,17 @@ async def refresh(
 
 @router.post("/logout")
 async def logout(
-    body: RefreshRequest,
+    request: Request,
+    response: Response,
+    body: RefreshRequest | None = None,
     redis=Depends(get_redis),
 ):
-    payload = decode_token(body.refresh_token)
-    if payload and payload.get("sub"):
-        await redis.delete(f"refresh:{payload['sub']}")
+    token = request.cookies.get("refresh_token") or (body.refresh_token if body else None)
+    if token:
+        payload = decode_token(token)
+        if payload and payload.get("sub"):
+            await redis.delete(f"refresh:{payload['sub']}")
+    response.delete_cookie("refresh_token", path="/api/v1/auth", httponly=True)
     return {"message": "Sesión cerrada"}
 
 

@@ -4,9 +4,9 @@ services:
   db:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_DB: adradio
-      POSTGRES_USER: adradio
-      POSTGRES_PASSWORD: adradio_dev
+      POSTGRES_DB: iaradio
+      POSTGRES_USER: iaradio
+      POSTGRES_PASSWORD: iaradio_dev
     ports:
       - "5432:5432"
     volumes:
@@ -14,8 +14,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
 
   backend:
     build: ./backend

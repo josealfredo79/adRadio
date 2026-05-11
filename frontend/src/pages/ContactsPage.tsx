@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Users, Plus, Upload, Trash2, Search } from 'lucide-react'
+import { Users, Plus, Upload, Trash2, Search, Download } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
 interface Contact {
@@ -62,6 +62,20 @@ export default function ContactsPage() {
     }
   }
 
+  const handleExport = async () => {
+    try {
+      const response = await api.get('/contacts/export-csv', { responseType: 'blob' })
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'contactos_iaradio.csv'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      alert('Error al exportar contactos')
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -78,6 +92,15 @@ export default function ContactsPage() {
             Importar CSV
             <input type="file" accept=".csv" className="hidden" onChange={handleCSVUpload} />
           </label>
+          {(data?.total ?? 0) > 0 && (
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Exportar CSV
+            </button>
+          )}
           <button
             onClick={() => setShowAdd(true)}
             className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"

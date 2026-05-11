@@ -2,10 +2,13 @@
 Cloudflare R2 storage service.
 """
 import asyncio
+import logging
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _s3_client = None
 
@@ -40,10 +43,10 @@ async def upload_bytes(content: bytes, key: str, content_type: str) -> str | Non
         return f"{settings.CF_R2_PUBLIC_URL}/{key}"
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, _put)
     except Exception as e:
-        print(f"[R2 ERROR] {e}")
+        logger.error("[R2 ERROR] %s", e)
         return None
 
 
@@ -56,9 +59,9 @@ async def delete_file(key: str) -> bool:
         client.delete_object(Bucket=settings.CF_R2_BUCKET, Key=key)
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _delete)
         return True
     except Exception as e:
-        print(f"[R2 DELETE ERROR] {e}")
+        logger.error("[R2 DELETE ERROR] %s", e)
         return False

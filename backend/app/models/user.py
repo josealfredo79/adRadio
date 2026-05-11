@@ -38,7 +38,7 @@ class User(Base):
     logo_url: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(String(20))
     whatsapp_number: Mapped[str | None] = mapped_column(String(20))
-    # 'shared' = usa el número de AdRadio | 'pool' = asignado del pool | 'own' = WABA propio
+    # 'shared' = usa el número de IaRadio | 'pool' = asignado del pool | 'own' = WABA propio
     whatsapp_number_source: Mapped[str] = mapped_column(String(10), default="shared")
 
     # Subscription

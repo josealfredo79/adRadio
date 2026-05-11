@@ -4,7 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # App
-    APP_NAME: str = "AdRadio"
+    APP_NAME: str = "IaRadio"
     APP_VERSION: str = "2.0.0"
     DEBUG: bool = False
     API_PREFIX: str = "/api/v1"
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-    FROM_EMAIL: str = "noreply@adradio.app"
+    FROM_EMAIL: str = "noreply@iaradio.app"
 
     # Twilio
     TWILIO_ACCOUNT_SID: str = ""
@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     # Voyage AI (embeddings RAG)
     VOYAGE_API_KEY: str = ""
 
+    # Fish Audio (TTS de alta calidad para cuñas de radio)
+    # Obtén tu API key en https://fish.audio/app/api-keys
+    FISH_AUDIO_API_KEY: str = ""
+    # ID de voz del locutor (opcional) — elige una voz en español en fish.audio/voice-library
+    # Si está vacío, se usa el modelo por defecto (Fish Audio S2)
+    FISH_AUDIO_VOICE_ID: str = ""
+
     # Google Cloud (Imagen 3)
     GOOGLE_CLOUD_PROJECT: str = ""
     GOOGLE_SERVICE_ACCOUNT_JSON: str = ""  # JSON string of service account key
@@ -78,8 +85,15 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
 
-    # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "https://app.adradio.app"]
+    # CORS — auto-includes FRONTEND_URL when set via env var
+    CORS_ORIGINS: list[str] = ["http://localhost:5173", "https://app.iaradio.app"]
+
+    @property
+    def cors_origins(self) -> list[str]:
+        origins = list(self.CORS_ORIGINS)
+        if self.FRONTEND_URL and self.FRONTEND_URL not in origins:
+            origins.append(self.FRONTEND_URL)
+        return origins
 
     # Email verification
     EMAIL_VERIFICATION_TTL: int = 600  # 10 minutos

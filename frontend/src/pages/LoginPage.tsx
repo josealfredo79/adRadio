@@ -18,7 +18,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login(email, password)
-      navigate('/dashboard')
+      navigate('/app/dashboard')
     } catch (err: any) {
       setError(err.response?.data?.detail ?? 'Error al iniciar sesión')
     } finally {
@@ -34,7 +34,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-lg">
             <Radio className="h-7 w-7 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">AdRadio</h1>
+          <h1 className="text-3xl font-bold text-gray-900">IaRadio</h1>
           <p className="mt-1 text-gray-500">Radio Publicitaria por WhatsApp con IA</p>
         </div>
 

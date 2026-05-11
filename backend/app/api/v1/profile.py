@@ -15,8 +15,10 @@ from app.database import get_db
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.message import Message
+from app.models.order import Order
 from app.models.user import User
 from app.schemas.auth import UserOut
+from app.schemas.profile import ProfileUpdate
 from app.services.number_pool_service import assign_pool_number, release_pool_number, pool_status
 
 router = APIRouter(tags=["profile"])
@@ -29,20 +31,39 @@ async def get_profile(current_user: User = Depends(get_current_user)):
 
 @router.patch("/me", response_model=UserOut)
 async def update_profile(
+    body: ProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(current_user, field, value)
+    await db.commit()
+    await db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
+@router.post("/me/change-password")
+async def change_password(
     body: dict,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    allowed_fields = {
-        "business_name", "business_category", "city", "country",
-        "phone", "whatsapp_number", "language", "bot_personality", "bot_name",
-    }
-    for field, value in body.items():
-        if field in allowed_fields:
-            setattr(current_user, field, value)
+    """Change the current user's password after verifying the old one."""
+    from app.core.security import verify_password, hash_password
+
+    current_pw = (body.get("current_password") or "").strip()
+    new_pw = (body.get("new_password") or "").strip()
+
+    if not current_pw or not new_pw:
+        raise HTTPException(status_code=400, detail="Debes proporcionar la contraseña actual y la nueva")
+    if len(new_pw) < 8:
+        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 8 caracteres")
+    if not verify_password(current_pw, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
+
+    current_user.hashed_password = hash_password(new_pw)
     await db.commit()
-    await db.refresh(current_user)
-    return UserOut.model_validate(current_user)
+    return {"message": "Contraseña actualizada correctamente"}
 
 
 @router.get("/dashboard")
@@ -84,6 +105,21 @@ async def dashboard(
         )
     )
 
+    # Orders confirmed (all time)
+    orders_confirmed = await db.execute(
+        select(func.count()).where(
+            Order.advertiser_id == current_user.id,
+            Order.state == "confirmed",
+        )
+    )
+    # Orders pending (in-progress)
+    orders_pending = await db.execute(
+        select(func.count()).where(
+            Order.advertiser_id == current_user.id,
+            Order.state.notin_(["confirmed", "cancelled"]),
+        )
+    )
+
     data = {
         "contacts_total": contacts_total.scalar_one(),
         "campaigns_active": campaigns_active.scalar_one(),
@@ -91,6 +127,8 @@ async def dashboard(
         "messages_remaining": current_user.messages_remaining,
         "plan": current_user.current_plan,
         "subscription_status": current_user.subscription_status,
+        "orders_confirmed": orders_confirmed.scalar_one(),
+        "orders_pending": orders_pending.scalar_one(),
     }
 
     await redis.setex(cache_key, 300, json.dumps(data))  # cache 5 min

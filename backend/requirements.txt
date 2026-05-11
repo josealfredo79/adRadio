@@ -54,6 +54,7 @@ sentry-sdk[fastapi]==2.19.2
 # Audio — locutor de radio con IA (La Nueva Radio)
 edge-tts==6.1.12
 pydub==0.25.1
+fish-audio-sdk>=1.0.0
 
 # Rate limiting
 slowapi==0.1.9

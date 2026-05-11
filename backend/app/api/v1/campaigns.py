@@ -3,7 +3,7 @@ Campaigns router — /api/v1/campaigns
 """
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +37,8 @@ router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 @router.get("", response_model=list[CampaignOut])
 async def list_campaigns(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -44,6 +46,8 @@ async def list_campaigns(
         select(Campaign)
         .where(Campaign.advertiser_id == current_user.id)
         .order_by(Campaign.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     return [CampaignOut.model_validate(c) for c in result.scalars().all()]
 
@@ -62,9 +66,17 @@ async def create_campaign(
     await db.commit()
     await db.refresh(campaign)
 
-    # If scheduled, dispatch to Celery
+    # If scheduled, dispatch to Celery respecting the start_date
     if campaign.schedule.get("start_date") and campaign.status == "scheduled":
-        schedule_campaign.delay(str(campaign.id))
+        from datetime import datetime, timezone
+        try:
+            start_dt = datetime.fromisoformat(
+                campaign.schedule["start_date"].replace("Z", "+00:00")
+            )
+            countdown = max(0, int((start_dt - datetime.now(timezone.utc)).total_seconds()))
+        except (ValueError, KeyError):
+            countdown = 0
+        schedule_campaign.apply_async(args=[str(campaign.id)], countdown=countdown)
 
     return CampaignOut.model_validate(campaign)
 
@@ -248,5 +260,6 @@ async def generate_radio_ad_endpoint(
         country=body.country,
         _script=script,
         mode=body.mode,
+        business_category=body.business_category,
     )
     return {"audio_url": audio_url, "script": script}

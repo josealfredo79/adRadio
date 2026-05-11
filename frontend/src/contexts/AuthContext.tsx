@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import api from '@/lib/api'
+import axios from 'axios'
+import api, { setAccessToken } from '@/lib/api'
 
 interface User {
   id: string
@@ -35,34 +36,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    if (token) {
-      api.get('/me')
-        .then((res) => setUser(res.data))
-        .catch(() => {
-          localStorage.clear()
-          setUser(null)
-        })
-        .finally(() => setLoading(false))
-    } else {
-      setLoading(false)
-    }
+    // Restore session using httpOnly cookie — no localStorage needed
+    axios
+      .post('/api/v1/auth/refresh', null, { withCredentials: true })
+      .then(({ data }) => {
+        setAccessToken(data.access_token)
+        return api.get('/me')
+      })
+      .then((res) => setUser(res.data))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false))
   }, [])
 
   const login = async (email: string, password: string) => {
     const { data } = await api.post('/auth/login', { email, password })
-    localStorage.setItem('access_token', data.access_token)
-    localStorage.setItem('refresh_token', data.refresh_token)
+    setAccessToken(data.access_token)
+    // refresh_token is now set as httpOnly cookie by the backend
     const me = await api.get('/me')
     setUser(me.data)
   }
 
   const logout = async () => {
-    const refreshToken = localStorage.getItem('refresh_token')
-    if (refreshToken) {
-      await api.post('/auth/logout', { refresh_token: refreshToken }).catch(() => {})
-    }
-    localStorage.clear()
+    await api.post('/auth/logout').catch(() => {})
+    setAccessToken(null)
     setUser(null)
   }
 

@@ -61,8 +61,8 @@ async def create_checkout_session(
             {
                 "price_data": {
                     "currency": "usd",
-                    "product_data": {"name": f"AdRadio {plan['name']}"},
-                    "unit_amount": plan["price"] * 100,
+                    "product_data": {"name": f"IaRadio {plan['name']}"},
+                    "unit_amount": plan["price_usd"] * 100,
                     "recurring": {"interval": "month"},
                 },
                 "quantity": 1,

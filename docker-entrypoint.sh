@@ -1,0 +1,19 @@
+#!/bin/bash
+set -e
+
+case "${SERVICE_ROLE:-api}" in
+  worker)
+    echo "Starting Celery worker..."
+    exec celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    ;;
+  beat)
+    echo "Starting Celery beat..."
+    exec celery -A app.workers.celery_app beat --loglevel=info
+    ;;
+  *)
+    echo "Running database migrations..."
+    alembic upgrade head
+    echo "Starting API server on port ${PORT:-8000}..."
+    exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --workers 2
+    ;;
+esac

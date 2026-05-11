@@ -2,13 +2,24 @@ import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Settings, Save, Copy, Check, ExternalLink } from 'lucide-react'
+import { Settings, Save, Copy, Check, ExternalLink, Lock } from 'lucide-react'
 
-const WEBHOOK_URL = 'https://api.adradio.app/api/v1/webhooks/twilio'
+const WEBHOOK_URL = 'https://api.iaradio.app/api/v1/webhooks/twilio'
 
 const CATEGORIES = [
-  'Restaurante', 'Tienda de ropa', 'Salón de belleza', 'Gimnasio', 'Farmacia',
-  'Ferretería', 'Panadería', 'Consultoría', 'Inmobiliaria', 'Educación', 'Otro',
+  { value: 'restaurante', label: 'Restaurante / Bar / Taquería' },
+  { value: 'tienda', label: 'Tienda / Ropa / Boutique' },
+  { value: 'belleza', label: 'Salón de Belleza / Estética' },
+  { value: 'gimnasio', label: 'Gimnasio / Fitness / Deportes' },
+  { value: 'farmacia', label: 'Farmacia / Salud' },
+  { value: 'ferreteria', label: 'Ferretería / Construcción' },
+  { value: 'panaderia', label: 'Panadería / Pastelería / Café' },
+  { value: 'corporativo', label: 'Consultoría / Servicios / Empresa' },
+  { value: 'inmobiliaria', label: 'Inmobiliaria / Terrenos / Bienes Raíces' },
+  { value: 'educacion', label: 'Educación / Academia / Cursos' },
+  { value: 'automotriz', label: 'Automotriz / Taller / Agencia de Autos' },
+  { value: 'tecnologia', label: 'Tecnología / Software / E-commerce' },
+  { value: 'otro', label: 'Otro' },
 ]
 
 const PERSONALITIES = [
@@ -23,6 +34,8 @@ export default function SettingsPage() {
   const qc = useQueryClient()
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
+  const [pwMsg, setPwMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
 
   const copyWebhook = () => {
     navigator.clipboard.writeText(WEBHOOK_URL)
@@ -73,6 +86,19 @@ export default function SettingsPage() {
     },
   })
 
+  const pwMutation = useMutation({
+    mutationFn: (data: { current_password: string; new_password: string }) =>
+      api.post('/me/change-password', data),
+    onSuccess: () => {
+      setPwMsg({ type: 'ok', text: '¡Contraseña actualizada correctamente!' })
+      setPwForm({ current_password: '', new_password: '', confirm_password: '' })
+      setTimeout(() => setPwMsg(null), 4000)
+    },
+    onError: (err: any) => {
+      setPwMsg({ type: 'error', text: err.response?.data?.detail ?? 'Error al cambiar contraseña' })
+    },
+  })
+
   const field = (label: string, key: keyof typeof form, type = 'text', placeholder = '') => (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
@@ -111,7 +137,7 @@ export default function SettingsPage() {
           >
             <option value="">Seleccionar...</option>
             {CATEGORIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
         </div>
@@ -124,7 +150,7 @@ export default function SettingsPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Número WhatsApp Business
             {numberIsManaged && (
-              <span className="ml-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Asignado por AdRadio</span>
+              <span className="ml-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Asignado por IaRadio</span>
             )}
           </label>
           {numberIsManaged ? (
@@ -143,7 +169,7 @@ export default function SettingsPage() {
               />
               {numberSource === 'shared' && (
                 <p className="mt-1 text-xs text-gray-400">
-                  En el plan actual usas el número compartido de AdRadio.
+                  En el plan actual usas el número compartido de IaRadio.
                   Al subir al plan <strong>Pro</strong> se te asigna un número dedicado automáticamente.
                 </p>
               )}
@@ -233,6 +259,92 @@ export default function SettingsPage() {
             {(mutation.error as any)?.response?.data?.detail ?? 'Error al guardar'}
           </span>
         )}
+      </div>
+
+      {/* Change password */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
+        <div className="flex items-center gap-2">
+          <Lock className="h-4 w-4 text-gray-400" />
+          <h2 className="text-base font-semibold text-gray-900">Cambiar contraseña</h2>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña actual</label>
+            <input
+              type="password"
+              value={pwForm.current_password}
+              onChange={(e) => setPwForm({ ...pwForm, current_password: e.target.value })}
+              placeholder="••••••••"
+              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña</label>
+            <input
+              type="password"
+              value={pwForm.new_password}
+              onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })}
+              placeholder="Mínimo 8 caracteres"
+              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar nueva contraseña</label>
+            <input
+              type="password"
+              value={pwForm.confirm_password}
+              onChange={(e) => setPwForm({ ...pwForm, confirm_password: e.target.value })}
+              placeholder="Repite la nueva contraseña"
+              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              if (pwForm.new_password !== pwForm.confirm_password) {
+                setPwMsg({ type: 'error', text: 'Las contraseñas no coinciden' })
+                return
+              }
+              pwMutation.mutate({ current_password: pwForm.current_password, new_password: pwForm.new_password })
+            }}
+            disabled={pwMutation.isPending || !pwForm.current_password || !pwForm.new_password}
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            <Lock className="h-4 w-4" />
+            {pwMutation.isPending ? 'Actualizando...' : 'Actualizar contraseña'}
+          </button>
+          {pwMsg && (
+            <span className={`text-sm font-medium ${pwMsg.type === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+              {pwMsg.text}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Music attribution — required by Kevin MacLeod CC BY 3.0 */}
+      <div className="rounded-xl border border-gray-100 bg-gray-50 px-6 py-4">
+        <p className="text-xs text-gray-400">
+          Música de fondo para anuncios:{' '}
+          <a
+            href="https://incompetech.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-gray-600"
+          >
+            Kevin MacLeod
+          </a>{' '}
+          (incompetech.com). Licencia{' '}
+          <a
+            href="https://creativecommons.org/licenses/by/3.0/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-gray-600"
+          >
+            CC BY 3.0
+          </a>
+          .
+        </p>
       </div>
     </div>
   )

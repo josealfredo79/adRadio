@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearchParams, Link } from 'react-router-dom'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle } from 'lucide-react'
+import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import {
   LineChart,
@@ -21,6 +21,8 @@ interface DashboardData {
   messages_remaining: number
   plan: string
   subscription_status: string
+  orders_confirmed: number
+  orders_pending: number
 }
 
 interface ChartPoint {
@@ -51,6 +53,11 @@ export default function DashboardPage() {
   const { data: chartData } = useQuery<ChartPoint[]>({
     queryKey: ['dashboard-chart'],
     queryFn: () => api.get('/dashboard/chart').then((r) => r.data),
+    staleTime: 1000 * 60 * 5,
+  })
+  const { data: kbFiles } = useQuery<{ id: string }[]>({
+    queryKey: ['knowledge-base'],
+    queryFn: () => api.get('/knowledge-base').then((r) => r.data),
     staleTime: 1000 * 60 * 5,
   })
 
@@ -106,7 +113,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <span className="text-2xl">🎉</span>
             <div>
-              <p className="text-sm font-semibold text-green-800">¡Pago completado! Bienvenido a AdRadio.</p>
+              <p className="text-sm font-semibold text-green-800">¡Pago completado! Bienvenido a IaRadio.</p>
               <p className="text-xs text-green-600">Tu plan ya está activo. Puedes empezar a crear campañas ahora mismo.</p>
             </div>
           </div>
@@ -142,6 +149,25 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Orders bot summary */}
+      <Link
+        to="/app/orders"
+        className="flex items-center justify-between rounded-xl border border-brand-100 bg-brand-50 px-6 py-4 hover:border-brand-300 hover:bg-brand-100 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-brand-500 p-2">
+            <ShoppingBag className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-brand-900">Pedidos del bot de WhatsApp</p>
+            <p className="text-xs text-brand-600 mt-0.5">
+              {data?.orders_confirmed ?? 0} confirmados &middot; {data?.orders_pending ?? 0} en proceso
+            </p>
+          </div>
+        </div>
+        <span className="text-sm font-medium text-brand-600">Ver todos &rarr;</span>
+      </Link>
+
       {/* Chart */}
       <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
         <h2 className="mb-4 text-base font-semibold text-gray-900">Mensajes enviados (7 días)</h2>
@@ -172,25 +198,25 @@ export default function DashboardPage() {
                 done: !!(user?.business_name),
                 label: 'Completa los datos de tu negocio',
                 desc: 'Nombre, categoría y ciudad para que el bot suene auténtico.',
-                to: '/settings',
+                to: '/app/settings',
               },
               {
                 done: (data?.contacts_total ?? 0) > 0,
                 label: 'Importa tus primeros contactos',
                 desc: 'Sube un CSV o agrega clientes uno por uno.',
-                to: '/contacts',
+                to: '/app/contacts',
               },
               {
-                done: false,
+                done: (kbFiles?.length ?? 0) > 0,
                 label: 'Sube tu base de conocimiento',
                 desc: 'PDFs, menús o listas de precios para que el bot responda con precisión.',
-                to: '/knowledge-base',
+                to: '/app/knowledge-base',
               },
               {
                 done: false,
                 label: 'Crea tu primera campaña de radio',
                 desc: 'Claude genera el guion + voz + jingle en segundos.',
-                to: '/campaigns',
+                to: '/app/campaigns',
               },
             ].map((step, i) => (
               <li key={i} className="flex items-start gap-3">
@@ -220,7 +246,7 @@ export default function DashboardPage() {
             Claude IA crea el mensaje perfecto para tu negocio en segundos.
           </p>
           <a
-            href="/campaigns"
+            href="/app/campaigns"
             className="mt-3 inline-flex items-center text-sm font-medium text-brand-600 hover:underline"
           >
             Crear campaña →
@@ -232,7 +258,7 @@ export default function DashboardPage() {
             Sube tu lista de clientes en CSV y empieza a emitir hoy mismo.
           </p>
           <a
-            href="/contacts"
+            href="/app/contacts"
             className="mt-3 inline-flex items-center text-sm font-medium text-green-600 hover:underline"
           >
             Ir a contactos →

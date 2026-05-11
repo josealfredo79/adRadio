@@ -7,6 +7,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -147,3 +148,42 @@ async def import_csv(
     import_contacts_csv.delay(str(current_user.id), rows)
 
     return {"message": f"Importando {len(rows)} contactos en segundo plano"}
+
+
+@router.get("/export-csv")
+async def export_contacts_csv(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export all contacts for the current advertiser as a UTF-8 CSV download."""
+    result = await db.execute(
+        select(Contact)
+        .where(Contact.advertiser_id == current_user.id)
+        .order_by(Contact.created_at.desc())
+    )
+    contacts = result.scalars().all()
+
+    output = io.StringIO()
+    writer = csv.DictWriter(
+        output,
+        fieldnames=["name", "phone", "email", "city", "status", "tags", "engagement_score", "created_at"],
+    )
+    writer.writeheader()
+    for c in contacts:
+        writer.writerow({
+            "name": c.name,
+            "phone": c.phone,
+            "email": c.email or "",
+            "city": c.city or "",
+            "status": c.status,
+            "tags": ",".join(c.tags or []),
+            "engagement_score": c.engagement_score,
+            "created_at": c.created_at.isoformat() if c.created_at else "",
+        })
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=contactos_iaradio.csv"},
+    )

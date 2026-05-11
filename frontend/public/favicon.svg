@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#a855f7"/>
+    </linearGradient>
+  </defs>
+  <!-- Background rounded square -->
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <!-- Radio tower base -->
+  <rect x="30" y="38" width="4" height="14" rx="2" fill="white"/>
+  <!-- Radio waves left -->
+  <path d="M22 28 Q16 32 22 38" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M17 23 Q8 32 17 42" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.6"/>
+  <!-- Radio waves right -->
+  <path d="M42 28 Q48 32 42 38" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M47 23 Q56 32 47 42" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.6"/>
+  <!-- Antenna dot -->
+  <circle cx="32" cy="26" r="3.5" fill="white"/>
+  <!-- WhatsApp-style chat bubble at bottom right -->
+  <circle cx="48" cy="48" r="10" fill="#25D366"/>
+  <path d="M44 48 Q44 44.5 48 44.5 Q52 44.5 52 48 Q52 51.5 48 51.5 L45 53 L46.5 51.5 Q44 51.5 44 48Z" fill="white"/>
+</svg>

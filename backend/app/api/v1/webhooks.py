@@ -6,7 +6,7 @@ import hmac
 import json
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -16,10 +16,12 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.coupon import Coupon
 from app.models.message import Message
+from app.models.order import Order
 from app.models.user import User
 from app.services.coupon_service import is_redeem_intent, is_expired
 from app.services.number_pool_service import assign_pool_number, release_pool_number
 from app.services.rag_service import answer_with_rag
+from app.services.claude_service import detect_order_intent
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -56,13 +58,21 @@ async def twilio_incoming(
     to_number = form_data.get("To", "").replace("whatsapp:", "")
     body_text = form_data.get("Body", "").strip()
 
+    # Handle WhatsApp media attachments (images, audio, documents)
+    num_media = int(form_data.get("NumMedia", "0"))
+    if num_media > 0 and not body_text:
+        media_url = form_data.get("MediaUrl0", "")
+        media_type = form_data.get("MediaContentType0", "")
+        if media_url:
+            body_text = f"[media:{media_type}]{media_url}"
+
     # Find advertiser by whatsapp_number
     result = await db.execute(
         select(User).where(User.whatsapp_number == to_number)
     )
     advertiser = result.scalar_one_or_none()
 
-    # Fallback: shared AdRadio number — can't route to a specific advertiser on inbound.
+    # Fallback: shared IaRadio number — can't route to a specific advertiser on inbound.
     # Shared number is outbound-only (campaigns). Inbound bot requires a dedicated number.
     if not advertiser:
         shared = settings.TWILIO_WHATSAPP_NUMBER.lstrip("+")
@@ -198,6 +208,141 @@ async def twilio_incoming(
         )
         db.add(conv)
         await db.flush()
+
+    # ─── ORDER STATE MACHINE ──────────────────────────────────────────────
+    # Check if there's a pending order in progress for this contact
+    pending_order_result = await db.execute(
+        select(Order).where(
+            Order.advertiser_id == advertiser.id,
+            Order.contact_id == contact.id,
+            Order.state.not_in(["confirmed", "cancelled"]),
+        ).order_by(Order.created_at.desc())
+    )
+    pending_order = pending_order_result.scalars().first()
+
+    order_reply: str | None = None
+
+    if pending_order:
+        # Continue collecting order data based on current state
+        if pending_order.state == "collecting_name":
+            pending_order.customer_name = body_text.strip()
+            pending_order.state = "collecting_address"
+            order_reply = (
+                f"Perfecto, {pending_order.customer_name.split()[0]} 👍\n"
+                "¿Cuál es tu dirección de entrega? 📍"
+            )
+        elif pending_order.state == "collecting_address":
+            pending_order.delivery_address = body_text.strip()
+            pending_order.state = "collecting_payment"
+            order_reply = (
+                "¡Anotado! 📝 ¿Cómo prefieres pagar?\n"
+                "Responde: *Efectivo*, *Tarjeta* o *Transferencia* 💳"
+            )
+        elif pending_order.state == "collecting_payment":
+            from datetime import datetime, timezone as tz
+            pending_order.payment_method = body_text.strip()
+            pending_order.state = "confirmed"
+            pending_order.confirmed_at = datetime.now(tz.utc)
+            await db.flush()
+
+            order_reply = (
+                f"✅ *Pedido #{pending_order.order_number:04d} confirmado*\n\n"
+                f"🛒 {pending_order.items_raw}\n"
+                f"👤 {pending_order.customer_name}\n"
+                f"📍 {pending_order.delivery_address}\n"
+                f"💳 {pending_order.payment_method}\n\n"
+                "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
+            )
+
+            # ── Notify owner via WhatsApp ─────────────────────────────────
+            wa_notify = (
+                f"📦 *NUEVO PEDIDO #{pending_order.order_number:04d}*\n"
+                f"────────────────\n"
+                f"🛒 {pending_order.items_raw}\n"
+                f"👤 Cliente: {pending_order.customer_name}\n"
+                f"📱 WhatsApp: {from_number}\n"
+                f"📍 Dirección: {pending_order.delivery_address}\n"
+                f"💳 Pago: {pending_order.payment_method}\n"
+                f"────────────────\n"
+                f"Responde a este número para contactar al cliente."
+            )
+            if advertiser.phone or advertiser.whatsapp_number:
+                from app.services.twilio_service import send_whatsapp
+                owner_number = advertiser.whatsapp_number or advertiser.phone
+                await send_whatsapp(
+                    to=owner_number,
+                    body=wa_notify,
+                )
+
+            # ── Notify owner via email ────────────────────────────────────
+            from app.core.email import send_new_order_email
+            import asyncio
+            asyncio.create_task(
+                send_new_order_email(
+                    to=advertiser.email,
+                    order_number=pending_order.order_number,
+                    business_name=advertiser.business_name or "Tu negocio",
+                    items_raw=pending_order.items_raw or "",
+                    customer_name=pending_order.customer_name or "",
+                    customer_phone=from_number,
+                    delivery_address=pending_order.delivery_address or "",
+                    payment_method=pending_order.payment_method or "",
+                )
+            )
+
+    elif not pending_order:
+        # No pending order — detect if this message is an order intent
+        is_order = await detect_order_intent(body_text)
+        if is_order:
+            # Get next order number for this advertiser
+            count_result = await db.execute(
+                select(func.count()).select_from(Order).where(
+                    Order.advertiser_id == advertiser.id
+                )
+            )
+            order_count = count_result.scalar() or 0
+
+            new_order = Order(
+                advertiser_id=advertiser.id,
+                contact_id=contact.id,
+                items_raw=body_text,
+                state="collecting_name",
+                order_number=order_count + 1,
+            )
+            db.add(new_order)
+            await db.flush()
+
+            order_reply = (
+                "¡Con gusto te ayudo con tu pedido! 🛒\n"
+                "Para completarlo, ¿a qué nombre va el pedido?"
+            )
+
+    # If we handled an order step, send that reply and skip RAG
+    if order_reply is not None:
+        updated_msgs = conv.messages + [
+            {"role": "user", "content": body_text},
+            {"role": "assistant", "content": order_reply},
+        ]
+        conv.messages = updated_msgs[-40:]
+
+        out_msg = Message(
+            advertiser_id=advertiser.id,
+            contact_id=contact.id,
+            direction="outbound",
+            content=order_reply,
+            status="queued",
+        )
+        db.add(out_msg)
+        await db.commit()
+
+        from app.workers.tasks import send_whatsapp_message
+        send_whatsapp_message.apply_async(
+            args=[str(out_msg.id), from_number, order_reply],
+            queue="whatsapp",
+            countdown=2,
+        )
+        return {"message": "ok"}
+    # ─── END ORDER STATE MACHINE ──────────────────────────────────────────
 
     # Build conversation history (last 20 turns)
     history = conv.messages[-40:] if conv.messages else []
