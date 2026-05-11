@@ -99,7 +99,7 @@ export default function InboxPage() {
   const filtered = conversations?.filter((c) => {
     if (!search.trim()) return true
     const q = search.toLowerCase()
-    return c.contact.name.toLowerCase().includes(q) || c.contact.phone.toLowerCase().includes(q)
+    return c.contact.name.toLowerCase().includes(q) || (c.contact.phone ?? '').toLowerCase().includes(q)
   })
 
   const statusMutation = useMutation({

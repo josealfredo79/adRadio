@@ -12,6 +12,7 @@ interface Campaign {
   stats: Record<string, number>
   ab_test: Record<string, any>
   created_at: string
+  schedule?: { start_date?: string; end_date?: string } | null
 }
 
 const CAMPAIGN_TYPES = [
