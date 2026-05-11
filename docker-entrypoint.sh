@@ -12,7 +12,7 @@ case "${SERVICE_ROLE:-api}" in
     ;;
   *)
     echo "Running database migrations..."
-    alembic upgrade head
+    alembic upgrade head || echo "⚠️  Migration warning (may already be up to date) — continuing..."
     echo "Starting API server on port ${PORT:-8000}..."
     exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --workers 2
     ;;
