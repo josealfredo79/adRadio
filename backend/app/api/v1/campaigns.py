@@ -253,6 +253,8 @@ async def generate_radio_ad_endpoint(
         message_or_intent=body.intent,
         country=body.country,
         mode=body.mode,
+        business_category=body.business_category,
+        extra_context=body.extra_context,
     )
     audio_url = await generate_radio_ad(
         business_name=body.business_name,

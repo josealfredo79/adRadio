@@ -28,7 +28,12 @@ const CAMPAIGN_MODES = [
   { value: 'sequence', label: '📻 Secuencia', desc: '3 mensajes en días 1, 3 y 5 — como un programa de radio' },
   { value: 'saga', label: '🎭 Saga', desc: '4 episodios semanales — radionovela de tu negocio' },
   { value: 'radio', label: '🎙️ Cuña clásica', desc: 'Audio estilo radio AM/FM de los 80s con voz de locutor' },
-  { value: 'comunitaria', label: '🌿 Radio Comunitaria', desc: 'Primero un consejo genuino para tu cliente, luego tu negocio — como la radio que educaba' },
+  { value: 'comunitaria', label: '🌿 Radio Comunitaria', desc: 'Primero un consejo genuino, luego tu negocio' },
+  { value: 'capsula', label: '💡 Cápsula del Día', desc: 'Dato sorprendente + mención natural del negocio' },
+  { value: 'trivia', label: '🧠 Trivia del Día', desc: 'Pregunta curiosa + respuesta + negocio — perfecto para interacción' },
+  { value: 'historia', label: '📖 Mini Historia', desc: 'Radionovela de 30s: personaje → problema → tu negocio como solución' },
+  { value: 'alerta', label: '🚨 Alerta de Servicio', desc: 'Info contextual oportuna (clima, fecha) + tu negocio' },
+  { value: 'estacional', label: '🗓️ Cuña Estacional', desc: 'Conecta tu negocio con el momento exacto del año' },
 ]
 
 const STATUS_COLORS: Record<string, string> = {
@@ -49,9 +54,16 @@ const MODE_BADGE: Record<string, string> = {
   saga: '🎭 Saga',
   radio: '🎙️ Cuña de radio',
   comunitaria: '🌿 Radio Comunitaria',
+  capsula: '💡 Cápsula',
+  trivia: '🧠 Trivia',
+  historia: '📖 Historia',
+  alerta: '🚨 Alerta',
+  estacional: '🗓️ Estacional',
 }
 
-type CampaignMode = 'regular' | 'sequence' | 'saga' | 'radio' | 'comunitaria'
+type CampaignMode = 'regular' | 'sequence' | 'saga' | 'radio' | 'comunitaria' | 'capsula' | 'trivia' | 'historia' | 'alerta' | 'estacional'
+
+const AUDIO_MODES: CampaignMode[] = ['radio', 'comunitaria', 'capsula', 'trivia', 'historia', 'alerta', 'estacional']
 
 export default function CampaignsPage() {
   const qc = useQueryClient()
@@ -77,6 +89,8 @@ export default function CampaignsPage() {
   const [radioCountry, setRadioCountry] = useState('mx')
   const [radioAudioUrl, setRadioAudioUrl] = useState('')
   const [radioScript, setRadioScript] = useState('')
+  const [extraContext, setExtraContext] = useState('')
+  const [businessCategory, setBusinessCategory] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
   const [error, setError] = useState('')
   const [analyticsId, setAnalyticsId] = useState<string | null>(null)
@@ -111,6 +125,7 @@ export default function CampaignsPage() {
     setIntent(''); setProductDesc(''); setProtagonist('María')
     setHasCoupon(false); setCouponDesc(''); setCouponHours(72)
     setRadioCountry('mx'); setRadioAudioUrl(''); setRadioScript('')
+    setExtraContext(''); setBusinessCategory('')
     setScheduledAt(''); setError('')
   }
 
@@ -134,10 +149,12 @@ export default function CampaignsPage() {
           business_name: form.name, product_description: productDesc, protagonist_name: protagonist,
         })
         setMultiMessages(data.messages)
-      } else if (mode === 'radio' || mode === 'comunitaria') {
+      } else if (AUDIO_MODES.includes(mode)) {
         const { data } = await api.post('/campaigns/generate-radio-ad', {
           business_name: form.name, intent, country: radioCountry,
-          mode: mode === 'comunitaria' ? 'comunitaria' : 'classic',
+          mode: mode === 'radio' ? 'classic' : mode,
+          business_category: businessCategory || undefined,
+          extra_context: extraContext || undefined,
         })
         setRadioAudioUrl(data.audio_url)
         setRadioScript(data.script ?? '')
@@ -159,7 +176,7 @@ export default function CampaignsPage() {
     if (mode !== 'regular' && multiMessages.length > 0) {
       ab_test.messages = multiMessages
     }
-    if (mode === 'radio' || mode === 'comunitaria') {
+    if (AUDIO_MODES.includes(mode)) {
       ab_test.audio_url = radioAudioUrl
       ab_test.radio_script = radioScript
     }
@@ -177,7 +194,7 @@ export default function CampaignsPage() {
   const analyticsTarget = campaigns?.find((c) => c.id === analyticsId)
 
   const isMultiMode = mode === 'sequence' || mode === 'saga'
-  const isRadioMode = mode === 'radio' || mode === 'comunitaria'
+  const isRadioMode = AUDIO_MODES.includes(mode)
   const readyToCreate = form.name && (
     (mode === 'regular' && form.message_text) ||
     (isMultiMode && multiMessages.length > 0) ||
@@ -392,16 +409,28 @@ export default function CampaignsPage() {
                   <p className="text-xs text-gray-400">Claude creará 4 episodios semanales al estilo radionovela 📻</p>
                 </div>
               )}
-              {(mode === 'radio' || mode === 'comunitaria') && (
+              {isRadioMode && (
                 <div className="space-y-3">
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                      {mode === 'comunitaria' ? '¿Qué valor genuino puede dar tu negocio?' : '¿Qué quieres anunciar?'}
+                      {mode === 'comunitaria' ? '¿Qué valor genuino puede dar tu negocio?'
+                        : mode === 'capsula' ? '¿Sobre qué tema quieres el dato sorprendente?'
+                        : mode === 'trivia' ? '¿Sobre qué área será la pregunta?'
+                        : mode === 'historia' ? '¿Qué problema resuelve tu negocio?'
+                        : mode === 'alerta' ? '¿Cuál es el tema de la alerta?'
+                        : mode === 'estacional' ? '¿Qué ángulo de tu negocio esta temporada?'
+                        : '¿Qué quieres anunciar?'}
                     </label>
                     <textarea rows={2}
-                      placeholder={mode === 'comunitaria'
-                        ? 'Ej: Restaurante vegano — tips de alimentación saludable'
-                        : 'Ej: Gran remate de zapatos, 50% de descuento sólo este sábado'}
+                      placeholder={
+                        mode === 'comunitaria' ? 'Ej: Restaurante vegano — tips de alimentación saludable'
+                        : mode === 'capsula' ? 'Ej: farmacia — datos curiosos de salud'
+                        : mode === 'trivia' ? 'Ej: cocina mexicana, historia, salud'
+                        : mode === 'historia' ? 'Ej: dolor de espalda, falta de tiempo para cocinar'
+                        : mode === 'alerta' ? 'Ej: temporada de lluvias, calor extremo, quincena'
+                        : mode === 'estacional' ? 'Ej: regreso a clases, ofertas de fin de año'
+                        : 'Ej: Gran remate de zapatos, 50% de descuento sólo este sábado'
+                      }
                       value={intent} onChange={(e) => setIntent(e.target.value)}
                       className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none" />
                     {mode === 'comunitaria' && (
@@ -409,7 +438,60 @@ export default function CampaignsPage() {
                         🌿 El guión primero dará un consejo útil relacionado con tu categoría, luego mencionará tu negocio con honestidad — como la radio que educaba antes de vender.
                       </p>
                     )}
+                    {mode === 'capsula' && (
+                      <p className="mt-1 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                        💡 Un dato real y sorprendente que el oyente no esperaba saber, seguido de la mención natural de tu negocio.
+                      </p>
+                    )}
+                    {mode === 'trivia' && (
+                      <p className="mt-1 text-xs text-purple-700 bg-purple-50 rounded-lg px-3 py-2">
+                        🧠 Pregunta curiosa → el oyente responde por WhatsApp → interacción natural con tu negocio.
+                      </p>
+                    )}
+                    {mode === 'historia' && (
+                      <p className="mt-1 text-xs text-blue-700 bg-blue-50 rounded-lg px-3 py-2">
+                        📖 Mini radionovela de 30s: un personaje con un problema real y tu negocio como la solución creíble.
+                      </p>
+                    )}
+                    {mode === 'alerta' && (
+                      <p className="mt-1 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">
+                        🚨 Información oportuna que el oyente necesita HOY, conectada naturalmente con tu negocio.
+                      </p>
+                    )}
+                    {mode === 'estacional' && (
+                      <p className="mt-1 text-xs text-teal-700 bg-teal-50 rounded-lg px-3 py-2">
+                        🗓️ El mensaje correcto en el momento correcto — conecta tu negocio con lo que la gente ya está viviendo.
+                      </p>
+                    )}
                   </div>
+
+                  {/* Extra context — trivia (premio), alerta/estacional (fecha/temporada) */}
+                  {(mode === 'trivia' || mode === 'alerta' || mode === 'estacional') && (
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                        {mode === 'trivia' ? '🎁 Premio mencionado en la trivia'
+                          : mode === 'alerta' ? '📅 Contexto actual (fecha, clima, evento)'
+                          : '📅 Temporada o momento del año'}
+                      </label>
+                      <input type="text"
+                        placeholder={
+                          mode === 'trivia' ? 'Ej: un 20% de descuento en tu próxima compra'
+                          : mode === 'alerta' ? 'Ej: Temporada de lluvias en Guadalajara'
+                          : 'Ej: Regreso a clases, Navidad, quincena'
+                        }
+                        value={extraContext} onChange={(e) => setExtraContext(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none" />
+                    </div>
+                  )}
+
+                  {/* Categoría del negocio (para elegir jingle y contextualizar) */}
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Categoría del negocio (opcional)</label>
+                    <input type="text" placeholder="Ej: farmacia, restaurante, gimnasio, inmobiliaria..."
+                      value={businessCategory} onChange={(e) => setBusinessCategory(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none" />
+                  </div>
+
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700">País / acento del locutor</label>
                     <select value={radioCountry} onChange={(e) => setRadioCountry(e.target.value)}
@@ -422,15 +504,13 @@ export default function CampaignsPage() {
                   </div>
                   {!radioAudioUrl && (
                     <p className="text-xs text-gray-400">
-                      {mode === 'comunitaria'
-                        ? 'Claude escribe el guión comunitario → voz de locutor → audio .ogg listo para WhatsApp 🌿'
-                        : 'Claude escribe el guión → voz de locutor → audio .ogg listo para WhatsApp 🎙️'}
+                      Claude escribe el guión → voz de locutor → audio .ogg listo para WhatsApp {MODE_BADGE[mode]?.split(' ')[0] || '🎙️'}
                     </p>
                   )}
                   {radioAudioUrl && (
                     <div className="rounded-xl border border-green-200 bg-green-50 p-4 space-y-2">
                       <p className="text-sm font-medium text-green-700">
-                        {mode === 'comunitaria' ? '🌿 Cuña comunitaria generada' : '✅ Cuña generada'}
+                        {MODE_BADGE[mode] || '✅'} Cuña generada
                       </p>
                       <audio controls src={radioAudioUrl} className="w-full" />
                       {radioScript && (
@@ -445,7 +525,7 @@ export default function CampaignsPage() {
               )}
 
               {/* Botón generar */}
-              {mode !== 'radio' && mode !== 'comunitaria' && (
+              {!isRadioMode && (
                 <button onClick={generateContent}
                   disabled={generating || !form.name || (mode !== 'saga' && !intent) || (mode === 'saga' && !productDesc)}
                   className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60 transition-colors">
@@ -453,16 +533,12 @@ export default function CampaignsPage() {
                   {generating ? 'Generando con Claude...' : mode === 'regular' ? 'Generar 3 variantes' : mode === 'sequence' ? 'Generar secuencia' : 'Generar saga'}
                 </button>
               )}
-              {(mode === 'radio' || mode === 'comunitaria') && (
+              {isRadioMode && (
                 <button onClick={generateContent}
                   disabled={generating || !form.name || !intent}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-60 transition-colors ${
-                    mode === 'comunitaria' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
-                  }`}>
-                  {mode === 'comunitaria' ? <span className="text-base">🌿</span> : <Radio className="h-3.5 w-3.5" />}
-                  {generating ? 'Generando cuña...' : radioAudioUrl
-                    ? (mode === 'comunitaria' ? 'Regenerar cuña comunitaria' : 'Regenerar cuña')
-                    : (mode === 'comunitaria' ? 'Generar cuña comunitaria' : 'Generar cuña de radio')}
+                  className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60 transition-colors">
+                  <Radio className="h-3.5 w-3.5" />
+                  {generating ? 'Generando cuña...' : radioAudioUrl ? `Regenerar ${MODE_BADGE[mode] || 'cuña'}` : `Generar ${MODE_BADGE[mode] || 'cuña de radio'}`}
                 </button>
               )}
 

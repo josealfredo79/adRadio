@@ -14,6 +14,7 @@ import {
   Radio,
   Settings,
   ShoppingBag,
+  CalendarDays,
   Menu,
   X,
 } from 'lucide-react'
@@ -24,6 +25,7 @@ const navItems = [
   { to: '/app/campaigns', icon: Megaphone, label: 'Campañas' },
   { to: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
   { to: '/app/orders', icon: ShoppingBag, label: 'Pedidos', badge: 'orders_pending' as const },
+  { to: '/app/appointments', icon: CalendarDays, label: 'Citas' },
   { to: '/app/contacts', icon: Users, label: 'Contactos' },
   { to: '/app/knowledge-base', icon: BookOpen, label: 'Base de conocimiento' },
   { to: '/app/plans', icon: CreditCard, label: 'Planes' },

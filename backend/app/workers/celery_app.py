@@ -38,4 +38,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.cleanup_expired_data",
         "schedule": 3600.0,  # every hour
     },
+    "send-appointment-reminders": {
+        "task": "app.workers.tasks.send_appointment_reminders",
+        "schedule": 300.0,  # every 5 minutes
+    },
 }

@@ -305,7 +305,13 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
         from app.database import AsyncSessionLocal
         from app.models.knowledge_base import KnowledgeBase
         from app.services.embedding_service import get_embedding, chunk_text
+        from app.config import settings
         from sqlalchemy import select
+
+        # Delay entre llamadas al API de embeddings (seg).
+        # Free tier de Voyage AI admite ~3 RPM → 22 s entre llamadas.
+        # Con un plan de pago baja a 0-1 s. Configura VOYAGE_EMBEDDING_DELAY_S en .env.
+        embed_delay: float = getattr(settings, "VOYAGE_EMBEDDING_DELAY_S", 22.0)
 
         # Extract text based on file type
         text = _extract_text(file_content, file_type)
@@ -321,6 +327,8 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
             return
 
         chunks = chunk_text(text, chunk_size=500, overlap=50)
+        total_chunks = len(chunks)
+        logger.info("[KB %s] Procesando %d chunks (delay=%.1fs entre embeddings)", kb_id, total_chunks, embed_delay)
 
         async with AsyncSessionLocal() as db:
             # Update original record with raw text
@@ -335,9 +343,10 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
             original.chunk_text = chunks[0] if chunks else text
 
             # Create additional records for each chunk
-            # 22s delay between calls to respect Voyage AI free tier (3 RPM)
             for i, chunk in enumerate(chunks[1:], 1):
-                await asyncio.sleep(22)
+                logger.info("[KB %s] Chunk %d/%d — esperando %.1fs", kb_id, i, total_chunks - 1, embed_delay)
+                if embed_delay > 0:
+                    await asyncio.sleep(embed_delay)
                 embedding = await get_embedding(chunk)
                 kb_chunk = KnowledgeBase(
                     advertiser_id=original.advertiser_id,
@@ -355,6 +364,7 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
 
             original.processing_status = "done"
             await db.commit()
+            logger.info("[KB %s] Procesamiento completado (%d chunks)", kb_id, total_chunks)
 
     try:
         run_async(_process())
@@ -533,3 +543,103 @@ def cleanup_expired_data():
             await db.commit()
 
     run_async(_cleanup())
+
+
+@celery_app.task
+def send_appointment_reminders():
+    """Celery Beat: send WhatsApp reminders for upcoming appointments.
+
+    Runs every 5 minutes. Sends:
+      - 24h reminder (once, when appointment is 23-25h away)
+      - 1h reminder (once, when appointment is 50-70 min away)
+    """
+    async def _remind():
+        from datetime import timedelta
+        from app.database import AsyncSessionLocal
+        from app.models.appointment import Appointment
+        from app.models.user import User
+        from app.models.contact import Contact
+        from app.services.twilio_service import send_whatsapp
+        from sqlalchemy import select, and_
+
+        now = datetime.now(timezone.utc)
+
+        async with AsyncSessionLocal() as db:
+            # ── 24h reminders ────────────────────────────────────────────
+            window_24h_start = now + timedelta(hours=23)
+            window_24h_end = now + timedelta(hours=25)
+
+            result = await db.execute(
+                select(Appointment).where(
+                    Appointment.reminder_24h_sent == False,  # noqa: E712
+                    Appointment.status.in_(["pending", "confirmed"]),
+                    Appointment.scheduled_at >= window_24h_start,
+                    Appointment.scheduled_at <= window_24h_end,
+                )
+            )
+            for appt in result.scalars().all():
+                # Get advertiser's WhatsApp number
+                user_result = await db.execute(select(User).where(User.id == appt.advertiser_id))
+                advertiser = user_result.scalar_one_or_none()
+                from_number = advertiser.whatsapp_number if advertiser else None
+
+                phone = appt.customer_phone
+                if not phone and appt.contact_id:
+                    c_result = await db.execute(select(Contact).where(Contact.id == appt.contact_id))
+                    contact = c_result.scalar_one_or_none()
+                    if contact:
+                        phone = contact.phone
+
+                if phone:
+                    hora = appt.scheduled_at.strftime("%I:%M %p").lstrip("0")
+                    fecha = appt.scheduled_at.strftime("%A %d de %B")
+                    biz_name = advertiser.business_name if advertiser else "tu cita"
+                    msg = (
+                        f"📅 Recordatorio: tienes cita mañana {fecha} a las {hora} "
+                        f"en {biz_name} — {appt.service}.\n\n"
+                        f"¿Confirmas? Responde ✅ o ❌ para cancelar."
+                    )
+                    await send_whatsapp(phone, msg, from_number=from_number)
+
+                appt.reminder_24h_sent = True
+
+            # ── 1h reminders ─────────────────────────────────────────────
+            window_1h_start = now + timedelta(minutes=50)
+            window_1h_end = now + timedelta(minutes=70)
+
+            result = await db.execute(
+                select(Appointment).where(
+                    Appointment.reminder_1h_sent == False,  # noqa: E712
+                    Appointment.status.in_(["pending", "confirmed"]),
+                    Appointment.scheduled_at >= window_1h_start,
+                    Appointment.scheduled_at <= window_1h_end,
+                )
+            )
+            for appt in result.scalars().all():
+                user_result = await db.execute(select(User).where(User.id == appt.advertiser_id))
+                advertiser = user_result.scalar_one_or_none()
+                from_number = advertiser.whatsapp_number if advertiser else None
+
+                phone = appt.customer_phone
+                if not phone and appt.contact_id:
+                    c_result = await db.execute(select(Contact).where(Contact.id == appt.contact_id))
+                    contact = c_result.scalar_one_or_none()
+                    if contact:
+                        phone = contact.phone
+
+                if phone:
+                    hora = appt.scheduled_at.strftime("%I:%M %p").lstrip("0")
+                    biz_name = advertiser.business_name if advertiser else "tu cita"
+                    msg = (
+                        f"⏰ Tu cita es en 1 hora — {hora} en {biz_name}.\n"
+                        f"Servicio: {appt.service}\n\n"
+                        f"¡Te esperamos! 😊"
+                    )
+                    await send_whatsapp(phone, msg, from_number=from_number)
+
+                appt.reminder_1h_sent = True
+
+            await db.commit()
+
+    run_async(_remind())
+

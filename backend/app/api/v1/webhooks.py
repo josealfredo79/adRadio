@@ -22,6 +22,7 @@ from app.services.coupon_service import is_redeem_intent, is_expired
 from app.services.number_pool_service import assign_pool_number, release_pool_number
 from app.services.rag_service import answer_with_rag
 from app.services.claude_service import detect_order_intent
+from app.api.v1.payments import PLAN_MESSAGES  # fuente de verdad para cuotas
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -494,11 +495,10 @@ async def stripe_webhook(
         )
         user = result.scalar_one_or_none()
         if user and plan:
-            plan_messages = {"starter": 200, "growth": 500, "pro": 1000, "business": 3000, "enterprise": 10000}
             plan_days = 30
             user.subscription_status = "active"
             user.current_plan = plan
-            user.messages_remaining = plan_messages.get(plan, 0)
+            user.messages_remaining = PLAN_MESSAGES.get(plan, 0)
             user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=plan_days)
 
             # Auto-assign a dedicated pool number for any paid plan
@@ -528,8 +528,7 @@ async def stripe_webhook(
         )
         user = result.scalar_one_or_none()
         if user and user.current_plan:
-            plan_messages = {"starter": 200, "growth": 500, "pro": 1000, "business": 3000, "enterprise": 10000}
-            user.messages_remaining = plan_messages.get(user.current_plan, 0)
+            user.messages_remaining = PLAN_MESSAGES.get(user.current_plan, 0)
             user.subscription_status = "active"
             user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 

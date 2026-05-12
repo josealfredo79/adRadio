@@ -53,6 +53,9 @@ class Settings(BaseSettings):
 
     # Voyage AI (embeddings RAG)
     VOYAGE_API_KEY: str = ""
+    # Delay en segundos entre llamadas a Voyage AI para embeddings.
+    # Free tier: ~3 RPM → usa 22 s. Plan de pago: baja a 0 o 1.
+    VOYAGE_EMBEDDING_DELAY_S: float = 22.0
 
     # Fish Audio (TTS de alta calidad para cuñas de radio)
     # Obtén tu API key en https://fish.audio/app/api-keys
@@ -64,6 +67,10 @@ class Settings(BaseSettings):
     # Google Cloud (Imagen 3)
     GOOGLE_CLOUD_PROJECT: str = ""
     GOOGLE_SERVICE_ACCOUNT_JSON: str = ""  # JSON string of service account key
+
+    # Google Calendar OAuth (for appointment sync)
+    GOOGLE_CALENDAR_CLIENT_ID: str = ""
+    GOOGLE_CALENDAR_CLIENT_SECRET: str = ""
 
     # Cloudflare R2
     CF_R2_ACCESS_KEY: str = ""

@@ -77,5 +77,6 @@ class GenerateRadioAdRequest(BaseModel):
     business_name: str
     intent: str
     country: str = "mx"  # mx | co | ar | es
-    mode: str = "classic"  # "classic" | "comunitaria"
+    mode: str = "classic"  # "classic" | "comunitaria" | "capsula" | "trivia" | "historia" | "alerta" | "estacional"
     business_category: str | None = None  # inmobiliaria, restaurante, tienda, etc.
+    extra_context: str | None = None  # premio de trivia, fecha/temporada, dato extra

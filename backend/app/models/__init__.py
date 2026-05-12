@@ -8,6 +8,7 @@ from app.models.transaction import Transaction
 from app.models.prospects_pool import ProspectsPool
 from app.models.coupon import Coupon
 from app.models.order import Order
+from app.models.appointment import Appointment
 
 __all__ = [
     "User",
@@ -20,4 +21,5 @@ __all__ = [
     "ProspectsPool",
     "Coupon",
     "Order",
+    "Appointment",
 ]

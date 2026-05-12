@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import RadioSphere3D from '../components/RadioSphere3D'
+import { LANDING_PLANS } from '@/lib/plans'
 
 function useCountUp(target: number, duration = 1800, start = false) {
   const [count, setCount] = useState(0)
@@ -44,23 +45,8 @@ function AnimatedStat({ n, label, suffix = '' }: { n: number; label: string; suf
   )
 }
 
-const PLANS = [
-  {
-    key: 'starter', name: 'Starter', price: 499, usd: 29, msgs: 200,
-    popular: false,
-    features: ['200 mensajes/mes', 'Bot IA básico', 'Campañas masivas', 'Importar contactos CSV', 'Soporte por email'],
-  },
-  {
-    key: 'pro', name: 'Pro', price: 2499, usd: 149, msgs: 1000,
-    popular: true,
-    features: ['1,000 mensajes/mes', 'Bot IA avanzado + RAG', 'Campañas masivas + segmentación', 'Cupones automáticos', 'Cuñas de radio con IA', 'Número dedicado WhatsApp', 'Soporte prioritario'],
-  },
-  {
-    key: 'business', name: 'Business', price: 6799, usd: 399, msgs: 3000,
-    popular: false,
-    features: ['3,000 mensajes/mes', 'Todo lo de Pro', 'Campañas secuencia (saga)', 'Multi-agente IA', 'Analytics avanzados', 'API de integración', 'Gerente de cuenta dedicado'],
-  },
-]
+// PLANS ahora viene de src/lib/plans.ts — fuente de verdad única.
+// Quitamos el array local para evitar desincronización.
 
 const CHAT_MESSAGES = [
   { from: 'bot', text: '👋 Hola! Soy el asistente de *Pizzería El Fogón*. ¿En qué te puedo ayudar?' },
@@ -515,14 +501,14 @@ export default function LandingPage() {
 
       {/* ─── PRECIOS ─── */}
       <section id="precios" className="px-5 py-24">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-6xl">
           <div className="mb-14 text-center">
             <p className="text-indigo-400 font-semibold text-sm uppercase tracking-widest mb-3">Precios</p>
             <h2 className="text-4xl font-black text-white sm:text-5xl">Invierte lo que vendes en un día</h2>
             <p className="mt-4 text-gray-500">Sin contratos. Cancela cuando quieras.</p>
           </div>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3 items-start">
-            {PLANS.map(plan => (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4 items-start">
+            {LANDING_PLANS.map(plan => (
               <div
                 key={plan.key}
                 className={`relative rounded-3xl p-7 flex flex-col transition-all ${
@@ -533,22 +519,29 @@ export default function LandingPage() {
               >
                 {plan.popular && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 px-5 py-1.5 text-xs font-black text-white shadow-lg shadow-indigo-500/30">
-                    ⭐ Más popular
+                    {plan.badge ?? '⭐ Más popular'}
                   </div>
                 )}
                 <div className="mb-1 text-sm font-bold text-gray-400 uppercase tracking-widest">{plan.name}</div>
                 <div className="mb-1 text-4xl font-black text-white">
-                  ${plan.price.toLocaleString()}
+                  ${plan.price_mxn.toLocaleString()}
                   <span className="text-base font-normal text-gray-500"> MXN/mes</span>
                 </div>
-                <div className="mb-6 text-xs text-gray-600">≈ ${plan.usd} USD</div>
+                <div className="mb-1 text-xs text-gray-600">≈ ${plan.price_usd} USD</div>
+                <p className="mb-5 text-xs text-gray-500 italic">{plan.tagline}</p>
                 <ul className="mb-7 space-y-3 flex-1">
-                  {plan.features.map(f => (
-                    <li key={f} className="flex items-center gap-2.5 text-sm text-gray-300">
-                      <CheckCircle className="h-4 w-4 text-indigo-400 shrink-0" />
-                      {f}
-                    </li>
-                  ))}
+                  {plan.features.map(f => {
+                    const isHighlight = plan.highlightFeatures?.includes(f)
+                    return (
+                      <li key={f} className="flex items-center gap-2.5 text-sm">
+                        {isHighlight
+                          ? <Sparkles className="h-4 w-4 text-indigo-400 shrink-0" />
+                          : <CheckCircle className="h-4 w-4 text-indigo-400 shrink-0" />
+                        }
+                        <span className={isHighlight ? 'text-white font-medium' : 'text-gray-300'}>{f}</span>
+                      </li>
+                    )
+                  })}
                 </ul>
                 <Link
                   to="/register"
@@ -564,7 +557,8 @@ export default function LandingPage() {
             ))}
           </div>
           <p className="mt-8 text-center text-sm text-gray-600">
-            ¿Más de 10,000 mensajes/mes? <Link to="/register" className="text-indigo-400 hover:text-indigo-300">Contáctanos para Enterprise</Link>
+            ¿Más de 10,000 mensajes/mes?{' '}
+            <Link to="/register" className="text-indigo-400 hover:text-indigo-300">Contáctanos para Enterprise</Link>
           </p>
         </div>
       </section>
