@@ -80,3 +80,31 @@ class GenerateRadioAdRequest(BaseModel):
     mode: str = "classic"  # "classic" | "comunitaria" | "capsula" | "trivia" | "historia" | "alerta" | "estacional"
     business_category: str | None = None  # inmobiliaria, restaurante, tienda, etc.
     extra_context: str | None = None  # premio de trivia, fecha/temporada, dato extra
+
+
+class ParrillaRequest(BaseModel):
+    business_name: str
+    intent: str          # propósito/mensaje central de la semana
+    country: str = "mx"
+    business_category: str | None = None
+    extra_context: str | None = None   # contexto extra (temporada, promo activa, etc.)
+    # Si True, programa el envío automático a los contactos activos
+    auto_schedule: bool = False
+    # Hora local preferida de envío (formato "HH:MM"), default 10:00
+    send_time: str = "10:00"
+
+
+class ParrillaDayOut(BaseModel):
+    day: int          # 0=Lun … 6=Dom
+    day_name: str
+    mode: str
+    mode_emoji: str
+    script: str
+    audio_url: str | None = None  # None si la generación de audio falló
+
+
+class ParrillaOut(BaseModel):
+    days: list[ParrillaDayOut]
+    plan: str          # plan del usuario que generó esto
+    auto_scheduled: bool
+

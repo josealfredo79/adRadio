@@ -22,12 +22,13 @@ Plataforma SaaS que permite a cualquier negocio crear, enviar y medir campañas 
 
 | Característica | Descripción |
 |---|---|
-| 🎙️ **Cuñas de radio con IA** | Genera guiones publicitarios con Claude 3.5 y los convierte a audio con Fish Audio TTS |
-| 📢 **Campañas masivas** | Envía mensajes de audio personalizados a segmentos de contactos vía WhatsApp Business |
+| 🎙️ **Parrilla Semanal (IA)** | Generación automática de 7 días de contenido radial (Cápsulas, Trivias, Estacional) |
+| 📢 **Campañas masivas** | Envío asíncrono con Celery y Redis, respetando delays anti-ban |
+| 📅 **Gestión de Citas** | Webhooks para confirmación ("1") y rescate inteligente/reagendamiento ("2" -> "Sí") |
 | 🤖 **Bot conversacional** | Responde preguntas de clientes usando RAG sobre la base de conocimiento del negocio |
 | 📊 **Analytics en tiempo real** | KPIs de entrega, apertura y respuesta cacheados en Redis |
 | 🛒 **Gestión de pedidos** | Estado de pedidos vía WhatsApp con flujo automatizado de 4 pasos |
-| 💳 **Suscripciones Stripe** | Planes Free → Starter → Pro con pagos y webhooks validados |
+| 💳 **Suscripciones Stripe** | Planes Starter → Growth → Pro+ con validación estricta de cuotas |
 | 📋 **Base de conocimiento** | Sube PDFs, Word o texto plano → embeddings Voyage AI → búsqueda semántica |
 
 ---

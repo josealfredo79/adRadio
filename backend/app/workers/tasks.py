@@ -653,3 +653,77 @@ def send_appointment_reminders():
 
     run_async(_remind())
 
+
+@celery_app.task(bind=True, max_retries=2)
+def send_parrilla_day(
+    self,
+    advertiser_id: str,
+    audio_url: str,
+    script: str,
+    day_name: str,
+    mode: str,
+):
+    """Envía la cuña del día de la parrilla semanal a todos los contactos activos.
+
+    Programado automáticamente por generate_parrilla cuando auto_schedule=True.
+    Respeta el anti-ban delay y el quota de mensajes del plan.
+    """
+    async def _send():
+        from app.database import AsyncSessionLocal
+        from app.models.contact import Contact
+        from app.models.user import User
+        from app.models.message import Message
+        from app.services.twilio_service import anti_ban_delay, send_whatsapp_media
+        from sqlalchemy import select
+
+        async with AsyncSessionLocal() as db:
+            adv_result = await db.execute(
+                select(User).where(User.id == uuid.UUID(advertiser_id))
+            )
+            advertiser = adv_result.scalar_one_or_none()
+            if not advertiser or advertiser.messages_remaining <= 0:
+                logger.warning("[PARRILLA] %s — sin mensajes disponibles, día %s omitido", advertiser_id, day_name)
+                return
+
+            contacts_result = await db.execute(
+                select(Contact).where(
+                    Contact.advertiser_id == uuid.UUID(advertiser_id),
+                    Contact.status == "active",
+                )
+            )
+            contacts = contacts_result.scalars().all()
+
+            ban_delay = 0
+            sent = 0
+
+            for contact in contacts:
+                if advertiser.messages_remaining <= 0:
+                    break
+
+                msg = Message(
+                    advertiser_id=uuid.UUID(advertiser_id),
+                    contact_id=contact.id,
+                    direction="outbound",
+                    content=f"[PARRILLA:{day_name}:{mode}] {audio_url}",
+                    status="queued",
+                    scheduled_for=datetime.now(timezone.utc),
+                )
+                db.add(msg)
+                await db.flush()
+
+                send_whatsapp_voice_note.apply_async(
+                    args=[str(msg.id), contact.phone, audio_url, script[:200]],
+                    countdown=ban_delay,
+                    queue="whatsapp",
+                )
+                advertiser.messages_remaining -= 1
+                ban_delay += anti_ban_delay()
+                sent += 1
+
+            await db.commit()
+            logger.info("[PARRILLA] %s — %s enviado a %d contactos", day_name, mode, sent)
+
+    try:
+        run_async(_send())
+    except Exception as exc:
+        raise self.retry(exc=exc)

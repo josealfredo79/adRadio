@@ -99,6 +99,39 @@ async def twilio_incoming(
             await db.commit()
         return {"message": "ok"}
 
+    # ─── APPOINTMENT RESCHEDULE HANDLER ─────────────────────────────────────
+    if advertiser:
+        reschedule_result = await db.execute(
+            select(Appointment).where(
+                Appointment.advertiser_id == advertiser.id,
+                Appointment.awaiting_reschedule == True,  # noqa: E712
+                Appointment.status == "cancelled",
+            ).order_by(Appointment.scheduled_at.desc())
+        )
+        reschedule_appt = reschedule_result.scalars().first()
+        if reschedule_appt:
+            from app.services.twilio_service import send_whatsapp as _send_wa
+            normalized = body_text.strip().lower()
+            # Si el usuario dice "SÍ" a reagendar
+            if normalized in ("1", "si", "sí", "s", "yes", "y", "claro", "por supuesto", "reagendar"):
+                reschedule_appt.awaiting_reschedule = False
+                await db.commit()
+                reply = (
+                    "¡Genial! 📅\n"
+                    "Por favor escríbeme qué día y hora prefieres esta semana "
+                    "y revisaré la disponibilidad para agendarte."
+                )
+                await _send_wa(from_number, reply, from_number=advertiser.whatsapp_number)
+                return {"message": "ok"}
+            # Si el usuario dice "NO"
+            elif normalized in ("2", "no", "n", "nop", "cancelar"):
+                reschedule_appt.awaiting_reschedule = False
+                await db.commit()
+                reply = "Entendido 👍. ¡Escríbenos cuando estés listo/a!"
+                await _send_wa(from_number, reply, from_number=advertiser.whatsapp_number)
+                return {"message": "ok"}
+    # ─── END APPOINTMENT RESCHEDULE ─────────────────────────────────────────
+
     # ─── APPOINTMENT CONFIRMATION HANDLER ───────────────────────────────────
     # Detecta respuestas 1/2 de contactos que tienen cita esperando confirmación
     _appt_reply: str | None = None
@@ -145,10 +178,11 @@ async def twilio_incoming(
             else:  # cancel
                 pending_appt.status = "cancelled"
                 pending_appt.awaiting_confirmation = False
+                pending_appt.awaiting_reschedule = True
                 _appt_reply = (
                     f"❌ Cita cancelada.\n\n"
-                    f"Sin problema, {pending_appt.customer_name.split()[0]}. "
-                    f"Escríbenos cuando quieras reagendar y te buscamos un nuevo horario 📅"
+                    f"Sin problema, {pending_appt.customer_name.split()[0]}.\n"
+                    f"¿Te gustaría que te muestre los horarios disponibles para reagendar tu cita? Responde *SÍ* o *NO* 📅"
                 )
                 owner_notify = (
                     f"❌ *Cita CANCELADA por el cliente*\n"

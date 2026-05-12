@@ -22,6 +22,9 @@ from app.schemas.campaign import (
     GenerateSagaRequest,
     GenerateSequenceResponse,
     GenerateRadioAdRequest,
+    ParrillaRequest,
+    ParrillaOut,
+    ParrillaDayOut,
 )
 from app.services.claude_service import (
     generate_campaign_variants,
@@ -265,3 +268,160 @@ async def generate_radio_ad_endpoint(
         business_category=body.business_category,
     )
     return {"audio_url": audio_url, "script": script}
+
+
+# ─── Modos por día según el plan ──────────────────────────────────────────────
+# Orden estratégico: valor primero, oferta al final de semana
+_PARRILLA_ALL = [
+    (0, "Lunes",     "comunitaria", "🌿"),
+    (1, "Martes",    "capsula",     "💡"),
+    (2, "Miércoles", "trivia",      "🧠"),
+    (3, "Jueves",    "historia",    "📖"),
+    (4, "Viernes",   "classic",     "🎙️"),
+    (5, "Sábado",    "alerta",      "🚨"),
+    (6, "Domingo",   "estacional",  "🗓️"),
+]
+
+# Starter solo accede a los primeros 4 días con classic
+_PARRILLA_STARTER = [
+    (0, "Lunes",     "classic", "🎙️"),
+    (1, "Martes",    "classic", "🎙️"),
+    (2, "Miércoles", "classic", "🎙️"),
+    (3, "Jueves",    "classic", "🎙️"),
+    (4, "Viernes",   "classic", "🎙️"),
+    (5, "Sábado",    "classic", "🎙️"),
+    (6, "Domingo",   "classic", "🎙️"),
+]
+
+# Growth: 4 modos (sin alerta ni estacional)
+_PARRILLA_GROWTH = [
+    (0, "Lunes",     "comunitaria", "🌿"),
+    (1, "Martes",    "capsula",     "💡"),
+    (2, "Miércoles", "trivia",      "🧠"),
+    (3, "Jueves",    "historia",    "📖"),
+    (4, "Viernes",   "classic",     "🎙️"),
+    (5, "Sábado",    "classic",     "🎙️"),
+    (6, "Domingo",   "classic",     "🎙️"),
+]
+
+
+@router.post("/generate-parrilla", response_model=ParrillaOut)
+async def generate_parrilla(
+    body: ParrillaRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Genera la parrilla semanal de radio: 7 cuñas con 1 clic.
+
+    - Starter: 7 variaciones del modo classic
+    - Growth:  4 modos distintos + classic los últimos días
+    - Pro+:    Los 7 modos completos con máxima variedad
+
+    Si auto_schedule=True (solo Growth+), programa el envío por Celery.
+    """
+    import asyncio
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    if current_user.subscription_status not in ("active", "trial"):
+        raise HTTPException(status_code=402, detail="Necesitas un plan activo")
+
+    plan = current_user.current_plan or "starter"
+
+    # Seleccionar tabla de modos según plan
+    if plan in ("pro", "business", "enterprise"):
+        schedule_table = _PARRILLA_ALL
+    elif plan == "growth":
+        schedule_table = _PARRILLA_GROWTH
+    else:  # starter / trial
+        schedule_table = _PARRILLA_STARTER
+
+    # Auto-schedule solo disponible para Growth+
+    can_auto = plan in ("growth", "pro", "business", "enterprise")
+    auto_scheduled = body.auto_schedule and can_auto
+
+    days_out: list[ParrillaDayOut] = []
+
+    for day_num, day_name, mode, emoji in schedule_table:
+        try:
+            script = await generate_radio_script(
+                business_name=body.business_name,
+                message_or_intent=body.intent,
+                country=body.country,
+                mode=mode,
+                business_category=body.business_category,
+                extra_context=body.extra_context,
+            )
+            try:
+                audio_url = await generate_radio_ad(
+                    business_name=body.business_name,
+                    message_or_intent=body.intent,
+                    country=body.country,
+                    _script=script,
+                    mode=mode,
+                    business_category=body.business_category,
+                )
+            except Exception as audio_err:
+                logger.warning("[PARRILLA] Audio day %d failed: %s", day_num, audio_err)
+                audio_url = None
+
+            days_out.append(ParrillaDayOut(
+                day=day_num,
+                day_name=day_name,
+                mode=mode,
+                mode_emoji=emoji,
+                script=script,
+                audio_url=audio_url,
+            ))
+
+            # Small delay to avoid rate limits on Claude/TTS
+            await asyncio.sleep(0.5)
+
+        except Exception as e:
+            logger.error("[PARRILLA] Script day %d failed: %s", day_num, e)
+            days_out.append(ParrillaDayOut(
+                day=day_num,
+                day_name=day_name,
+                mode=mode,
+                mode_emoji=emoji,
+                script=f"[Error generando guión: {e}]",
+                audio_url=None,
+            ))
+
+    # Auto-schedule: programar envío a contactos activos cada día de la semana
+    if auto_scheduled:
+        from datetime import datetime, timezone, timedelta
+        from app.workers.tasks import send_parrilla_day
+
+        try:
+            hour, minute = (int(x) for x in body.send_time.split(":"))
+        except Exception:
+            hour, minute = 10, 0
+
+        now = datetime.now(timezone.utc)
+        for day_out in days_out:
+            if day_out.audio_url:  # solo programar días con audio OK
+                # días hasta el próximo día de semana correspondiente
+                days_ahead = (day_out.day - now.weekday()) % 7
+                send_dt = (now + timedelta(days=days_ahead)).replace(
+                    hour=hour, minute=minute, second=0, microsecond=0
+                )
+                countdown = max(60, int((send_dt - now).total_seconds()))
+                send_parrilla_day.apply_async(
+                    kwargs={
+                        "advertiser_id": str(current_user.id),
+                        "audio_url": day_out.audio_url,
+                        "script": day_out.script,
+                        "day_name": day_out.day_name,
+                        "mode": day_out.mode,
+                    },
+                    countdown=countdown,
+                    queue="whatsapp",
+                )
+
+    return ParrillaOut(
+        days=days_out,
+        plan=plan,
+        auto_scheduled=auto_scheduled,
+    )

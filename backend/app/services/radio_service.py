@@ -149,7 +149,10 @@ LOCUTOR_VOICES = {
     "co": "es-CO-GonzaloNeural",   # Colombia
     "ar": "es-AR-TomasNeural",     # Argentina
     "es": "es-ES-AlvaroNeural",    # España (fallback)
-    "defaulGUION_SYSTEM_PROMPT = """Eres un guionista experto en radio AM/FM latinoamericana de los años 80-90.
+    "default": "es-MX-JorgeNeural",
+}
+
+GUION_SYSTEM_PROMPT = """Eres un guionista experto en radio AM/FM latinoamericana de los años 80-90.
 Escribe el guión de una cuña publicitaria de 20-25 segundos.
 
 Reglas:
@@ -304,7 +307,6 @@ Reglas:
 - Sin únicamente hablar de descuentos — el timing ES el mensaje
 - Máximo 220 palabras
 - SOLO el texto del locutor
-"""�No te lo pierdas!"
 - Máximo 220 palabras
 - SOLO el texto del locutor
 """

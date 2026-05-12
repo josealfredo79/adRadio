@@ -42,6 +42,8 @@ class Appointment(Base):
     reminder_1h_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     # True mientras esperamos que el cliente confirme/cancele
     awaiting_confirmation: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True si el cliente canceló y le preguntamos si quiere reagendar
+    awaiting_reschedule: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Google Calendar sync
     google_event_id: Mapped[str | None] = mapped_column(String(300))
