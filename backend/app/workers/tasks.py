@@ -595,11 +595,17 @@ def send_appointment_reminders():
                     fecha = appt.scheduled_at.strftime("%A %d de %B")
                     biz_name = advertiser.business_name if advertiser else "tu cita"
                     msg = (
-                        f"📅 Recordatorio: tienes cita mañana {fecha} a las {hora} "
-                        f"en {biz_name} — {appt.service}.\n\n"
-                        f"¿Confirmas? Responde ✅ o ❌ para cancelar."
+                        f"📅 *Recordatorio de cita*\n\n"
+                        f"Hola {appt.customer_name.split()[0]} 👋, tienes cita mañana:\n"
+                        f"📌 *{appt.service}*\n"
+                        f"🕐 {fecha} a las {hora}\n"
+                        f"🏪 {biz_name}\n\n"
+                        f"¿Puedes confirmar tu asistencia?\n"
+                        f"Responde *1* para confirmar ✅\n"
+                        f"Responde *2* para cancelar ❌"
                     )
                     await send_whatsapp(phone, msg, from_number=from_number)
+                    appt.awaiting_confirmation = True
 
                 appt.reminder_24h_sent = True
 
@@ -630,12 +636,16 @@ def send_appointment_reminders():
                 if phone:
                     hora = appt.scheduled_at.strftime("%I:%M %p").lstrip("0")
                     biz_name = advertiser.business_name if advertiser else "tu cita"
+                    status_emoji = "✅" if appt.status == "confirmed" else "📅"
                     msg = (
-                        f"⏰ Tu cita es en 1 hora — {hora} en {biz_name}.\n"
-                        f"Servicio: {appt.service}\n\n"
+                        f"⏰ *Tu cita es en 1 hora*\n\n"
+                        f"{status_emoji} {appt.service} a las {hora}\n"
+                        f"🏪 {biz_name}\n\n"
                         f"¡Te esperamos! 😊"
                     )
                     await send_whatsapp(phone, msg, from_number=from_number)
+                    # Ya no preguntamos a 1h — solo recordamos
+                    appt.awaiting_confirmation = False
 
                 appt.reminder_1h_sent = True
 

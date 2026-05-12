@@ -17,6 +17,7 @@ from app.models.conversation import Conversation
 from app.models.coupon import Coupon
 from app.models.message import Message
 from app.models.order import Order
+from app.models.appointment import Appointment
 from app.models.user import User
 from app.services.coupon_service import is_redeem_intent, is_expired
 from app.services.number_pool_service import assign_pool_number, release_pool_number
@@ -97,6 +98,77 @@ async def twilio_incoming(
             contact.status = "unsubscribed"
             await db.commit()
         return {"message": "ok"}
+
+    # ─── APPOINTMENT CONFIRMATION HANDLER ───────────────────────────────────
+    # Detecta respuestas 1/2 de contactos que tienen cita esperando confirmación
+    _appt_reply: str | None = None
+    confirm_keywords = {"1", "si", "sí", "yes", "confirmo", "confirmar", "✅", "ok", "dale"}
+    cancel_keywords  = {"2", "no", "cancela", "cancelar", "cancelar cita", "no puedo", "❌"}
+    normalized = body_text.lower().strip()
+
+    if normalized in confirm_keywords or normalized in cancel_keywords:
+        # Look for an appointment awaiting confirmation from this phone
+        appt_result = await db.execute(
+            select(Appointment).where(
+                Appointment.advertiser_id == advertiser.id,
+                Appointment.awaiting_confirmation == True,  # noqa: E712
+                Appointment.status.in_(["pending", "confirmed"]),
+            ).order_by(Appointment.scheduled_at.asc())
+        )
+        pending_appt = appt_result.scalars().first()
+
+        if pending_appt:
+            from datetime import datetime, timezone as _tz
+            from app.services.twilio_service import send_whatsapp as _send_wa
+            hora = pending_appt.scheduled_at.strftime("%I:%M %p").lstrip("0")
+            fecha = pending_appt.scheduled_at.strftime("%A %d de %B")
+            biz_name = advertiser.business_name or "el negocio"
+            from_wa = advertiser.whatsapp_number
+
+            if normalized in confirm_keywords:
+                pending_appt.status = "confirmed"
+                pending_appt.awaiting_confirmation = False
+                _appt_reply = (
+                    f"✅ *¡Cita confirmada!*\n\n"
+                    f"📌 {pending_appt.service}\n"
+                    f"🕐 {fecha} a las {hora}\n"
+                    f"🏪 {biz_name}\n\n"
+                    f"¡Te esperamos! Si necesitas reagendar escríbenos 😊"
+                )
+                # Notify business owner
+                owner_notify = (
+                    f"✅ *Cita confirmada por el cliente*\n"
+                    f"👤 {pending_appt.customer_name} ({from_number})\n"
+                    f"📌 {pending_appt.service}\n"
+                    f"🕐 {fecha} a las {hora}"
+                )
+            else:  # cancel
+                pending_appt.status = "cancelled"
+                pending_appt.awaiting_confirmation = False
+                _appt_reply = (
+                    f"❌ Cita cancelada.\n\n"
+                    f"Sin problema, {pending_appt.customer_name.split()[0]}. "
+                    f"Escríbenos cuando quieras reagendar y te buscamos un nuevo horario 📅"
+                )
+                owner_notify = (
+                    f"❌ *Cita CANCELADA por el cliente*\n"
+                    f"👤 {pending_appt.customer_name} ({from_number})\n"
+                    f"📌 {pending_appt.service}\n"
+                    f"🕐 {fecha} a las {hora}"
+                )
+
+            await db.commit()
+
+            # Send reply to client
+            await _send_wa(from_number, _appt_reply, from_number=from_wa)
+
+            # Notify owner
+            if advertiser.whatsapp_number or advertiser.phone:
+                owner_wa = advertiser.whatsapp_number or advertiser.phone
+                await _send_wa(owner_wa, owner_notify)
+
+            return {"message": "ok"}
+    # ─── END APPOINTMENT CONFIRMATION ────────────────────────────────────────
 
     # Coupon redemption intent
     if is_redeem_intent(body_text):
