@@ -494,7 +494,7 @@ async def stripe_webhook(
         )
         user = result.scalar_one_or_none()
         if user and plan:
-            plan_messages = {"starter": 200, "pro": 1000, "business": 3000, "enterprise": 10000}
+            plan_messages = {"starter": 200, "growth": 500, "pro": 1000, "business": 3000, "enterprise": 10000}
             plan_days = 30
             user.subscription_status = "active"
             user.current_plan = plan
@@ -528,7 +528,7 @@ async def stripe_webhook(
         )
         user = result.scalar_one_or_none()
         if user and user.current_plan:
-            plan_messages = {"starter": 200, "pro": 1000, "business": 3000, "enterprise": 10000}
+            plan_messages = {"starter": 200, "growth": 500, "pro": 1000, "business": 3000, "enterprise": 10000}
             user.messages_remaining = plan_messages.get(user.current_plan, 0)
             user.subscription_status = "active"
             user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=30)

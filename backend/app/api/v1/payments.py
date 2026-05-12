@@ -19,6 +19,7 @@ stripe_lib.api_key = settings.STRIPE_SECRET_KEY
 
 PLANS = {
     "starter": {"name": "Starter", "price_mxn": 499, "price_usd": 29, "messages": 200, "days": 30},
+    "growth": {"name": "Growth", "price_mxn": 999, "price_usd": 59, "messages": 500, "days": 30},
     "pro": {"name": "Pro", "price_mxn": 2499, "price_usd": 149, "messages": 1000, "days": 30},
     "business": {"name": "Business", "price_mxn": 6799, "price_usd": 399, "messages": 3000, "days": 30},
     "enterprise": {"name": "Enterprise", "price_mxn": 19999, "price_usd": 1199, "messages": 10000, "days": 30},

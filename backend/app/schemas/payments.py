@@ -12,7 +12,7 @@ class PlanInfo(BaseModel):
 
 
 class CheckoutRequest(BaseModel):
-    plan: str  # starter | pro | business | enterprise
+    plan: str  # starter | growth | pro | business | enterprise
 
 
 class CheckoutResponse(BaseModel):

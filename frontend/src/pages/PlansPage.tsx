@@ -14,6 +14,14 @@ interface Plan {
 
 const PLAN_FEATURES: Record<string, string[]> = {
   starter: ['200 mensajes/mes', 'Bot IA básico', 'Importar CSV', 'Campañas manuales'],
+  growth: [
+    '500 mensajes/mes',
+    'Bot IA básico',
+    'Importar CSV',
+    'Campañas manuales',
+    'Cupones QR',
+    'Métricas básicas',
+  ],
   pro: [
     '1,000 mensajes/mes',
     'Bot IA con RAG',
@@ -68,7 +76,7 @@ export default function PlansPage() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(plan.price_usd)
   }
 
-  const planOrder = ['starter', 'pro', 'business', 'enterprise']
+  const planOrder = ['starter', 'growth', 'pro', 'business', 'enterprise']
 
   return (
     <div className="space-y-8">
@@ -103,7 +111,7 @@ export default function PlansPage() {
         {planOrder.map((key) => {
           const plan = plans?.[key]
           if (!plan) return null
-          const isPro = key === 'pro'
+          const isGrowth = key === 'growth'
           const features = PLAN_FEATURES[key] ?? []
           const isCurrentPlan = user?.current_plan === key
 
@@ -111,14 +119,14 @@ export default function PlansPage() {
             <div
               key={key}
               className={`relative rounded-2xl border p-6 ${
-                isPro
+                isGrowth
                   ? 'border-brand-500 shadow-xl shadow-brand-100 bg-white'
                   : isCurrentPlan
                   ? 'border-green-400 shadow-lg shadow-green-100 bg-white'
                   : 'border-gray-200 bg-white shadow-sm'
               }`}
             >
-              {isPro && !isCurrentPlan && (
+              {isGrowth && !isCurrentPlan && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
                   <span className="inline-flex items-center gap-1 rounded-full bg-brand-500 px-3 py-1 text-xs font-bold text-white">
                     <Zap className="h-3 w-3" /> MÁS POPULAR
@@ -159,7 +167,7 @@ export default function PlansPage() {
                 className={`w-full rounded-xl py-2.5 text-sm font-medium transition-colors ${
                   isCurrentPlan
                     ? 'bg-green-100 text-green-700 cursor-default'
-                    : isPro
+                    : isGrowth
                     ? 'bg-brand-500 text-white hover:bg-brand-600 shadow'
                     : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
                 } disabled:opacity-60`}
