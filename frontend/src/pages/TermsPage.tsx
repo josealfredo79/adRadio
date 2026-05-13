@@ -35,7 +35,7 @@ export default function TermsPage() {
 
             <section>
               <h2 className="text-xl font-bold text-white mb-3">3. Inteligencia Artificial y Contenido Sintético</h2>
-              <p>IaRadio utiliza modelos de IA de terceros (como Anthropic y ElevenLabs) para generar texto y audio. Eres responsable de utilizar estas herramientas éticamente. En muchas jurisdicciones es obligatorio declarar que el contenido ha sido generado por Inteligencia Artificial o que el interlocutor es un bot. Te recomendamos actuar con transparencia hacia tus clientes finales.</p>
+              <p>IaRadio utiliza modelos de IA de terceros (como Anthropic (Claude), OpenAI, Voyage AI y Fish Audio) para generar texto, audios y buscar información. Eres responsable de utilizar estas herramientas éticamente. En muchas jurisdicciones es obligatorio declarar que el contenido ha sido generado por Inteligencia Artificial o que el interlocutor es un bot. Te recomendamos actuar con transparencia hacia tus clientes finales.</p>
             </section>
             
             <section>

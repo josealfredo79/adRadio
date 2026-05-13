@@ -49,7 +49,7 @@ export default function PrivacyPage() {
             
             <section>
               <h2 className="text-xl font-bold text-white mb-3">4. Compartir con Terceros</h2>
-              <p>No compartimos tu información personal con terceros, excepto con proveedores de servicios necesarios para el funcionamiento de la plataforma (como Stripe para pagos, proveedores de alojamiento en la nube, y servicios de IA como OpenAI/Anthropic para generar los textos y audios). Estos proveedores están sujetos a estrictas obligaciones de confidencialidad.</p>
+              <p>No compartimos tu información personal con terceros, excepto con proveedores de servicios necesarios para el funcionamiento de la plataforma (como Stripe para pagos, Cloudflare para almacenamiento, Twilio para mensajería, y servicios de IA como Anthropic, OpenAI, Voyage AI y Fish Audio para procesar textos y audios). Estos proveedores están sujetos a estrictas obligaciones de confidencialidad.</p>
             </section>
 
             <section>
