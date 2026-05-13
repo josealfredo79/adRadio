@@ -644,6 +644,8 @@ export default function LandingPage() {
             <span className="text-gray-600 text-sm">— Radio Publicitaria por WhatsApp con IA</span>
           </div>
           <div className="flex gap-5 text-sm text-gray-600">
+            <Link to="/terms" className="hover:text-gray-300 transition-colors">Términos</Link>
+            <Link to="/privacy" className="hover:text-gray-300 transition-colors">Privacidad</Link>
             <Link to="/login" className="hover:text-gray-300 transition-colors">Iniciar sesión</Link>
             <Link to="/register" className="hover:text-gray-300 transition-colors">Registrarse</Link>
           </div>

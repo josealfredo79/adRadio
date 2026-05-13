@@ -18,6 +18,8 @@ const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'))
 const InboxPage = lazy(() => import('@/pages/InboxPage'))
 const OrdersPage = lazy(() => import('@/pages/OrdersPage'))
 const AppointmentsPage = lazy(() => import('@/pages/AppointmentsPage'))
+const TermsPage = lazy(() => import('@/pages/TermsPage'))
+const PrivacyPage = lazy(() => import('@/pages/PrivacyPage'))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -39,6 +41,8 @@ export default function App() {
           <Routes>
             {/* Landing */}
             <Route path="/" element={<LandingPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
 
             {/* Public */}
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
