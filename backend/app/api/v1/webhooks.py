@@ -28,6 +28,32 @@ from app.api.v1.payments import PLAN_MESSAGES  # fuente de verdad para cuotas
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
+def _calculate_lead_score(body_text: str, message_count: int) -> str | None:
+    """Auto-calculate lead score based on message content and conversation history."""
+    text_lower = body_text.lower().strip()
+
+    if message_count >= 3:
+        return "warm"
+
+    hot_keywords = ["comprar", "precio", "ya", "urgente", "ahora", "quiero", "necesito", "pedir", "ordenar", "apartar", "reservar", "cuánto", "costo", "tarifa", "promo", "descuento", "oferta"]
+    warm_keywords = ["quizás", "creo", "pensando", "ver", "info", "consultar", "preguntar", "saber", "dime", "mandar", "enviar", "详细信息", "cuál", "cómo"]
+    cold_keywords = ["hola", "buenos", "buenas", "saludos", "gracias", "ok", "si", "sí", "no", "hi", "hello"]
+
+    if any(kw in text_lower for kw in hot_keywords):
+        return "hot"
+
+    if any(kw in text_lower for kw in warm_keywords):
+        return "warm"
+
+    if any(kw in text_lower for kw in cold_keywords) and len(text_lower) < 15:
+        return "cold"
+
+    if len(text_lower) < 5:
+        return "cold"
+
+    return "warm"
+
+
 def _validate_twilio_signature(request_url: str, params: dict, signature: str) -> bool:
     """Validate X-Twilio-Signature HMAC-SHA1."""
     sorted_params = "".join(f"{k}{v}" for k, v in sorted(params.items()))
@@ -312,9 +338,15 @@ async def twilio_incoming(
             advertiser_id=advertiser.id,
             contact_id=contact.id,
             messages=[],
+            lead_score="cold",
         )
         db.add(conv)
         await db.flush()
+    else:
+        msg_count = len(conv.messages) if conv.messages else 0
+        new_score = _calculate_lead_score(body_text, msg_count)
+        if new_score:
+            conv.lead_score = new_score
 
     # ─── ORDER STATE MACHINE ──────────────────────────────────────────────
     # Check if there's a pending order in progress for this contact
