@@ -78,6 +78,7 @@ export default function InboxPage() {
   const qc = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [leadScoreFilter, setLeadScoreFilter] = useState<string>('')
   const [search, setSearch] = useState('')
   const [replyText, setReplyText] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -97,6 +98,7 @@ export default function InboxPage() {
   })
 
   const filtered = conversations?.filter((c) => {
+    if (leadScoreFilter && c.lead_score !== leadScoreFilter) return false
     if (!search.trim()) return true
     const q = search.toLowerCase()
     return c.contact.name.toLowerCase().includes(q) || (c.contact.phone ?? '').toLowerCase().includes(q)
@@ -118,6 +120,15 @@ export default function InboxPage() {
       setReplyText('')
       qc.invalidateQueries({ queryKey: ['conversation', selectedId] })
       qc.invalidateQueries({ queryKey: ['conversations', statusFilter] })
+    },
+  })
+
+  const leadScoreMutation = useMutation({
+    mutationFn: ({ id, lead_score }: { id: string; lead_score: string | null }) =>
+      api.patch(`/conversations/${id}/lead-score`, { lead_score }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['conversations'] })
+      qc.invalidateQueries({ queryKey: ['conversation', selectedId] })
     },
   })
 
@@ -161,6 +172,25 @@ export default function InboxPage() {
                 )}
               >
                 {s === '' ? 'Todas' : STATUS_LABEL[s as keyof typeof STATUS_LABEL]}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-1.5">
+            {([{ v: '', l: 'Todos' }, { v: 'hot', l: '🔥 Caliente' }, { v: 'warm', l: '🌡️ Tibio' }, { v: 'cold', l: '❄️ Frío' }] as const).map((opt) => (
+              <button
+                key={opt.v}
+                onClick={() => setLeadScoreFilter(opt.v)}
+                className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+                  leadScoreFilter === opt.v
+                    ? opt.v === 'hot' && 'bg-red-100 text-red-600'
+                    || opt.v === 'warm' && 'bg-orange-100 text-orange-600'
+                    || opt.v === 'cold' && 'bg-blue-100 text-blue-600'
+                    || 'bg-gray-200 text-gray-700'
+                    : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                )}
+              >
+                {opt.l}
               </button>
             ))}
           </div>
@@ -244,6 +274,22 @@ export default function InboxPage() {
                 <p className="text-xs text-gray-500">{detail.contact.phone}</p>
               </div>
               <div className="flex items-center gap-2">
+                <select
+                  value={detail.lead_score || ''}
+                  onChange={(e) => leadScoreMutation.mutate({ id: detail.id, lead_score: e.target.value || null })}
+                  className={cn(
+                    'rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors',
+                    detail.lead_score === 'hot' && 'border-red-200 bg-red-50 text-red-600',
+                    detail.lead_score === 'warm' && 'border-orange-200 bg-orange-50 text-orange-600',
+                    detail.lead_score === 'cold' && 'border-blue-200 bg-blue-50 text-blue-600',
+                    !detail.lead_score && 'border-gray-200 bg-white text-gray-500'
+                  )}
+                >
+                  <option value="">Sin calificar</option>
+                  <option value="hot">🔥 Caliente</option>
+                  <option value="warm">🌡️ Tibio</option>
+                  <option value="cold">❄️ Frío</option>
+                </select>
                 {detail.status !== 'escalated' && (
                   <button
                     onClick={() => statusMutation.mutate({ id: detail.id, status: 'escalated' })}

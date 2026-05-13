@@ -123,6 +123,33 @@ async def update_conversation_status(
     return {"message": f"Estado actualizado a {new_status}"}
 
 
+@router.patch("/{conversation_id}/lead-score")
+async def update_lead_score(
+    conversation_id: uuid.UUID,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Manually set lead score: hot, warm, cold, or null to clear."""
+    new_score = body.get("lead_score")
+    if new_score not in (None, "hot", "warm", "cold"):
+        raise HTTPException(status_code=400, detail="Lead score inválido")
+
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.advertiser_id == current_user.id,
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversación no encontrada")
+
+    conv.lead_score = new_score
+    await db.commit()
+    return {"message": f"Lead score actualizado a {new_score}"}
+
+
 @router.post("/{conversation_id}/reply")
 async def reply_to_conversation(
     conversation_id: uuid.UUID,
