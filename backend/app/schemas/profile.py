@@ -27,9 +27,12 @@ class ProfileUpdate(BaseModel):
     def validate_whatsapp(cls, v: str | None) -> str | None:
         if v is None or v == "":
             return None
-        if not re.match(r"^\+\d{7,15}$", v):
-            raise ValueError("El WhatsApp debe estar en formato E.164 (ej: +521234567890)")
-        return v
+        # Accept with or without +
+        clean = v.replace("+", "")
+        if not clean.isdigit() or len(clean) < 7 or len(clean) > 15:
+            raise ValueError("El WhatsApp debe tener entre 7 y 15 dígitos")
+        # Add + if not present
+        return f"+{clean}" if not v.startswith("+") else v
 
     @field_validator("language")
     @classmethod
