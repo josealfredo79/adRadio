@@ -55,5 +55,14 @@ services:
       - "5173:5173"
     command: sh -c "npm install && npm run dev -- --host"
 
+  cloudflared:
+    image: cloudflare/cloudflared
+    command: tunnel --config /etc/cloudflared/config.yml run adradio-prod
+    volumes:
+      - ./cloudflared:/etc/cloudflared
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   pgdata:
