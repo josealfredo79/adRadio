@@ -2,7 +2,11 @@
 Appointments router — /api/v1/appointments
 CRUD de citas + flujo OAuth de Google Calendar.
 """
+import base64
+import hashlib
+import hmac
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -19,6 +23,38 @@ from app.models.user import User
 from app.schemas.appointment import AppointmentCreate, AppointmentOut, AppointmentUpdate
 
 logger = logging.getLogger(__name__)
+
+
+def _sign_state(user_id: str) -> str:
+    """Create a signed, time-limited state token for OAuth."""
+    payload = f"{user_id}:{int(time.time())}"
+    sig = hmac.new(settings.SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    token = base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
+    return token
+
+
+def _verify_state(token: str) -> str | None:
+    """Verify and decode state token. Returns user_id or None if invalid/expired."""
+    try:
+        raw = base64.urlsafe_b64decode(token.encode()).decode()
+        parts = raw.rsplit(":", 1)
+        if len(parts) != 2:
+            return None
+        payload_with_ts, received_sig = parts
+        ts_parts = payload_with_ts.rsplit(":", 1)
+        if len(ts_parts) != 2:
+            return None
+        user_id, ts_str = ts_parts
+        ts = int(ts_str)
+        if abs(int(time.time()) - ts) > 300:
+            return None
+        payload = f"{user_id}:{ts}"
+        expected_sig = hmac.new(settings.SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+        if not hmac.compare_digest(received_sig, expected_sig):
+            return None
+        return user_id
+    except Exception:
+        return None
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -211,8 +247,7 @@ async def google_connect(
     from app.services.calendar_service import get_auth_url
 
     redirect_uri = f"{settings.BASE_URL}/api/v1/appointments/google/callback"
-    # Encode user ID in state for the callback
-    state = str(current_user.id)
+    state = _sign_state(str(current_user.id))
     url = get_auth_url(redirect_uri, state)
     return {"auth_url": url}
 
@@ -229,14 +264,17 @@ async def google_callback(
     redirect_uri = f"{settings.BASE_URL}/api/v1/appointments/google/callback"
 
     try:
+        user_id = _verify_state(state)
+        if not user_id:
+            logger.warning("[GCAL] Invalid state token: %s", state)
+            return RedirectResponse(f"{settings.FRONTEND_URL}/app/appointments?error=invalid_state")
+
         refresh_token = exchange_code(code, redirect_uri)
     except Exception as e:
         logger.error("[GCAL] OAuth exchange failed: %s", e)
         return RedirectResponse(f"{settings.FRONTEND_URL}/app/appointments?error=oauth_failed")
 
-    # Save refresh token to user
-    user_id = uuid.UUID(state)
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()
     if not user:
         return RedirectResponse(f"{settings.FRONTEND_URL}/app/appointments?error=user_not_found")

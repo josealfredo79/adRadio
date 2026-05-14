@@ -13,6 +13,7 @@ interface Contact {
   status: string
   engagement_score: number
   created_at: string
+  city?: string | null
 }
 
 export default function ContactsPage() {
@@ -22,6 +23,8 @@ export default function ContactsPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', email: '', city: '' })
   const [error, setError] = useState('')
+  const [uploadMsg, setUploadMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
 
   const { data, isLoading } = useQuery<{ items: Contact[]; total: number }>({
     queryKey: ['contacts'],
@@ -56,13 +59,19 @@ export default function ContactsPage() {
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    setUploadMsg(null)
+    setIsUploading(true)
     const fd = new FormData()
     fd.append('file', file)
     try {
       await api.post('/contacts/import-csv', fd)
+      setUploadMsg({ type: 'success', text: `Archivo "${file.name}" importado exitosamente.` })
       qc.invalidateQueries({ queryKey: ['contacts'] })
     } catch (err: any) {
-      alert(err.response?.data?.detail ?? 'Error al importar CSV')
+      setUploadMsg({ type: 'error', text: err.response?.data?.detail ?? 'Error al importar CSV' })
+    } finally {
+      setIsUploading(false)
+      e.target.value = ''
     }
   }
 
@@ -91,15 +100,16 @@ export default function ContactsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+          <label className={`flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-colors ${isUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
             <Upload className="h-4 w-4" />
-            Importar CSV
-            <input type="file" accept=".csv" className="hidden" onChange={handleCSVUpload} />
+            {isUploading ? 'Importando...' : 'Importar CSV'}
+            <input type="file" accept=".csv" className="hidden" onChange={handleCSVUpload} disabled={isUploading} />
           </label>
           {(data?.total ?? 0) > 0 && (
             <button
               onClick={handleExport}
-              className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              disabled={isUploading}
+              className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="h-4 w-4" />
               Exportar CSV
@@ -114,6 +124,18 @@ export default function ContactsPage() {
           </button>
         </div>
       </div>
+
+      {/* Upload feedback */}
+      {uploadMsg && (
+        <div className={`rounded-lg border px-4 py-3 text-sm ${
+          uploadMsg.type === 'success'
+            ? 'border-green-200 bg-green-50 text-green-700'
+            : 'border-red-200 bg-red-50 text-red-700'
+        }`}>
+          {uploadMsg.text}
+          <button onClick={() => setUploadMsg(null)} className="ml-2 font-medium hover:underline">×</button>
+        </div>
+      )}
 
       {/* Status filter tabs */}
       <div className="flex gap-1.5 flex-wrap">
@@ -187,7 +209,7 @@ export default function ContactsPage() {
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{contact.name}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{contact.phone}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{contact.email ?? '—'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{(contact as any).city ?? '—'}</td>
+                  <td className="px-6 py-4 text-sm text-gray-500">{contact.city ?? '—'}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                       contact.status === 'active'

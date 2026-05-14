@@ -33,7 +33,13 @@ class ContactUpdate(BaseModel):
     tags: list[str] | None = None
     language: str | None = None
     notes: str | None = None
-    status: str | None = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str | None) -> str | None:
+        if v is not None and v not in ("active", "unsubscribed"):
+            raise ValueError("Solo puedes cambiar a active o unsubscribed")
+        return v
 
 
 class ContactOut(BaseModel):

@@ -105,7 +105,7 @@ async def update_conversation_status(
 ):
     """Manually escalate or close a conversation."""
     new_status = body.get("status")
-    if new_status not in ("active", "escalated", "closed"):
+    if new_status not in ("active", "closed"):
         raise HTTPException(status_code=400, detail="Estado inválido")
 
     result = await db.execute(

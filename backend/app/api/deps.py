@@ -1,7 +1,7 @@
 """
-Dependency: current authenticated user.
+Dependency: current authenticated user with request-level caching.
 """
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,9 +14,13 @@ bearer_scheme = HTTPBearer()
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    if hasattr(request.state, "user"):
+        return request.state.user
+
     token = credentials.credentials
     payload = decode_token(token)
 
@@ -33,6 +37,7 @@ async def get_current_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario no encontrado")
 
+    request.state.user = user
     return user
 
 

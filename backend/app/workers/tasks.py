@@ -16,13 +16,20 @@ def run_async(coro):
     return asyncio.run(coro)
 
 
+async def _get_advertiser_whatsapp_number(db: AsyncSession, advertiser_id: uuid.UUID) -> str | None:
+    from app.models.user import User
+    from sqlalchemy import select
+    result = await db.execute(select(User).where(User.id == advertiser_id))
+    advertiser = result.scalar_one_or_none()
+    return advertiser.whatsapp_number if advertiser else None
+
+
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def send_whatsapp_message(self, message_id: str, to: str, body: str):
     """Send a WhatsApp message via Twilio with retry logic."""
     async def _send():
         from app.database import AsyncSessionLocal
         from app.models.message import Message
-        from app.models.user import User
         from app.services.twilio_service import send_whatsapp
         from sqlalchemy import select
 
@@ -30,13 +37,9 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
             result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
             msg = result.scalar_one_or_none()
 
-            # Use advertiser's own WhatsApp number if configured
-            from_number: str | None = None
+            from_number = None
             if msg:
-                user_result = await db.execute(select(User).where(User.id == msg.advertiser_id))
-                advertiser = user_result.scalar_one_or_none()
-                if advertiser:
-                    from_number = advertiser.whatsapp_number
+                from_number = await _get_advertiser_whatsapp_number(db, msg.advertiser_id)
 
             sid = await send_whatsapp(to, body, from_number=from_number)
 
@@ -58,7 +61,6 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
     async def _send():
         from app.database import AsyncSessionLocal
         from app.models.message import Message
-        from app.models.user import User
         from app.services.twilio_service import send_whatsapp_media
         from sqlalchemy import select
 
@@ -66,12 +68,9 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
             result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
             msg = result.scalar_one_or_none()
 
-            from_number: str | None = None
+            from_number = None
             if msg:
-                user_result = await db.execute(select(User).where(User.id == msg.advertiser_id))
-                advertiser = user_result.scalar_one_or_none()
-                if advertiser:
-                    from_number = advertiser.whatsapp_number
+                from_number = await _get_advertiser_whatsapp_number(db, msg.advertiser_id)
 
             sid = await send_whatsapp_media(to, audio_url, body=caption, from_number=from_number)
 
@@ -231,6 +230,7 @@ def schedule_campaign(self, campaign_id: str):
                     send_whatsapp_voice_note.apply_async(
                         args=[str(msg.id), contact.phone, audio_url, radio_script],
                         countdown=ban_delay,
+                        queue="whatsapp",
                     )
                     advertiser.messages_remaining -= 1
                     ban_delay += anti_ban_delay()
@@ -285,10 +285,9 @@ def schedule_campaign(self, campaign_id: str):
                 send_whatsapp_message.apply_async(
                     args=[str(msg.id), contact.phone, body],
                     countdown=ban_delay,
+                    queue="whatsapp",
                 )
                 advertiser.messages_remaining -= 1
-                ban_delay += anti_ban_delay()
-
                 ban_delay += anti_ban_delay()
 
             await db.commit()

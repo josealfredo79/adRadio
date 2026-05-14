@@ -4,7 +4,7 @@ Serves R2-stored audio files publicly so Twilio can download them.
 """
 import boto3
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.config import settings
@@ -23,13 +23,12 @@ def _get_r2_client():
 
 
 @router.get("/audio/{key:path}")
-async def serve_audio(key: str):
+async def serve_audio(request: Request, key: str):
     """Proxy an audio file from R2 so Twilio/WhatsApp can download it."""
     if not settings.CF_R2_ACCESS_KEY:
         raise HTTPException(status_code=503, detail="R2 not configured")
 
-    # Prevent path traversal
-    if ".." in key or key.startswith("/"):
+    if ".." in key or key.startswith("/") or "/" in key:
         raise HTTPException(status_code=400, detail="Invalid key")
 
     r2 = _get_r2_client()

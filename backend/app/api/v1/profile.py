@@ -58,10 +58,10 @@ async def change_password(
         raise HTTPException(status_code=400, detail="Debes proporcionar la contraseña actual y la nueva")
     if len(new_pw) < 8:
         raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 8 caracteres")
-    if not verify_password(current_pw, current_user.hashed_password):
+    if not verify_password(current_pw, current_user.password_hash):
         raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
 
-    current_user.hashed_password = hash_password(new_pw)
+    current_user.password_hash = hash_password(new_pw)
     await db.commit()
     return {"message": "Contraseña actualizada correctamente"}
 
