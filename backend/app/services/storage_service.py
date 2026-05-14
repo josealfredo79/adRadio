@@ -28,7 +28,7 @@ def _get_client():
 
 
 async def upload_bytes(content: bytes, key: str, content_type: str) -> str | None:
-    """Upload bytes to R2. Returns the public URL."""
+    """Upload bytes to R2. Returns the proxy URL through the backend API."""
     if not settings.CF_R2_ACCESS_KEY:
         return None
 
@@ -40,7 +40,7 @@ async def upload_bytes(content: bytes, key: str, content_type: str) -> str | Non
             Body=content,
             ContentType=content_type,
         )
-        return f"{settings.CF_R2_PUBLIC_URL}/{key}"
+        return f"{settings.BASE_URL}/api/v1/radio/audio/{key}"
 
     try:
         loop = asyncio.get_running_loop()

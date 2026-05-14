@@ -28,12 +28,12 @@ async def serve_audio(request: Request, key: str):
     if not settings.CF_R2_ACCESS_KEY:
         raise HTTPException(status_code=503, detail="R2 not configured")
 
-    if ".." in key or key.startswith("/") or "/" in key:
+    if ".." in key:
         raise HTTPException(status_code=400, detail="Invalid key")
 
     r2 = _get_r2_client()
     try:
-        obj = r2.get_object(Bucket=settings.CF_R2_BUCKET, Key=f"radio/{key}")
+        obj = r2.get_object(Bucket=settings.CF_R2_BUCKET, Key=key)
     except ClientError as e:
         if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
             raise HTTPException(status_code=404, detail="Audio not found")
