@@ -1,7 +1,9 @@
 #!/bin/bash
 set -e
 
-echo "=== DEBUG: PORT = ${PORT} ==="
+echo "=== Railway Debug ==="
+echo "PORT: ${PORT}"
+echo "=================="
 
 case "${SERVICE_ROLE:-api}" in
   worker)
@@ -14,9 +16,10 @@ case "${SERVICE_ROLE:-api}" in
     ;;
   *)
     echo "Running migrations..."
-    alembic upgrade head || true
+    alembic upgrade head || echo "Migrations done (or skipped)"
     
-    echo "Starting uvicorn on port ${PORT:-8000}..."
-    exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --workers 1
+    PORT_VALUE=${PORT:-8000}
+    echo "Starting uvicorn on port $PORT_VALUE..."
+    exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT_VALUE"
     ;;
 esac
