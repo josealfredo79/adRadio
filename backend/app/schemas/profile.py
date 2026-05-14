@@ -8,6 +8,7 @@ class ProfileUpdate(BaseModel):
     city: str | None = None
     country: str | None = None
     phone: str | None = None
+    whatsapp_number: str | None = None
     language: str | None = None
     bot_name: str | None = None
     bot_personality: str | None = None
@@ -19,6 +20,15 @@ class ProfileUpdate(BaseModel):
             return None
         if not re.match(r"^\+\d{7,15}$", v):
             raise ValueError("El teléfono debe estar en formato E.164 (ej: +521234567890)")
+        return v
+
+    @field_validator("whatsapp_number")
+    @classmethod
+    def validate_whatsapp(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if not re.match(r"^\+\d{7,15}$", v):
+            raise ValueError("El WhatsApp debe estar en formato E.164 (ej: +521234567890)")
         return v
 
     @field_validator("language")
