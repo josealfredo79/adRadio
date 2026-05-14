@@ -3,6 +3,7 @@ Celery tasks — background jobs for IaRadio.
 """
 import asyncio
 import logging
+import random
 import re
 import uuid
 from datetime import datetime, timezone
@@ -247,46 +248,46 @@ def schedule_campaign(self, campaign_id: str):
                     "city": getattr(contact, "city", None),
                 }
 
-                for idx, raw_template in enumerate(messages_list):
-                    # Personalize message
-                    body = personalize_message(raw_template, contact_data, advertiser_data)
+                # Select one random message variant per contact (anti-spam)
+                raw_template = random.choice(messages_list) if messages_list else campaign.message_text
 
-                    # Attach coupon to LAST message in sequence/saga
-                    if has_coupon and idx == len(messages_list) - 1:
-                        code = generate_coupon_code()
-                        expires_at = default_expiry(hours=coupon_hours)
-                        coupon = Coupon(
-                            advertiser_id=campaign.advertiser_id,
-                            campaign_id=campaign.id,
-                            contact_id=contact.id,
-                            code=code,
-                            description=coupon_description or None,
-                            expires_at=expires_at,
-                        )
-                        db.add(coupon)
-                        await db.flush()
-                        body = format_coupon_in_message(body, code, expires_at, coupon_description)
+                # Personalize message
+                body = personalize_message(raw_template, contact_data, advertiser_data)
 
-                    # Schedule offset: anti-ban delay + message interval
-                    msg_countdown = ban_delay + (idx * interval_seconds)
-
-                    msg = Message(
+                # Attach coupon to message (only if has_coupon enabled)
+                if has_coupon:
+                    code = generate_coupon_code()
+                    expires_at = default_expiry(hours=coupon_hours)
+                    coupon = Coupon(
+                        advertiser_id=campaign.advertiser_id,
                         campaign_id=campaign.id,
                         contact_id=contact.id,
-                        advertiser_id=campaign.advertiser_id,
-                        direction="outbound",
-                        content=body,
-                        status="queued",
-                        scheduled_for=datetime.now(timezone.utc),
+                        code=code,
+                        description=coupon_description or None,
+                        expires_at=expires_at,
                     )
-                    db.add(msg)
+                    db.add(coupon)
                     await db.flush()
+                    body = format_coupon_in_message(body, code, expires_at, coupon_description)
 
-                    send_whatsapp_message.apply_async(
-                        args=[str(msg.id), contact.phone, body],
-                        countdown=msg_countdown,
-                    )
-                    advertiser.messages_remaining -= 1
+                msg = Message(
+                    campaign_id=campaign.id,
+                    contact_id=contact.id,
+                    advertiser_id=campaign.advertiser_id,
+                    direction="outbound",
+                    content=body,
+                    status="queued",
+                    scheduled_for=datetime.now(timezone.utc),
+                )
+                db.add(msg)
+                await db.flush()
+
+                send_whatsapp_message.apply_async(
+                    args=[str(msg.id), contact.phone, body],
+                    countdown=ban_delay,
+                )
+                advertiser.messages_remaining -= 1
+                ban_delay += anti_ban_delay()
 
                 ban_delay += anti_ban_delay()
 
