@@ -26,29 +26,13 @@ logger = logging.getLogger(__name__)
 if settings.SENTRY_DSN:
     sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=0.1)
 
-# Rate limiter — intenta usar Redis para que el límite sea GLOBAL entre todos los workers.
-# Si Redis no está disponible al arrancar (ej. primer deploy), cae a memoria local como fallback.
-# Esto evita que cada proceso Uvicorn tenga un contador independiente en producción.
-def _build_limiter() -> Limiter:
-    try:
-        import redis as sync_redis
-        r = sync_redis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
-        r.ping()
-        storage_uri = settings.REDIS_URL
-        logger.info("[RateLimit] Backend: Redis (%s)", settings.REDIS_URL)
-    except Exception:
-        storage_uri = "memory://"
-        logger.warning(
-            "[RateLimit] Redis no disponible al arrancar — usando memoria local. "
-            "El límite NO será global entre múltiples workers."
-        )
-    return Limiter(
-        key_func=get_remote_address,
-        storage_uri=storage_uri,
-        default_limits=["200/minute"],
-    )
-
-limiter = _build_limiter()
+# Rate limiter — usa memoria por defecto para evitar problemas al inicio
+# Redis se conecta bajo demanda en las rutas que lo requieren
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri="memory://",
+    default_limits=["200/minute"],
+)
 
 
 @asynccontextmanager
