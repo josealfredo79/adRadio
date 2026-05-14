@@ -49,6 +49,17 @@ async def answer_with_rag(
     rows = result.fetchall()
 
     if not rows:
+        # Use business profile info as fallback context
+        from sqlalchemy import select
+        from app.models.user import User
+
+        user_result = await db.execute(
+            select(User).where(User.id == uuid.UUID(advertiser_id))
+        )
+        user = user_result.scalar_one_or_none()
+
+        if user and user.business_name:
+            return f"Hola! Soy {user.bot_name or 'el asistente'} de {user.business_name}. {user.bot_personality or 'Estoy aquí para ayudarte con información sobre nuestros servicios y productos.'} ¿En qué puedo ayudarte hoy?"
         return "Gracias por tu mensaje. En breve un asesor te atenderá. 😊"
 
     # Build context from top chunks (filter by similarity threshold)
