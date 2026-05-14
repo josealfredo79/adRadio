@@ -3,8 +3,8 @@ set -e
 
 case "${SERVICE_ROLE:-api}" in
   worker)
-    echo "Starting Celery worker..."
-    exec celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    echo "Starting Celery worker (all queues)..."
+    exec celery -A app.workers.celery_app worker --loglevel=info --concurrency=4 -Q celery,whatsapp,processing,campaigns
     ;;
   beat)
     echo "Starting Celery beat..."
