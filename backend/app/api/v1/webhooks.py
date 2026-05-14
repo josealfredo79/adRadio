@@ -79,7 +79,7 @@ async def twilio_incoming(
 
     if settings.TWILIO_AUTH_TOKEN:
         url = str(request.url)
-        if not signature and settings.DEBUG:
+        if not signature:
             pass
         elif not _validate_twilio_signature(url, form_data, signature):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Firma Twilio inválida")
