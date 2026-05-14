@@ -4,6 +4,7 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /frontend
 
 COPY frontend/package.json ./
+# Use package-lock.json if present (faster), fall back to npm install
 COPY frontend/package-lock.json* ./
 RUN npm install --ignore-scripts
 
@@ -29,6 +30,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 
+# Copy built frontend so FastAPI can serve it as a SPA
 COPY --from=frontend-builder /frontend/dist ./app/static/dist
 
 EXPOSE 8000
