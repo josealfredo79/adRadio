@@ -40,13 +40,16 @@ async def upload_bytes(content: bytes, key: str, content_type: str) -> str | Non
             Body=content,
             ContentType=content_type,
         )
+        logger.info("[R2] Uploaded %s → %s/%s", len(content), settings.CF_R2_BUCKET, key)
         return f"{settings.BASE_URL}/api/v1/radio/audio/{key}"
 
     try:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, _put)
+        url = await loop.run_in_executor(None, _put)
+        logger.info("[R2] Success: %s", url)
+        return url
     except Exception as e:
-        logger.error("[R2 ERROR] %s", e)
+        logger.error("[R2 ERROR] upload failed: %s", e)
         return None
 
 
