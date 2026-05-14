@@ -601,7 +601,7 @@ async def generate_radio_ad(
     country: str = "mx",
     jingle_path: str | None = None,
     _script: str | None = None,
-    mode: str = "classic",  # "classic" | "comunitaria"
+    mode: str = "classic",
     business_category: str | None = None,
 ) -> str:
     """
@@ -610,26 +610,40 @@ async def generate_radio_ad(
     business_category: categoría del negocio para elegir el jingle automáticamente.
     Retorna la URL del archivo de audio en R2.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     # 1. Generar guión con Claude (o usar el provisto)
     script = _script or await generate_radio_script(business_name, message_or_intent, country, mode=mode)
 
     # 2. Sintetizar voz
     voice = LOCUTOR_VOICES.get(country, LOCUTOR_VOICES["default"])
-    mp3_bytes = await text_to_speech(script, voice)
+    try:
+        mp3_bytes = await text_to_speech(script, voice)
+        logger.info("[RADIO] TTS generated %d bytes with voice %s", len(mp3_bytes), voice)
+    except Exception as tts_err:
+        logger.error("[RADIO] TTS failed: %s", tts_err)
+        raise RuntimeError(f"TTS failed: {tts_err}") from tts_err
 
     # 3. Elegir jingle: prioridad jingle_path explícito > por categoría > sin jingle
     resolved_jingle = jingle_path or get_jingle_path(business_category)
+    logger.info("[RADIO] Using jingle: %s", resolved_jingle)
 
     # 4. Mezclar voz + jingle
-    audio_bytes = mix_with_jingle(mp3_bytes, resolved_jingle)
+    try:
+        audio_bytes = mix_with_jingle(mp3_bytes, resolved_jingle)
+        logger.info("[RADIO] Mixed audio: %d bytes", len(audio_bytes))
+    except Exception as mix_err:
+        logger.error("[RADIO] Mix failed: %s", mix_err)
+        raise RuntimeError(f"Mix failed: {mix_err}") from mix_err
 
-    # 4. Subir a R2
+    # 5. Subir a R2 / guardar localmente
     ext = "ogg" if audio_bytes[:4] == b"OggS" else "mp3"
     key = f"radio/{business_name.lower().replace(' ', '_')}_{os.urandom(4).hex()}.{ext}"
     content_type = "audio/ogg" if ext == "ogg" else "audio/mpeg"
     url = await upload_bytes(audio_bytes, key, content_type=content_type)
 
     if not url:
-        raise RuntimeError("No se pudo subir el audio a R2. Verifica las variables CF_R2_*.")
+        raise RuntimeError("No se pudo guardar el audio. Verifica el almacenamiento.")
 
     return url
