@@ -9,8 +9,9 @@ from pathlib import Path
 import sentry_sdk
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -18,21 +19,36 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.redis import close_redis
-from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders
+from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments
 
 logger = logging.getLogger(__name__)
 
 if settings.SENTRY_DSN:
     sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=0.1)
 
-# Rate limiter — usa memoria local (sin depender de Redis en el middleware)
-# Nota: SlowAPI con Redis como storage falla cuando Redis no está disponible al arrancar.
-# Usamos memory:// para el limiter del middleware y Redis solo para la lógica de negocio.
-limiter = Limiter(
-    key_func=get_remote_address,
-    storage_uri="memory://",
-    default_limits=["200/minute"],
-)
+# Rate limiter — intenta usar Redis para que el límite sea GLOBAL entre todos los workers.
+# Si Redis no está disponible al arrancar (ej. primer deploy), cae a memoria local como fallback.
+# Esto evita que cada proceso Uvicorn tenga un contador independiente en producción.
+def _build_limiter() -> Limiter:
+    try:
+        import redis as sync_redis
+        r = sync_redis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
+        r.ping()
+        storage_uri = settings.REDIS_URL
+        logger.info("[RateLimit] Backend: Redis (%s)", settings.REDIS_URL)
+    except Exception:
+        storage_uri = "memory://"
+        logger.warning(
+            "[RateLimit] Redis no disponible al arrancar — usando memoria local. "
+            "El límite NO será global entre múltiples workers."
+        )
+    return Limiter(
+        key_func=get_remote_address,
+        storage_uri=storage_uri,
+        default_limits=["200/minute"],
+    )
+
+limiter = _build_limiter()
 
 
 @asynccontextmanager
@@ -52,6 +68,21 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if request.app.debug:
+            response.headers["X-Debug"] = "1"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS
 app.add_middleware(
@@ -73,6 +104,7 @@ app.include_router(payments.router, prefix=settings.API_PREFIX)
 app.include_router(webhooks.router, prefix=settings.API_PREFIX)
 app.include_router(radio.router, prefix=settings.API_PREFIX)
 app.include_router(orders.router, prefix=settings.API_PREFIX)
+app.include_router(appointments.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health")

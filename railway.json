@@ -15,7 +15,6 @@
         "dockerfilePath": "Dockerfile"
       },
       "deploy": {
-        "command": "/docker-entrypoint.sh",
         "healthcheckPath": "/health",
         "numReplicas": 1,
         "targetPort": 8080
