@@ -31,6 +31,7 @@ httpx==0.28.1
 google-auth==2.37.0
 google-auth-oauthlib==1.4.0
 google-api-python-client==2.196.0
+google-cloud-texttospeech==2.17.2
 
 # WhatsApp
 twilio==9.3.7

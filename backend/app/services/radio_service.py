@@ -442,12 +442,45 @@ async def _tts_edge(text: str, voice: str, rate: str = "-5%", pitch: str = "-5Hz
     return audio_data
 
 
+async def _tts_google_cloud(text: str, voice_name: str = "es-ES-Neural2-F") -> bytes:
+    """Sintetiza voz con Google Cloud Text-to-Speech (WaveNet). Retorna bytes MP3."""
+    from google.cloud import texttospeech_v1 as tts
+    import json
+
+    credentials_info = json.loads(settings.GOOGLE_SERVICE_ACCOUNT_JSON)
+    client = tts.TextToSpeechClient.from_service_account_info(credentials_info)
+
+    synthesis_input = tts.SynthesisInput(text=text)
+
+    voice = tts.VoiceSelectionParams(
+        language_code="es-ES",
+        name=voice_name,
+    )
+
+    audio_config = tts.AudioConfig(
+        audio_encoding=tts.AudioEncoding.MP3,
+        speaking_rate=0.95,
+        pitch=-0.5,
+    )
+
+    response = client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config,
+    )
+
+    return response.audio_content
+
+
 async def text_to_speech(text: str, voice: str, rate: str = "-5%", pitch: str = "-5Hz") -> bytes:
     """
     Sintetiza voz para la cuña de radio.
+    - Si GOOGLE_TTS_PROVIDER="google" → usa Google Cloud TTS (WaveNet).
     - Si FISH_AUDIO_API_KEY está configurado → usa Fish Audio S2 (calidad profesional).
     - Si no → usa edge-tts (gratuito, Microsoft Neural).
     """
+    if settings.GOOGLE_TTS_PROVIDER == "google":
+        return await _tts_google_cloud(text, settings.GOOGLE_TTS_VOICE_NAME or "es-ES-Neural2-F")
     if settings.FISH_AUDIO_API_KEY:
         voice_id = settings.FISH_AUDIO_VOICE_ID or None
         return await _tts_fish_audio(text, voice_id)

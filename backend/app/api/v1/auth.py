@@ -212,6 +212,7 @@ async def logout(
 @router.post("/forgot-password")
 @limiter.limit("3/minute")
 async def forgot_password(
+    request: Request,
     body: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),

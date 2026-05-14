@@ -7,6 +7,7 @@ import random
 import re
 import uuid
 from datetime import datetime, timezone
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.workers.celery_app import celery_app
 

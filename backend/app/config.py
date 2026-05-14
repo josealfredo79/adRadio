@@ -65,9 +65,14 @@ class Settings(BaseSettings):
     # Si está vacío, se usa el modelo por defecto (Fish Audio S2)
     FISH_AUDIO_VOICE_ID: str = ""
 
-    # Google Cloud (Imagen 3)
+    # Google Cloud (Imagen 3 + TTS)
     GOOGLE_CLOUD_PROJECT: str = ""
     GOOGLE_SERVICE_ACCOUNT_JSON: str = ""  # JSON string of service account key
+
+    # Google Cloud TTS
+    # Proveedor: "google" para Google Cloud Text-to-Speech (WaveNet)
+    GOOGLE_TTS_PROVIDER: str = ""  # "google", "fish", "edge"
+    GOOGLE_TTS_VOICE_NAME: str = "es-ES-Neural2-F"  # Voice name from Google Cloud
 
     # Google Calendar OAuth (for appointment sync)
     GOOGLE_CALENDAR_CLIENT_ID: str = ""

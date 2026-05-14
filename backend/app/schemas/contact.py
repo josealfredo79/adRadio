@@ -33,6 +33,7 @@ class ContactUpdate(BaseModel):
     tags: list[str] | None = None
     language: str | None = None
     notes: str | None = None
+    status: str | None = None
 
     @field_validator("status")
     @classmethod
