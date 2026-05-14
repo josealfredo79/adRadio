@@ -31,6 +31,6 @@ COPY backend/ .
 
 COPY --from=frontend-builder /frontend/dist ./app/static/dist
 
-EXPOSE 8000
+EXPOSE 8080
 
-CMD ["sh", "-c", "alembic upgrade head; exec uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

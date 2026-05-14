@@ -17,7 +17,9 @@
       "deploy": {
         "command": "/docker-entrypoint.sh",
         "healthcheckPath": "/health",
-        "numReplicas": 1
+        "numReplicas": 1,
+        "targetPort": 8080,
+        "source": "railway"
       }
     },
     "worker": {
