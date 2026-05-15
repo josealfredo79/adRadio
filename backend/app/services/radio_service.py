@@ -447,8 +447,11 @@ async def _tts_google_cloud(text: str, voice_name: str = "es-ES-Neural2-F") -> b
     from google.cloud import texttospeech_v1 as tts
     import json
 
-    credentials_info = json.loads(settings.GOOGLE_SERVICE_ACCOUNT_JSON)
-    client = tts.TextToSpeechClient.from_service_account_info(credentials_info)
+    credentials_info = json.loads(settings.GOOGLE_SERVICE_ACCOUNT_JSON) if settings.GOOGLE_SERVICE_ACCOUNT_JSON else {}
+    if not credentials_info:
+        raise ValueError("GOOGLE_SERVICE_ACCOUNT_JSON no está configurado.")
+
+    client = tts.TextToSpeechAsyncClient.from_service_account_info(credentials_info)
 
     synthesis_input = tts.SynthesisInput(text=text)
 
@@ -463,11 +466,13 @@ async def _tts_google_cloud(text: str, voice_name: str = "es-ES-Neural2-F") -> b
         pitch=-0.5,
     )
 
-    response = client.synthesize_speech(
+    request = tts.SynthesizeSpeechRequest(
         input=synthesis_input,
         voice=voice,
         audio_config=audio_config,
     )
+
+    response = await client.synthesize_speech(request=request)
 
     return response.audio_content
 
