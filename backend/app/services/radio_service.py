@@ -355,7 +355,8 @@ País: {country.upper()}
 """
 
     if mode == "classic":
-        prompt = base + f"Mensaje a comunicar: {message_or_intent}\n\nDevuelve SOLO el texto que dirá el locutor."
+        ctx_str = f"Contexto extra (MUY IMPORTANTE INCLUIR/ADAPTAR): {extra_context}\n" if extra_context else ""
+        prompt = base + f"Mensaje a comunicar: {message_or_intent}\n{ctx_str}\nDevuelve SOLO el texto que dirá el locutor."
 
     elif mode == "comunitaria":
         prompt = base + f"""Categoría / mensaje: {message_or_intent}

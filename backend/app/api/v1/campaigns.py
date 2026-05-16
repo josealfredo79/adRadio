@@ -345,13 +345,16 @@ async def generate_parrilla(
 
     for day_num, day_name, mode, emoji in schedule_table:
         try:
+            day_context = f"Haz este mensaje específico para el día {day_name}, dale un ángulo único."
+            combined_context = f"{body.extra_context} - {day_context}" if body.extra_context else day_context
+
             script = await generate_radio_script(
                 business_name=body.business_name,
                 message_or_intent=body.intent,
                 country=body.country,
                 mode=mode,
                 business_category=body.business_category,
-                extra_context=body.extra_context,
+                extra_context=combined_context,
             )
             try:
                 audio_url = await generate_radio_ad(
