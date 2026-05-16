@@ -308,6 +308,7 @@ _PARRILLA_GROWTH = [
 @router.post("/generate-parrilla", response_model=ParrillaOut)
 async def generate_parrilla(
     body: ParrillaRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -392,10 +393,9 @@ async def generate_parrilla(
                 audio_url=None,
             ))
 
-    # Auto-schedule: programar envío a contactos activos cada día de la semana
+    # Auto-schedule: programar envío creando Campañas
     if auto_scheduled:
         from datetime import datetime, timezone, timedelta
-        from app.workers.tasks import send_parrilla_day
 
         try:
             hour, minute = (int(x) for x in body.send_time.split(":"))
@@ -410,17 +410,28 @@ async def generate_parrilla(
                 send_dt = (now + timedelta(days=days_ahead)).replace(
                     hour=hour, minute=minute, second=0, microsecond=0
                 )
-                countdown = max(60, int((send_dt - now).total_seconds()))
-                send_parrilla_day.apply_async(
-                    kwargs={
-                        "advertiser_id": str(current_user.id),
+                
+                campaign = Campaign(
+                    advertiser_id=current_user.id,
+                    name=f"Parrilla: {day_out.day_name}",
+                    type="promo",
+                    message_text=day_out.script,
+                    status="scheduled",
+                    ab_test={
+                        "campaign_mode": "radio",
                         "audio_url": day_out.audio_url,
-                        "script": day_out.script,
-                        "day_name": day_out.day_name,
-                        "mode": day_out.mode,
+                        "radio_script": day_out.script,
                     },
+                    schedule={"start_date": send_dt.isoformat().replace("+00:00", "Z")}
+                )
+                db.add(campaign)
+                await db.commit()
+                await db.refresh(campaign)
+
+                countdown = max(60, int((send_dt - now).total_seconds()))
+                schedule_campaign.apply_async(
+                    args=[str(campaign.id)],
                     countdown=countdown,
-                    queue="whatsapp",
                 )
 
     return ParrillaOut(
