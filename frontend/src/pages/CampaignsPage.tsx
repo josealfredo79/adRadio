@@ -369,9 +369,10 @@ export default function CampaignsPage() {
                       <Pause className="h-3.5 w-3.5" />
                     </button>
                   )}
-                  {campaign.status === 'paused' && (
+                  {(campaign.status === 'paused' || campaign.status === 'draft' || campaign.status === 'scheduled') && (
                     <button onClick={() => resumeMutation.mutate(campaign.id)}
-                      className="rounded-lg border border-green-200 bg-green-50 p-1.5 text-green-600 hover:bg-green-100">
+                      title={campaign.status === 'draft' ? "Enviar campaña ahora" : campaign.status === 'scheduled' ? "Forzar envío ahora" : "Reanudar campaña"}
+                      className="rounded-lg border border-green-200 bg-green-50 p-1.5 text-green-600 hover:bg-green-100 transition-colors">
                       <Play className="h-3.5 w-3.5" />
                     </button>
                   )}
