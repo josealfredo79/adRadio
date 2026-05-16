@@ -49,9 +49,9 @@ async def upload_bytes(content: bytes, key: str, content_type: str) -> str | Non
     url = f"{settings.BASE_URL}/api/v1/radio/audio/{key}"
     logger.info("[STORAGE] Saved locally %s bytes → %s", len(content), url)
 
-    # Async upload to R2 (don't block on failure)
+    # Async upload to R2 (blocking to ensure it saves!)
     if settings.CF_R2_ACCESS_KEY:
-        asyncio.create_task(_upload_to_r2(content, key, content_type))
+        await _upload_to_r2(content, key, content_type)
 
     return url
 
