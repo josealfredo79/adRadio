@@ -59,6 +59,7 @@ async def serve_audio(request: Request, filename: str):
         raise HTTPException(status_code=502, detail=f"Storage error: {e.response['Error']['Code']}")
 
     # Cache to local storage for next time
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
     with open(local_path, "wb") as f:
         for chunk in obj["Body"].iter_chunks(chunk_size=65536):
             f.write(chunk)
