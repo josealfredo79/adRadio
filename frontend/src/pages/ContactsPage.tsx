@@ -32,14 +32,29 @@ export default function ContactsPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (body: typeof form) => api.post('/contacts', body),
+    mutationFn: (body: typeof form) => {
+      const payload = {
+        name: body.name,
+        phone: body.phone.trim().startsWith('+') ? body.phone.trim() : `+${body.phone.replace(/\D/g, '')}`,
+        email: body.email.trim() || undefined,
+        city: body.city.trim() || undefined,
+      }
+      return api.post('/contacts', payload)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['contacts'] })
       setShowAdd(false)
       setForm({ name: '', phone: '', email: '', city: '' })
       setError('')
     },
-    onError: (err: any) => setError(err.response?.data?.detail ?? 'Error al crear contacto'),
+    onError: (err: any) => {
+      const detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setError(detail[0].msg);
+      } else {
+        setError(typeof detail === 'string' ? detail : 'Error al crear contacto');
+      }
+    },
   })
 
   const deleteMutation = useMutation({
