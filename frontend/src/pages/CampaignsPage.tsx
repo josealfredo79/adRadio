@@ -316,7 +316,12 @@ export default function CampaignsPage() {
                     )}
                   </div>
                   <p className="mt-1.5 text-sm text-gray-500 line-clamp-2">{campaign.message_text}</p>
-                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-400">
+                  {campaign.ab_test?.audio_url && (
+                    <div className="mt-3">
+                      <audio controls src={campaign.ab_test.audio_url} className="h-8 w-full max-w-md rounded-lg" />
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-400">
                     <span>📤 {campaign.stats.sent ?? 0} enviados</span>
                     <span>✅ {campaign.stats.delivered ?? 0} entregados</span>
                     <span>💬 {campaign.stats.replied ?? 0} respondidos</span>
