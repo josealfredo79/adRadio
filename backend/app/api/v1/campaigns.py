@@ -393,41 +393,47 @@ async def generate_parrilla(
                 audio_url=None,
             ))
 
-    # Auto-schedule: programar envío creando Campañas
-    if auto_scheduled:
-        from datetime import datetime, timezone, timedelta
+    # Guardar siempre en base de datos. Programar solo si auto_scheduled.
+    from datetime import datetime, timezone, timedelta
 
-        try:
-            hour, minute = (int(x) for x in body.send_time.split(":"))
-        except Exception:
-            hour, minute = 10, 0
+    try:
+        hour, minute = (int(x) for x in body.send_time.split(":"))
+    except Exception:
+        hour, minute = 10, 0
 
-        now = datetime.now(timezone.utc)
-        for day_out in days_out:
-            if day_out.audio_url:  # solo programar días con audio OK
-                # días hasta el próximo día de semana correspondiente
-                days_ahead = (day_out.day - now.weekday()) % 7
-                send_dt = (now + timedelta(days=days_ahead)).replace(
-                    hour=hour, minute=minute, second=0, microsecond=0
-                )
-                
-                campaign = Campaign(
-                    advertiser_id=current_user.id,
-                    name=f"Parrilla: {day_out.day_name}",
-                    type="promo",
-                    message_text=day_out.script,
-                    status="scheduled",
-                    ab_test={
-                        "campaign_mode": "radio",
-                        "audio_url": day_out.audio_url,
-                        "radio_script": day_out.script,
-                    },
-                    schedule={"start_date": send_dt.isoformat().replace("+00:00", "Z")}
-                )
-                db.add(campaign)
-                await db.commit()
-                await db.refresh(campaign)
+    now = datetime.now(timezone.utc)
+    for day_out in days_out:
+        if day_out.audio_url:  # solo guardar días con audio OK
+            # días hasta el próximo día de semana correspondiente
+            days_ahead = (day_out.day - now.weekday()) % 7
+            
+            # Si es para hoy pero ya pasó la hora, programar para la siguiente semana
+            send_dt_today = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if days_ahead == 0 and now > send_dt_today:
+                days_ahead += 7
 
+            send_dt = (now + timedelta(days=days_ahead)).replace(
+                hour=hour, minute=minute, second=0, microsecond=0
+            )
+            
+            campaign = Campaign(
+                advertiser_id=current_user.id,
+                name=f"Parrilla: {day_out.day_name}",
+                type="promo",
+                message_text=day_out.script,
+                status="scheduled" if auto_scheduled else "draft",
+                ab_test={
+                    "campaign_mode": "radio",
+                    "audio_url": day_out.audio_url,
+                    "radio_script": day_out.script,
+                },
+                schedule={"start_date": send_dt.isoformat().replace("+00:00", "Z")}
+            )
+            db.add(campaign)
+            await db.commit()
+            await db.refresh(campaign)
+
+            if auto_scheduled:
                 countdown = max(60, int((send_dt - now).total_seconds()))
                 schedule_campaign.apply_async(
                     args=[str(campaign.id)],
