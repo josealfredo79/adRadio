@@ -109,28 +109,21 @@ app.include_router(appointments.router, prefix=settings.API_PREFIX)
 
 @app.get("/health")
 async def health():
+    return {"status": "ok", "version": settings.APP_VERSION}
+
+
+@app.get("/logs")
+async def get_logs():
     import os
     worker_log = ""
     beat_log = ""
     if os.path.exists("/tmp/logs/celery_worker.log"):
         with open("/tmp/logs/celery_worker.log", "r") as f:
-            worker_log = f.read()[-2000:]
+            worker_log = f.read()[-2500:]
     if os.path.exists("/tmp/logs/celery_beat.log"):
         with open("/tmp/logs/celery_beat.log", "r") as f:
-            beat_log = f.read()[-2000:]
-    from app.models.user import User
-    from sqlalchemy import select
-    from app.database import AsyncSessionLocal
-    try:
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(select(User))
-            user = result.scalars().first()
-            if user:
-                user.bot_personality = f"WORKER:\n{worker_log}\n\nBEAT:\n{beat_log}"
-                await session.commit()
-    except:
-        pass
-    return {"status": "ok", "version": settings.APP_VERSION}
+            beat_log = f.read()[-2500:]
+    return {"worker": worker_log, "beat": beat_log}
 
 
 @app.exception_handler(Exception)
