@@ -103,15 +103,12 @@ async def twilio_incoming(
     )
     advertiser = result.scalar_one_or_none()
 
-    # Fallback: shared IaRadio number — can't route to a specific advertiser on inbound.
-    # Shared number is outbound-only (campaigns). Inbound bot requires a dedicated number.
+    # Fallback: shared IaRadio number — try to find user with this number assigned
     if not advertiser:
-        shared = settings.TWILIO_WHATSAPP_NUMBER.lstrip("+")
-        to_clean = to_number.lstrip("+")
-        if to_clean == shared:
-            # Shared number: acknowledge without bot response
-            return {"message": "ok"}
-        return {"message": "ok"}
+        result = await db.execute(
+            select(User).where(User.whatsapp_number == f"+{to_number}")
+        )
+        advertiser = result.scalar_one_or_none()
 
     # Auto-unsubscribe on STOP words
     stop_words = {"baja", "stop", "no quiero", "cancelar", "salir"}

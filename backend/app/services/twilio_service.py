@@ -1,6 +1,7 @@
 """
 Twilio WhatsApp service.
 """
+import json
 import logging
 import random
 import asyncio
@@ -79,6 +80,42 @@ async def send_whatsapp_media(to: str, media_url: str, body: str = "", from_numb
     except Exception as e:
         error_msg = str(e)
         logger.error("[TWILIO MEDIA ERROR] %s", error_msg)
+        return None, error_msg[:20]
+
+
+async def send_whatsapp_template(
+    to: str,
+    template_sid: str,
+    variables: dict | None = None,
+    from_number: str | None = None,
+) -> tuple[str | None, str | None]:
+    """
+    Send a WhatsApp message using a pre-approved template.
+    Returns (sid, error_message) tuple.
+    This is the safe way to send without 24h window restriction.
+    """
+    sender = from_number or settings.TWILIO_WHATSAPP_NUMBER
+    if not settings.TWILIO_ACCOUNT_SID:
+        logger.debug("[TWILIO DEV] Template: %s | To: %s", template_sid, to)
+        return "DEV_SID", None
+
+    client = _get_client()
+    try:
+        kwargs: dict = {
+            "from_": f"whatsapp:{sender}",
+            "to": f"whatsapp:{to}",
+            "content_sid": template_sid,
+        }
+        if variables:
+            kwargs["content_variables"] = json.dumps(variables)
+        message = await asyncio.to_thread(
+            client.messages.create,
+            **kwargs
+        )
+        return message.sid, None
+    except Exception as e:
+        error_msg = str(e)
+        logger.error("[TWILIO TEMPLATE ERROR] %s", error_msg)
         return None, error_msg[:20]
 
 
