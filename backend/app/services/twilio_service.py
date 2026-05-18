@@ -36,7 +36,8 @@ async def send_whatsapp(to: str, body: str, from_number: str | None = None) -> s
 
     client = _get_client()
     try:
-        message = await client.messages.create_async(
+        message = await asyncio.to_thread(
+            client.messages.create,
             from_=f"whatsapp:{sender}",
             to=f"whatsapp:{to}",
             body=body,
@@ -68,7 +69,10 @@ async def send_whatsapp_media(to: str, media_url: str, body: str = "", from_numb
         }
         if body:
             kwargs["body"] = body
-        message = await client.messages.create_async(**kwargs)
+        message = await asyncio.to_thread(
+            client.messages.create,
+            **kwargs
+        )
         return message.sid
     except Exception as e:
         logger.error("[TWILIO MEDIA ERROR] %s", e)
