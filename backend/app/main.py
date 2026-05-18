@@ -112,20 +112,6 @@ async def health():
     return {"status": "ok", "version": settings.APP_VERSION}
 
 
-@app.get("/logs")
-async def logs():
-    import os
-    w = ""
-    b = ""
-    if os.path.exists("/tmp/logs/celery_worker.log"):
-        with open("/tmp/logs/celery_worker.log", "r") as f:
-            w = f.read()[-3000:]
-    if os.path.exists("/tmp/logs/celery_beat.log"):
-        with open("/tmp/logs/celery_beat.log", "r") as f:
-            b = f.read()[-2000:]
-    return {"worker": w, "beat": b}
-
-
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled exception on %s %s", request.method, request.url)
