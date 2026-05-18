@@ -42,12 +42,13 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
             if msg:
                 from_number = await _get_advertiser_whatsapp_number(db, msg.advertiser_id)
 
-            sid = await send_whatsapp(to, body, from_number=from_number)
+            sid, error = await send_whatsapp(to, body, from_number=from_number)
 
             if msg:
                 msg.status = "sent" if sid else "failed"
                 msg.twilio_sid = sid
-                msg.sent_at = datetime.now(timezone.utc)
+                msg.error_code = error
+                msg.sent_at = datetime.now(timezone.utc) if sid else None
                 await db.commit()
 
     try:
@@ -73,12 +74,13 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
             if msg:
                 from_number = await _get_advertiser_whatsapp_number(db, msg.advertiser_id)
 
-            sid = await send_whatsapp_media(to, audio_url, body=caption, from_number=from_number)
+            sid, error = await send_whatsapp_media(to, audio_url, body=caption, from_number=from_number)
 
             if msg:
                 msg.status = "sent" if sid else "failed"
                 msg.twilio_sid = sid
-                msg.sent_at = datetime.now(timezone.utc)
+                msg.error_code = error
+                msg.sent_at = datetime.now(timezone.utc) if sid else None
                 await db.commit()
 
     try:

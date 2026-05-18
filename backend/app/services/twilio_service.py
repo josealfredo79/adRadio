@@ -21,10 +21,10 @@ def _get_client() -> Client:
     return _client
 
 
-async def send_whatsapp(to: str, body: str, from_number: str | None = None) -> str | None:
+async def send_whatsapp(to: str, body: str, from_number: str | None = None) -> tuple[str | None, str | None]:
     """
     Send a WhatsApp message via Twilio.
-    Returns the Twilio message SID or None on failure.
+    Returns (sid, error_message) tuple.
     'to' should be in E.164 format (e.g. +521234567890).
     'from_number' is the advertiser's own WhatsApp number; falls back to
     the global TWILIO_WHATSAPP_NUMBER (shared IaRadio sender).
@@ -32,7 +32,7 @@ async def send_whatsapp(to: str, body: str, from_number: str | None = None) -> s
     sender = from_number or settings.TWILIO_WHATSAPP_NUMBER
     if not settings.TWILIO_ACCOUNT_SID:
         logger.debug("[TWILIO DEV] From: %s | To: %s | Body: %s", sender, to, body)
-        return "DEV_SID"
+        return "DEV_SID", None
 
     client = _get_client()
     try:
@@ -42,15 +42,17 @@ async def send_whatsapp(to: str, body: str, from_number: str | None = None) -> s
             to=f"whatsapp:{to}",
             body=body,
         )
-        return message.sid
+        return message.sid, None
     except Exception as e:
-        logger.error("[TWILIO ERROR] %s", e)
-        return None
+        error_msg = str(e)
+        logger.error("[TWILIO ERROR] %s", error_msg)
+        return None, error_msg[:100]
 
 
-async def send_whatsapp_media(to: str, media_url: str, body: str = "", from_number: str | None = None) -> str | None:
+async def send_whatsapp_media(to: str, media_url: str, body: str = "", from_number: str | None = None) -> tuple[str | None, str | None]:
     """
     Send a WhatsApp media message (voice note, image, etc.) via Twilio.
+    Returns (sid, error_message) tuple.
     'media_url' must be a publicly accessible URL.
     'from_number' is the advertiser's own WhatsApp number; falls back to
     the global TWILIO_WHATSAPP_NUMBER (shared IaRadio sender).
@@ -58,7 +60,7 @@ async def send_whatsapp_media(to: str, media_url: str, body: str = "", from_numb
     sender = from_number or settings.TWILIO_WHATSAPP_NUMBER
     if not settings.TWILIO_ACCOUNT_SID:
         logger.debug("[TWILIO DEV] From: %s | To: %s | Media: %s | Body: %s", sender, to, media_url, body)
-        return "DEV_SID"
+        return "DEV_SID", None
 
     client = _get_client()
     try:
@@ -73,10 +75,11 @@ async def send_whatsapp_media(to: str, media_url: str, body: str = "", from_numb
             client.messages.create,
             **kwargs
         )
-        return message.sid
+        return message.sid, None
     except Exception as e:
-        logger.error("[TWILIO MEDIA ERROR] %s", e)
-        return None
+        error_msg = str(e)
+        logger.error("[TWILIO MEDIA ERROR] %s", error_msg)
+        return None, error_msg[:100]
 
 
 def anti_ban_delay() -> int:

@@ -109,30 +109,6 @@ app.include_router(appointments.router, prefix=settings.API_PREFIX)
 
 @app.get("/health")
 async def health():
-    try:
-        import os
-        from app.models.user import User
-        from sqlalchemy import select
-        from app.database import AsyncSessionLocal
-        
-        worker_log = "No worker log found"
-        beat_log = "No beat log found"
-        if os.path.exists("/tmp/logs/celery_worker.log"):
-            with open("/tmp/logs/celery_worker.log", "r") as f:
-                worker_log = f.read()
-        if os.path.exists("/tmp/logs/celery_beat.log"):
-            with open("/tmp/logs/celery_beat.log", "r") as f:
-                beat_log = f.read()
-                
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(select(User))
-            user = result.scalars().first()
-            if user:
-                user.bot_personality = f"--- WORKER LOG ---\n{worker_log[-4000:]}\n\n--- BEAT LOG ---\n{beat_log[-4000:]}"
-                await session.commit()
-    except Exception as e:
-        logger.error(f"Error en telemetría de salud: {e}")
-        
     return {"status": "ok", "version": settings.APP_VERSION}
 
 
