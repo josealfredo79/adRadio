@@ -38,6 +38,23 @@ from app.workers.tasks import schedule_campaign
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 
+@router.get("/diagnose-celery")
+async def diagnose_celery():
+    import os
+    worker_log = "No log found"
+    beat_log = "No log found"
+    if os.path.exists("celery_worker.log"):
+        with open("celery_worker.log", "r") as f:
+            worker_log = f.read()
+    if os.path.exists("celery_beat.log"):
+        with open("celery_beat.log", "r") as f:
+            beat_log = f.read()
+    return {
+        "worker_log": worker_log[-5000:],
+        "beat_log": beat_log[-5000:]
+    }
+
+
 @router.get("", response_model=list[CampaignOut])
 async def list_campaigns(
     page: int = Query(1, ge=1),
