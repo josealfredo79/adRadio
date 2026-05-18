@@ -20,14 +20,14 @@ RUN apt-get update && apt-get install -y \
     gcc libffi-dev libssl-dev libmupdf-dev ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt ./requirements.txt
+COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 COPY --from=frontend-builder /frontend/dist ./app/static/dist
-COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+COPY start.sh ./
+RUN chmod +x ./start.sh
 
 EXPOSE 8080
 
-CMD ["/app/start.sh"]
+CMD ["./start.sh"]
