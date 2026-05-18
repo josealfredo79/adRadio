@@ -1,0 +1,15 @@
+.git/
+.venv/
+venv/
+node_modules/
+backend/venv/
+backend/.venv/
+frontend/node_modules/
+backend/app/static/audio/
+dist/
+build/
+*.log
+*.ogg
+*.mp3
+*.pyc
+__pycache__/
