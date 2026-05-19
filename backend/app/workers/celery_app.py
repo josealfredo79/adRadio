@@ -32,7 +32,7 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     "check-scheduled-campaigns": {
         "task": "app.workers.tasks.check_scheduled_campaigns",
-        "schedule": 60.0,  # every minute
+        "schedule": 300.0,  # every 5 minutes — sufficient for campaign scheduling
     },
     "cleanup-expired-tokens": {
         "task": "app.workers.tasks.cleanup_expired_data",

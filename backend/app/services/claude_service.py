@@ -47,7 +47,7 @@ Intención del anunciante: {intent}
 Devuelve solo las 3 variantes, separadas por "---", sin numeración ni explicaciones adicionales."""
 
     message = await client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-6",
         max_tokens=600,
         temperature=0.7,
         system=CAMPAIGN_SYSTEM_PROMPT,
@@ -118,7 +118,7 @@ CONTEXTO DEL NEGOCIO (tu única fuente de verdad):
     ]
 
     response = await client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-6",
         max_tokens=300,
         temperature=0.3,
         system=system,
@@ -189,7 +189,7 @@ Usa {{{{nombre}}}} para personalizar con el nombre del cliente cuando sea natura
 Devuelve solo los 3 mensajes separados por "---"."""
 
     message = await client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-6",
         max_tokens=800,
         temperature=0.7,
         system=SEQUENCE_SYSTEM_PROMPT,
@@ -239,7 +239,7 @@ Usa {{{{nombre}}}} al final del episodio 4 para personalizar la oferta final.
 Devuelve solo los 4 episodios separados por "---"."""
 
     message = await client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-6",
         max_tokens=1200,
         temperature=0.8,
         system=SAGA_SYSTEM_PROMPT,
@@ -253,23 +253,27 @@ Devuelve solo los 4 episodios separados por "---"."""
 
 # ─── Detección de intención de pedido ────────────────────────────────────────
 
-async def detect_order_intent(message: str) -> bool:
+# Palabras clave para detectar intención de pedido — sin llamada a Claude (costo $0)
+_ORDER_KEYWORDS: frozenset[str] = frozenset([
+    "quiero pedir", "quiero ordenar", "quiero comprar", "me das", "me da",
+    "dame", "deme", "quiero", "necesito", "ordenar", "pedir", "comprar",
+    "apartar", "reservar", "llevo", "me llevo", "quisiera", "quisiera pedir",
+    "quisiera ordenar", "un kilo", "media kilo", "media docena", "una docena",
+    "cuánto cuesta", "cuanto cuesta", "precio de", "tiene disponible",
+    "hay disponible", "hacen pedidos", "hacen entregas", "entregan a domicilio",
+    "servicio a domicilio", "para llevar", "a domicilio", "delivery",
+])
+
+
+def detect_order_intent(message: str) -> bool:
     """
-    Returns True if the message indicates the user wants to place an order,
-    buy something, or request a service.
-    Uses Claude with temperature=0 for consistent classification.
+    Detecta si el mensaje indica intención de pedido/compra usando palabras clave.
+    Función síncrona — costo $0, latencia ~0ms (reemplaza llamada a Claude).
     """
-    client = _get_client()
-    response = await client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=5,
-        temperature=0,
-        system=(
-            "Eres un clasificador de intenciones para WhatsApp. "
-            "Responde ÚNICAMENTE con 'si' o 'no'. "
-            "¿El mensaje indica que el usuario quiere hacer un pedido, "
-            "comprar un producto, o solicitar/contratar un servicio?"
-        ),
-        messages=[{"role": "user", "content": message}],
-    )
-    return response.content[0].text.strip().lower().startswith("si")
+    text = message.lower().strip()
+    return any(kw in text for kw in _ORDER_KEYWORDS)
+
+
+async def detect_order_intent_async(message: str) -> bool:
+    """Wrapper async para compatibilidad — delega a detect_order_intent síncrono."""
+    return detect_order_intent(message)

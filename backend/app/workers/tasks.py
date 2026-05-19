@@ -311,10 +311,9 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
         from app.config import settings
         from sqlalchemy import select
 
-        # Delay entre llamadas al API de embeddings (seg).
-        # Free tier de Voyage AI admite ~3 RPM → 22 s entre llamadas.
-        # Con un plan de pago baja a 0-1 s. Configura VOYAGE_EMBEDDING_DELAY_S en .env.
-        embed_delay: float = getattr(settings, "VOYAGE_EMBEDDING_DELAY_S", 22.0)
+        # Con OpenAI text-embedding-3-small no hay rate limit — delay = 0.
+        # Fallback Voyage AI free tier usa 22s (configurable en VOYAGE_EMBEDDING_DELAY_S).
+        embed_delay: float = 0.0 if settings.OPENAI_API_KEY else getattr(settings, "VOYAGE_EMBEDDING_DELAY_S", 22.0)
 
         # Extract text based on file type
         text = _extract_text(file_content, file_type)
@@ -349,7 +348,8 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
             for i, chunk in enumerate(chunks[1:], 1):
                 logger.info("[KB %s] Chunk %d/%d — esperando %.1fs", kb_id, i, total_chunks - 1, embed_delay)
                 if embed_delay > 0:
-                    await asyncio.sleep(embed_delay)
+                    import asyncio as _asyncio
+                    await _asyncio.sleep(embed_delay)
                 embedding = await get_embedding(chunk)
                 kb_chunk = KnowledgeBase(
                     advertiser_id=original.advertiser_id,

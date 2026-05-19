@@ -431,7 +431,7 @@ async def twilio_incoming(
 
     elif not pending_order:
         # No pending order — detect if this message is an order intent
-        is_order = await detect_order_intent(body_text)
+        is_order = detect_order_intent(body_text)
         if is_order:
             # Get next order number for this advertiser
             count_result = await db.execute(
