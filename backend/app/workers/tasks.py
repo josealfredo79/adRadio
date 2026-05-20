@@ -730,3 +730,123 @@ def send_parrilla_day(
         run_async(_send())
     except Exception as exc:
         raise self.retry(exc=exc)
+
+@celery_app.task
+def update_contact_engagement_score(contact_id: str):
+    """
+    Asynchronously updates a contact's engagement_score (0-100) and their active
+    conversation's lead_score ('hot', 'warm', 'cold') using Claude.
+    """
+    async def _update():
+        from app.database import AsyncSessionLocal
+        from app.models.contact import Contact
+        from app.models.conversation import Conversation
+        from app.models.message import Message
+        from app.services.claude_service import _get_client
+        from sqlalchemy import select
+        import json
+
+        async with AsyncSessionLocal() as db:
+            c_uuid = uuid.UUID(contact_id)
+            
+            # Fetch contact
+            result = await db.execute(select(Contact).where(Contact.id == c_uuid))
+            contact = result.scalar_one_or_none()
+            if not contact:
+                logger.warning("Contact %s not found for scoring", contact_id)
+                return
+
+            # Fetch last 20 messages of the conversation
+            msg_result = await db.execute(
+                select(Message)
+                .where(Message.contact_id == c_uuid)
+                .order_by(Message.created_at.desc())
+                .limit(20)
+            )
+            messages = list(msg_result.scalars().all())
+            messages.reverse()
+
+            if not messages:
+                logger.info("No messages found for contact %s, keeping score at 0", contact_id)
+                return
+
+            # Format chat log for Claude
+            chat_log = []
+            for msg in messages:
+                role = "usuario" if msg.direction == "inbound" else "asistente"
+                chat_log.append(f"{role}: {msg.content}")
+            
+            chat_str = "\n".join(chat_log)
+
+            system_prompt = (
+                "Eres un analista de ventas experto en calificar el interés de clientes potenciales en WhatsApp.\n"
+                "Analiza la conversación que se te presenta y califica la intención de compra o el nivel de interés del usuario "
+                "en una escala de 0 a 100:\n"
+                "- 0 a 30: El cliente explícitamente se dio de baja, insultó, o no tiene ningún interés.\n"
+                "- 31 a 60: El cliente es frío, hace preguntas básicas, o responde cortante.\n"
+                "- 61 a 85: El cliente muestra interés alto, pregunta por precios específicos, horarios o ubicación.\n"
+                "- 86 a 100: El cliente está listo para comprar, ya hizo un pedido o pidió el enlace de pago.\n\n"
+                "IMPORTANTE: Responde ÚNICAMENTE con un objeto JSON válido con este formato exacto:\n"
+                "{\n"
+                '  "score": 85,\n'
+                '  "summary": "Resumen muy breve (máximo 15 palabras) de lo que busca o de su actitud."\n'
+                "}\n"
+                "No agregues texto antes, después ni explicaciones adicionales de ningún tipo."
+            )
+
+            client = _get_client()
+            try:
+                response = await client.messages.create(
+                    model="claude-3-5-sonnet-latest",
+                    max_tokens=150,
+                    temperature=0.0,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": f"Historial de conversación:\n{chat_str}"}],
+                )
+                raw_text = response.content[0].text.strip()
+                
+                # Cleanup potential markdown wrapper from raw_text
+                if raw_text.startswith("```json"):
+                    raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+                elif raw_text.startswith("```"):
+                    raw_text = raw_text.replace("```", "").strip()
+
+                data = json.loads(raw_text)
+                score = int(data.get("score", 0))
+                summary = data.get("summary", "")
+
+                score = max(0, min(100, score))
+
+                # Update contact fields
+                contact.engagement_score = score
+                if summary:
+                    contact.notes = f"Interés: {summary} (Actualizado por IA)"
+
+                # Map numerical score to conversation lead_score string:
+                # hot: >= 80, warm: 40-79, cold: < 40
+                if score >= 80:
+                    lead_score = "hot"
+                elif score >= 40:
+                    lead_score = "warm"
+                else:
+                    lead_score = "cold"
+
+                # Update the active conversation for this contact
+                conv_result = await db.execute(
+                    select(Conversation)
+                    .where(Conversation.contact_id == c_uuid, Conversation.status == "active")
+                )
+                conv = conv_result.scalar_one_or_none()
+                if conv:
+                    conv.lead_score = lead_score
+
+                await db.commit()
+                logger.info("Updated contact %s score to %d (%s) and conv lead_score to %s", contact_id, score, summary, lead_score)
+
+            except Exception as e:
+                logger.error("Error running update_contact_engagement_score for %s: %s", contact_id, str(e))
+
+    try:
+        run_async(_update())
+    except Exception as exc:
+        logger.error("Error in update_contact_engagement_score Celery wrapper: %s", str(exc))
