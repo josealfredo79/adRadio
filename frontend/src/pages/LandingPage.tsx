@@ -634,6 +634,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── FOOTER ─── */}
+
       <footer className="border-t border-white/5 px-5 py-10">
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-2.5">
@@ -643,6 +644,19 @@ export default function LandingPage() {
             <span className="font-black text-white">IaRadio</span>
             <span className="text-gray-600 text-sm">— Radio Publicitaria por WhatsApp con IA</span>
           </div>
+          <div className="flex flex-col gap-2 text-sm text-gray-600 sm:items-end">
+            <div>
+              <strong>Contacto:</strong> <a href="mailto:iaradio@iaradio.online" className="hover:text-indigo-400 underline">iaradio@iaradio.online</a>
+            </div>
+            <div>
+              <strong>Dirección fiscal:</strong><br />
+              Callejón del Bohemio No. 8A, Depto. 7 Altos, Col. Ricardo Flores Magón,<br />
+              Heroica Ciudad de Tlaxiaco, Oaxaca, C.P. 69800<br />
+              Entre calles: Tierra y Libertad
+            </div>
+          </div>
+        </div>
+        <div className="mx-auto mt-6 flex max-w-5xl flex-col items-center gap-2 sm:flex-row sm:justify-between">
           <div className="flex gap-5 text-sm text-gray-600">
             <Link to="/terms" className="hover:text-gray-300 transition-colors">Términos</Link>
             <Link to="/privacy" className="hover:text-gray-300 transition-colors">Privacidad</Link>

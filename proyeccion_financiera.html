@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IaRadio — Proyección Financiera</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --surface: #111827;
+      --card: #1a2236;
+      --border: #1e2d45;
+      --conservador: #f59e0b;
+      --moderado: #10b981;
+      --agresivo: #6366f1;
+      --text: #e2e8f0;
+      --muted: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 24px 60px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .header .badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 14px;
+      border-radius: 100px;
+      margin-bottom: 16px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .header h1 {
+      font-size: clamp(28px, 5vw, 48px);
+      font-weight: 800;
+      background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    /* SCENARIO TABS */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      padding: 10px 22px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+    }
+
+    .tab:hover {
+      border-color: #334155;
+      color: var(--text);
+    }
+
+    .tab.active-c {
+      border-color: var(--conservador);
+      color: var(--conservador);
+      background: #f59e0b15;
+    }
+
+    .tab.active-m {
+      border-color: var(--moderado);
+      color: var(--moderado);
+      background: #10b98115;
+    }
+
+    .tab.active-a {
+      border-color: var(--agresivo);
+      color: var(--agresivo);
+      background: #6366f115;
+    }
+
+    /* KPI CARDS */
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .kpi {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      transition: transform .2s;
+    }
+
+    .kpi:hover {
+      transform: translateY(-2px);
+    }
+
+    .kpi .label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 8px;
+    }
+
+    .kpi .value {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .kpi .sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* CHARTS GRID */
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+    }
+
+    .chart-card h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 20px;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 220px;
+    }
+
+    /* TABLE */
+    .table-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 24px;
+      overflow-x: auto;
+    }
+
+    .table-card h3 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      padding: 10px 14px;
+      text-align: right;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th:first-child {
+      text-align: left;
+    }
+
+    td {
+      padding: 12px 14px;
+      text-align: right;
+      border-bottom: 1px solid #1a2236;
+    }
+
+    td:first-child {
+      text-align: left;
+      font-weight: 600;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: #1e2d4520;
+    }
+
+    .positive {
+      color: #10b981;
+      font-weight: 700;
+    }
+
+    .negative {
+      color: #f87171;
+    }
+
+    .highlight {
+      background: #1e2d4560 !important;
+    }
+
+    /* COMPARISON */
+    .comparison {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .scenario-card {
+      border-radius: 20px;
+      padding: 24px;
+      border: 1.5px solid;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scenario-card.c {
+      border-color: var(--conservador);
+      background: linear-gradient(135deg, #f59e0b08, #f59e0b03);
+    }
+
+    .scenario-card.m {
+      border-color: var(--moderado);
+      background: linear-gradient(135deg, #10b98108, #10b98103);
+    }
+
+    .scenario-card.a {
+      border-color: var(--agresivo);
+      background: linear-gradient(135deg, #6366f108, #6366f103);
+    }
+
+    .scenario-card .sc-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+
+    .scenario-card.c .sc-label {
+      color: var(--conservador);
+    }
+
+    .scenario-card.m .sc-label {
+      color: var(--moderado);
+    }
+
+    .scenario-card.a .sc-label {
+      color: var(--agresivo);
+    }
+
+    .scenario-card .sc-clients {
+      font-size: 40px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .scenario-card .sc-clients span {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+
+    .sc-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .sc-row .sc-key {
+      color: var(--muted);
+    }
+
+    .sc-row .sc-val {
+      font-weight: 600;
+    }
+
+    .footer-note {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="header">
+    <div class="badge">📊 Modelo de Negocio SaaS</div>
+    <h1>Proyección Financiera IaRadio</h1>
+    <p>Tres escenarios · 6 meses · Basado en estructura real del proyecto</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active-c" onclick="setScenario('c')">🟡 Conservador</button>
+    <button class="tab" onclick="setScenario('m')">🟢 Moderado</button>
+    <button class="tab" onclick="setScenario('a')">🔵 Agresivo</button>
+    <button class="tab" onclick="setScenario('all')">📈 Comparar Todos</button>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="charts">
+    <div class="chart-card">
+      <h3>💰 MRR por Mes (USD)</h3>
+      <div class="chart-wrap"><canvas id="chartMRR"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>👥 Clientes Activos</h3>
+      <div class="chart-wrap"><canvas id="chartClients"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>✅ Utilidad Neta Mensual</h3>
+      <div class="chart-wrap"><canvas id="chartProfit"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>📦 Ingresos Acumulados</h3>
+      <div class="chart-wrap"><canvas id="chartCumulative"></canvas></div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <h3 id="tableTitle">📋 Detalle Mes a Mes</h3>
+    <table id="mainTable">
+      <thead>
+        <tr>
+          <th>Mes</th>
+          <th>Clientes</th>
+          <th>MRR Bruto</th>
+          <th>Stripe Fee</th>
+          <th>Costos Var.</th>
+          <th>Costos Fijos</th>
+          <th>Utilidad</th>
+          <th>Margen</th>
+          <th>Acumulado</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <div style="margin-bottom:16px; font-size:13px; color:var(--muted); text-align:center;">🏆 Comparativa Final — Mes 6
+  </div>
+  <div class="comparison">
+    <div class="scenario-card c">
+      <div class="sc-label">🟡 Conservador</div>
+      <div class="sc-clients">22 <span>clientes</span></div>
+      <div class="sc-row"><span class="sc-key">MRR mes 6</span><span class="sc-val">$836</span></div>
+      <div class="sc-row"><span class="sc-key">Ingresos 6M</span><span class="sc-val">$3,192</span></div>
+      <div class="sc-row"><span class="sc-key">Utilidad 6M</span><span class="sc-val positive">$1,983</span></div>
+      <div class="sc-row"><span class="sc-key">Margen prom.</span><span class="sc-val">62%</span></div>
+      <div class="sc-row"><span class="sc-key">ARPU</span><span class="sc-val">$38</span></div>
+      <div class="sc-row"><span class="sc-key">Churn</span><span class="sc-val">12%/mes</span></div>
+    </div>
+    <div class="scenario-card m">
+      <div class="sc-label">🟢 Moderado</div>
+      <div class="sc-clients">59 <span>clientes</span></div>
+      <div class="sc-row"><span class="sc-key">MRR mes 6</span><span class="sc-val">$3,658</span></div>
+      <div class="sc-row"><span class="sc-key">Ingresos 6M</span><span class="sc-val">$13,640</span></div>
+      <div class="sc-row"><span class="sc-key">Utilidad 6M</span><span class="sc-val positive">$11,378</span></div>
+      <div class="sc-row"><span class="sc-key">Margen prom.</span><span class="sc-val">83%</span></div>
+      <div class="sc-row"><span class="sc-key">ARPU</span><span class="sc-val">$62</span></div>
+      <div class="sc-row"><span class="sc-key">Churn</span><span class="sc-val">8%/mes</span></div>
+    </div>
+    <div class="scenario-card a">
+      <div class="sc-label">🔵 Agresivo</div>
+      <div class="sc-clients">132 <span>clientes</span></div>
+      <div class="sc-row"><span class="sc-key">MRR mes 6</span><span class="sc-val">$11,880</span></div>
+      <div class="sc-row"><span class="sc-key">Ingresos 6M</span><span class="sc-val">$43,560</span></div>
+      <div class="sc-row"><span class="sc-key">Utilidad 6M</span><span class="sc-val positive">$39,580</span></div>
+      <div class="sc-row"><span class="sc-key">Margen prom.</span><span class="sc-val">91%</span></div>
+      <div class="sc-row"><span class="sc-key">ARPU</span><span class="sc-val">$90</span></div>
+      <div class="sc-row"><span class="sc-key">Churn</span><span class="sc-val">5%/mes</span></div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Costos fijos: $130/mes · Variable: $4/cliente/mes · Stripe: 2.9% + $0.30/txn<br>
+    Break-even: 4 clientes Growth ≈ mes 1 en todos los escenarios · LTV(moderado) = $775/cliente
+  </div>
+
+  <script>
+    const LABELS = ['Mes 1', 'Mes 2', 'Mes 3', 'Mes 4', 'Mes 5', 'Mes 6'];
+    const FIXED = 130;
+    const VAR_PER = 4;
+    const STRIPE_RATE = 0.029;
+    const STRIPE_FLAT = 0.30;
+
+    const scenarios = {
+      c: { label: 'Conservador', color: '#f59e0b', arpu: 38, newPerMonth: 5, churnRate: 0.12 },
+      m: { label: 'Moderado', color: '#10b981', arpu: 62, newPerMonth: 12, churnRate: 0.08 },
+      a: { label: 'Agresivo', color: '#6366f1', arpu: 90, newPerMonth: 25, churnRate: 0.05 },
+    };
+
+    function calcScenario(sc) {
+      const rows = [];
+      let active = 0, cumulative = 0;
+      for (let i = 0; i < 6; i++) {
+        const churn = i === 0 ? 0 : Math.round(active * sc.churnRate);
+        active = active + sc.newPerMonth - churn;
+        const mrr = active * sc.arpu;
+        const stripe = mrr * STRIPE_RATE + active * STRIPE_FLAT;
+        const varCost = active * VAR_PER;
+        const profit = mrr - stripe - varCost - FIXED;
+        cumulative += mrr;
+        rows.push({ active, mrr, stripe, varCost, profit, cumulative, margin: (profit / mrr * 100) });
+      }
+      return rows;
+    }
+
+    const data = { c: calcScenario(scenarios.c), m: calcScenario(scenarios.m), a: calcScenario(scenarios.a) };
+
+    let charts = {};
+    let currentScenario = 'c';
+
+    function fmt(n) { return '$' + Math.round(n).toLocaleString('en'); }
+    function pct(n) { return Math.round(n) + '%'; }
+
+    function renderKPIs(sc) {
+      const rows = sc === 'all' ? null : data[sc];
+      const kpiEl = document.getElementById('kpis');
+      if (sc === 'all') {
+        kpiEl.innerHTML = `
+      <div class="kpi"><div class="label">Utilidad 6M — Conservador</div><div class="value" style="color:#f59e0b">$1,983</div><div class="sub">22 clientes · 62% margen</div></div>
+      <div class="kpi"><div class="label">Utilidad 6M — Moderado</div><div class="value" style="color:#10b981">$11,378</div><div class="sub">59 clientes · 83% margen</div></div>
+      <div class="kpi"><div class="label">Utilidad 6M — Agresivo</div><div class="value" style="color:#6366f1">$39,580</div><div class="sub">132 clientes · 91% margen</div></div>
+      <div class="kpi"><div class="label">Break-even (todos)</div><div class="value">Mes 1</div><div class="sub">Solo 4 clientes Growth = $130 fixed</div></div>
+    `;
+        return;
+      }
+      const last = rows[5]; const m1 = rows[0]; const m3 = rows[2];
+      const color = scenarios[sc].color;
+      kpiEl.innerHTML = `
+    <div class="kpi"><div class="label">MRR mes 6</div><div class="value" style="color:${color}">${fmt(last.mrr)}</div><div class="sub">${last.active} clientes activos</div></div>
+    <div class="kpi"><div class="label">Utilidad 1 mes</div><div class="value" style="color:${color}">${fmt(m1.profit)}</div><div class="sub">Margen ${pct(m1.margin)}</div></div>
+    <div class="kpi"><div class="label">Utilidad acum. 3M</div><div class="value" style="color:${color}">${fmt(rows[0].profit + rows[1].profit + rows[2].profit)}</div><div class="sub">Ingresos: ${fmt(rows[0].mrr + rows[1].mrr + rows[2].mrr)}</div></div>
+    <div class="kpi"><div class="label">Utilidad acum. 6M</div><div class="value" style="color:${color}">${fmt(rows.reduce((s, r) => s + r.profit, 0))}</div><div class="sub">Ingresos: ${fmt(last.cumulative)}</div></div>
+  `;
+    }
+
+    function renderTable(sc) {
+      const tbody = document.getElementById('tableBody');
+      if (sc === 'all') {
+        // Compare all 3 at once
+        document.getElementById('tableTitle').textContent = '📋 Comparativa Todos los Escenarios';
+        tbody.innerHTML = LABELS.map((l, i) => `
+      <tr>
+        <td>${l}</td>
+        <td>${data.c[i].active} / ${data.m[i].active} / ${data.a[i].active}</td>
+        <td>${fmt(data.c[i].mrr)} / ${fmt(data.m[i].mrr)} / ${fmt(data.a[i].mrr)}</td>
+        <td>— / — / —</td>
+        <td>— / — / —</td>
+        <td>— / — / —</td>
+        <td class="positive">${fmt(data.c[i].profit)} / ${fmt(data.m[i].profit)} / ${fmt(data.a[i].profit)}</td>
+        <td>${pct(data.c[i].margin)} / ${pct(data.m[i].margin)} / ${pct(data.a[i].margin)}</td>
+        <td>${fmt(data.c[i].cumulative)} / ${fmt(data.m[i].cumulative)} / ${fmt(data.a[i].cumulative)}</td>
+      </tr>
+    `).join('');
+        return;
+      }
+      document.getElementById('tableTitle').textContent = `📋 Detalle Mes a Mes — ${scenarios[sc].label}`;
+      tbody.innerHTML = data[sc].map((r, i) => `
+    <tr class="${i === 2 || i === 5 ? 'highlight' : ''}">
+      <td>${LABELS[i]}${i === 2 ? ' ✦' : i === 5 ? ' ✦✦' : ''}</td>
+      <td>${r.active}</td>
+      <td>${fmt(r.mrr)}</td>
+      <td class="negative">-${fmt(r.stripe)}</td>
+      <td class="negative">-${fmt(r.varCost)}</td>
+      <td class="negative">-${fmt(FIXED)}</td>
+      <td class="positive">${fmt(r.profit)}</td>
+      <td>${pct(r.margin)}</td>
+      <td>${fmt(r.cumulative)}</td>
+    </tr>
+  `).join('');
+    }
+
+    function makeDatasets(sc, key) {
+      if (sc === 'all') {
+        return Object.entries(scenarios).map(([k, s]) => ({
+          label: s.label,
+          data: data[k].map(r => Math.round(r[key])),
+          borderColor: s.color,
+          backgroundColor: s.color + '20',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 5,
+          pointHoverRadius: 8,
+        }));
+      }
+      return [{
+        label: scenarios[sc].label,
+        data: data[sc].map(r => Math.round(r[key])),
+        borderColor: scenarios[sc].color,
+        backgroundColor: scenarios[sc].color + '25',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 5,
+        pointHoverRadius: 8,
+        pointBackgroundColor: scenarios[sc].color,
+      }];
+    }
+
+    const chartOpts = (prefix = '$') => ({
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 12 } } } },
+      scales: {
+        x: { ticks: { color: '#64748b' }, grid: { color: '#1e2d45' } },
+        y: { ticks: { color: '#64748b', callback: v => prefix + v.toLocaleString('en') }, grid: { color: '#1e2d45' } }
+      }
+    });
+
+    function renderCharts(sc) {
+      const configs = [
+        { id: 'chartMRR', key: 'mrr', prefix: '$' },
+        { id: 'chartClients', key: 'active', prefix: '' },
+        { id: 'chartProfit', key: 'profit', prefix: '$' },
+        { id: 'chartCumulative', key: 'cumulative', prefix: '$' },
+      ];
+      configs.forEach(({ id, key, prefix }) => {
+        if (charts[id]) charts[id].destroy();
+        charts[id] = new Chart(document.getElementById(id), {
+          type: 'line',
+          data: { labels: LABELS, datasets: makeDatasets(sc, key) },
+          options: chartOpts(prefix),
+        });
+      });
+    }
+
+    function setScenario(sc) {
+      currentScenario = sc;
+      document.querySelectorAll('.tab').forEach(t => t.className = 'tab');
+      const idx = ['c', 'm', 'a', 'all'].indexOf(sc);
+      const cls = ['active-c', 'active-m', 'active-a', 'active-a'][idx];
+      document.querySelectorAll('.tab')[idx].classList.add(cls);
+      renderKPIs(sc);
+      renderTable(sc);
+      renderCharts(sc);
+    }
+
+    setScenario('c');
+  </script>
+</body>
+
+</html>

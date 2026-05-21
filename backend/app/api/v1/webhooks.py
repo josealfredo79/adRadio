@@ -122,6 +122,7 @@ async def twilio_incoming(
         contact = contact_result.scalar_one_or_none()
         if contact:
             contact.status = "unsubscribed"
+            contact.engagement_score = 0
             await db.commit()
         return {"message": "ok"}
 
@@ -286,10 +287,15 @@ async def twilio_incoming(
             )
             db.add(out_msg)
             await db.commit()
-            from app.workers.tasks import send_whatsapp_message
+            from app.workers.tasks import send_whatsapp_message, update_contact_engagement_score
             send_whatsapp_message.apply_async(
                 args=[str(out_msg.id), from_number, redeem_reply],
                 countdown=2,
+            )
+            update_contact_engagement_score.apply_async(
+                args=[str(contact.id)],
+                queue="whatsapp",
+                countdown=10,
             )
             return {"message": "ok"}
 
@@ -474,11 +480,16 @@ async def twilio_incoming(
         db.add(out_msg)
         await db.commit()
 
-        from app.workers.tasks import send_whatsapp_message
+        from app.workers.tasks import send_whatsapp_message, update_contact_engagement_score
         send_whatsapp_message.apply_async(
             args=[str(out_msg.id), from_number, order_reply],
             queue="whatsapp",
             countdown=2,
+        )
+        update_contact_engagement_score.apply_async(
+            args=[str(contact.id)],
+            queue="whatsapp",
+            countdown=10,
         )
         return {"message": "ok"}
     # ─── END ORDER STATE MACHINE ──────────────────────────────────────────
@@ -516,11 +527,16 @@ async def twilio_incoming(
     await db.commit()
 
     # Send reply via Twilio (async, humanized delay)
-    from app.workers.tasks import send_whatsapp_message, send_welcome_cuna
+    from app.workers.tasks import send_whatsapp_message, send_welcome_cuna, update_contact_engagement_score
     send_whatsapp_message.apply_async(
         args=[str(out_msg.id), from_number, reply],
         queue="whatsapp",
         countdown=__import__("random").randint(1, 5),
+    )
+    update_contact_engagement_score.apply_async(
+        args=[str(contact.id)],
+        queue="whatsapp",
+        countdown=10,
     )
 
     # New lead: automatically send a radio cuña ~10 seconds after the text reply
