@@ -132,6 +132,12 @@ export default function CampaignsPage() {
     staleTime: 1000 * 60 * 60,
   })
 
+  const { data: optimalTime } = useQuery<{ best_window: string; best_hour: number }>({
+    queryKey: ['optimal-send-time'],
+    queryFn: () => api.get('/analytics/optimal-send-time').then((r) => r.data),
+    staleTime: 1000 * 60 * 30,
+  })
+
   const createMutation = useMutation({
     mutationFn: (body: any) => api.post('/campaigns', body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); setShowCreate(false); resetForm() },
@@ -739,6 +745,11 @@ export default function CampaignsPage() {
                   <CalendarClock className="h-4 w-4" />
                   Programar envío (opcional)
                 </label>
+                {optimalTime && (
+                  <p className="mb-2 text-xs text-blue-700 bg-blue-100 rounded-lg px-3 py-2">
+                    💡 Tus contactos responden más entre las <strong>{optimalTime.best_window}</strong> — considera enviarlo en ese horario.
+                  </p>
+                )}
                 <input
                   type="datetime-local"
                   value={scheduledAt}

@@ -234,6 +234,79 @@ async def export_campaigns_csv(
     )
 
 
+class ABTestSetup(BaseModel):
+    variant_b: str  # alternative message text
+
+
+@router.post("/{campaign_id}/ab-test")
+async def setup_ab_test(
+    campaign_id: uuid.UUID,
+    body: ABTestSetup,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Enable A/B testing on a campaign with an alternate message variant."""
+    result = await db.execute(
+        select(Campaign).where(Campaign.id == campaign_id, Campaign.advertiser_id == current_user.id)
+    )
+    campaign = result.scalar_one_or_none()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaña no encontrada")
+
+    campaign.ab_test = {
+        "enabled": True,
+        "variant_b": body.variant_b,
+        "stats_a": {"sent": 0, "replied": 0},
+        "stats_b": {"sent": 0, "replied": 0},
+    }
+    await db.commit()
+    await db.refresh(campaign)
+    return CampaignOut.model_validate(campaign)
+
+
+
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export all campaigns with stats as a CSV file."""
+    result = await db.execute(
+        select(Campaign)
+        .where(Campaign.advertiser_id == current_user.id)
+        .order_by(Campaign.created_at.desc())
+    )
+    campaigns = result.scalars().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Nombre", "Tipo", "Estado", "Enviados", "Entregados",
+        "Leídos", "Respondidos", "Fallidos", "Cupones Canjeados",
+        "% Entrega", "% Respuesta", "Creada"
+    ])
+    for c in campaigns:
+        s = c.stats
+        sent = s.get("sent", 0) or 0
+        delivered = s.get("delivered", 0) or 0
+        replied = s.get("replied", 0) or 0
+        pct_delivery = round((delivered / sent * 100), 1) if sent > 0 else 0
+        pct_reply = round((replied / sent * 100), 1) if sent > 0 else 0
+        writer.writerow([
+            c.name, c.type, c.status,
+            sent, delivered,
+            s.get("read", 0) or 0, replied,
+            s.get("failed", 0) or 0, s.get("coupons_redeemed", 0) or 0,
+            f"{pct_delivery}%", f"{pct_reply}%",
+            c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else "",
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=campanas_iaradio.csv"},
+    )
+
+
 @router.post("/generate-content", response_model=GenerateContentResponse)
 async def generate_content(
     body: GenerateContentRequest,

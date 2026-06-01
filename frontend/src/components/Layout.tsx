@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   UserCog,
+  MessageCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -30,6 +31,7 @@ const navItems = [
   { to: '/app/contacts', icon: Users, label: 'Contactos' },
   { to: '/app/knowledge-base', icon: BookOpen, label: 'Base de conocimiento' },
   { to: '/app/team', icon: UserCog, label: 'Equipo' },
+  { to: '/app/widget', icon: MessageCircle, label: 'Widget WA' },
   { to: '/app/plans', icon: CreditCard, label: 'Planes' },
   { to: '/app/settings', icon: Settings, label: 'Configuración' },
 ]

@@ -1,0 +1,98 @@
+/* IaRadio WhatsApp Widget */
+#iaradio-widget-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--iaradio-color, #25D366);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: none;
+  outline: none;
+}
+#iaradio-widget-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+}
+#iaradio-widget-btn svg {
+  width: 32px;
+  height: 32px;
+  fill: #fff;
+}
+#iaradio-widget-popup {
+  position: fixed;
+  bottom: 96px;
+  right: 24px;
+  z-index: 9999;
+  width: 320px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+  overflow: hidden;
+  display: none;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+#iaradio-widget-popup.open { display: flex; }
+#iaradio-widget-header {
+  background: var(--iaradio-color, #25D366);
+  color: #fff;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+#iaradio-widget-header .avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+#iaradio-widget-header .info { flex: 1; }
+#iaradio-widget-header .name { font-weight: 700; font-size: 15px; }
+#iaradio-widget-header .sub { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+#iaradio-widget-body {
+  padding: 16px 18px;
+  background: #f0f4f8;
+}
+.iaradio-bubble {
+  background: #fff;
+  border-radius: 0 12px 12px 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #333;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  max-width: 90%;
+  line-height: 1.4;
+}
+#iaradio-widget-footer {
+  padding: 12px 18px 16px;
+  background: #fff;
+}
+#iaradio-widget-footer a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--iaradio-color, #25D366);
+  color: #fff;
+  border-radius: 10px;
+  padding: 12px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  transition: opacity 0.15s;
+}
+#iaradio-widget-footer a:hover { opacity: 0.9; }

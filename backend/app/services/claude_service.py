@@ -277,3 +277,53 @@ def detect_order_intent(message: str) -> bool:
 async def detect_order_intent_async(message: str) -> bool:
     """Wrapper async para compatibilidad — delega a detect_order_intent síncrono."""
     return detect_order_intent(message)
+
+
+INTENT_TAGS = {
+    "interesado": "interesado",
+    "compra": "compra",
+    "soporte": "soporte",
+    "queja": "queja",
+    "precio": "precio",
+    "no_interesado": "no-interesado",
+}
+
+
+async def detect_intent_tags(conversation_text: str) -> list[str]:
+    """
+    Use Claude to classify a WhatsApp conversation into intent tags.
+    Returns a list of tag strings to add to the contact.
+    """
+    client = _get_client()
+    prompt = f"""Analiza esta conversación de WhatsApp y clasifica la intención del cliente.
+Devuelve ÚNICAMENTE un JSON array con las etiquetas que apliquen, eligiendo SOLO de esta lista:
+["interesado", "compra", "soporte", "queja", "precio", "no-interesado"]
+
+Reglas:
+- "interesado": el cliente muestra interés general en el producto/servicio
+- "compra": el cliente quiere comprar o ya realizó un pedido
+- "soporte": el cliente tiene un problema o pregunta técnica
+- "queja": el cliente está molesto o insatisfecho
+- "precio": el cliente pregunta por precios o descuentos
+- "no-interesado": el cliente indica que no le interesa
+
+Conversación:
+{conversation_text[:1500]}
+
+Responde ÚNICAMENTE con el JSON array, sin texto adicional. Ejemplo: ["interesado","precio"]"""
+
+    try:
+        response = await client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=50,
+            temperature=0.0,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.content[0].text.strip()
+        import json
+        tags = json.loads(raw)
+        if isinstance(tags, list):
+            return [str(t) for t in tags if isinstance(t, str)]
+    except Exception:
+        pass
+    return []

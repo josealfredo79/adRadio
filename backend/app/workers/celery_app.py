@@ -42,4 +42,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.send_appointment_reminders",
         "schedule": 300.0,  # every 5 minutes
     },
+    "process-automation-enrollments": {
+        "task": "app.workers.tasks.process_automation_enrollments",
+        "schedule": 60.0,  # every minute — drip messages precision
+    },
 }

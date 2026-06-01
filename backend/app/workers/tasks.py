@@ -6,7 +6,7 @@ import logging
 import random
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.workers.celery_app import celery_app
@@ -25,7 +25,7 @@ async def _get_advertiser_whatsapp_number(db: AsyncSession, advertiser_id: uuid.
     return advertiser.whatsapp_number if advertiser else None
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
+@celery_app.task(bind=True, max_retries=5, default_retry_delay=120)
 def send_whatsapp_message(self, message_id: str, to: str, body: str):
     """Send a WhatsApp message via Twilio with retry logic."""
     async def _send():
@@ -51,13 +51,18 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
                 await db.commit()
 
+            # Twilio rate-limit error codes: 63006, 63007, 63016 → retry with backoff
+            if error and any(code in str(error) for code in ("63006", "63007", "63016", "rate")):
+                raise RuntimeError(f"Twilio rate limit: {error}")
+
     try:
         run_async(_send())
     except Exception as exc:
-        raise self.retry(exc=exc)
+        # Exponential backoff: 2min, 4min, 8min, 16min, 32min
+        raise self.retry(exc=exc, countdown=120 * (2 ** self.request.retries))
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
+@celery_app.task(bind=True, max_retries=5, default_retry_delay=120)
 def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, caption: str = ""):
     """Send a WhatsApp voice note (audio cuña) via Twilio media message."""
     async def _send():
@@ -83,10 +88,13 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
                 await db.commit()
 
+            if error and any(code in str(error) for code in ("63006", "63007", "63016", "rate")):
+                raise RuntimeError(f"Twilio rate limit: {error}")
+
     try:
         run_async(_send())
     except Exception as exc:
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc, countdown=120 * (2 ** self.request.retries))
 
 
 @celery_app.task(bind=True, max_retries=2)
@@ -124,7 +132,54 @@ def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str, fro
 
     try:
         run_async(_run())
-    except Exception as exc:
+
+
+@celery_app.task
+def auto_tag_contact_from_conversation(contact_id: str):
+    """Use Claude Haiku to detect intent from last 10 messages and add auto-tags to the contact."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.models.contact import Contact
+        from app.models.message import Message
+        from app.services.claude_service import detect_intent_tags
+        from sqlalchemy import select
+
+        async with AsyncSessionLocal() as db:
+            c_uuid = uuid.UUID(contact_id)
+
+            msg_result = await db.execute(
+                select(Message)
+                .where(Message.contact_id == c_uuid)
+                .order_by(Message.created_at.desc())
+                .limit(10)
+            )
+            messages = list(msg_result.scalars().all())
+            messages.reverse()
+
+            if not messages:
+                return
+
+            conv_text = "\n".join(
+                f"{'cliente' if m.direction == 'inbound' else 'bot'}: {m.content}"
+                for m in messages
+            )
+
+            new_tags = await detect_intent_tags(conv_text)
+            if not new_tags:
+                return
+
+            contact_res = await db.execute(select(Contact).where(Contact.id == c_uuid))
+            contact = contact_res.scalar_one_or_none()
+            if not contact:
+                return
+
+            existing = set(contact.tags or [])
+            merged = list(existing | set(new_tags))
+            contact.tags = merged
+            await db.commit()
+            logger.info("[AUTO-TAG] Contact %s tagged: %s", contact_id, merged)
+
+    run_async(_run())    except Exception as exc:
         raise self.retry(exc=exc)
 
 
@@ -145,7 +200,7 @@ def schedule_campaign(self, campaign_id: str):
         from app.models.coupon import Coupon
         from app.models.message import Message
         from app.models.user import User
-        from app.services.twilio_service import anti_ban_delay, send_whatsapp_media
+        from app.services.twilio_service import anti_ban_delay, send_whatsapp_media, is_human_hour
         from app.services.claude_service import personalize_message
         from app.services.coupon_service import (
             generate_coupon_code, format_coupon_in_message, default_expiry
@@ -153,6 +208,25 @@ def schedule_campaign(self, campaign_id: str):
         from sqlalchemy import select
 
         SECONDS_PER_DAY = 86_400
+        # Max messages per hour — Twilio/WhatsApp rate limit guard
+        MAX_PER_HOUR = 60
+
+        # ── Anti-Twilio-ban: only send between 8am-9pm (UTC-6 / MX) ──────────
+        if not is_human_hour(timezone_offset=-6):
+            now_utc = datetime.now(timezone.utc)
+            # Next 8am MX = next 14:00 UTC (UTC-6)
+            next_8am = now_utc.replace(hour=14, minute=0, second=0, microsecond=0)
+            if now_utc.hour >= 14:
+                next_8am = next_8am + timedelta(days=1)
+            delay_secs = int((next_8am - now_utc).total_seconds())
+            logger.info(
+                "[CAMPAIGN] Outside human hours — rescheduling in %ds (next 8am MX)", delay_secs
+            )
+            schedule_campaign.apply_async(
+                args=[campaign_id], countdown=delay_secs, queue="whatsapp"
+            )
+            return
+        # ─────────────────────────────────────────────────────────────────────
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(
@@ -214,9 +288,13 @@ def schedule_campaign(self, campaign_id: str):
                     await db.commit()
                     return
 
-                for contact in contacts:
+                for idx_r, contact in enumerate(contacts):
                     if advertiser.messages_remaining <= 0:
                         break
+
+                    # Throttle: after MAX_PER_HOUR msgs, push rest to next hour
+                    if idx_r > 0 and idx_r % MAX_PER_HOUR == 0:
+                        ban_delay = int(idx_r / MAX_PER_HOUR) * 3600
 
                     msg = Message(
                         campaign_id=campaign.id,
@@ -242,17 +320,32 @@ def schedule_campaign(self, campaign_id: str):
                 return
             # ─────────────────────────────────────────────────────────────────
 
-            for contact in contacts:
+            ab_enabled = ab.get("enabled", False)
+            ab_variant_b = ab.get("variant_b", "")
+            ab_stats_a = ab.get("stats_a", {"sent": 0, "replied": 0})
+            ab_stats_b = ab.get("stats_b", {"sent": 0, "replied": 0})
+
+            for i, contact in enumerate(contacts):
                 if advertiser.messages_remaining <= 0:
                     break
+
+                # Throttle: after MAX_PER_HOUR msgs, push remainder to next hour slot
+                if i > 0 and i % MAX_PER_HOUR == 0:
+                    ban_delay = int(i / MAX_PER_HOUR) * 3600
 
                 contact_data = {
                     "name": contact.name,
                     "city": getattr(contact, "city", None),
                 }
 
-                # Select one random message variant per contact (anti-spam)
-                raw_template = random.choice(messages_list) if messages_list else campaign.message_text
+                # A/B split: odd contacts get variant B, even get variant A
+                if ab_enabled and ab_variant_b and i % 2 == 1:
+                    raw_template = ab_variant_b
+                    ab_variant = "b"
+                else:
+                    # Select one random message variant per contact (anti-spam)
+                    raw_template = random.choice(messages_list) if messages_list else campaign.message_text
+                    ab_variant = "a"
 
                 # Personalize message
                 body = personalize_message(raw_template, contact_data, advertiser_data)
@@ -285,6 +378,12 @@ def schedule_campaign(self, campaign_id: str):
                 db.add(msg)
                 await db.flush()
 
+                # Track A/B sent counts
+                if ab_enabled and ab_variant == "b":
+                    ab_stats_b["sent"] = ab_stats_b.get("sent", 0) + 1
+                else:
+                    ab_stats_a["sent"] = ab_stats_a.get("sent", 0) + 1
+
                 send_whatsapp_message.apply_async(
                     args=[str(msg.id), contact.phone, body],
                     countdown=ban_delay,
@@ -292,6 +391,13 @@ def schedule_campaign(self, campaign_id: str):
                 )
                 advertiser.messages_remaining -= 1
                 ban_delay += anti_ban_delay()
+
+            # Persist updated A/B stats
+            if ab_enabled:
+                new_ab = dict(campaign.ab_test)
+                new_ab["stats_a"] = ab_stats_a
+                new_ab["stats_b"] = ab_stats_b
+                campaign.ab_test = new_ab
 
             await db.commit()
 
@@ -850,3 +956,155 @@ def update_contact_engagement_score(contact_id: str):
         run_async(_update())
     except Exception as exc:
         logger.error("Error in update_contact_engagement_score Celery wrapper: %s", str(exc))
+
+
+# ─── AUTOMATION DRIP TASK ─────────────────────────────────────────────────────
+
+@celery_app.task
+def process_automation_enrollments():
+    """Celery beat task — send next drip message to all due enrollments."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.models.automation import AutomationEnrollment, AutomationFlow, AutomationStep
+        from app.models.contact import Contact
+        from app.models.message import Message
+        from app.services.twilio_service import send_whatsapp
+        from sqlalchemy import select, and_
+        from sqlalchemy.orm import selectinload
+
+        now = datetime.now(timezone.utc)
+
+        async with AsyncSessionLocal() as db:
+            # Find all active enrollments where next_send_at <= now
+            enroll_result = await db.execute(
+                select(AutomationEnrollment)
+                .where(
+                    AutomationEnrollment.status == "active",
+                    AutomationEnrollment.next_send_at <= now,
+                )
+            )
+            enrollments = enroll_result.scalars().all()
+
+            for enrollment in enrollments:
+                # Load flow with steps
+                flow_res = await db.execute(
+                    select(AutomationFlow)
+                    .options(selectinload(AutomationFlow.steps))
+                    .where(AutomationFlow.id == enrollment.flow_id)
+                )
+                flow = flow_res.scalar_one_or_none()
+                if not flow or not flow.is_active:
+                    enrollment.status = "cancelled"
+                    continue
+
+                steps = sorted(flow.steps, key=lambda s: s.position)
+                if enrollment.current_step >= len(steps):
+                    enrollment.status = "completed"
+                    continue
+
+                step = steps[enrollment.current_step]
+
+                # Load contact
+                contact_res = await db.execute(
+                    select(Contact).where(Contact.id == enrollment.contact_id)
+                )
+                contact = contact_res.scalar_one_or_none()
+                if not contact or contact.status != "active":
+                    enrollment.status = "cancelled"
+                    continue
+
+                # Send message
+                from app.models.user import User
+                user_res = await db.execute(select(User).where(User.id == enrollment.advertiser_id))
+                advertiser = user_res.scalar_one_or_none()
+                from_number = advertiser.whatsapp_number if advertiser else None
+
+                sid, error = await send_whatsapp(contact.phone, step.message, from_number=from_number)
+
+                # Save message record
+                msg = Message(
+                    advertiser_id=enrollment.advertiser_id,
+                    contact_id=contact.id,
+                    direction="outbound",
+                    content=step.message,
+                    status="sent" if sid else "failed",
+                    twilio_sid=sid,
+                    error_code=error,
+                    sent_at=now if sid else None,
+                )
+                db.add(msg)
+
+                # Advance to next step
+                enrollment.current_step += 1
+                if enrollment.current_step >= len(steps):
+                    enrollment.status = "completed"
+                    enrollment.next_send_at = None
+                else:
+                    next_step = steps[enrollment.current_step]
+                    enrollment.next_send_at = now + __import__("datetime").timedelta(minutes=next_step.delay_minutes)
+
+            await db.commit()
+            logger.info("[AUTOMATION] Processed %d enrollments", len(enrollments))
+
+    run_async(_run())
+
+
+@celery_app.task
+def trigger_automation_for_contact(contact_id: str, advertiser_id: str, trigger: str, trigger_value: str = ""):
+    """Enroll a contact in all matching active flows."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.models.automation import AutomationFlow, AutomationStep, AutomationEnrollment
+        from app.models.contact import Contact
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        async with AsyncSessionLocal() as db:
+            flows_res = await db.execute(
+                select(AutomationFlow)
+                .options(selectinload(AutomationFlow.steps))
+                .where(
+                    AutomationFlow.advertiser_id == uuid.UUID(advertiser_id),
+                    AutomationFlow.trigger == trigger,
+                    AutomationFlow.is_active == True,  # noqa: E712
+                )
+            )
+            flows = flows_res.scalars().all()
+
+            for flow in flows:
+                # For keyword triggers, check if trigger_value matches
+                if trigger == "keyword" and flow.trigger_value:
+                    if flow.trigger_value.lower() not in trigger_value.lower():
+                        continue
+
+                # Skip if already enrolled
+                existing = await db.execute(
+                    select(AutomationEnrollment).where(
+                        AutomationEnrollment.flow_id == flow.id,
+                        AutomationEnrollment.contact_id == uuid.UUID(contact_id),
+                        AutomationEnrollment.status == "active",
+                    )
+                )
+                if existing.scalar_one_or_none():
+                    continue
+
+                steps = sorted(flow.steps, key=lambda s: s.position)
+                first = steps[0] if steps else None
+                next_send = datetime.now(timezone.utc) + __import__("datetime").timedelta(
+                    minutes=first.delay_minutes
+                ) if first else None
+
+                enrollment = AutomationEnrollment(
+                    flow_id=flow.id,
+                    contact_id=uuid.UUID(contact_id),
+                    advertiser_id=uuid.UUID(advertiser_id),
+                    current_step=0,
+                    next_send_at=next_send,
+                )
+                db.add(enrollment)
+
+            await db.commit()
+            logger.info("[AUTOMATION] Enrolled contact %s in flows for trigger=%s", contact_id, trigger)
+
+    run_async(_run())
+

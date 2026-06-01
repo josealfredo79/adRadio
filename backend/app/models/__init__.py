@@ -11,6 +11,7 @@ from app.models.order import Order
 from app.models.appointment import Appointment
 from app.models.template import MessageTemplate
 from app.models.team_member import TeamMember
+from app.models.automation import AutomationFlow, AutomationStep, AutomationEnrollment
 
 __all__ = [
     "User",
@@ -26,4 +27,7 @@ __all__ = [
     "Appointment",
     "MessageTemplate",
     "TeamMember",
+    "AutomationFlow",
+    "AutomationStep",
+    "AutomationEnrollment",
 ]

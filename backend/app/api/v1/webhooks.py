@@ -91,11 +91,26 @@ async def twilio_incoming(
 
     # Handle WhatsApp media attachments (images, audio, documents)
     num_media = int(form_data.get("NumMedia", "0"))
-    if num_media > 0 and not body_text:
+    audio_transcription: str | None = None
+    if num_media > 0:
         media_url = form_data.get("MediaUrl0", "")
         media_type = form_data.get("MediaContentType0", "")
         if media_url:
-            body_text = f"[media:{media_type}]{media_url}"
+            is_audio = any(t in media_type for t in ("audio/", "ogg", "mpeg", "mp4", "webm", "amr"))
+            if is_audio and not body_text:
+                # Transcribe audio with Whisper
+                from app.services.whisper_service import transcribe_audio_url
+                audio_transcription = await transcribe_audio_url(
+                    media_url,
+                    twilio_account_sid=settings.TWILIO_ACCOUNT_SID,
+                    twilio_auth_token=settings.TWILIO_AUTH_TOKEN,
+                )
+                if audio_transcription:
+                    body_text = audio_transcription
+                else:
+                    body_text = f"[audio:{media_type}]"
+            elif not body_text:
+                body_text = f"[media:{media_type}]{media_url}"
 
     # Find advertiser by whatsapp_number
     result = await db.execute(
@@ -497,10 +512,15 @@ async def twilio_incoming(
     # Build conversation history (last 20 turns)
     history = conv.messages[-40:] if conv.messages else []
 
+    # For transcribed audio, add context hint to query
+    rag_query = body_text
+    if audio_transcription:
+        rag_query = f"[El cliente envió un mensaje de voz. Transcripción: {audio_transcription}]"
+
     # Generate RAG response
     reply = await answer_with_rag(
         advertiser_id=str(advertiser.id),
-        query=body_text,
+        query=rag_query,
         conversation_history=history,
         db=db,
         business_name=advertiser.business_name or "el negocio",
@@ -552,6 +572,29 @@ async def twilio_incoming(
             queue="whatsapp",
             countdown=10,
         )
+        # Trigger new_contact automation flows
+        from app.workers.tasks import trigger_automation_for_contact
+        trigger_automation_for_contact.apply_async(
+            args=[str(contact.id), str(advertiser.id), "new_contact"],
+            queue="whatsapp",
+            countdown=15,
+        )
+    else:
+        # Trigger keyword automation flows for every inbound message
+        from app.workers.tasks import trigger_automation_for_contact
+        trigger_automation_for_contact.apply_async(
+            args=[str(contact.id), str(advertiser.id), "keyword", body_text],
+            queue="whatsapp",
+            countdown=5,
+        )
+
+    # Auto-tag contact based on conversation intent (runs ~30s later)
+    from app.workers.tasks import auto_tag_contact_from_conversation
+    auto_tag_contact_from_conversation.apply_async(
+        args=[str(contact.id)],
+        queue="whatsapp",
+        countdown=30,
+    )
 
     return {"message": "ok"}
 
