@@ -279,6 +279,71 @@ def schedule_campaign(self, campaign_id: str):
 
             ban_delay = 0  # accumulates anti-ban spacing between contacts
 
+            # ── Banner Visual mode: generate personalized PNG per contact ────────
+            if mode == "banner":
+                from app.services.banner_service import (
+                    generate_banner_png, generate_banner_copy_with_claude, BannerCopy
+                )
+                from app.services.storage_service import upload_bytes
+
+                promo_description = ab.get("promo_description", campaign.message_text)
+                palette = ab.get("banner_palette", "promo")
+                caption = ab.get("banner_caption", "")
+
+                for idx_b, contact in enumerate(contacts):
+                    if advertiser.messages_remaining <= 0:
+                        break
+
+                    if idx_b > 0 and idx_b % MAX_PER_HOUR == 0:
+                        ban_delay = int(idx_b / MAX_PER_HOUR) * 3600
+
+                    contact_name = (contact.name or "").split()[0] if contact.name else "Cliente"
+
+                    # Generate personalized copy via Claude
+                    copy = await generate_banner_copy_with_claude(
+                        business_name=advertiser.business_name or "Tu negocio",
+                        contact_name=contact_name,
+                        promo_description=promo_description,
+                    )
+
+                    # Render PNG
+                    png_bytes = generate_banner_png(copy, palette)
+
+                    # Upload to R2/local storage
+                    import uuid as _uuid
+                    key = f"banners/{campaign.id}/{contact.id}_{_uuid.uuid4().hex[:8]}.png"
+                    banner_url = await upload_bytes(png_bytes, key, "image/png")
+
+                    if not banner_url:
+                        logger.error("[BANNER] Upload failed for contact %s", contact.id)
+                        continue
+
+                    body_text = caption or f"¡Hola {contact_name}! Mira lo que tenemos para ti 👆"
+
+                    msg = Message(
+                        campaign_id=campaign.id,
+                        contact_id=contact.id,
+                        advertiser_id=campaign.advertiser_id,
+                        direction="outbound",
+                        content=f"[BANNER] {banner_url}",
+                        status="queued",
+                        scheduled_for=datetime.now(timezone.utc),
+                    )
+                    db.add(msg)
+                    await db.flush()
+
+                    send_whatsapp_voice_note.apply_async(
+                        args=[str(msg.id), contact.phone, banner_url, body_text],
+                        countdown=ban_delay,
+                        queue="whatsapp",
+                    )
+                    advertiser.messages_remaining -= 1
+                    ban_delay += anti_ban_delay()
+
+                await db.commit()
+                return
+            # ────────────────────────────────────────────────────────────────────
+
             # ── Radio / Comunitaria mode: send pre-generated audio cuña ─────────
             if mode in ("radio", "comunitaria"):
                 audio_url = ab.get("audio_url", "")

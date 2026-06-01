@@ -7,6 +7,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -264,10 +265,33 @@ async def setup_ab_test(
     return CampaignOut.model_validate(campaign)
 
 
+class BannerPreviewRequest(BaseModel):
+    promo_description: str
+    business_name: str
+    contact_name: str = "Juan"
+    palette: str = "promo"
 
-    db: AsyncSession = Depends(get_db),
+
+@router.post("/banner/preview")
+async def preview_banner(
+    body: BannerPreviewRequest,
     current_user: User = Depends(get_current_user),
 ):
+    """Generate and return a preview PNG banner (no R2 upload, no DB write)."""
+    from fastapi.responses import Response as FastAPIResponse
+    from app.services.banner_service import (
+        generate_banner_png, generate_banner_copy_with_claude, BannerCopy
+    )
+
+    copy = await generate_banner_copy_with_claude(
+        business_name=body.business_name,
+        contact_name=body.contact_name,
+        promo_description=body.promo_description,
+    )
+    png_bytes = generate_banner_png(copy, body.palette)
+    return FastAPIResponse(content=png_bytes, media_type="image/png")
+
+
     """Export all campaigns with stats as a CSV file."""
     result = await db.execute(
         select(Campaign)

@@ -26,6 +26,7 @@ const CAMPAIGN_TYPES = [
 // Modos de campaña — La Nueva Radio
 const CAMPAIGN_MODES = [
   { value: 'regular', label: '📢 Regular', desc: 'Un mensaje personalizado con nombre y ciudad' },
+  { value: 'banner', label: '🖼️ Banner Visual', desc: 'Imagen personalizada con el nombre del contacto — IA genera el diseño' },
   { value: 'sequence', label: '📻 Secuencia', desc: '3 mensajes en días 1, 3 y 5 — como un programa de radio' },
   { value: 'saga', label: '🎭 Saga', desc: '4 episodios semanales — radionovela de tu negocio' },
   { value: 'radio', label: '🎙️ Cuña clásica', desc: 'Audio estilo radio AM/FM de los 80s con voz de locutor' },
@@ -60,9 +61,10 @@ const MODE_BADGE: Record<string, string> = {
   historia: '📖 Historia',
   alerta: '🚨 Alerta',
   estacional: '🗓️ Estacional',
+  banner: '🖼️ Banner Visual',
 }
 
-type CampaignMode = 'regular' | 'sequence' | 'saga' | 'radio' | 'comunitaria' | 'capsula' | 'trivia' | 'historia' | 'alerta' | 'estacional'
+type CampaignMode = 'regular' | 'banner' | 'sequence' | 'saga' | 'radio' | 'comunitaria' | 'capsula' | 'trivia' | 'historia' | 'alerta' | 'estacional'
 
 const AUDIO_MODES: CampaignMode[] = ['radio', 'comunitaria', 'capsula', 'trivia', 'historia', 'alerta', 'estacional']
 
@@ -96,6 +98,13 @@ export default function CampaignsPage() {
   const [scheduledAt, setScheduledAt] = useState('')
   const [error, setError] = useState('')
   const [analyticsId, setAnalyticsId] = useState<string | null>(null)
+
+  // Banner Visual mode
+  const [bannerPromo, setBannerPromo] = useState('')
+  const [bannerPalette, setBannerPalette] = useState('promo')
+  const [bannerCaption, setBannerCaption] = useState('')
+  const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string | null>(null)
+  const [bannerPreviewing, setBannerPreviewing] = useState(false)
 
   // Parrilla Semanal
   const [showParrilla, setShowParrilla] = useState(false)
@@ -165,6 +174,7 @@ export default function CampaignsPage() {
     setRadioCountry('mx'); setRadioAudioUrl(''); setRadioScript('')
     setExtraContext(''); setBusinessCategory(''); setRadioVoiceId('')
     setScheduledAt(''); setError('')
+    setBannerPromo(''); setBannerPalette('promo'); setBannerCaption(''); setBannerPreviewUrl(null)
   }
 
   const generateContent = async () => {
@@ -241,11 +251,16 @@ export default function CampaignsPage() {
       ab_test.audio_url = radioAudioUrl
       ab_test.radio_script = radioScript
     }
+    if (mode === 'banner') {
+      ab_test.promo_description = bannerPromo
+      ab_test.banner_palette = bannerPalette
+      ab_test.banner_caption = bannerCaption
+    }
     const schedule = scheduledAt ? { start_date: new Date(scheduledAt).toISOString() } : {}
     const campaignStatus = scheduledAt ? 'scheduled' : 'draft'
     createMutation.mutate({
       ...form,
-      message_text: form.message_text || radioScript,
+      message_text: form.message_text || radioScript || bannerPromo,
       ab_test,
       schedule,
       status: campaignStatus,
@@ -256,11 +271,33 @@ export default function CampaignsPage() {
 
   const isMultiMode = mode === 'sequence' || mode === 'saga'
   const isRadioMode = AUDIO_MODES.includes(mode)
+  const isBannerMode = mode === 'banner'
   const readyToCreate = form.name && (
     (mode === 'regular' && form.message_text) ||
     (isMultiMode && multiMessages.length > 0) ||
-    (isRadioMode && !!radioAudioUrl)
+    (isRadioMode && !!radioAudioUrl) ||
+    (isBannerMode && !!bannerPromo)
   )
+
+  const previewBanner = async () => {
+    if (!bannerPromo) return
+    setBannerPreviewing(true)
+    setBannerPreviewUrl(null)
+    try {
+      const resp = await api.post('/campaigns/banner/preview', {
+        promo_description: bannerPromo,
+        business_name: form.name || 'Mi negocio',
+        contact_name: 'Juan',
+        palette: bannerPalette,
+      }, { responseType: 'blob' })
+      const url = URL.createObjectURL(resp.data)
+      setBannerPreviewUrl(url)
+    } catch {
+      setError('Error generando preview del banner')
+    } finally {
+      setBannerPreviewing(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -519,9 +556,79 @@ export default function CampaignsPage() {
                   <p className="text-xs text-gray-400">Claude creará 4 episodios semanales al estilo radionovela 📻</p>
                 </div>
               )}
-              {isRadioMode && (
-                <div className="space-y-3">
+              {/* ── Banner Visual mode ─────────────────────────────────── */}
+              {isBannerMode && (
+                <div className="space-y-4">
                   <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">¿Qué quieres promocionar?</label>
+                    <textarea rows={2}
+                      placeholder="Ej: 20% de descuento esta semana en todos los productos, solo por tiempo limitado"
+                      value={bannerPromo} onChange={(e) => setBannerPromo(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none" />
+                    <p className="mt-1 text-xs text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2">
+                      🎨 La IA generará el copy del banner y diseñará la imagen. Cada contacto recibirá su nombre dentro de la foto.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Paleta de colores</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { key: 'promo', label: 'Azul/Rojo', colors: ['#1d3557', '#e63946'] },
+                        { key: 'verde', label: 'Verde', colors: ['#1b5e20', '#388e3c'] },
+                        { key: 'oscuro', label: 'Negro/Neón', colors: ['#121212', '#00e676'] },
+                        { key: 'elegante', label: 'Dorado', colors: ['#1a1a2e', '#e8c547'] },
+                        { key: 'naranja', label: 'Naranja', colors: ['#e65100', '#ff8f00'] },
+                        { key: 'morado', label: 'Morado', colors: ['#4a148c', '#7b1fa2'] },
+                        { key: 'azul', label: 'Azul vivo', colors: ['#0d47a1', '#1565c0'] },
+                        { key: 'rojo', label: 'Rojo', colors: ['#b71c1c', '#e53935'] },
+                      ].map((p) => (
+                        <button key={p.key} onClick={() => { setBannerPalette(p.key); setBannerPreviewUrl(null) }}
+                          className={`flex items-center gap-2 rounded-lg border-2 px-2 py-1.5 text-xs font-medium transition ${bannerPalette === p.key ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                          <span className="flex gap-0.5">
+                            {p.colors.map((c, i) => (
+                              <span key={i} className="w-3 h-3 rounded-full inline-block" style={{ background: c }} />
+                            ))}
+                          </span>
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Texto del mensaje (opcional)</label>
+                    <input type="text"
+                      placeholder="Ej: ¡Hola! Mira lo que tenemos para ti 👆"
+                      value={bannerCaption} onChange={(e) => setBannerCaption(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none" />
+                    <p className="mt-1 text-xs text-gray-400">Este texto se envía junto con la imagen. Si lo dejas vacío se genera automáticamente.</p>
+                  </div>
+
+                  {/* Preview */}
+                  <div className="space-y-2">
+                    <button onClick={previewBanner} disabled={!bannerPromo || bannerPreviewing}
+                      className="flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 transition">
+                      {bannerPreviewing ? (
+                        <><span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />Generando preview...</>
+                      ) : (
+                        <>🖼️ Ver preview del banner</>
+                      )}
+                    </button>
+                    {bannerPreviewUrl && (
+                      <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                        <img src={bannerPreviewUrl} alt="Preview banner" className="w-full max-h-80 object-cover" />
+                        <p className="text-center text-xs text-gray-400 py-2 bg-gray-50">
+                          Preview con nombre "Juan" — cada contacto verá su propio nombre
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {isRadioMode && (
+                <div className="space-y-3">                  <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700">
                       {mode === 'comunitaria' ? '¿Qué valor genuino puede dar tu negocio?'
                         : mode === 'capsula' ? '¿Sobre qué tema quieres el dato sorprendente?'
