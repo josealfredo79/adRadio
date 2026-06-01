@@ -9,6 +9,8 @@ from app.models.prospects_pool import ProspectsPool
 from app.models.coupon import Coupon
 from app.models.order import Order
 from app.models.appointment import Appointment
+from app.models.template import MessageTemplate
+from app.models.team_member import TeamMember
 
 __all__ = [
     "User",
@@ -22,4 +24,6 @@ __all__ = [
     "Coupon",
     "Order",
     "Appointment",
+    "MessageTemplate",
+    "TeamMember",
 ]

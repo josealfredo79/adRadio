@@ -642,11 +642,13 @@ async def generate_radio_ad(
     _script: str | None = None,
     mode: str = "classic",
     business_category: str | None = None,
+    voice_id: str | None = None,
 ) -> str:
     """
     Pipeline completo: guión → voz → mezcla → R2 → URL pública.
     Si se provee _script, se omite la llamada a Claude.
     business_category: categoría del negocio para elegir el jingle automáticamente.
+    voice_id: ID de voz edge-tts a usar (ej: es-MX-JorgeNeural). Si None, usa el por defecto del país.
     Retorna la URL del archivo de audio en R2.
     """
     import logging
@@ -655,8 +657,8 @@ async def generate_radio_ad(
     # 1. Generar guión con Claude (o usar el provisto)
     script = _script or await generate_radio_script(business_name, message_or_intent, country, mode=mode)
 
-    # 2. Sintetizar voz
-    voice = LOCUTOR_VOICES.get(country, LOCUTOR_VOICES["default"])
+    # 2. Sintetizar voz (voice_id override o por defecto del país)
+    voice = voice_id or LOCUTOR_VOICES.get(country, LOCUTOR_VOICES["default"])
     try:
         mp3_bytes = await text_to_speech(script, voice)
         logger.info("[RADIO] TTS generated %d bytes with voice %s", len(mp3_bytes), voice)

@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams, Link } from 'react-router-dom'
+import { useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
+import OnboardingWizard from '@/components/OnboardingWizard'
 import {
   LineChart,
   Line,
@@ -39,6 +41,7 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const paymentSuccess = searchParams.get('success') === '1'
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false)
 
   // Remove ?success param from URL after showing the banner
   const dismissSuccess = () => {
@@ -60,6 +63,12 @@ export default function DashboardPage() {
     queryFn: () => api.get('/knowledge-base').then((r) => r.data),
     staleTime: 1000 * 60 * 5,
   })
+
+  const showOnboarding = !onboardingDismissed
+    && !isLoading
+    && (kbFiles?.length ?? 0) === 0
+    && (data?.contacts_total ?? 0) === 0
+    && (data?.campaigns_active ?? 0) === 0
 
   const kpis = [
     {
@@ -107,6 +116,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {showOnboarding && <OnboardingWizard onClose={() => setOnboardingDismissed(true)} />}
       {/* Payment success banner */}
       {paymentSuccess && (
         <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 px-5 py-4">

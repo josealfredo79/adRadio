@@ -19,7 +19,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.redis import close_redis
-from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments
+from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, team
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +105,8 @@ app.include_router(webhooks.router, prefix=settings.API_PREFIX)
 app.include_router(radio.router, prefix=settings.API_PREFIX)
 app.include_router(orders.router, prefix=settings.API_PREFIX)
 app.include_router(appointments.router, prefix=settings.API_PREFIX)
+app.include_router(templates.router, prefix=settings.API_PREFIX)
+app.include_router(team.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health")

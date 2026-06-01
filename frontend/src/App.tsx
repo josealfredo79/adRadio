@@ -20,6 +20,7 @@ const OrdersPage = lazy(() => import('@/pages/OrdersPage'))
 const AppointmentsPage = lazy(() => import('@/pages/AppointmentsPage'))
 const TermsPage = lazy(() => import('@/pages/TermsPage'))
 const PrivacyPage = lazy(() => import('@/pages/PrivacyPage'))
+const TeamPage = lazy(() => import('@/pages/TeamPage'))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -63,6 +64,7 @@ export default function App() {
               <Route path="knowledge-base" element={<KnowledgeBasePage />} />
               <Route path="plans" element={<PlansPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="team" element={<TeamPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />

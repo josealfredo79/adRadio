@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, ListOrdered, Ticket, CalendarClock, BarChart2, X, CalendarRange, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, ListOrdered, Ticket, CalendarClock, BarChart2, X, CalendarRange, CheckCircle2, AlertCircle, Download } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 interface Campaign {
   id: string
@@ -91,6 +92,7 @@ export default function CampaignsPage() {
   const [radioScript, setRadioScript] = useState('')
   const [extraContext, setExtraContext] = useState('')
   const [businessCategory, setBusinessCategory] = useState('')
+  const [radioVoiceId, setRadioVoiceId] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
   const [error, setError] = useState('')
   const [analyticsId, setAnalyticsId] = useState<string | null>(null)
@@ -115,6 +117,19 @@ export default function CampaignsPage() {
   const { data: campaigns, isLoading } = useQuery<Campaign[]>({
     queryKey: ['campaigns'],
     queryFn: () => api.get('/campaigns').then((r) => r.data),
+  })
+
+  interface Template { id: string; name: string; content: string; category: string | null }
+  interface Voice { id: string; name: string; lang: string; gender: string; provider: string }
+  const { data: templatesData } = useQuery<Template[]>({
+    queryKey: ['templates'],
+    queryFn: () => api.get('/templates').then((r) => r.data),
+    staleTime: 1000 * 60 * 5,
+  })
+  const { data: voicesData } = useQuery<Voice[]>({
+    queryKey: ['radio-voices'],
+    queryFn: () => api.get('/radio/voices').then((r) => r.data),
+    staleTime: 1000 * 60 * 60,
   })
 
   const createMutation = useMutation({
@@ -142,7 +157,7 @@ export default function CampaignsPage() {
     setIntent(''); setProductDesc(''); setProtagonist('María')
     setHasCoupon(false); setCouponDesc(''); setCouponHours(72)
     setRadioCountry('mx'); setRadioAudioUrl(''); setRadioScript('')
-    setExtraContext(''); setBusinessCategory('')
+    setExtraContext(''); setBusinessCategory(''); setRadioVoiceId('')
     setScheduledAt(''); setError('')
   }
 
@@ -172,6 +187,7 @@ export default function CampaignsPage() {
           mode: mode === 'radio' ? 'classic' : mode,
           business_category: businessCategory || undefined,
           extra_context: extraContext || undefined,
+          voice_id: radioVoiceId || undefined,
         })
         setRadioAudioUrl(data.audio_url)
         setRadioScript(data.script ?? '')
@@ -249,6 +265,21 @@ export default function CampaignsPage() {
           <p className="mt-1 text-sm text-gray-500">{campaigns?.length ?? 0} campañas creadas</p>
         </div>
         <div className="flex gap-3">
+          {(campaigns?.length ?? 0) > 0 && (
+            <button
+              onClick={async () => {
+                try {
+                  const response = await api.get('/campaigns/export-csv', { responseType: 'blob' })
+                  const url = URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }))
+                  const a = document.createElement('a'); a.href = url; a.download = 'campanas_iaradio.csv'; a.click()
+                  URL.revokeObjectURL(url)
+                } catch { alert('Error al exportar') }
+              }}
+              className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <Download className="h-4 w-4" /> Exportar CSV
+            </button>
+          )}
           <button
             onClick={() => setShowParrilla(true)}
             className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
@@ -394,6 +425,26 @@ export default function CampaignsPage() {
             <h3 className="mb-5 text-lg font-semibold text-gray-900">Nueva campaña</h3>
 
             <div className="space-y-4">
+              {/* Template picker */}
+              {(templatesData?.length ?? 0) > 0 && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">📋 Usar template guardado</label>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const t = templatesData?.find((x) => x.id === e.target.value)
+                      if (t) setForm({ ...form, message_text: t.content })
+                    }}
+                    className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                  >
+                    <option value="">— Seleccionar template —</option>
+                    {templatesData?.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}{t.category ? ` (${t.category})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Nombre + tipo */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -555,6 +606,18 @@ export default function CampaignsPage() {
                       <option value="es">🇪🇸 España</option>
                     </select>
                   </div>
+                  {(voicesData?.length ?? 0) > 0 && (
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700">Voz del locutor</label>
+                      <select value={radioVoiceId} onChange={(e) => setRadioVoiceId(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none">
+                        <option value="">— Por defecto según país —</option>
+                        {voicesData?.map((v) => (
+                          <option key={v.id} value={v.id}>{v.name} ({v.gender === 'female' ? 'Femenina' : 'Masculina'})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   {!radioAudioUrl && (
                     <p className="text-xs text-gray-400">
                       Claude escribe el guión → voz de locutor → audio .ogg listo para WhatsApp {MODE_BADGE[mode]?.split(' ')[0] || '🎙️'}
@@ -858,33 +921,42 @@ export default function CampaignsPage() {
               </button>
             </div>
 
-            {/* Stat rows */}
+            {/* Recharts bar chart */}
             {(() => {
               const s = analyticsTarget.stats
               const sent = s.sent ?? 0
-              const rows = [
-                { label: 'Enviados', value: sent, color: 'bg-blue-400', pct: 100 },
-                { label: 'Entregados', value: s.delivered ?? 0, color: 'bg-green-400', pct: sent > 0 ? ((s.delivered ?? 0) / sent) * 100 : 0 },
-                { label: 'Leídos', value: s.read ?? 0, color: 'bg-indigo-400', pct: sent > 0 ? ((s.read ?? 0) / sent) * 100 : 0 },
-                { label: 'Respondidos', value: s.replied ?? 0, color: 'bg-brand-500', pct: sent > 0 ? ((s.replied ?? 0) / sent) * 100 : 0 },
-                { label: 'Fallidos', value: s.failed ?? 0, color: 'bg-red-400', pct: sent > 0 ? ((s.failed ?? 0) / sent) * 100 : 0 },
-                { label: 'Cupones canjeados', value: s.coupons_redeemed ?? 0, color: 'bg-amber-400', pct: sent > 0 ? ((s.coupons_redeemed ?? 0) / sent) * 100 : 0 },
+              const chartData = [
+                { name: 'Enviados', value: sent, fill: '#60a5fa' },
+                { name: 'Entregados', value: s.delivered ?? 0, fill: '#34d399' },
+                { name: 'Leídos', value: s.read ?? 0, fill: '#818cf8' },
+                { name: 'Respondidos', value: s.replied ?? 0, fill: '#f59e0b' },
+                { name: 'Fallidos', value: s.failed ?? 0, fill: '#f87171' },
+                { name: 'Cupones', value: s.coupons_redeemed ?? 0, fill: '#fb923c' },
               ]
               return (
-                <div className="space-y-3">
-                  {rows.map((r) => (
-                    <div key={r.label}>
-                      <div className="mb-1 flex items-center justify-between text-sm">
-                        <span className="text-gray-600">{r.label}</span>
-                        <span className="font-semibold text-gray-900">
-                          {r.value.toLocaleString()} {sent > 0 && r.label !== 'Enviados' && <span className="text-xs font-normal text-gray-400">({Math.round(r.pct)}%)</span>}
-                        </span>
+                <div className="space-y-4">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip formatter={(v: number) => [v.toLocaleString(), '']} labelStyle={{ fontWeight: 600 }} />
+                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                        {chartData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  {sent > 0 && (
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="rounded-lg bg-green-50 p-2 text-center">
+                        <div className="font-semibold text-green-700">{Math.round(((s.delivered ?? 0) / sent) * 100)}%</div>
+                        <div className="text-xs text-green-600">Entrega</div>
                       </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                        <div className={`h-full rounded-full transition-all ${r.color}`} style={{ width: `${Math.min(100, r.pct)}%` }} />
+                      <div className="rounded-lg bg-brand-50 p-2 text-center">
+                        <div className="font-semibold text-brand-700">{Math.round(((s.replied ?? 0) / sent) * 100)}%</div>
+                        <div className="text-xs text-brand-600">Respuesta</div>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               )
             })()}

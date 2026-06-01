@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Users, Plus, Upload, Trash2, Search, Download } from 'lucide-react'
+import { Users, Plus, Upload, Trash2, Search, Download, Tag, X } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
 interface Contact {
@@ -20,11 +20,17 @@ export default function ContactsPage() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [tagFilter, setTagFilter] = useState<string>('')
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ name: '', phone: '', email: '', city: '' })
+  const [form, setForm] = useState({ name: '', phone: '', email: '', city: '', tags: [] as string[] })
+  const [tagInput, setTagInput] = useState('')
   const [error, setError] = useState('')
   const [uploadMsg, setUploadMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [editTagsId, setEditTagsId] = useState<string | null>(null)
+  const [editTagsValue, setEditTagsValue] = useState<string[]>([])
+  const [editTagInput, setEditTagInput] = useState('')
+  const tagInputRef = useRef<HTMLInputElement>(null)
 
   const { data, isLoading } = useQuery<{ items: Contact[]; total: number }>({
     queryKey: ['contacts'],
@@ -38,13 +44,15 @@ export default function ContactsPage() {
         phone: body.phone.trim().startsWith('+') ? body.phone.trim() : `+${body.phone.replace(/\D/g, '')}`,
         email: body.email.trim() || undefined,
         city: body.city.trim() || undefined,
+        tags: body.tags,
       }
       return api.post('/contacts', payload)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['contacts'] })
       setShowAdd(false)
-      setForm({ name: '', phone: '', email: '', city: '' })
+      setForm({ name: '', phone: '', email: '', city: '', tags: [] })
+      setTagInput('')
       setError('')
     },
     onError: (err: any) => {
@@ -62,14 +70,44 @@ export default function ContactsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['contacts'] }),
   })
 
+  const updateTagsMutation = useMutation({
+    mutationFn: ({ id, tags }: { id: string; tags: string[] }) =>
+      api.patch(`/contacts/${id}`, { tags }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contacts'] })
+      setEditTagsId(null)
+    },
+  })
+
+  // Collect all unique tags from loaded contacts
+  const allTags = Array.from(new Set((data?.items ?? []).flatMap((c) => c.tags))).sort()
+
   const filtered = data?.items.filter(
     (c) =>
       (statusFilter === 'all' || c.status === statusFilter) &&
+      (!tagFilter || c.tags.includes(tagFilter)) &&
       (
         c.name.toLowerCase().includes(search.toLowerCase()) ||
         c.phone.includes(search)
       )
   ) ?? []
+
+  const addTagToForm = () => {
+    const t = tagInput.trim().toLowerCase()
+    if (t && !form.tags.includes(t)) {
+      setForm({ ...form, tags: [...form.tags, t] })
+    }
+    setTagInput('')
+    tagInputRef.current?.focus()
+  }
+
+  const addTagToEdit = () => {
+    const t = editTagInput.trim().toLowerCase()
+    if (t && !editTagsValue.includes(t)) {
+      setEditTagsValue([...editTagsValue, t])
+    }
+    setEditTagInput('')
+  }
 
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -179,6 +217,32 @@ export default function ContactsPage() {
         ))}
       </div>
 
+      {/* Tag filter */}
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <Tag className="h-3.5 w-3.5 text-gray-400" />
+          <button
+            onClick={() => setTagFilter('')}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              !tagFilter ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Todas
+          </button>
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                tagFilter === tag ? 'bg-brand-500 text-white' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
+              }`}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -213,6 +277,7 @@ export default function ContactsPage() {
                 <th className="px-6 py-3 text-left">Teléfono</th>
                 <th className="px-6 py-3 text-left">Email</th>
                 <th className="px-6 py-3 text-left">Ciudad</th>
+                <th className="px-6 py-3 text-left">Tags</th>
                 <th className="px-6 py-3 text-left">Estado</th>
                 <th className="px-6 py-3 text-left">Agregado</th>
                 <th className="px-6 py-3" />
@@ -225,6 +290,56 @@ export default function ContactsPage() {
                   <td className="px-6 py-4 text-sm text-gray-500">{contact.phone}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{contact.email ?? '—'}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{contact.city ?? '—'}</td>
+                  <td className="px-6 py-4">
+                    {editTagsId === contact.id ? (
+                      <div className="flex flex-wrap gap-1 min-w-[160px]">
+                        {editTagsValue.map((t) => (
+                          <span key={t} className="flex items-center gap-0.5 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
+                            {t}
+                            <button onClick={() => setEditTagsValue(editTagsValue.filter((x) => x !== t))} className="ml-0.5 hover:text-red-500">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                        <input
+                          autoFocus
+                          type="text"
+                          value={editTagInput}
+                          onChange={(e) => setEditTagInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTagToEdit() }
+                            if (e.key === 'Escape') setEditTagsId(null)
+                          }}
+                          placeholder="+ tag"
+                          className="w-16 rounded border-0 bg-transparent text-xs text-gray-700 outline-none placeholder-gray-400"
+                        />
+                        <button
+                          onClick={() => updateTagsMutation.mutate({ id: contact.id, tags: editTagsValue })}
+                          className="rounded bg-brand-500 px-2 py-0.5 text-[10px] text-white hover:bg-brand-600"
+                        >
+                          ✓
+                        </button>
+                        <button onClick={() => setEditTagsId(null)} className="text-gray-400 hover:text-gray-600">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        className="flex flex-wrap gap-1 cursor-pointer group"
+                        onClick={() => { setEditTagsId(contact.id); setEditTagsValue([...contact.tags]); setEditTagInput('') }}
+                        title="Click para editar tags"
+                      >
+                        {contact.tags.length > 0
+                          ? contact.tags.map((t) => (
+                              <span key={t} className="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">
+                                {t}
+                              </span>
+                            ))
+                          : <span className="text-xs text-gray-300 group-hover:text-gray-400">+ tag</span>
+                        }
+                      </div>
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                       contact.status === 'active'
@@ -290,11 +405,45 @@ export default function ContactsPage() {
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
+              {/* Tags input */}
+              <div>
+                <div className="flex flex-wrap gap-1.5 mb-1.5 min-h-[1.5rem]">
+                  {form.tags.map((t) => (
+                    <span key={t} className="flex items-center gap-0.5 rounded-full bg-purple-100 px-2.5 py-0.5 text-xs text-purple-700">
+                      {t}
+                      <button onClick={() => setForm({ ...form, tags: form.tags.filter((x) => x !== t) })} className="ml-0.5 hover:text-red-500">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    ref={tagInputRef}
+                    type="text"
+                    placeholder="Agregar tag (Enter para confirmar)"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTagToForm() }
+                    }}
+                    className="flex-1 rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={addTagToForm}
+                    disabled={!tagInput.trim()}
+                    className="rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-medium text-purple-600 hover:bg-purple-100 disabled:opacity-40"
+                  >
+                    + Tag
+                  </button>
+                </div>
+              </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
             </div>
             <div className="mt-5 flex gap-3">
               <button
-                onClick={() => { setShowAdd(false); setError('') }}
+                onClick={() => { setShowAdd(false); setError(''); setForm({ name: '', phone: '', email: '', city: '', tags: [] }); setTagInput('') }}
                 className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
               >
                 Cancelar

@@ -17,6 +17,7 @@ import {
   CalendarDays,
   Menu,
   X,
+  UserCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -28,6 +29,7 @@ const navItems = [
   { to: '/app/appointments', icon: CalendarDays, label: 'Citas' },
   { to: '/app/contacts', icon: Users, label: 'Contactos' },
   { to: '/app/knowledge-base', icon: BookOpen, label: 'Base de conocimiento' },
+  { to: '/app/team', icon: UserCog, label: 'Equipo' },
   { to: '/app/plans', icon: CreditCard, label: 'Planes' },
   { to: '/app/settings', icon: Settings, label: 'Configuración' },
 ]

@@ -56,3 +56,6 @@ htmlcov/
 # Uploads / media
 uploads/
 media/
+
+# AI Agent context files (internal use only, not for versioning)
+PROJECT_CONTEXT.md

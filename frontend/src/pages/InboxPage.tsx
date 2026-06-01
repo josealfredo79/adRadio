@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { MessageSquare, User, Clock, Flame, Thermometer, Snowflake, CheckCircle, AlertCircle, X, Image, Volume2, FileText, Search, Send } from 'lucide-react'
+import { MessageSquare, User, Clock, Flame, Thermometer, Snowflake, CheckCircle, AlertCircle, X, Image, Volume2, FileText, Search, Send, Bot, BotOff } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 
@@ -270,7 +270,14 @@ export default function InboxPage() {
             {/* Header */}
             <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
               <div>
-                <p className="font-semibold text-gray-900">{detail.contact.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-gray-900">{detail.contact.name}</p>
+                  {detail.status === 'escalated' && (
+                    <span className="flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-600">
+                      <BotOff className="h-3 w-3" /> Bot pausado
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500">{detail.contact.phone}</p>
               </div>
               <div className="flex items-center gap-2">
@@ -294,9 +301,20 @@ export default function InboxPage() {
                   <button
                     onClick={() => statusMutation.mutate({ id: detail.id, status: 'escalated' })}
                     className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-600 hover:bg-orange-100 transition-colors"
+                    title="Pausar bot y tomar el control manual"
                   >
-                    <AlertCircle className="h-3.5 w-3.5" />
-                    Escalar
+                    <BotOff className="h-3.5 w-3.5" />
+                    Pausar bot
+                  </button>
+                )}
+                {detail.status === 'escalated' && (
+                  <button
+                    onClick={() => statusMutation.mutate({ id: detail.id, status: 'active' })}
+                    className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-600 hover:bg-green-100 transition-colors"
+                    title="Reactivar el bot para responder automáticamente"
+                  >
+                    <Bot className="h-3.5 w-3.5" />
+                    Reactivar bot
                   </button>
                 )}
                 {detail.status !== 'closed' && (

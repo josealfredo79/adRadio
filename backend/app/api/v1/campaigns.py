@@ -1,9 +1,12 @@
 """
 Campaigns router — /api/v1/campaigns
 """
+import csv
+import io
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -187,6 +190,50 @@ async def campaign_stats(
     return campaign.stats
 
 
+@router.get("/export-csv")
+async def export_campaigns_csv(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export all campaigns with stats as a CSV file."""
+    result = await db.execute(
+        select(Campaign)
+        .where(Campaign.advertiser_id == current_user.id)
+        .order_by(Campaign.created_at.desc())
+    )
+    campaigns = result.scalars().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Nombre", "Tipo", "Estado", "Enviados", "Entregados",
+        "Leídos", "Respondidos", "Fallidos", "Cupones Canjeados",
+        "% Entrega", "% Respuesta", "Creada"
+    ])
+    for c in campaigns:
+        s = c.stats
+        sent = s.get("sent", 0) or 0
+        delivered = s.get("delivered", 0) or 0
+        replied = s.get("replied", 0) or 0
+        pct_delivery = round((delivered / sent * 100), 1) if sent > 0 else 0
+        pct_reply = round((replied / sent * 100), 1) if sent > 0 else 0
+        writer.writerow([
+            c.name, c.type, c.status,
+            sent, delivered,
+            s.get("read", 0) or 0, replied,
+            s.get("failed", 0) or 0, s.get("coupons_redeemed", 0) or 0,
+            f"{pct_delivery}%", f"{pct_reply}%",
+            c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else "",
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=campanas_iaradio.csv"},
+    )
+
+
 @router.post("/generate-content", response_model=GenerateContentResponse)
 async def generate_content(
     body: GenerateContentRequest,
@@ -266,6 +313,7 @@ async def generate_radio_ad_endpoint(
         _script=script,
         mode=body.mode,
         business_category=body.business_category,
+        voice_id=body.voice_id,
     )
     return {"audio_url": audio_url, "script": script}
 

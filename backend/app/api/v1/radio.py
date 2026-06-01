@@ -32,6 +32,25 @@ def _get_r2_client():
     )
 
 
+# Available voices for cuñas de radio
+AVAILABLE_VOICES = [
+    {"id": "es-MX-JorgeNeural", "name": "Jorge (México)", "lang": "es-MX", "gender": "male", "provider": "edge"},
+    {"id": "es-MX-DaliaNeural", "name": "Dalia (México)", "lang": "es-MX", "gender": "female", "provider": "edge"},
+    {"id": "es-AR-TomasNeural", "name": "Tomás (Argentina)", "lang": "es-AR", "gender": "male", "provider": "edge"},
+    {"id": "es-AR-ElenaNeural", "name": "Elena (Argentina)", "lang": "es-AR", "gender": "female", "provider": "edge"},
+    {"id": "es-CO-GonzaloNeural", "name": "Gonzalo (Colombia)", "lang": "es-CO", "gender": "male", "provider": "edge"},
+    {"id": "es-CO-SalomeNeural", "name": "Salomé (Colombia)", "lang": "es-CO", "gender": "female", "provider": "edge"},
+    {"id": "es-ES-AlvaroNeural", "name": "Álvaro (España)", "lang": "es-ES", "gender": "male", "provider": "edge"},
+    {"id": "es-ES-ElviraNeural", "name": "Elvira (España)", "lang": "es-ES", "gender": "female", "provider": "edge"},
+]
+
+
+@router.get("/voices")
+async def list_voices():
+    """List available TTS voices for radio ads."""
+    return AVAILABLE_VOICES
+
+
 @router.get("/audio/{filename:path}")
 async def serve_audio(request: Request, filename: str):
     """Serve an audio file from local storage or R2 fallback."""
