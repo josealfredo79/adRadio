@@ -132,6 +132,8 @@ def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str, fro
 
     try:
         run_async(_run())
+    except Exception:
+        pass
 
 
 @celery_app.task
@@ -179,8 +181,10 @@ def auto_tag_contact_from_conversation(contact_id: str):
             await db.commit()
             logger.info("[AUTO-TAG] Contact %s tagged: %s", contact_id, merged)
 
-    run_async(_run())    except Exception as exc:
-        raise self.retry(exc=exc)
+    try:
+        run_async(_run())
+    except Exception:
+        pass
 
 
 @celery_app.task(bind=True, max_retries=2)
