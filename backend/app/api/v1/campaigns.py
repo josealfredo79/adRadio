@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.campaign import Campaign
+from app.models.customer_story import CustomerStory
 from app.models.user import User
 from app.schemas.campaign import (
     CampaignCreate,
@@ -29,11 +30,14 @@ from app.schemas.campaign import (
     ParrillaRequest,
     ParrillaOut,
     ParrillaDayOut,
+    CustomerStoryOut,
+    CustomerStoryListOut,
 )
 from app.services.claude_service import (
     generate_campaign_variants,
     generate_sequence_messages,
     generate_saga_episodes,
+    generate_voces_capsule,
 )
 from app.services.imagen_service import generate_flyer
 from app.services.radio_service import generate_radio_ad, generate_radio_script
@@ -292,45 +296,6 @@ async def preview_banner(
     return FastAPIResponse(content=png_bytes, media_type="image/png")
 
 
-    """Export all campaigns with stats as a CSV file."""
-    result = await db.execute(
-        select(Campaign)
-        .where(Campaign.advertiser_id == current_user.id)
-        .order_by(Campaign.created_at.desc())
-    )
-    campaigns = result.scalars().all()
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow([
-        "Nombre", "Tipo", "Estado", "Enviados", "Entregados",
-        "Leídos", "Respondidos", "Fallidos", "Cupones Canjeados",
-        "% Entrega", "% Respuesta", "Creada"
-    ])
-    for c in campaigns:
-        s = c.stats
-        sent = s.get("sent", 0) or 0
-        delivered = s.get("delivered", 0) or 0
-        replied = s.get("replied", 0) or 0
-        pct_delivery = round((delivered / sent * 100), 1) if sent > 0 else 0
-        pct_reply = round((replied / sent * 100), 1) if sent > 0 else 0
-        writer.writerow([
-            c.name, c.type, c.status,
-            sent, delivered,
-            s.get("read", 0) or 0, replied,
-            s.get("failed", 0) or 0, s.get("coupons_redeemed", 0) or 0,
-            f"{pct_delivery}%", f"{pct_reply}%",
-            c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else "",
-        ])
-
-    output.seek(0)
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=campanas_iaradio.csv"},
-    )
-
-
 @router.post("/generate-content", response_model=GenerateContentResponse)
 async def generate_content(
     body: GenerateContentRequest,
@@ -413,6 +378,132 @@ async def generate_radio_ad_endpoint(
         voice_id=body.voice_id,
     )
     return {"audio_url": audio_url, "script": script}
+
+
+@router.post("/{campaign_id}/generate-capsule")
+async def generate_capsule(
+    campaign_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a Voces del Barrio narrative capsule from approved customer stories."""
+    result = await db.execute(
+        select(Campaign).where(
+            Campaign.id == campaign_id,
+            Campaign.advertiser_id == current_user.id,
+        )
+    )
+    campaign = result.scalar_one_or_none()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaña no encontrada")
+
+    if campaign.type != "voces":
+        raise HTTPException(status_code=400, detail="Esta campaña no es de tipo voces")
+
+    stories_result = await db.execute(
+        select(CustomerStory).where(
+            CustomerStory.campaign_id == campaign_id,
+            CustomerStory.approved == True,
+        )
+    )
+    stories = stories_result.scalars().all()
+    if not stories:
+        raise HTTPException(
+            status_code=400,
+            detail="No hay historias aprobadas para generar la cápsula. "
+                   "Espera a que los clientes envíen audios y los apruebes.",
+        )
+
+    stories_data = [
+        {"name": s.contact.name if s.contact else "Cliente", "text": s.transcription}
+        for s in stories
+    ]
+
+    business_name = current_user.business_name or "Mi negocio"
+    script = await generate_voces_capsule(
+        business_name=business_name,
+        stories=stories_data,
+        campaign_intent=campaign.message_text,
+    )
+
+    audio_url = await generate_radio_ad(
+        business_name=business_name,
+        message_or_intent=script,
+        country="mx",
+        _script=script,
+        mode="comunitaria",
+        business_category=None,
+    )
+
+    return {"audio_url": audio_url, "script": script}
+
+
+@router.get("/{campaign_id}/stories", response_model=CustomerStoryListOut)
+async def list_campaign_stories(
+    campaign_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List all customer stories for a Voces campaign."""
+    result = await db.execute(
+        select(Campaign).where(
+            Campaign.id == campaign_id,
+            Campaign.advertiser_id == current_user.id,
+        )
+    )
+    campaign = result.scalar_one_or_none()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaña no encontrada")
+
+    stories_result = await db.execute(
+        select(CustomerStory).where(
+            CustomerStory.campaign_id == campaign_id,
+        ).order_by(CustomerStory.created_at.desc())
+    )
+    stories = stories_result.scalars().all()
+
+    out = []
+    for s in stories:
+        contact_name = s.contact.name if s.contact else None
+        out.append(CustomerStoryOut(
+            id=s.id,
+            contact_id=s.contact_id,
+            contact_name=contact_name,
+            media_url=s.media_url,
+            transcription=s.transcription,
+            sentiment=s.sentiment,
+            approved=s.approved,
+            created_at=s.created_at,
+        ))
+
+    return CustomerStoryListOut(
+        stories=out,
+        total=len(out),
+        approved_count=sum(1 for s in stories if s.approved),
+        pending_count=sum(1 for s in stories if not s.approved),
+    )
+
+
+@router.patch("/stories/{story_id}/approve")
+async def approve_story(
+    story_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Toggle approval of a customer story."""
+    result = await db.execute(
+        select(CustomerStory).where(
+            CustomerStory.id == story_id,
+            CustomerStory.advertiser_id == current_user.id,
+        )
+    )
+    story = result.scalar_one_or_none()
+    if not story:
+        raise HTTPException(status_code=404, detail="Historia no encontrada")
+
+    story.approved = not story.approved
+    await db.commit()
+    return {"approved": story.approved}
 
 
 # ─── Modos por día según el plan ──────────────────────────────────────────────

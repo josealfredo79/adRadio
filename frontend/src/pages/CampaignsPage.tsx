@@ -21,6 +21,7 @@ const CAMPAIGN_TYPES = [
   { value: 'reminder', label: '⏰ Recordatorio' },
   { value: 'launch', label: '🚀 Lanzamiento' },
   { value: 'event', label: '🎉 Evento' },
+  { value: 'voces', label: '🎤 Voces del Barrio' },
 ]
 
 // Modos de campaña — La Nueva Radio
@@ -36,6 +37,7 @@ const CAMPAIGN_MODES = [
   { value: 'historia', label: '📖 Mini Historia', desc: 'Radionovela de 30s: personaje → problema → tu negocio como solución' },
   { value: 'alerta', label: '🚨 Alerta de Servicio', desc: 'Info contextual oportuna (clima, fecha) + tu negocio' },
   { value: 'estacional', label: '🗓️ Cuña Estacional', desc: 'Conecta tu negocio con el momento exacto del año' },
+  { value: 'voces', label: '🎤 Voces del Barrio', desc: 'Colecciona audios reales de clientes y genera una cápsula narrativa con IA' },
 ]
 
 const STATUS_COLORS: Record<string, string> = {
@@ -62,9 +64,10 @@ const MODE_BADGE: Record<string, string> = {
   alerta: '🚨 Alerta',
   estacional: '🗓️ Estacional',
   banner: '🖼️ Banner Visual',
+  voces: '🎤 Voces del Barrio',
 }
 
-type CampaignMode = 'regular' | 'banner' | 'sequence' | 'saga' | 'radio' | 'comunitaria' | 'capsula' | 'trivia' | 'historia' | 'alerta' | 'estacional'
+type CampaignMode = 'regular' | 'banner' | 'sequence' | 'saga' | 'radio' | 'comunitaria' | 'capsula' | 'trivia' | 'historia' | 'alerta' | 'estacional' | 'voces'
 
 const AUDIO_MODES: CampaignMode[] = ['radio', 'comunitaria', 'capsula', 'trivia', 'historia', 'alerta', 'estacional']
 
@@ -98,6 +101,7 @@ export default function CampaignsPage() {
   const [scheduledAt, setScheduledAt] = useState('')
   const [error, setError] = useState('')
   const [analyticsId, setAnalyticsId] = useState<string | null>(null)
+  const [vocesDetailId, setVocesDetailId] = useState<string | null>(null)
 
   // Banner Visual mode
   const [bannerPromo, setBannerPromo] = useState('')
@@ -105,6 +109,13 @@ export default function CampaignsPage() {
   const [bannerCaption, setBannerCaption] = useState('')
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string | null>(null)
   const [bannerPreviewing, setBannerPreviewing] = useState(false)
+
+  // Voces del Barrio
+  const [vocesCollectionPrompt, setVocesCollectionPrompt] = useState('')
+  const [vocesStories, setVocesStories] = useState<any[]>([])
+  const [vocesCapsuleAudioUrl, setVocesCapsuleAudioUrl] = useState('')
+  const [vocesCapsuleScript, setVocesCapsuleScript] = useState('')
+  const [vocesGenerating, setVocesGenerating] = useState(false)
 
   // Parrilla Semanal
   const [showParrilla, setShowParrilla] = useState(false)
@@ -175,6 +186,7 @@ export default function CampaignsPage() {
     setExtraContext(''); setBusinessCategory(''); setRadioVoiceId('')
     setScheduledAt(''); setError('')
     setBannerPromo(''); setBannerPalette('promo'); setBannerCaption(''); setBannerPreviewUrl(null)
+    setVocesCollectionPrompt(''); setVocesStories([]); setVocesCapsuleAudioUrl(''); setVocesCapsuleScript('')
   }
 
   const generateContent = async () => {
@@ -268,15 +280,18 @@ export default function CampaignsPage() {
   }
 
   const analyticsTarget = campaigns?.find((c) => c.id === analyticsId)
+  const vocesDetailTarget = campaigns?.find((c) => c.id === vocesDetailId)
 
   const isMultiMode = mode === 'sequence' || mode === 'saga'
   const isRadioMode = AUDIO_MODES.includes(mode)
   const isBannerMode = mode === 'banner'
+  const isVocesMode = mode === 'voces'
   const readyToCreate = form.name && (
     (mode === 'regular' && form.message_text) ||
     (isMultiMode && multiMessages.length > 0) ||
     (isRadioMode && !!radioAudioUrl) ||
-    (isBannerMode && !!bannerPromo)
+    (isBannerMode && !!bannerPromo) ||
+    (isVocesMode && !!vocesCapsuleAudioUrl)
   )
 
   const previewBanner = async () => {
@@ -437,6 +452,12 @@ export default function CampaignsPage() {
                     className="rounded-lg border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-50 transition-colors">
                     <BarChart2 className="h-3.5 w-3.5" />
                   </button>
+                  {campaign.type === 'voces' && (
+                    <button onClick={() => setVocesDetailId(campaign.id)}
+                      className="rounded-lg border border-purple-200 bg-purple-50 p-1.5 text-purple-600 hover:bg-purple-100 transition-colors">
+                      <Megaphone className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   {campaign.status === 'running' && (
                     <button onClick={() => pauseMutation.mutate(campaign.id)}
                       className="rounded-lg border border-yellow-200 bg-yellow-50 p-1.5 text-yellow-600 hover:bg-yellow-100">
@@ -753,8 +774,24 @@ export default function CampaignsPage() {
                 </div>
               )}
 
+              {/* ── Voces del Barrio mode ──────────────────────────────────── */}
+              {isVocesMode && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    📝 Solicitud para tus clientes
+                  </label>
+                  <textarea rows={2}
+                    placeholder='Ej: Mándanos un audio de 10 segundos diciendo cuál es tu platillo favorito 🎙️'
+                    value={vocesCollectionPrompt} onChange={(e) => { setVocesCollectionPrompt(e.target.value); setForm({ ...form, message_text: e.target.value }) }}
+                    className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none" />
+                  <p className="mt-1 text-xs text-purple-700 bg-purple-50 rounded-lg px-3 py-2">
+                    🎤 Tus contactos recibirán este mensaje y podrán responder con audios. La IA transcribirá sus historias y después podrás generar una cápsula narrativa con ellas.
+                  </p>
+                </div>
+              )}
+
               {/* Botón generar */}
-              {!isRadioMode && (
+              {!isRadioMode && !isVocesMode && (
                 <button onClick={generateContent}
                   disabled={generating || !form.name || (mode !== 'saga' && !intent) || (mode === 'saga' && !productDesc)}
                   className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60 transition-colors">
@@ -1087,6 +1124,126 @@ export default function CampaignsPage() {
           </div>
         </div>
       )}
+
+      {/* Voces del Barrio Detail Modal */}
+      {vocesDetailTarget && (() => {
+        const { data: storiesData, isLoading: storiesLoading, refetch: refetchStories } = useQuery({
+          queryKey: ['campaign-stories', vocesDetailTarget.id],
+          queryFn: () => api.get(`/campaigns/${vocesDetailTarget.id}/stories`).then((r) => r.data),
+          enabled: !!vocesDetailTarget,
+        })
+        const [capsuleAudioUrl, setCapsuleAudioUrl] = useState('')
+        const [capsuleScript, setCapsuleScript] = useState('')
+        const [capsuleGenerating, setCapsuleGenerating] = useState(false)
+
+        const approveMutation = useMutation({
+          mutationFn: (storyId: string) => api.patch(`/campaigns/stories/${storyId}/approve`),
+          onSuccess: () => refetchStories(),
+        })
+
+        const generateCapsule = async () => {
+          setCapsuleGenerating(true)
+          try {
+            const { data } = await api.post(`/campaigns/${vocesDetailTarget.id}/generate-capsule`)
+            setCapsuleAudioUrl(data.audio_url)
+            setCapsuleScript(data.script ?? '')
+          } catch (err: any) {
+            setError(err.response?.data?.detail ?? 'Error al generar cápsula')
+          } finally {
+            setCapsuleGenerating(false)
+          }
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setVocesDetailId(null)}>
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900">🎤 {vocesDetailTarget.name}</h3>
+                  <p className="mt-0.5 text-xs text-gray-500">Voces del Barrio — Historias de clientes</p>
+                </div>
+                <button onClick={() => setVocesDetailId(null)} className="text-gray-400 hover:text-gray-600">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {storiesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <span className="h-6 w-6 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
+                </div>
+              ) : storiesData && storiesData.stories.length > 0 ? (
+                <>
+                  <div className="mb-3 flex items-center gap-3 text-sm text-gray-500">
+                    <span>📥 Total: {storiesData.total}</span>
+                    <span className="text-green-600">✅ Aprobadas: {storiesData.approved_count}</span>
+                    <span className="text-yellow-600">⏳ Pendientes: {storiesData.pending_count}</span>
+                  </div>
+
+                  <div className="space-y-3 mb-4 max-h-80 overflow-y-auto">
+                    {storiesData.stories.map((story: any) => (
+                      <div key={story.id} className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900">{story.contact_name || 'Cliente'}</p>
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                              story.sentiment === 'positivo' ? 'bg-green-100 text-green-600' :
+                              story.sentiment === 'negativo' ? 'bg-red-100 text-red-600' :
+                              'bg-gray-100 text-gray-500'
+                            }`}>{story.sentiment}</span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-gray-500 line-clamp-3">{story.transcription}</p>
+                          <p className="mt-1 text-[10px] text-gray-400">
+                            {new Date(story.created_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => approveMutation.mutate(story.id)}
+                          className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                            story.approved
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                          }`}>
+                          {story.approved ? '✅ Aprobada' : '⏳ Aprobar'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="border-t border-gray-100 pt-4 space-y-3">
+                    <button onClick={generateCapsule} disabled={capsuleGenerating || storiesData.approved_count === 0}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-600 disabled:opacity-60 transition-colors">
+                      <Sparkles className="h-4 w-4" />
+                      {capsuleGenerating ? 'Generando cápsula...' : capsuleAudioUrl ? '🎤 Regenerar cápsula narrativa' : '🎤 Generar cápsula narrativa'}
+                    </button>
+                    {storiesData.approved_count === 0 && (
+                      <p className="text-center text-xs text-yellow-600">Aprueba al menos una historia para generar la cápsula</p>
+                    )}
+
+                    {capsuleAudioUrl && (
+                      <div className="rounded-xl border border-purple-200 bg-purple-50 p-4 space-y-2">
+                        <p className="text-sm font-medium text-purple-700">🎤 Cápsula generada</p>
+                        <audio controls src={capsuleAudioUrl} className="w-full" />
+                        {capsuleScript && (
+                          <details className="text-xs text-gray-500">
+                            <summary className="cursor-pointer font-medium">Ver guión</summary>
+                            <p className="mt-2 whitespace-pre-wrap">{capsuleScript}</p>
+                          </details>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8 text-gray-400">
+                  <Megaphone className="mx-auto h-10 w-10 mb-2" />
+                  <p className="text-sm font-medium">No hay historias todavía</p>
+                  <p className="text-xs mt-1">Cuando tus contactos envíen audios a esta campaña, aparecerán aquí</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

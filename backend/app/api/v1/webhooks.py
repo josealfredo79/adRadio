@@ -18,6 +18,7 @@ from app.models.coupon import Coupon
 from app.models.message import Message
 from app.models.order import Order
 from app.models.appointment import Appointment
+from app.models.customer_story import CustomerStory
 from app.models.user import User
 from app.services.coupon_service import is_redeem_intent, is_expired
 from app.services.number_pool_service import assign_pool_number, release_pool_number
@@ -334,6 +335,26 @@ async def twilio_incoming(
         _is_new_contact = True
     else:
         _is_new_contact = False
+
+    # ─── VOCES DEL BARRIO — Save customer story from audio ─────────────────
+    if audio_transcription and media_url and advertiser:
+        voces_result = await db.execute(
+            select(Campaign).where(
+                Campaign.advertiser_id == advertiser.id,
+                Campaign.type == "voces",
+                Campaign.status.in_(["running", "scheduled"]),
+            ).limit(1)
+        )
+        voces_campaign = voces_result.scalar_one_or_none()
+        if voces_campaign:
+            story = CustomerStory(
+                advertiser_id=advertiser.id,
+                contact_id=contact.id,
+                campaign_id=voces_campaign.id,
+                media_url=media_url,
+                transcription=audio_transcription,
+            )
+            db.add(story)
 
     # Save inbound message
     msg = Message(

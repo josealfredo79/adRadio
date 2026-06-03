@@ -327,3 +327,56 @@ Responde ÚNICAMENTE con el JSON array, sin texto adicional. Ejemplo: ["interesa
     except Exception:
         pass
     return []
+
+
+# ─── Voces del Barrio — cápsula narrativa ─────────────────────────────────────
+
+VOCES_SYSTEM_PROMPT = """Eres un locutor de radio comunitaria latinoamericana.
+Tu voz es cálida, cercana, como la de un amigo en la estación de radio del barrio.
+
+Tu tarea es convertir historias REALES de clientes en una cápsula narrativa de radio
+que se sienta auténtica, no como publicidad.
+
+Reglas:
+- Usa los nombres reales de los clientes que compartieron su historia
+- Conecta las historias con naturalidad, como en un programa de radio
+- Mantén un tono cálido, de barrio, nunca corporativo
+- Máximo 250 palabras
+- Termina con una frase que conecte con la campaña (el intent del anunciante)
+- No suenes a comercia, suena a comunidad
+- Usa lenguaje cotidiano, latinoamericano neutral
+"""
+
+
+async def generate_voces_capsule(
+    business_name: str,
+    stories: list[dict],
+    campaign_intent: str,
+) -> str:
+    """Generate a narrative radio capsule from real customer stories."""
+    client = _get_client()
+
+    stories_text = "\n\n".join(
+        f"Cliente: {s.get('name', 'Alguien')}\nHistoria: {s.get('text', '')}"
+        for s in stories
+    )
+
+    prompt = f"""Convierte estas historias REALES de clientes de {business_name} en una cápsula narrativa de radio comunitaria.
+
+Historias de clientes:
+{stories_text}
+
+Intención de la campaña: {campaign_intent}
+
+Genera solo la cápsula narrativa, sin introducciones ni explicaciones adicionales.
+Debe sonar como un segmento de radio del barrio, no como un anuncio."""
+
+    message = await client.messages.create(
+        model="claude-3-5-sonnet-latest",
+        max_tokens=600,
+        temperature=0.7,
+        system=VOCES_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    return message.content[0].text.strip()

@@ -52,7 +52,7 @@ class Campaign(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "type IN ('promo','reminder','launch','event')", name="ck_campaigns_type"
+            "type IN ('promo','reminder','launch','event','voces')", name="ck_campaigns_type"
         ),
         CheckConstraint(
             "status IN ('draft','scheduled','running','paused','completed')",

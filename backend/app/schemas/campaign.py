@@ -109,3 +109,23 @@ class ParrillaOut(BaseModel):
     plan: str          # plan del usuario que generó esto
     auto_scheduled: bool
 
+
+class CustomerStoryOut(BaseModel):
+    id: uuid.UUID
+    contact_id: uuid.UUID | None
+    contact_name: str | None = None
+    media_url: str
+    transcription: str
+    sentiment: str
+    approved: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CustomerStoryListOut(BaseModel):
+    stories: list[CustomerStoryOut]
+    total: int
+    approved_count: int
+    pending_count: int
+

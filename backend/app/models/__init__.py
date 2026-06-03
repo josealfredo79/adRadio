@@ -12,6 +12,7 @@ from app.models.appointment import Appointment
 from app.models.template import MessageTemplate
 from app.models.team_member import TeamMember
 from app.models.automation import AutomationFlow, AutomationStep, AutomationEnrollment
+from app.models.customer_story import CustomerStory
 
 __all__ = [
     "User",
@@ -30,4 +31,5 @@ __all__ = [
     "AutomationFlow",
     "AutomationStep",
     "AutomationEnrollment",
+    "CustomerStory",
 ]

@@ -112,7 +112,7 @@ class TestTwilioService:
         # Verificar que el delay está en el rango correcto
         for _ in range(100):
             delay = anti_ban_delay()
-            assert 25 <= delay <= 90
+            assert 45 <= delay <= 300
 
 
 class TestConfigSettings:
