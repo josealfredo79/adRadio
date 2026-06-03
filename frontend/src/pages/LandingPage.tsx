@@ -266,102 +266,72 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* ─── HERO ─── */}
-      <section className="relative px-5 pt-20 pb-28 overflow-hidden">
-        {/* Mesh bg + gradientes de producto */}
-        <div className="absolute inset-0 mesh-bg opacity-50 z-0" />
+      {/* ─── HERO (Hostinger-style) ─── */}
+      <section className="relative px-5 pt-28 pb-28 overflow-hidden min-h-[90vh] flex items-center">
+        {/* Mesh bg inmersivo */}
+        <div className="absolute inset-0 mesh-bg opacity-60 z-0" />
         <div className="absolute inset-0 z-0" style={{
-          background: `
-            radial-gradient(ellipse 60% 30% at 25% 20%, rgba(99,102,241,0.25) 0%, transparent 60%),
-            radial-gradient(ellipse 40% 30% at 75% 80%, rgba(168,85,247,0.18) 0%, transparent 60%)
-          `,
+          background: 'radial-gradient(ellipse 50% 40% at 50% 50%, rgba(124,58,237,0.25) 0%, transparent 70%)',
         }} />
 
-        {/* Dot grid bg */}
-        <div className="pointer-events-none absolute inset-0 opacity-15 z-10"
-          style={{backgroundImage: 'radial-gradient(circle, rgba(99,102,241,0.4) 1px, transparent 1px)', backgroundSize: '32px 32px'}} />
+        {/* Dot grid bg purple */}
+        <div className="pointer-events-none absolute inset-0 opacity-[0.12] z-10"
+          style={{backgroundImage: 'radial-gradient(circle, rgba(124,58,237,0.4) 1px, transparent 1px)', backgroundSize: '32px 32px'}} />
 
-        <div className="relative z-20 mx-auto grid max-w-6xl grid-cols-1 items-center gap-16 lg:grid-cols-2">
-          {/* Left */}
-          <div>
-            {/* Badge */}
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-4 py-1.5 text-sm font-medium text-indigo-300">
-              <Sparkles className="h-3.5 w-3.5" />
-              Impulsado por Claude IA · Twilio · pgvector
-            </div>
-
-            <h1 className="mb-6 text-5xl font-black leading-[1.05] tracking-tight sm:text-6xl">
-              Tu negocio en<br />
-              <span className="text-shimmer">la radio del futuro</span>
-            </h1>
-
-            <p className="mb-8 text-lg text-gray-400 leading-relaxed max-w-lg">
-              Campañas masivas por WhatsApp, bot IA que conoce tu negocio,
-              cuñas de radio generadas en segundos. <strong className="text-white">Todo en una plataforma.</strong>
-            </p>
-
-            <div className="flex flex-wrap gap-3 mb-10">
-              <Link
-                to="/register"
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#6366F1] px-7 py-3.5 text-base font-black text-white shadow-xl shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 glow-purple"
-              >
-                Empieza gratis
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <a
-                href="#como-funciona"
-                className="flex items-center gap-2 rounded-xl glass px-6 py-3.5 text-base font-semibold text-gray-300 hover:text-white hover:border-white/20 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300"
-              >
-                Ver demo
-              </a>
-            </div>
-
-            {/* Trust strip */}
-            <div className="flex flex-wrap gap-5 text-sm text-gray-500">
-              <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Sin tarjeta de crédito</span>
-              <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Cancela cuando quieras</span>
-              <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Configuración en 10 min</span>
-            </div>
+        <div className="relative z-20 mx-auto max-w-4xl text-center">
+          {/* Badge */}
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#7C3AED]/30 bg-[#7C3AED]/10 px-4 py-1.5 text-sm font-medium text-[#7C3AED]">
+            <Sparkles className="h-3.5 w-3.5" />
+            Impulsado por Claude IA · Twilio · pgvector
           </div>
 
-          {/* Right — product demo showcase */}
-          <div className="flex flex-col items-center gap-5 float-anim">
-            <div className="relative">
-              <div className="absolute -top-3 -right-3 z-20 inline-flex items-center gap-1.5 rounded-full bg-green-500 px-3 py-1 text-[10px] font-bold text-white shadow-lg animate-pulse">
-                <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                Demo en vivo
-              </div>
-              <WhatsAppMockup />
-            </div>
-            <div className="glass rounded-2xl p-3 w-72 flex items-center gap-3 border border-indigo-500/20 hover:border-indigo-500/40 transition-colors">
-              <div className="flex -space-x-2">
-                <div className="h-7 w-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-[9px] font-bold text-indigo-300">M</div>
-                <div className="h-7 w-7 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-[9px] font-bold text-purple-300">P</div>
-                <div className="h-7 w-7 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center text-[9px] font-bold text-green-300">R</div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[9px] text-gray-500">Campaña activa</div>
-                <div className="text-xs font-bold text-white truncate">🍕 Oferta de Martes</div>
-              </div>
-              <div className="text-right">
-                <div className="text-[11px] font-bold text-green-400">+82%</div>
-                <div className="text-[8px] text-gray-600">apertura</div>
-              </div>
-            </div>
+          <h1 className="mb-6 text-5xl font-black leading-[1.05] tracking-tight sm:text-7xl">
+            Tu negocio en<br />
+            <span className="text-shimmer">la radio del futuro</span>
+          </h1>
+
+          <p className="mb-10 text-lg text-gray-400 leading-relaxed max-w-2xl mx-auto">
+            Campañas masivas por WhatsApp, bot IA que conoce tu negocio,
+            cuñas de radio generadas en segundos. <strong className="text-white">Todo en una plataforma.</strong>
+          </p>
+
+          <div className="flex flex-wrap justify-center gap-4 mb-10">
+            <Link
+              to="/register"
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#6366F1] px-8 py-4 text-base font-black text-white shadow-xl shadow-[#7C3AED]/30 hover:shadow-[#7C3AED]/50 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 glow-purple"
+            >
+              Empieza gratis
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <a
+              href="#como-funciona"
+              className="flex items-center gap-2 rounded-xl glass px-7 py-4 text-base font-semibold text-gray-300 hover:text-white hover:border-white/20 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300"
+            >
+              Ver demo
+            </a>
+          </div>
+
+          {/* Trust strip */}
+          <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-500">
+            <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Sin tarjeta de crédito</span>
+            <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Cancela cuando quieras</span>
+            <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Configuración en 10 min</span>
+            <span className="flex items-center gap-1.5"><Zap className="h-4 w-4 text-[#7C3AED]" /> 15 días gratis</span>
           </div>
         </div>
 
         {/* Stats row */}
-        <div className="mx-auto mt-20 max-w-4xl grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <AnimatedStat n={2840} suffix="+" label="Negocios activos en México" />
-          <AnimatedStat n={10} suffix=" min" label="Para lanzar tu primera campaña" />
-          <AnimatedStat n={60} suffix="%" label="Cupones canjeados en promedio" />
-          <AnimatedStat n={1200000} suffix="" label="Mensajes enviados este mes" />
-        </div>
-        {/* Live social proof ticker */}
-        <div className="mx-auto mt-5 max-w-4xl flex items-center justify-center gap-2 text-xs text-gray-600">
-          <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-          <span><strong className="text-green-400">24</strong> negocios se registraron hoy · Actualizado en vivo</span>
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-4xl px-5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <AnimatedStat n={2840} suffix="+" label="Negocios activos en México" />
+            <AnimatedStat n={10} suffix=" min" label="Para lanzar tu primera campaña" />
+            <AnimatedStat n={60} suffix="%" label="Cupones canjeados en promedio" />
+            <AnimatedStat n={1200000} suffix="" label="Mensajes enviados este mes" />
+          </div>
+          <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-600">
+            <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            <span><strong className="text-green-400">24</strong> negocios se registraron hoy · Actualizado en vivo</span>
+          </div>
         </div>
       </section>
 
