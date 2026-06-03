@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   Radio, MessageCircle, Users, TrendingUp, Star,
   CheckCircle, ArrowRight, Gift, Bot, Mic, ChevronDown,
-  Sparkles, Shield, Clock, PhoneCall, BarChart3, Zap
+  Sparkles, Shield, Clock, PhoneCall, BarChart3, Zap, Plus
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import RadioSphere3D from '../components/RadioSphere3D'
@@ -263,20 +263,14 @@ export default function LandingPage() {
 
       {/* ─── HERO ─── */}
       <section className="relative px-5 pt-20 pb-28 overflow-hidden">
-        {/* Video de fondo premium */}
-        <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          poster="https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&q=80"
-          className="absolute top-0 left-0 w-full h-full object-cover z-0"
-        >
-          <source src="https://assets.mixkit.co/videos/preview/mixkit-man-working-on-his-laptop-in-a-coffeeshop-42512-large.mp4" type="video/mp4" />
-        </video>
-
-        {/* Capa de opacidad oscura para contraste de texto */}
-        <div className="absolute inset-0 bg-[#06060f]/80 z-0" />
+        {/* Mesh bg + gradientes de producto */}
+        <div className="absolute inset-0 mesh-bg opacity-50 z-0" />
+        <div className="absolute inset-0 z-0" style={{
+          background: `
+            radial-gradient(ellipse 60% 30% at 25% 20%, rgba(99,102,241,0.25) 0%, transparent 60%),
+            radial-gradient(ellipse 40% 30% at 75% 80%, rgba(168,85,247,0.18) 0%, transparent 60%)
+          `,
+        }} />
 
         {/* Dot grid bg */}
         <div className="pointer-events-none absolute inset-0 opacity-15 z-10"
@@ -325,9 +319,30 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Right — phone mockup */}
-          <div className="flex justify-center float-anim">
-            <WhatsAppMockup />
+          {/* Right — product demo showcase */}
+          <div className="flex flex-col items-center gap-5 float-anim">
+            <div className="relative">
+              <div className="absolute -top-3 -right-3 z-20 inline-flex items-center gap-1.5 rounded-full bg-green-500 px-3 py-1 text-[10px] font-bold text-white shadow-lg animate-pulse">
+                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                Demo en vivo
+              </div>
+              <WhatsAppMockup />
+            </div>
+            <div className="glass rounded-2xl p-3 w-72 flex items-center gap-3 border border-indigo-500/20 hover:border-indigo-500/40 transition-colors">
+              <div className="flex -space-x-2">
+                <div className="h-7 w-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-[9px] font-bold text-indigo-300">M</div>
+                <div className="h-7 w-7 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-[9px] font-bold text-purple-300">P</div>
+                <div className="h-7 w-7 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center text-[9px] font-bold text-green-300">R</div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[9px] text-gray-500">Campaña activa</div>
+                <div className="text-xs font-bold text-white truncate">🍕 Oferta de Martes</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[11px] font-bold text-green-400">+82%</div>
+                <div className="text-[8px] text-gray-600">apertura</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -510,6 +525,86 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ─── AI AGENT ─── */}
+      <section className="px-5 py-24 relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 mesh-bg opacity-30" />
+        <div className="relative mx-auto max-w-5xl">
+          <div className="mb-14 text-center">
+            <p className="text-indigo-400 font-semibold text-sm uppercase tracking-widest mb-3">Tu agente IA</p>
+            <h2 className="text-4xl font-black text-white sm:text-5xl">
+              Un vendedor 24/7 que <span className="text-shimmer">conoce tu negocio</span>
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 items-center">
+            <div className="glass rounded-3xl p-6 border border-indigo-500/20">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                  <Bot className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white">Base de conocimiento</div>
+                  <div className="text-xs text-green-400 flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                    Conectado a Claude IA
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {[
+                  { label: 'Menú / Catálogo', status: '✅ 12 productos', color: 'border-green-500/30' },
+                  { label: 'Precios y promociones', status: '✅ 3 promos activas', color: 'border-green-500/30' },
+                  { label: 'Horarios y ubicación', status: '✅ Sucursal única', color: 'border-green-500/30' },
+                  { label: 'FAQ del negocio', status: '✅ 15 preguntas', color: 'border-green-500/30' },
+                ].map(item => (
+                  <div key={item.label} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3 hover:border-indigo-500/30 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-full bg-indigo-500/10 flex items-center justify-center">
+                        <CheckCircle className="h-3 w-3 text-indigo-400" />
+                      </div>
+                      <span className="text-sm text-gray-300">{item.label}</span>
+                    </div>
+                    <span className="text-[10px] text-gray-500">{item.status}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-indigo-500/5 border border-dashed border-indigo-500/20 px-4 py-3">
+                <Plus className="h-4 w-4 text-indigo-400" />
+                <span className="text-sm text-gray-500">Subir nuevo documento...</span>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div className="glass rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <Sparkles className="h-5 w-5 text-indigo-400" />
+                  <h3 className="font-bold text-white">Aprende de tus datos</h3>
+                </div>
+                <p className="text-sm text-gray-400 leading-relaxed">
+                  Sube tu menú, catálogo o cualquier documento. El bot entiende el contexto completo de tu negocio — no solo palabras clave sueltas.
+                </p>
+              </div>
+              <div className="glass rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <Zap className="h-5 w-5 text-yellow-400" />
+                  <h3 className="font-bold text-white">Responde en segundos</h3>
+                </div>
+                <p className="text-sm text-gray-400 leading-relaxed">
+                  Sin esperas, sin transferencias. El agente atiende a todos tus clientes al mismo tiempo, 24/7, en WhatsApp.
+                </p>
+              </div>
+              <div className="glass rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <TrendingUp className="h-5 w-5 text-green-400" />
+                  <h3 className="font-bold text-white">Vende mientras duermes</h3>
+                </div>
+                <p className="text-sm text-gray-400 leading-relaxed">
+                  Cada pregunta de un cliente es una venta potencial. El bot califica leads, toma pedidos y agenda citas sin intervención humana.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ─── TESTIMONIALS ─── */}
       <section className="px-5 py-24 relative overflow-hidden">
         <div className="pointer-events-none absolute inset-0 mesh-bg opacity-40" />
@@ -590,6 +685,14 @@ export default function LandingPage() {
                   </div>
                 )}
                 <div className="mb-1 text-sm font-bold text-gray-400 uppercase tracking-widest">{plan.name}</div>
+                {plan.referencePriceMxn && (
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm text-gray-500 line-through">${plan.referencePriceMxn.toLocaleString()} MXN</span>
+                    <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[9px] font-bold text-green-400">
+                      -{Math.round((1 - plan.price_mxn / plan.referencePriceMxn) * 100)}%
+                    </span>
+                  </div>
+                )}
                 <div className="mb-1 text-4xl font-black text-white">
                   ${plan.price_mxn.toLocaleString()}
                   <span className="text-base font-normal text-gray-500"> MXN/mes</span>

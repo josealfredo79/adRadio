@@ -13,6 +13,8 @@ export interface PlanDefinition {
   name: string
   price_mxn: number
   price_usd: number
+  /** Precio de referencia (costo manual equivalente) para mostrar descuento estilo Hostinger */
+  referencePriceMxn?: number
   messages: number
   days: number
   popular: boolean
@@ -29,6 +31,7 @@ export const PLANS_CONFIG: PlanDefinition[] = [
     name: 'Starter',
     price_mxn: 499,
     price_usd: 29,
+    referencePriceMxn: 1500,
     messages: 200,
     days: 30,
     popular: false,
@@ -46,6 +49,7 @@ export const PLANS_CONFIG: PlanDefinition[] = [
     name: 'Growth',
     price_mxn: 999,
     price_usd: 59,
+    referencePriceMxn: 3500,
     messages: 500,
     days: 30,
     popular: true,
@@ -72,6 +76,7 @@ export const PLANS_CONFIG: PlanDefinition[] = [
     name: 'Pro',
     price_mxn: 2499,
     price_usd: 149,
+    referencePriceMxn: 7500,
     messages: 1000,
     days: 30,
     popular: false,
@@ -97,6 +102,7 @@ export const PLANS_CONFIG: PlanDefinition[] = [
     name: 'Business',
     price_mxn: 6799,
     price_usd: 399,
+    referencePriceMxn: 18000,
     messages: 3000,
     days: 30,
     popular: false,
