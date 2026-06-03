@@ -15,11 +15,18 @@ async def get_redis() -> aioredis.Redis:
     """
     Retorna una instancia del pool de Redis.
     - Crea el pool una sola vez (singleton).
-    - NO hace ping en cada request para reducir latencia y puntos de falla.
+    - Resetea el pool si la conexión está caída para forzar reconexión.
     - Aumenta timeouts para tolerar la latencia de red en Railway.
-    - Mantiene el pool vivo aunque haya un error puntual (no lo destruye en cada fallo).
     """
     global _redis_pool
+    if _redis_pool is not None:
+        # Verificar que el pool sigue vivo; si no, forzar recreación
+        try:
+            await _redis_pool.ping()
+        except (RedisConnectionError, RedisTimeoutError, OSError):
+            logger.warning("Pool de Redis perdió conexión, reconectando...")
+            await close_redis()
+
     if _redis_pool is None:
         try:
             _redis_pool = await aioredis.from_url(
@@ -33,7 +40,6 @@ async def get_redis() -> aioredis.Redis:
                 retry_on_timeout=True,       # reintenta automáticamente en timeout
                 health_check_interval=30,    # Redis-py hace ping interno cada 30 s
             )
-            # Ping inicial solo al crear el pool para verificar la conexión
             await _redis_pool.ping()
             logger.info("Conexión a Redis establecida correctamente: %s", settings.REDIS_URL)
         except (RedisConnectionError, RedisTimeoutError, OSError) as exc:
