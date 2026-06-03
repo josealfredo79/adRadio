@@ -28,15 +28,15 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-8">
-          <div className="max-w-md rounded-2xl bg-white p-8 shadow-lg border border-gray-200 text-center">
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
+          <div className="max-w-md rounded-2xl bg-card p-8 shadow-lg border border-border text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
               <svg className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h2 className="mb-2 text-xl font-bold text-gray-900">Algo salió mal</h2>
-            <p className="mb-6 text-sm text-gray-500">
+            <h2 className="mb-2 text-xl font-bold text-card-foreground">Algo salió mal</h2>
+            <p className="mb-6 text-sm text-muted-foreground">
               Ocurrió un error inesperado. Puedes intentar recargar la página.
             </p>
             <button

@@ -31,11 +31,11 @@ const STATE_LABELS: Record<OrderState, string> = {
 }
 
 const STATE_COLORS: Record<OrderState, string> = {
-  collecting_name: 'bg-yellow-100 text-yellow-800',
-  collecting_address: 'bg-yellow-100 text-yellow-800',
-  collecting_payment: 'bg-blue-100 text-blue-800',
-  confirmed: 'bg-green-100 text-green-800',
-  cancelled: 'bg-gray-100 text-gray-500',
+  collecting_name: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
+  collecting_address: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
+  collecting_payment: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
+  confirmed: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
+  cancelled: 'bg-muted text-muted-foreground',
 }
 
 const STATE_ICON: Record<OrderState, React.FC<{ className?: string }>> = {
@@ -94,8 +94,8 @@ export default function OrdersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Pedidos</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Pedidos capturados por el bot de WhatsApp
           </p>
         </div>
@@ -106,30 +106,30 @@ export default function OrdersPage() {
 
       {/* Stats strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Total</p>
-          <p className="mt-1 text-3xl font-bold text-gray-900">{data?.total ?? 0}</p>
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total</p>
+          <p className="mt-1 text-3xl font-bold text-foreground">{data?.total ?? 0}</p>
         </div>
-        <div className="rounded-xl border border-green-100 bg-green-50 p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-green-600">Confirmados</p>
-          <p className="mt-1 text-3xl font-bold text-green-700">{confirmedCount}</p>
+        <div className="rounded-xl border border-green-100 bg-green-50 p-5 shadow-sm dark:border-green-950/50 dark:bg-green-950/30">
+          <p className="text-xs font-medium uppercase tracking-wider text-green-600 dark:text-green-400">Confirmados</p>
+          <p className="mt-1 text-3xl font-bold text-green-700 dark:text-green-300">{confirmedCount}</p>
         </div>
-        <div className="rounded-xl border border-yellow-100 bg-yellow-50 p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-yellow-600">En proceso</p>
-          <p className="mt-1 text-3xl font-bold text-yellow-700">{pendingCount}</p>
+        <div className="rounded-xl border border-yellow-100 bg-yellow-50 p-5 shadow-sm dark:border-yellow-950/50 dark:bg-yellow-950/30">
+          <p className="text-xs font-medium uppercase tracking-wider text-yellow-600 dark:text-yellow-400">En proceso</p>
+          <p className="mt-1 text-3xl font-bold text-yellow-700 dark:text-yellow-300">{pendingCount}</p>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por número, cliente, teléfono..."
-            className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            className="w-full rounded-lg border border-border py-2.5 pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           />
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -141,7 +141,7 @@ export default function OrdersPage() {
                 'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 stateFilter === opt.value
                   ? 'bg-brand-500 text-white'
-                  : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                  : 'border border-border text-muted-foreground hover:bg-muted'
               )}
             >
               {opt.label}
@@ -151,21 +151,21 @@ export default function OrdersPage() {
       </div>
 
       {/* List */}
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="space-y-3 p-6">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+              <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <ShoppingBag className="h-12 w-12 mb-3" />
             <p className="text-sm">No hay pedidos todavía</p>
             <p className="text-xs mt-1">Los pedidos aparecerán cuando el bot los capture por WhatsApp</p>
           </div>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-border">
             {filtered.map((order) => {
               const Icon = STATE_ICON[order.state]
               const isOpen = expanded === order.id
@@ -174,54 +174,54 @@ export default function OrdersPage() {
                 <li key={order.id}>
                   {/* Row */}
                   <button
-                    className="w-full flex items-center gap-4 px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+                    className="w-full flex items-center gap-4 px-6 py-4 text-left hover:bg-muted transition-colors"
                     onClick={() => setExpanded(isOpen ? null : order.id)}
                   >
                     <Icon
                       className={cn(
                         'h-5 w-5 shrink-0',
-                        order.state === 'confirmed' ? 'text-green-500' :
-                        order.state === 'cancelled' ? 'text-gray-400' : 'text-yellow-500'
+                        order.state === 'confirmed' ? 'text-green-500 dark:text-green-400' :
+                        order.state === 'cancelled' ? 'text-muted-foreground' : 'text-yellow-500 dark:text-yellow-400'
                       )}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-gray-900 text-sm">
+                        <span className="font-semibold text-foreground text-sm">
                           #{order.order_number}
                         </span>
                         <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', STATE_COLORS[order.state])}>
                           {STATE_LABELS[order.state]}
                         </span>
                       </div>
-                      <p className="mt-0.5 text-xs text-gray-500 truncate">
+                      <p className="mt-0.5 text-xs text-muted-foreground truncate">
                         {order.customer_name ?? '—'} · {order.customer_phone ?? '—'} · {formatDate(order.created_at)}
                       </p>
                     </div>
                     <ChevronDown
-                      className={cn('h-4 w-4 text-gray-400 shrink-0 transition-transform', isOpen && 'rotate-180')}
+                      className={cn('h-4 w-4 text-muted-foreground shrink-0 transition-transform', isOpen && 'rotate-180')}
                     />
                   </button>
 
                   {/* Expanded detail */}
                   {isOpen && (
-                    <div className="px-6 pb-5 bg-gray-50 border-t border-gray-100">
+                    <div className="px-6 pb-5 bg-muted border-t border-border">
                       <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
-                          <dt className="text-xs font-medium text-gray-400 uppercase tracking-wider">Artículos</dt>
-                          <dd className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{order.items_raw ?? '—'}</dd>
+                          <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Artículos</dt>
+                          <dd className="mt-1 text-sm text-foreground whitespace-pre-wrap">{order.items_raw ?? '—'}</dd>
                         </div>
                         <div>
-                          <dt className="text-xs font-medium text-gray-400 uppercase tracking-wider">Dirección</dt>
-                          <dd className="mt-1 text-sm text-gray-900">{order.delivery_address ?? '—'}</dd>
+                          <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Dirección</dt>
+                          <dd className="mt-1 text-sm text-foreground">{order.delivery_address ?? '—'}</dd>
                         </div>
                         <div>
-                          <dt className="text-xs font-medium text-gray-400 uppercase tracking-wider">Método de pago</dt>
-                          <dd className="mt-1 text-sm text-gray-900">{order.payment_method ?? '—'}</dd>
+                          <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Método de pago</dt>
+                          <dd className="mt-1 text-sm text-foreground">{order.payment_method ?? '—'}</dd>
                         </div>
                         {order.confirmed_at && (
                           <div>
-                            <dt className="text-xs font-medium text-gray-400 uppercase tracking-wider">Confirmado el</dt>
-                            <dd className="mt-1 text-sm text-gray-900">{formatDate(order.confirmed_at)}</dd>
+                            <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Confirmado el</dt>
+                            <dd className="mt-1 text-sm text-foreground">{formatDate(order.confirmed_at)}</dd>
                           </div>
                         )}
                       </dl>
@@ -240,7 +240,7 @@ export default function OrdersPage() {
                           <button
                             onClick={() => patchState.mutate({ id: order.id, state: 'cancelled' })}
                             disabled={patchState.isPending}
-                            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
                           >
                             <XCircle className="h-3.5 w-3.5" />
                             Cancelar

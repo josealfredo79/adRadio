@@ -240,14 +240,14 @@ export default function ContactsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Contactos</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Contactos</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {data?.total ?? 0} contactos en tu lista
           </p>
         </div>
         <div className="flex gap-2">
           <PrintButton />
-          <label className={`flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-colors ${isUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+          <label className={`flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-colors ${isUploading ? 'bg-muted text-muted-foreground border-border cursor-not-allowed' : 'border-border text-muted-foreground hover:bg-muted'}`}>
             <Upload className="h-4 w-4" />
             {isUploading ? 'Importando...' : 'Importar CSV'}
             <input type="file" accept=".csv" className="hidden" onChange={handleCSVUpload} disabled={isUploading} />
@@ -256,7 +256,7 @@ export default function ContactsPage() {
             <button
               onClick={handleExport}
               disabled={isUploading}
-              className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="h-4 w-4" />
               Exportar CSV
@@ -277,7 +277,7 @@ export default function ContactsPage() {
       {uploadMsg && (
         <div className={`rounded-lg border px-4 py-3 text-sm ${
           uploadMsg.type === 'success'
-            ? 'border-green-200 bg-green-50 text-green-700'
+            ? 'border-green-200 bg-green-50 text-green-700 dark:text-green-300'
             : 'border-red-200 bg-red-50 text-red-700'
         }`}>
           {uploadMsg.text}
@@ -299,12 +299,12 @@ export default function ContactsPage() {
             className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
               statusFilter === tab.key
                 ? 'bg-brand-500 text-white'
-                : 'bg-white border border-gray-200 text-gray-600 hover:border-brand-300'
+                : 'bg-card border border-border text-muted-foreground hover:border-brand-300'
             }`}
           >
             {tab.label}
             <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[11px] ${
-              statusFilter === tab.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+              statusFilter === tab.key ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
             }`}>
               {tab.count}
             </span>
@@ -315,11 +315,11 @@ export default function ContactsPage() {
       {/* Tag filter */}
       {allTags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 items-center">
-          <Tag className="h-3.5 w-3.5 text-gray-400" />
+          <Tag className="h-3.5 w-3.5 text-muted-foreground" />
           <button
             onClick={() => setTagFilter('')}
             className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              !tagFilter ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              !tagFilter ? 'bg-brand-500 text-white' : 'bg-muted text-muted-foreground hover:bg-muted'
             }`}
           >
             Todas
@@ -329,7 +329,7 @@ export default function ContactsPage() {
               key={tag}
               onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                tagFilter === tag ? 'bg-brand-500 text-white' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
+                tagFilter === tag ? 'bg-brand-500 text-white' : 'bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50'
               }`}
             >
               {tag}
@@ -340,26 +340,26 @@ export default function ContactsPage() {
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre o teléfono..."
-          className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          className="w-full rounded-lg border border-border py-2.5 pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
         />
       </div>
 
       {/* Table */}
-      <div className="rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden">
+      <div className="rounded-xl bg-card shadow-sm border border-border overflow-hidden">
         {isLoading ? (
           <div className="space-y-3 p-6">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-12 rounded-lg bg-gray-100 animate-pulse" />
+              <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <Users className="h-12 w-12 mb-3" />
             <p className="text-sm">No hay contactos todavía</p>
             <p className="text-xs mt-1">Importa un CSV o agrega contactos manualmente</p>
@@ -367,14 +367,14 @@ export default function ContactsPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <thead className="bg-muted text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 <tr>
                   <th className="px-4 py-3 w-10">
                     <input
                       type="checkbox"
                       checked={filtered.length > 0 && selectedIds.size === filtered.length}
                       onChange={toggleSelectAll}
-                      className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                      className="rounded border-border text-brand-500 focus:ring-brand-500"
                     />
                   </th>
                   <th className="px-6 py-3 text-left">Nombre</th>
@@ -387,27 +387,27 @@ export default function ContactsPage() {
                   <th className="px-6 py-3" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-border">
                 {filtered.map((contact) => (
                   <Fragment key={contact.id}>
-                  <tr className={`hover:bg-gray-50 transition-colors ${selectedIds.has(contact.id) ? 'bg-brand-50/50' : ''}`}>
+                  <tr className={`hover:bg-muted transition-colors ${selectedIds.has(contact.id) ? 'bg-brand-50/50 dark:bg-brand-950/30' : ''}`}>
                     <td className="px-4 py-4">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(contact.id)}
                         onChange={() => toggleSelect(contact.id)}
-                        className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                        className="rounded border-border text-brand-500 focus:ring-brand-500"
                       />
                     </td>
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{contact.name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-500">{contact.phone}</td>
-                    <td className="hidden md:table-cell px-6 py-4 text-sm text-gray-500">{contact.email ?? '—'}</td>
-                    <td className="hidden md:table-cell px-6 py-4 text-sm text-gray-500">{contact.city ?? '—'}</td>
+                    <td className="px-6 py-4 text-sm font-medium text-foreground">{contact.name}</td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">{contact.phone}</td>
+                    <td className="hidden md:table-cell px-6 py-4 text-sm text-muted-foreground">{contact.email ?? '—'}</td>
+                    <td className="hidden md:table-cell px-6 py-4 text-sm text-muted-foreground">{contact.city ?? '—'}</td>
                     <td className="px-6 py-4 hidden md:table-cell">
                       {editTagsId === contact.id ? (
                         <div className="flex flex-wrap gap-1 min-w-[160px]">
                           {editTagsValue.map((t) => (
-                            <span key={t} className="flex items-center gap-0.5 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
+                            <span key={t} className="flex items-center gap-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 px-2 py-0.5 text-xs text-purple-700 dark:text-purple-300">
                               {t}
                               <button onClick={() => setEditTagsValue(editTagsValue.filter((x) => x !== t))} className="ml-0.5 hover:text-red-500">
                                 <X className="h-3 w-3" />
@@ -424,7 +424,7 @@ export default function ContactsPage() {
                               if (e.key === 'Escape') setEditTagsId(null)
                             }}
                             placeholder="+ tag"
-                            className="w-16 rounded border-0 bg-transparent text-xs text-gray-700 outline-none placeholder-gray-400"
+                            className="w-16 rounded border-0 bg-transparent text-xs text-foreground outline-none placeholder-gray-400"
                           />
                           <button
                             onClick={() => updateTagsMutation.mutate({ id: contact.id, tags: editTagsValue })}
@@ -432,7 +432,7 @@ export default function ContactsPage() {
                           >
                             ✓
                           </button>
-                          <button onClick={() => setEditTagsId(null)} className="text-gray-400 hover:text-gray-600">
+                          <button onClick={() => setEditTagsId(null)} className="text-muted-foreground hover:text-gray-600">
                             <X className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -444,11 +444,11 @@ export default function ContactsPage() {
                         >
                           {contact.tags.length > 0
                             ? contact.tags.map((t) => (
-                                <span key={t} className="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">
+                                <span key={t} className="rounded-full bg-purple-50 dark:bg-purple-950/30 px-2 py-0.5 text-xs text-purple-600 dark:text-purple-400">
                                   {t}
                                 </span>
                               ))
-                            : <span className="text-xs text-gray-300 group-hover:text-gray-400">+ tag</span>
+                            : <span className="text-xs text-muted-foreground group-hover:text-muted-foreground">+ tag</span>
                           }
                         </div>
                       )}
@@ -456,15 +456,15 @@ export default function ContactsPage() {
                     <td className="px-6 py-4">
                       <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         contact.status === 'active'
-                          ? 'bg-green-100 text-green-700'
+                          ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'
                           : contact.status === 'unsubscribed'
-                          ? 'bg-gray-100 text-gray-600'
-                          : 'bg-red-100 text-red-600'
+                          ? 'bg-muted text-muted-foreground'
+                          : 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'
                       }`}>
                         {contact.status === 'active' ? 'Activo' : contact.status === 'unsubscribed' ? 'Dado de baja' : 'Bloqueado'}
                       </span>
                     </td>
-                    <td className="hidden md:table-cell px-6 py-4 text-sm text-gray-500">{formatDate(contact.created_at)}</td>
+                    <td className="hidden md:table-cell px-6 py-4 text-sm text-muted-foreground">{formatDate(contact.created_at)}</td>
                     <td className="px-6 py-4">
                       <button
                         onClick={() => {
@@ -472,7 +472,7 @@ export default function ContactsPage() {
                             deleteMutation.mutate(contact.id)
                           }
                         }}
-                        className="text-gray-400 hover:text-red-500 transition-colors"
+                        className="text-muted-foreground hover:text-red-500 transition-colors"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -482,26 +482,26 @@ export default function ContactsPage() {
                     <td colSpan={9} className="px-4 py-3">
                       <div className="border rounded-xl p-4 space-y-2">
                         <div className="flex items-start justify-between gap-2">
-                          <div className="font-medium text-gray-900">{contact.name}</div>
+                          <div className="font-medium text-foreground">{contact.name}</div>
                           <span className={`shrink-0 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                             contact.status === 'active'
-                              ? 'bg-green-100 text-green-700'
+                              ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'
                               : contact.status === 'unsubscribed'
-                              ? 'bg-gray-100 text-gray-600'
-                              : 'bg-red-100 text-red-600'
+                              ? 'bg-muted text-muted-foreground'
+                              : 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'
                           }`}>
                             {contact.status === 'active' ? 'Activo' : contact.status === 'unsubscribed' ? 'Dado de baja' : 'Bloqueado'}
                           </span>
                         </div>
-                        <div className="text-sm text-gray-500">{contact.phone}</div>
-                        <div className="text-sm text-gray-400">{contact.email ?? '—'}  ·  {contact.city ?? '—'}</div>
-                        <div className="text-xs text-gray-400">Agregado {formatDate(contact.created_at)}</div>
+                        <div className="text-sm text-muted-foreground">{contact.phone}</div>
+                        <div className="text-sm text-muted-foreground">{contact.email ?? '—'}  ·  {contact.city ?? '—'}</div>
+                        <div className="text-xs text-muted-foreground">Agregado {formatDate(contact.created_at)}</div>
                         <div className="flex flex-wrap gap-1">
                           {contact.tags.length > 0
                             ? contact.tags.map((t) => (
-                                <span key={t} className="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{t}</span>
+                                <span key={t} className="rounded-full bg-purple-50 dark:bg-purple-950/30 px-2 py-0.5 text-xs text-purple-600 dark:text-purple-400">{t}</span>
                               ))
-                            : <span className="text-xs text-gray-300">Sin etiquetas</span>
+                            : <span className="text-xs text-muted-foreground">Sin etiquetas</span>
                           }
                         </div>
                         <div className="flex justify-end gap-2 pt-1">
@@ -509,7 +509,7 @@ export default function ContactsPage() {
                             type="checkbox"
                             checked={selectedIds.has(contact.id)}
                             onChange={() => toggleSelect(contact.id)}
-                            className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                            className="rounded border-border text-brand-500 focus:ring-brand-500"
                           />
                           <button
                             onClick={() => {
@@ -517,7 +517,7 @@ export default function ContactsPage() {
                                 deleteMutation.mutate(contact.id)
                               }
                             }}
-                            className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                            className="text-muted-foreground hover:text-red-500 transition-colors p-1"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -535,38 +535,38 @@ export default function ContactsPage() {
 
       {/* Batch actions toolbar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl bg-white border border-brand-200 shadow-xl px-5 py-3">
-          <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl bg-card border border-border shadow-xl px-5 py-3">
+          <span className="text-sm font-medium text-foreground whitespace-nowrap">
             <CheckCheck className="inline h-4 w-4 mr-1 text-brand-500" />
             {selectedIds.size} seleccionados
           </span>
-          <div className="h-6 w-px bg-gray-200" />
+          <div className="h-6 w-px bg-border" />
           <button
             onClick={() => setShowTagModal(true)}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-purple-600 hover:bg-purple-50 transition-colors"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
           >
             <Tags size={15} />
             Etiqueta
           </button>
           <button
             onClick={() => setShowStatusModal(true)}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
           >
             <CheckCheck size={15} />
             Estado
           </button>
           <button
             onClick={() => setShowCampaignModal(true)}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 transition-colors"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-colors"
           >
             <Send size={15} />
             Campaña
           </button>
-          <div className="h-6 w-px bg-gray-200" />
+          <div className="h-6 w-px bg-border" />
           <button
             onClick={handleBulkDelete}
             disabled={bulkDeleteMutation.isPending}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-50"
           >
             <Trash2 size={15} />
             Eliminar
@@ -577,41 +577,41 @@ export default function ContactsPage() {
       {/* Add Contact Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <h3 className="mb-4 text-lg font-semibold text-gray-900">Agregar contacto</h3>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl">
+            <h3 className="mb-4 text-lg font-semibold text-card-foreground">Agregar contacto</h3>
             <div className="space-y-3">
               <input
                 type="text"
                 placeholder="Nombre *"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
               <input
                 type="tel"
                 placeholder="Teléfono E.164 * (ej: +521234567890)"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
               <input
                 type="email"
                 placeholder="Email (opcional)"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
               <input
                 type="text"
                 placeholder="Ciudad (opcional)"
                 value={form.city}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
               <div>
                 <div className="flex flex-wrap gap-1.5 mb-1.5 min-h-[1.5rem]">
                   {form.tags.map((t) => (
-                    <span key={t} className="flex items-center gap-0.5 rounded-full bg-purple-100 px-2.5 py-0.5 text-xs text-purple-700">
+                    <span key={t} className="flex items-center gap-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 px-2.5 py-0.5 text-xs text-purple-700 dark:text-purple-300">
                       {t}
                       <button onClick={() => setForm({ ...form, tags: form.tags.filter((x) => x !== t) })} className="ml-0.5 hover:text-red-500">
                         <X className="h-3 w-3" />
@@ -629,24 +629,24 @@ export default function ContactsPage() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTagToForm() }
                     }}
-                    className="flex-1 rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                    className="flex-1 rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={addTagToForm}
                     disabled={!tagInput.trim()}
-                    className="rounded-lg border border-purple-200 bg-purple-50 px-3 text-xs font-medium text-purple-600 hover:bg-purple-100 disabled:opacity-40"
+                    className="rounded-lg border border-purple-200 bg-purple-50 dark:bg-purple-950/30 px-3 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50 disabled:opacity-40"
                   >
                     + Tag
                   </button>
                 </div>
               </div>
-              {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             </div>
             <div className="mt-5 flex gap-3">
               <button
                 onClick={() => { setShowAdd(false); setError(''); setForm({ name: '', phone: '', email: '', city: '', tags: [] }); setTagInput('') }}
-                className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                className="flex-1 rounded-lg border border-border py-2.5 text-sm text-muted-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
@@ -665,20 +665,20 @@ export default function ContactsPage() {
       {/* Batch Tag Modal */}
       {showTagModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowTagModal(false)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <h3 className="mb-4 text-lg font-semibold text-gray-900">Asignar etiquetas</h3>
-            <p className="text-sm text-gray-500 mb-3">{selectedIds.size} contactos seleccionados</p>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="mb-4 text-lg font-semibold text-card-foreground">Asignar etiquetas</h3>
+            <p className="text-sm text-muted-foreground mb-3">{selectedIds.size} contactos seleccionados</p>
             <div className="space-y-3">
               <div className="flex gap-2">
                 <button
                   onClick={() => setBatchTagAction('add')}
-                  className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${batchTagAction === 'add' ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600'}`}
+                  className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${batchTagAction === 'add' ? 'bg-brand-500 text-white' : 'bg-muted text-muted-foreground'}`}
                 >
                   Agregar
                 </button>
                 <button
                   onClick={() => setBatchTagAction('remove')}
-                  className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${batchTagAction === 'remove' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600'}`}
+                  className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${batchTagAction === 'remove' ? 'bg-red-500 text-white' : 'bg-muted text-muted-foreground'}`}
                 >
                   Quitar
                 </button>
@@ -688,11 +688,11 @@ export default function ContactsPage() {
                 placeholder="etiqueta1, etiqueta2, ..."
                 value={batchTagInput}
                 onChange={e => setBatchTagInput(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
             <div className="mt-5 flex gap-3">
-              <button onClick={() => setShowTagModal(false)} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+              <button onClick={() => setShowTagModal(false)} className="flex-1 rounded-lg border border-border py-2.5 text-sm text-muted-foreground hover:bg-muted">Cancelar</button>
               <button
                 onClick={confirmBulkTag}
                 disabled={!batchTagInput.trim() || bulkTagMutation.isPending}
@@ -708,20 +708,20 @@ export default function ContactsPage() {
       {/* Batch Status Modal */}
       {showStatusModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowStatusModal(false)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <h3 className="mb-4 text-lg font-semibold text-gray-900">Cambiar estado</h3>
-            <p className="text-sm text-gray-500 mb-3">{selectedIds.size} contactos seleccionados</p>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="mb-4 text-lg font-semibold text-card-foreground">Cambiar estado</h3>
+            <p className="text-sm text-muted-foreground mb-3">{selectedIds.size} contactos seleccionados</p>
             <select
               value={batchStatus}
               onChange={e => setBatchStatus(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
             >
               <option value="active">Activo</option>
               <option value="unsubscribed">Dado de baja</option>
               <option value="blocked">Bloqueado</option>
             </select>
             <div className="mt-5 flex gap-3">
-              <button onClick={() => setShowStatusModal(false)} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+              <button onClick={() => setShowStatusModal(false)} className="flex-1 rounded-lg border border-border py-2.5 text-sm text-muted-foreground hover:bg-muted">Cancelar</button>
               <button
                 onClick={() => bulkStatusMutation.mutate({ contact_ids: Array.from(selectedIds), status: batchStatus })}
                 disabled={bulkStatusMutation.isPending}
@@ -737,13 +737,13 @@ export default function ContactsPage() {
       {/* Batch Campaign Modal */}
       {showCampaignModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowCampaignModal(false)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <h3 className="mb-4 text-lg font-semibold text-gray-900">Enviar a campaña</h3>
-            <p className="text-sm text-gray-500 mb-3">{selectedIds.size} contactos seleccionados</p>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="mb-4 text-lg font-semibold text-card-foreground">Enviar a campaña</h3>
+            <p className="text-sm text-muted-foreground mb-3">{selectedIds.size} contactos seleccionados</p>
             <select
               value={batchCampaignId}
               onChange={e => setBatchCampaignId(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
             >
               <option value="">Seleccionar campaña...</option>
               {(campaignsQuery.data ?? []).map(c => (
@@ -751,7 +751,7 @@ export default function ContactsPage() {
               ))}
             </select>
             <div className="mt-5 flex gap-3">
-              <button onClick={() => setShowCampaignModal(false)} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+              <button onClick={() => setShowCampaignModal(false)} className="flex-1 rounded-lg border border-border py-2.5 text-sm text-muted-foreground hover:bg-muted">Cancelar</button>
               <button
                 onClick={() => bulkCampaignMutation.mutate({ contact_ids: Array.from(selectedIds), campaign_id: batchCampaignId })}
                 disabled={!batchCampaignId || bulkCampaignMutation.isPending}

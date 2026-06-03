@@ -76,29 +76,29 @@ export default function DashboardPage() {
       label: 'Contactos activos',
       value: data?.contacts_total ?? 0,
       icon: Users,
-      color: 'text-blue-500',
-      bg: 'bg-blue-50',
+      color: 'text-blue-500 dark:text-blue-400',
+      bg: 'bg-blue-50 dark:bg-blue-950/30',
     },
     {
       label: 'Campañas activas',
       value: data?.campaigns_active ?? 0,
       icon: Megaphone,
-      color: 'text-purple-500',
-      bg: 'bg-purple-50',
+      color: 'text-purple-500 dark:text-purple-400',
+      bg: 'bg-purple-50 dark:bg-purple-950/30',
     },
     {
       label: 'Mensajes este mes',
       value: data?.messages_sent_this_month ?? 0,
       icon: MessageSquare,
-      color: 'text-green-500',
-      bg: 'bg-green-50',
+      color: 'text-green-500 dark:text-green-400',
+      bg: 'bg-green-50 dark:bg-green-950/30',
     },
     {
       label: 'Mensajes restantes',
       value: data?.messages_remaining ?? 0,
       icon: TrendingUp,
-      color: 'text-brand-500',
-      bg: 'bg-brand-50',
+      color: 'text-brand-500 dark:text-brand-400',
+      bg: 'bg-brand-50 dark:bg-brand-950/30',
     },
   ]
 
@@ -107,10 +107,10 @@ export default function DashboardPage() {
       <>
         <SEO title="Dashboard" description="Panel de control de IaRadio." noIndex />
         <div className="space-y-6">
-        <div className="h-8 w-48 rounded-lg bg-gray-200 animate-pulse" />
+        <div className="h-8 w-48 rounded-lg bg-muted animate-pulse" />
         <div className="grid grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-28 rounded-xl bg-gray-200 animate-pulse" />
+            <div key={i} className="h-28 rounded-xl bg-muted animate-pulse" />
           ))}
         </div>
       </div>
@@ -125,26 +125,26 @@ export default function DashboardPage() {
       {showOnboarding && <OnboardingWizard onClose={() => setOnboardingDismissed(true)} />}
       {/* Payment success banner */}
       {paymentSuccess && (
-        <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 px-5 py-4">
+        <div className="flex items-center justify-between rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-5 py-4">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🎉</span>
             <div>
-              <p className="text-sm font-semibold text-green-800">¡Pago completado! Bienvenido a IaRadio.</p>
-              <p className="text-xs text-green-600">Tu plan ya está activo. Puedes empezar a crear campañas ahora mismo.</p>
+              <p className="text-sm font-semibold text-green-800 dark:text-green-200">¡Pago completado! Bienvenido a IaRadio.</p>
+              <p className="text-xs text-green-600 dark:text-green-300">Tu plan ya está activo. Puedes empezar a crear campañas ahora mismo.</p>
             </div>
           </div>
-          <button onClick={dismissSuccess} className="text-green-500 hover:text-green-700 text-lg leading-none">×</button>
+          <button onClick={dismissSuccess} className="text-green-500 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 text-lg leading-none">×</button>
         </div>
       )}
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-2xl font-bold text-foreground">
           Hola, {user?.business_name ?? 'Anunciante'} 👋
         </h1>
-        <p className="mt-1 text-gray-500">
+        <p className="mt-1 text-muted-foreground">
           Tu radio publicitaria está{' '}
-          <span className="font-medium text-green-600">
+          <span className="font-medium text-green-600 dark:text-green-400">
             {data?.subscription_status === 'active' ? 'emitiendo' : 'en prueba'}
           </span>
         </p>
@@ -153,14 +153,14 @@ export default function DashboardPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="rounded-xl bg-white p-5 shadow-sm border border-gray-100">
+          <div key={label} className="rounded-xl bg-card p-5 shadow-sm border border-border">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-500">{label}</p>
+              <p className="text-sm text-muted-foreground">{label}</p>
               <div className={`rounded-lg p-2 ${bg}`}>
                 <Icon className={`h-5 w-5 ${color}`} />
               </div>
             </div>
-            <p className="mt-3 text-3xl font-bold text-gray-900">{formatNumber(value)}</p>
+            <p className="mt-3 text-3xl font-bold text-foreground">{formatNumber(value)}</p>
           </div>
         ))}
       </div>
@@ -168,25 +168,25 @@ export default function DashboardPage() {
       {/* Orders bot summary */}
       <Link
         to="/app/orders"
-        className="flex items-center justify-between rounded-xl border border-brand-100 bg-brand-50 px-6 py-4 hover:border-brand-300 hover:bg-brand-100 transition-colors"
+        className="flex items-center justify-between rounded-xl border border-brand-100 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/30 px-6 py-4 hover:border-brand-300 dark:hover:border-brand-600 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition-colors"
       >
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-brand-500 p-2">
             <ShoppingBag className="h-5 w-5 text-white" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-brand-900">Pedidos del bot de WhatsApp</p>
-            <p className="text-xs text-brand-600 mt-0.5">
+            <p className="text-sm font-semibold text-brand-900 dark:text-brand-100">Pedidos del bot de WhatsApp</p>
+            <p className="text-xs text-brand-600 dark:text-brand-400 mt-0.5">
               {data?.orders_confirmed ?? 0} confirmados &middot; {data?.orders_pending ?? 0} en proceso
             </p>
           </div>
         </div>
-        <span className="text-sm font-medium text-brand-600">Ver todos &rarr;</span>
+        <span className="text-sm font-medium text-brand-600 dark:text-brand-400">Ver todos &rarr;</span>
       </Link>
 
       {/* Chart */}
-      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-        <h2 className="mb-4 text-base font-semibold text-gray-900">Mensajes enviados (7 días)</h2>
+      <div className="rounded-xl bg-card p-6 shadow-sm border border-border">
+        <h2 className="mb-4 text-base font-semibold text-foreground">Mensajes enviados (7 días)</h2>
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={(chartData ?? []).map((p) => ({ ...p, day: DAYS_ES[p.day] ?? p.day }))}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -206,8 +206,8 @@ export default function DashboardPage() {
 
       {/* Primeros pasos — shown while user hasn't sent any campaign */}
       {(data?.campaigns_active ?? 0) === 0 && (data?.messages_sent_this_month ?? 0) === 0 && (
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-6">
-          <h2 className="mb-4 text-base font-semibold text-indigo-900">🚀 Primeros pasos</h2>
+        <div className="rounded-xl border border-indigo-100 dark:border-indigo-800/50 bg-indigo-50 dark:bg-indigo-950/30 p-6">
+          <h2 className="mb-4 text-base font-semibold text-indigo-900 dark:text-indigo-200">🚀 Primeros pasos</h2>
           <ol className="space-y-3">
             {[
               {
@@ -237,16 +237,16 @@ export default function DashboardPage() {
             ].map((step, i) => (
               <li key={i} className="flex items-start gap-3">
                 {step.done
-                  ? <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
-                  : <Circle className="mt-0.5 h-5 w-5 shrink-0 text-indigo-300" />}
+                  ? <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-500 dark:text-green-400" />
+                  : <Circle className="mt-0.5 h-5 w-5 shrink-0 text-indigo-300 dark:text-indigo-400" />}
                 <div className="flex-1 min-w-0">
                   <Link
                     to={step.to}
-                    className={`text-sm font-medium ${step.done ? 'text-gray-400 line-through' : 'text-indigo-800 hover:underline'}`}
+                    className={`text-sm font-medium ${step.done ? 'text-muted-foreground line-through' : 'text-indigo-800 dark:text-indigo-300 hover:underline'}`}
                   >
                     {step.label}
                   </Link>
-                  {!step.done && <p className="text-xs text-indigo-600">{step.desc}</p>}
+                  {!step.done && <p className="text-xs text-indigo-600 dark:text-indigo-400">{step.desc}</p>}
                 </div>
               </li>
             ))}
@@ -256,26 +256,26 @@ export default function DashboardPage() {
 
       {/* Quick actions */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-brand-100 bg-brand-50 p-5">
-          <h3 className="font-semibold text-brand-700">🎙️ Nueva campaña</h3>
-          <p className="mt-1 text-sm text-brand-600">
+        <div className="rounded-xl border border-brand-100 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/30 p-5">
+          <h3 className="font-semibold text-brand-700 dark:text-brand-300">🎙️ Nueva campaña</h3>
+          <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">
             Claude IA crea el mensaje perfecto para tu negocio en segundos.
           </p>
           <a
             href="/app/campaigns"
-            className="mt-3 inline-flex items-center text-sm font-medium text-brand-600 hover:underline"
+            className="mt-3 inline-flex items-center text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline"
           >
             Crear campaña →
           </a>
         </div>
-        <div className="rounded-xl border border-green-100 bg-green-50 p-5">
-          <h3 className="font-semibold text-green-700">📞 Importar contactos</h3>
-          <p className="mt-1 text-sm text-green-600">
+        <div className="rounded-xl border border-green-100 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-5">
+          <h3 className="font-semibold text-green-700 dark:text-green-300">📞 Importar contactos</h3>
+          <p className="mt-1 text-sm text-green-600 dark:text-green-400">
             Sube tu lista de clientes en CSV y empieza a emitir hoy mismo.
           </p>
           <a
             href="/app/contacts"
-            className="mt-3 inline-flex items-center text-sm font-medium text-green-600 hover:underline"
+            className="mt-3 inline-flex items-center text-sm font-medium text-green-600 dark:text-green-400 hover:underline"
           >
             Ir a contactos →
           </a>

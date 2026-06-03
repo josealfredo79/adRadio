@@ -22,8 +22,8 @@ export default function CookieConsent() {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100]">
       <div className="mx-auto max-w-5xl px-4 pb-4">
-        <div className="rounded-t-2xl bg-white/90 backdrop-blur-md border border-gray-200 shadow-lg px-6 py-4 flex flex-col sm:flex-row items-center gap-4">
-          <p className="text-sm text-gray-600 flex-1 text-center sm:text-left">
+        <div className="rounded-t-2xl bg-card/90 backdrop-blur-md border border-border shadow-lg px-6 py-4 flex flex-col sm:flex-row items-center gap-4">
+          <p className="text-sm text-muted-foreground flex-1 text-center sm:text-left">
             🍪 Usamos cookies propias y de terceros para mejorar tu experiencia. Al continuar navegando, aceptas su uso.
           </p>
           <div className="flex gap-2 shrink-0">

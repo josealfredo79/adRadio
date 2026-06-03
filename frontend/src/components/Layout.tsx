@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
+import { useTheme } from '@/contexts/ThemeContext'
 import api from '@/lib/api'
 import {
   LayoutDashboard,
@@ -22,6 +23,8 @@ import {
   BarChart3,
   GitBranch,
   FileText,
+  Moon,
+  Sun,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -44,6 +47,7 @@ const navItems = [
 
 export default function Layout() {
   const { user, logout } = useAuth()
+  const { toggle: toggleTheme } = useTheme()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -61,11 +65,11 @@ export default function Layout() {
   const sidebarContent = (
     <>
       {/* Logo */}
-      <div className="flex items-center gap-2 px-6 py-5 border-b border-gray-100">
+      <div className="flex items-center gap-2 px-6 py-5 border-b border-border">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500">
           <Radio className="h-4 w-4 text-white" />
         </div>
-        <span className="text-xl font-bold text-gray-900">IaRadio</span>
+        <span className="text-xl font-bold text-foreground">IaRadio</span>
       </div>
 
       {/* Plan badge */}
@@ -93,8 +97,8 @@ export default function Layout() {
                 cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors min-h-[44px]',
                   isActive
-                    ? 'bg-brand-50 text-brand-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )
               }
             >
@@ -111,14 +115,14 @@ export default function Layout() {
       </nav>
 
       {/* User + logout */}
-      <div className="border-t border-gray-100 p-4">
+      <div className="border-t border-border p-4">
         <div className="mb-3">
-          <p className="text-sm font-medium text-gray-900 truncate">{user?.business_name ?? user?.email}</p>
-          <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+          <p className="text-sm font-medium text-foreground truncate">{user?.business_name ?? user?.email}</p>
+          <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
         </div>
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-red-600 transition-colors"
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-red-600 transition-colors"
         >
           <LogOut className="h-4 w-4" />
           Cerrar sesión
@@ -128,7 +132,7 @@ export default function Layout() {
   )
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-screen overflow-hidden bg-background">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -139,13 +143,13 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside className={cn(
-        'fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-white border-r border-gray-200 shadow-sm transition-transform duration-200 lg:static lg:translate-x-0',
+        'fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-card border-r border-border shadow-sm transition-transform duration-200 lg:static lg:translate-x-0',
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         {/* Mobile close button */}
         <button
           onClick={() => setSidebarOpen(false)}
-          className="absolute right-3 top-4 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 lg:hidden"
+          className="absolute right-3 top-4 rounded-lg p-1.5 text-muted-foreground hover:bg-muted lg:hidden"
         >
           <X className="h-4 w-4" />
         </button>
@@ -155,10 +159,10 @@ export default function Layout() {
       {/* Main content */}
       <main className="flex flex-1 flex-col overflow-hidden">
         {/* Mobile topbar */}
-        <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3 lg:hidden">
+        <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-3 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-100"
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -166,7 +170,7 @@ export default function Layout() {
             <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-500">
               <Radio className="h-3.5 w-3.5 text-white" />
             </div>
-            <span className="font-bold text-gray-900">IaRadio</span>
+            <span className="font-bold text-foreground">IaRadio</span>
           </div>
         </div>
 
