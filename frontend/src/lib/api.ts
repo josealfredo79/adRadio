@@ -12,6 +12,7 @@ const api = axios.create({
   // In local dev the Vite proxy handles /api → http://backend:8000, so baseURL stays relative.
   baseURL: `${import.meta.env.VITE_API_URL ?? ''}/api/v1`,
   withCredentials: true, // send httpOnly refresh_token cookie automatically
+  timeout: 10000,
 })
 
 // Attach in-memory access token to every request
@@ -33,7 +34,7 @@ api.interceptors.response.use(
         const { data } = await axios.post(
           `${import.meta.env.VITE_API_URL ?? ''}/api/v1/auth/refresh`,
           null,
-          { withCredentials: true },
+          { withCredentials: true, timeout: 10000 },
         )
         setAccessToken(data.access_token)
         originalRequest.headers.Authorization = `Bearer ${data.access_token}`

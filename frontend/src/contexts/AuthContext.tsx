@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Restore session using httpOnly cookie — no localStorage needed
     axios
-      .post('/api/v1/auth/refresh', null, { withCredentials: true })
+      .post('/api/v1/auth/refresh', null, { withCredentials: true, timeout: 5000 })
       .then(({ data }) => {
         setAccessToken(data.access_token)
         return api.get('/me')
