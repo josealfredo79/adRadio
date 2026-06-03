@@ -211,14 +211,14 @@ export default function LandingPage() {
           100% { background-position: 200% center; }
         }
         .text-shimmer {
-          background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899, #6366f1);
+          background: linear-gradient(90deg, #7C3AED, #6366f1, #a855f7, #7C3AED);
           background-size: 200% auto;
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           animation: shimmer 4s linear infinite;
         }
         .float-anim { animation: float 4s ease-in-out infinite; }
-        .glow-indigo { box-shadow: 0 0 60px rgba(99,102,241,0.3); }
+        .glow-purple { box-shadow: 0 0 60px rgba(124,58,237,0.3); }
         .glow-green { box-shadow: 0 0 40px rgba(34,197,94,0.2); }
         .glass {
           background: rgba(255,255,255,0.04);
@@ -227,9 +227,14 @@ export default function LandingPage() {
         }
         .mesh-bg {
           background:
-            radial-gradient(ellipse 80% 50% at 20% 10%, rgba(99,102,241,0.15) 0%, transparent 60%),
-            radial-gradient(ellipse 60% 40% at 80% 80%, rgba(168,85,247,0.12) 0%, transparent 60%),
-            radial-gradient(ellipse 50% 50% at 50% 50%, rgba(16,185,129,0.05) 0%, transparent 60%);
+            radial-gradient(ellipse 80% 50% at 20% 10%, rgba(124,58,237,0.18) 0%, transparent 60%),
+            radial-gradient(ellipse 60% 40% at 80% 80%, rgba(99,102,241,0.14) 0%, transparent 60%),
+            radial-gradient(ellipse 50% 50% at 50% 50%, rgba(168,85,247,0.08) 0%, transparent 60%);
+        }
+        .mesh-bg-light {
+          background:
+            radial-gradient(ellipse 80% 50% at 20% 10%, rgba(124,58,237,0.08) 0%, transparent 60%),
+            radial-gradient(ellipse 60% 40% at 80% 80%, rgba(99,102,241,0.06) 0%, transparent 60%);
         }
       `}</style>
 
@@ -237,7 +242,7 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-50 glass">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/30">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#6366F1] shadow-lg shadow-indigo-500/30">
               <Radio className="h-4.5 w-4.5 text-white" />
             </div>
             <span className="text-lg font-black tracking-tight">IaRadio</span>
@@ -253,7 +258,7 @@ export default function LandingPage() {
             </Link>
             <Link
               to="/register"
-              className="rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105 transition-all"
+              className="rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#6366F1] px-5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105 transition-all"
             >
               Prueba gratis →
             </Link>
@@ -298,7 +303,7 @@ export default function LandingPage() {
             <div className="flex flex-wrap gap-3 mb-10">
               <Link
                 to="/register"
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-7 py-3.5 text-base font-black text-white shadow-xl shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 glow-indigo"
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#6366F1] px-7 py-3.5 text-base font-black text-white shadow-xl shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 glow-purple"
               >
                 Empieza gratis
                 <ArrowRight className="h-4 w-4" />
@@ -361,7 +366,8 @@ export default function LandingPage() {
       </section>
 
       {/* ─── PROBLEMA / ANTES–DESPUÉS ─── */}
-      <section className="px-5 py-24">
+      <section className="px-5 py-24 relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 mesh-bg-light opacity-60" />
         <div className="mx-auto max-w-5xl">
           <div className="mb-14 text-center">
             <p className="text-indigo-400 font-semibold text-sm uppercase tracking-widest mb-3">El problema real</p>
@@ -391,7 +397,7 @@ export default function LandingPage() {
               </ul>
             </div>
             {/* After */}
-            <div className="rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 to-purple-500/5 p-8">
+            <div className="rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-[#7C3AED]/10 to-[#6366F1]/5 p-8">
               <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-indigo-500/20 px-3 py-1 text-xs font-bold text-indigo-300 uppercase tracking-widest">
                 ✓ Con IaRadio
               </div>
@@ -460,7 +466,8 @@ export default function LandingPage() {
       </section>
 
       {/* ─── FEATURES GRID ─── */}
-      <section className="px-5 py-24">
+      <section className="px-5 py-24 relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 mesh-bg opacity-20" />
         <div className="mx-auto max-w-5xl">
           <div className="mb-16 text-center">
             <p className="text-indigo-400 font-semibold text-sm uppercase tracking-widest mb-3">Funcionalidades</p>
@@ -538,7 +545,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 items-center">
             <div className="glass rounded-3xl p-6 border border-indigo-500/20">
               <div className="flex items-center gap-3 mb-5">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#6366F1] flex items-center justify-center">
                   <Bot className="h-5 w-5 text-white" />
                 </div>
                 <div>
@@ -662,7 +669,8 @@ export default function LandingPage() {
       </section>
 
       {/* ─── PRECIOS ─── */}
-      <section id="precios" className="px-5 py-24">
+      <section id="precios" className="px-5 py-24 relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 mesh-bg-light opacity-50" />
         <div className="mx-auto max-w-6xl">
           <div className="mb-14 text-center">
             <p className="text-indigo-400 font-semibold text-sm uppercase tracking-widest mb-3">Precios</p>
@@ -675,12 +683,12 @@ export default function LandingPage() {
                 key={plan.key}
                 className={`relative rounded-3xl p-7 flex flex-col transition-all ${
                   plan.popular
-                    ? 'bg-gradient-to-br from-indigo-600/30 to-purple-600/20 border-2 border-indigo-500/60 shadow-2xl shadow-indigo-500/20 scale-[1.03]'
+                    ? 'bg-gradient-to-br from-[#7C3AED]/30 to-[#6366F1]/20 border-2 border-indigo-500/60 shadow-2xl shadow-indigo-500/20 scale-[1.03]'
                     : 'glass'
                 }`}
               >
                 {plan.popular && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 px-5 py-1.5 text-xs font-black text-white shadow-lg shadow-indigo-500/30">
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-r from-[#7C3AED] to-[#6366F1] px-5 py-1.5 text-xs font-black text-white shadow-lg shadow-indigo-500/30">
                     {plan.badge ?? '⭐ Más popular'}
                   </div>
                 )}
@@ -698,6 +706,10 @@ export default function LandingPage() {
                   <span className="text-base font-normal text-gray-500"> MXN/mes</span>
                 </div>
                 <div className="mb-1 text-xs text-gray-600">≈ ${plan.price_usd} USD</div>
+                <div className="mb-3 inline-flex items-center gap-1 rounded-full bg-[#7C3AED]/15 px-2.5 py-0.5 text-[9px] font-bold text-[#7C3AED]">
+                  <Zap className="h-2.5 w-2.5" />
+                  15 días gratis
+                </div>
                 <p className="mb-5 text-xs text-gray-500 italic">{plan.tagline}</p>
                 <ul className="mb-7 space-y-3 flex-1">
                   {plan.features.map(f => {
@@ -717,7 +729,7 @@ export default function LandingPage() {
                   to="/register"
                   className={`block w-full rounded-xl py-3 text-center text-sm font-black transition-all hover:scale-105 ${
                     plan.popular
-                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50'
+                      ? 'bg-gradient-to-r from-[#7C3AED] to-[#6366F1] text-white shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50'
                       : 'glass text-gray-300 hover:text-white hover:border-indigo-500/40'
                   }`}
                 >
@@ -755,7 +767,8 @@ export default function LandingPage() {
       </section>
 
       {/* ─── FAQ ─── */}
-      <section id="faq" className="px-5 py-24">
+      <section id="faq" className="px-5 py-24 relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 mesh-bg opacity-15" />
         <div className="mx-auto max-w-2xl">
           <div className="mb-12 text-center">
             <p className="text-indigo-400 font-semibold text-sm uppercase tracking-widest mb-3">FAQ</p>
@@ -779,7 +792,7 @@ export default function LandingPage() {
         <div className="relative mx-auto max-w-3xl text-center">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-4 py-1.5 text-sm font-medium text-indigo-300">
             <Zap className="h-3.5 w-3.5" />
-            Gratis los primeros 7 días
+            15 días gratis · Sin tarjeta
           </div>
           <h2 className="mb-6 text-5xl font-black leading-tight sm:text-6xl">
             Tu negocio merece<br />
@@ -790,7 +803,7 @@ export default function LandingPage() {
           </p>
           <Link
             to="/register"
-            className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 px-10 py-5 text-lg font-black text-white shadow-2xl shadow-indigo-500/40 hover:shadow-indigo-500/60 hover:scale-105 transition-all glow-indigo"
+            className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#6366F1] px-10 py-5 text-lg font-black text-white shadow-2xl shadow-indigo-500/40 hover:shadow-indigo-500/60 hover:scale-105 transition-all glow-purple"
           >
             Crear mi cuenta gratis
             <ArrowRight className="h-5 w-5" />
@@ -808,7 +821,7 @@ export default function LandingPage() {
       <footer className="border-t border-white/5 px-5 py-10">
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#7C3AED] to-[#6366F1]">
               <Radio className="h-3.5 w-3.5 text-white" />
             </div>
             <span className="font-black text-white">IaRadio</span>
