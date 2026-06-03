@@ -4,6 +4,7 @@ import api from '@/lib/api'
 import { MessageSquare, User, Clock, Flame, Thermometer, Snowflake, CheckCircle, AlertCircle, X, Image, Volume2, FileText, Search, Send, Bot, BotOff } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import SEO from '@/components/SEO'
 
 // Detect and render WhatsApp media stored as [media:type]url
 function MediaMessage({ content }: { content: string }) {
@@ -144,7 +145,9 @@ export default function InboxPage() {
   }
 
   return (
-    <div className="flex h-full gap-0 -m-6 overflow-hidden">
+    <>
+      <SEO title="Bandeja de entrada" description="Panel de control de IaRadio." noIndex />
+      <div className="flex h-full gap-0 -m-6 overflow-hidden">
       {/* Left panel — conversation list */}
       <div className="flex w-80 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
         <div className="border-b border-gray-100 px-4 py-4">
@@ -400,5 +403,6 @@ export default function InboxPage() {
         )}
       </div>
     </div>
+    </>
   )
 }

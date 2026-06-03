@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Radio, Eye, EyeOff } from 'lucide-react'
+import SEO from '@/components/SEO'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -27,7 +28,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
+    <>
+      <SEO title="Iniciar sesión" description="Accede a tu panel de IaRadio." />
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="mb-8 text-center">
@@ -100,5 +103,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { CalendarDays, Plus, Trash2, Check, X, Clock, ExternalLink, Unplug } from 'lucide-react'
+import SEO from '@/components/SEO'
 
 interface Appointment {
   id: string
@@ -133,7 +134,9 @@ export default function AppointmentsPage() {
   const isPast = (a: Appointment) => !isUpcoming(a)
 
   return (
-    <div className="space-y-6">
+    <>
+      <SEO title="Citas" description="Panel de control de IaRadio." noIndex />
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -351,5 +354,6 @@ export default function AppointmentsPage() {
         </div>
       )}
     </div>
+    </>
   )
 }

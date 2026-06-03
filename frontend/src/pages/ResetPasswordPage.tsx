@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import api from '@/lib/api'
 import { Radio, Eye, EyeOff, CheckCircle } from 'lucide-react'
+import SEO from '@/components/SEO'
 
 export default function ResetPasswordPage() {
   const [params] = useSearchParams()
@@ -42,28 +43,36 @@ export default function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
-        <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl">
+      <>
+        <SEO title="Enlace inválido" noIndex />
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl">
           <p className="text-red-600">Enlace inválido. Solicita uno nuevo desde la página de login.</p>
         </div>
       </div>
+      </>
     )
   }
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
-        <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl">
-          <CheckCircle className="mx-auto mb-4 h-14 w-14 text-green-500" />
-          <h2 className="text-xl font-bold text-gray-900">¡Contraseña actualizada!</h2>
-          <p className="mt-2 text-sm text-gray-500">Redirigiendo al login...</p>
+      <>
+        <SEO title="Contraseña actualizada" noIndex />
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl">
+            <CheckCircle className="mx-auto mb-4 h-14 w-14 text-green-500" />
+            <h2 className="text-xl font-bold text-gray-900">¡Contraseña actualizada!</h2>
+            <p className="mt-2 text-sm text-gray-500">Redirigiendo al login...</p>
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
+    <>
+      <SEO title="Nueva contraseña" description="Establece una nueva contraseña para tu cuenta de IaRadio." noIndex />
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-lg">
@@ -124,5 +133,6 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }

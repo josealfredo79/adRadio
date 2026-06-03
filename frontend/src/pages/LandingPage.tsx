@@ -4,6 +4,7 @@ import {
   CheckCircle, ArrowRight, Gift, Bot, Mic, ChevronDown,
   Sparkles, Shield, Clock, PhoneCall, BarChart3, Zap, Plus
 } from 'lucide-react'
+import SEO from '@/components/SEO'
 import { useState, useEffect, useRef } from 'react'
 import RadioSphere3D from '../components/RadioSphere3D'
 import { LANDING_PLANS } from '@/lib/plans'
@@ -196,7 +197,9 @@ function WhatsAppMockup() {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#06060f] text-white font-sans overflow-x-hidden">
+    <>
+      <SEO />
+      <div className="min-h-screen bg-[#06060f] text-white font-sans overflow-x-hidden">
       <style>{`
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(8px); }
@@ -872,6 +875,7 @@ export default function LandingPage() {
       </footer>
 
     </div>
+    </>
   )
 }
 

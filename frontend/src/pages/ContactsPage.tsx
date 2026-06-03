@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { Users, Plus, Upload, Trash2, Search, Download, Tag, X } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
+import SEO from '@/components/SEO'
 
 interface Contact {
   id: string
@@ -143,7 +144,9 @@ export default function ContactsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <SEO title="Contactos" description="Panel de control de IaRadio." noIndex />
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -460,5 +463,6 @@ export default function ContactsPage() {
         </div>
       )}
     </div>
+    </>
   )
 }

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '@/lib/api'
 import { Radio, ArrowLeft, CheckCircle } from 'lucide-react'
+import SEO from '@/components/SEO'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -25,7 +26,9 @@ export default function ForgotPasswordPage() {
 
   if (sent) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
+      <>
+        <SEO title="Revisa tu correo" noIndex />
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
         <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl">
           <CheckCircle className="mx-auto mb-4 h-14 w-14 text-green-500" />
           <h2 className="text-xl font-bold text-gray-900">Revisa tu correo</h2>
@@ -41,11 +44,14 @@ export default function ForgotPasswordPage() {
           </Link>
         </div>
       </div>
-    )
+    </>
+  )
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
+    <>
+      <SEO title="Recuperar contraseña" description="Recupera el acceso a tu cuenta de IaRadio." noIndex />
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-lg">
@@ -95,5 +101,6 @@ export default function ForgotPasswordPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }

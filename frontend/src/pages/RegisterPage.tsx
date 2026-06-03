@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Radio } from 'lucide-react'
+import SEO from '@/components/SEO'
 
 export default function RegisterPage() {
   const { register } = useAuth()
@@ -29,7 +30,9 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
+    <>
+      <SEO title="Registro" description="Crea tu cuenta gratuita en IaRadio y empieza a crear campañas por WhatsApp con IA." />
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-lg">
@@ -110,5 +113,6 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }

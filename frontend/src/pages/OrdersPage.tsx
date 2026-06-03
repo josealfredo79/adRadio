@@ -4,6 +4,7 @@ import api from '@/lib/api'
 import { ShoppingBag, Search, CheckCircle, XCircle, Clock, ChevronDown } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import SEO from '@/components/SEO'
 
 type OrderState = 'collecting_name' | 'collecting_address' | 'collecting_payment' | 'confirmed' | 'cancelled'
 
@@ -86,7 +87,9 @@ export default function OrdersPage() {
   ).length ?? 0
 
   return (
-    <div className="space-y-6">
+    <>
+      <SEO title="Pedidos" description="Panel de control de IaRadio." noIndex />
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -249,5 +252,6 @@ export default function OrdersPage() {
         )}
       </div>
     </div>
+    </>
   )
 }

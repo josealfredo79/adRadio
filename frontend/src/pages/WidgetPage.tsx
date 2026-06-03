@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, MoveHorizontal, Save } from 'lucide-react'
 import api from '@/lib/api'
+import SEO from '@/components/SEO'
 
 interface SnippetData {
   snippet: string
@@ -53,7 +54,9 @@ export default function WidgetPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
+    <>
+      <SEO title="Widget" description="Panel de control de IaRadio." noIndex />
+      <div className="max-w-4xl mx-auto p-6 space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Widget de WhatsApp</h1>
         <p className="mt-1 text-gray-500 text-sm">
@@ -241,5 +244,6 @@ export default function WidgetPage() {
         </a>
       </div>
     </div>
+    </>
   )
 }

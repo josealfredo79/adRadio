@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { BookOpen, Upload, Trash2, FileText, FileSpreadsheet, File } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
+import SEO from '@/components/SEO'
 
 interface KBFile {
   id: string
@@ -56,7 +57,9 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <SEO title="Base de conocimiento" description="Panel de control de IaRadio." noIndex />
+      <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Base de conocimiento</h1>
@@ -147,5 +150,6 @@ export default function KnowledgeBasePage() {
         )}
       </div>
     </div>
+    </>
   )
 }

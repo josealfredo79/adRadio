@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, ListOrdered, Ticket, CalendarClock, BarChart2, X, CalendarRange, CheckCircle2, AlertCircle, Download } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import SEO from '@/components/SEO'
 
 interface Campaign {
   id: string
@@ -315,7 +316,9 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <SEO title="Campañas" description="Panel de control de IaRadio." noIndex />
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1245,5 +1248,6 @@ export default function CampaignsPage() {
         )
       })()}
     </div>
+    </>
   )
 }

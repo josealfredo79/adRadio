@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { Users, UserPlus, Trash2, Shield, Eye, Loader2 } from 'lucide-react'
+import SEO from '@/components/SEO'
 
 interface TeamMember {
   id: string
@@ -53,7 +54,9 @@ export default function TeamPage() {
   })
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
+    <>
+      <SEO title="Equipo" description="Panel de control de IaRadio." noIndex />
+      <div className="mx-auto max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Equipo</h1>
         <p className="mt-1 text-sm text-gray-500">Invita colaboradores a tu cuenta de IaRadio.</p>
@@ -147,5 +150,6 @@ export default function TeamPage() {
         )}
       </div>
     </div>
+    </>
   )
 }

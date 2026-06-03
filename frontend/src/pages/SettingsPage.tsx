@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Settings, Save, Copy, Check, ExternalLink, Lock, CreditCard, AlertTriangle } from 'lucide-react'
+import SEO from '@/components/SEO'
 
 const WEBHOOK_URL = 'https://api.iaradio.app/api/v1/webhooks/twilio'
 
@@ -131,7 +132,9 @@ export default function SettingsPage() {
   )
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    <>
+      <SEO title="Configuración" description="Panel de control de IaRadio." noIndex />
+      <div className="space-y-8 max-w-2xl">
       <div className="flex items-center gap-3">
         <div className="rounded-xl bg-brand-50 p-2.5">
           <Settings className="h-5 w-5 text-brand-500" />
@@ -424,5 +427,6 @@ export default function SettingsPage() {
         </p>
       </div>
     </div>
+    </>
   )
 }

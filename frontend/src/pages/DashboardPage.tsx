@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
+import SEO from '@/components/SEO'
 import {
   LineChart,
   Line,
@@ -103,7 +104,9 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <>
+        <SEO title="Dashboard" description="Panel de control de IaRadio." noIndex />
+        <div className="space-y-6">
         <div className="h-8 w-48 rounded-lg bg-gray-200 animate-pulse" />
         <div className="grid grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -111,11 +114,14 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+      </>
     )
   }
 
   return (
-    <div className="space-y-8">
+    <>
+      <SEO title="Dashboard" description="Panel de control de IaRadio." noIndex />
+      <div className="space-y-8">
       {showOnboarding && <OnboardingWizard onClose={() => setOnboardingDismissed(true)} />}
       {/* Payment success banner */}
       {paymentSuccess && (
@@ -276,5 +282,6 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }

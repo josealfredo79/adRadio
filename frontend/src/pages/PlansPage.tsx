@@ -4,6 +4,7 @@ import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { CheckCircle, Zap, Sparkles } from 'lucide-react'
 import { PLANS_CONFIG, type PlanDefinition } from '@/lib/plans'
+import SEO from '@/components/SEO'
 
 interface BackendPlan {
   name: string
@@ -49,7 +50,9 @@ export default function PlansPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <>
+      <SEO title="Planes" description="Panel de control de IaRadio." noIndex />
+      <div className="space-y-8">
       {/* Header */}
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900">Planes IaRadio</h1>
@@ -167,5 +170,6 @@ export default function PlansPage() {
         💳 Pago seguro con Stripe &nbsp;·&nbsp; 🔒 Sin contratos &nbsp;·&nbsp; ↩️ Devolución en 7 días
       </div>
     </div>
+    </>
   )
 }

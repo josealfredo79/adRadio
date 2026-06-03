@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { GitBranch, Plus, Zap, Users, MessageSquare } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
+import SEO from '@/components/SEO'
 
 interface AutomationFlow {
   id: string
@@ -39,7 +40,9 @@ export default function AutomationsPage() {
   })
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <>
+      <SEO title="Automatizaciones" description="Panel de control de IaRadio." noIndex />
+      <div className="space-y-6 max-w-4xl">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="rounded-xl bg-brand-50 p-2.5">
@@ -142,5 +145,6 @@ export default function AutomationsPage() {
         </div>
       )}
     </div>
+    </>
   )
 }

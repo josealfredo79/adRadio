@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom'
 import { Radio, ArrowLeft } from 'lucide-react'
+import SEO from '@/components/SEO'
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-[#06060f] text-gray-300 font-sans p-5 sm:p-10">
+    <>
+      <SEO title="Términos y Condiciones" description="Términos y condiciones de uso de IaRadio." />
+      <div className="min-h-screen bg-[#06060f] text-gray-300 font-sans p-5 sm:p-10">
       <div className="mx-auto max-w-4xl">
         <Link to="/" className="inline-flex items-center gap-2 text-sm text-indigo-400 hover:text-indigo-300 mb-8 transition-colors">
           <ArrowLeft className="h-4 w-4" /> Volver al inicio
@@ -53,5 +56,6 @@ export default function TermsPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }

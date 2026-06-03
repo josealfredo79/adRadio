@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { BarChart3, Clock, TrendingUp } from 'lucide-react'
+import SEO from '@/components/SEO'
 
 interface HourData {
   hour: number
@@ -25,7 +26,9 @@ export default function AnalyticsPage() {
   const maxCount = Math.max(...(data?.hours.map(h => h.count) ?? [0]), 1)
 
   return (
-    <div className="space-y-8 max-w-4xl">
+    <>
+      <SEO title="Analíticas" description="Panel de control de IaRadio." noIndex />
+      <div className="space-y-8 max-w-4xl">
       <div className="flex items-center gap-3">
         <div className="rounded-xl bg-brand-50 p-2.5">
           <BarChart3 className="h-5 w-5 text-brand-500" />
@@ -95,5 +98,6 @@ export default function AnalyticsPage() {
         </>
       )}
     </div>
+    </>
   )
 }

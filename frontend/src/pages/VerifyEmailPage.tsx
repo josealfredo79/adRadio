@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import api from '@/lib/api'
 import { Radio, CheckCircle } from 'lucide-react'
+import SEO from '@/components/SEO'
 
 export default function VerifyEmailPage() {
   const [params] = useSearchParams()
@@ -29,18 +30,23 @@ export default function VerifyEmailPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100">
-        <div className="rounded-2xl bg-white p-10 text-center shadow-xl">
-          <CheckCircle className="mx-auto mb-4 h-14 w-14 text-green-500" />
-          <h2 className="text-xl font-bold text-gray-900">¡Email verificado!</h2>
-          <p className="mt-2 text-gray-500">Redirigiendo a login...</p>
+      <>
+        <SEO title="Email verificado" noIndex />
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100">
+          <div className="rounded-2xl bg-white p-10 text-center shadow-xl">
+            <CheckCircle className="mx-auto mb-4 h-14 w-14 text-green-500" />
+            <h2 className="text-xl font-bold text-gray-900">¡Email verificado!</h2>
+            <p className="mt-2 text-gray-500">Redirigiendo a login...</p>
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
+    <>
+      <SEO title="Verificar email" description="Verifica tu dirección de email para activar tu cuenta de IaRadio." noIndex />
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-lg">
@@ -79,5 +85,6 @@ export default function VerifyEmailPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }
