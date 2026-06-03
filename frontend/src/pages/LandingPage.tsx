@@ -677,66 +677,91 @@ export default function LandingPage() {
             <h2 className="text-4xl font-black text-white sm:text-5xl">Invierte lo que vendes en un día</h2>
             <p className="mt-4 text-gray-500">Sin contratos. Cancela cuando quieras.</p>
           </div>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4 items-start">
-            {LANDING_PLANS.map(plan => (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4 items-start">
+            {LANDING_PLANS.map(plan => {
+              const savings = plan.referencePriceMxn
+                ? Math.round((1 - plan.price_mxn / plan.referencePriceMxn) * 100)
+                : null
+              return (
               <div
                 key={plan.key}
-                className={`relative rounded-3xl p-7 flex flex-col transition-all ${
+                className={`relative rounded-3xl p-6 flex flex-col transition-all ${
                   plan.popular
-                    ? 'bg-gradient-to-br from-[#7C3AED]/30 to-[#6366F1]/20 border-2 border-indigo-500/60 shadow-2xl shadow-indigo-500/20 scale-[1.03]'
+                    ? 'bg-gradient-to-br from-[#7C3AED]/30 to-[#6366F1]/20 border-2 border-[#7C3AED]/60 shadow-2xl shadow-[#7C3AED]/20 scale-[1.03]'
                     : 'glass'
                 }`}
               >
+                {/* Discount badge — Hostinger style big green pill */}
+                {savings && (
+                  <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-3 py-1 text-xs font-bold text-green-400 w-fit">
+                    <Zap className="h-3 w-3" />
+                    Ahorra {savings}%
+                  </div>
+                )}
+
+                {/* Plan name */}
+                <div className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-1">{plan.name}</div>
+                <div className="text-xs text-gray-500 mb-4">{plan.tagline}</div>
+
+                {/* Price row — original + current combined on same line like Hostinger */}
+                <div className="flex items-baseline gap-2 mb-1">
+                  {plan.referencePriceMxn && (
+                    <span className="text-sm text-gray-500 line-through">${plan.referencePriceMxn.toLocaleString()}</span>
+                  )}
+                  <span className="text-4xl font-black text-white">${plan.price_mxn.toLocaleString()}</span>
+                  <span className="text-xs text-gray-500">MXN/mes</span>
+                </div>
+
+                {/* Offer + USD row */}
+                <div className="flex items-center gap-3 mb-5">
+                  <span className="text-[10px] text-gray-600">≈ ${plan.price_usd} USD</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#7C3AED]/15 px-2 py-0.5 text-[9px] font-bold text-[#7C3AED]">
+                    <Zap className="h-2.5 w-2.5" />
+                    15 días gratis
+                  </span>
+                </div>
+
+                {/* CTA — before features, like Hostinger */}
+                <Link
+                  to="/register"
+                  className={`block w-full rounded-xl py-3 text-center text-sm font-black transition-all hover:scale-105 mb-3 ${
+                    plan.popular
+                      ? 'bg-gradient-to-r from-[#7C3AED] to-[#6366F1] text-white shadow-lg shadow-[#7C3AED]/30 hover:shadow-[#7C3AED]/50'
+                      : 'glass text-gray-300 hover:text-white hover:border-white/20'
+                  }`}
+                >
+                  Empezar con {plan.name} →
+                </Link>
+
+                {/* Popular badge inline (not floating) */}
                 {plan.popular && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-r from-[#7C3AED] to-[#6366F1] px-5 py-1.5 text-xs font-black text-white shadow-lg shadow-indigo-500/30">
-                    {plan.badge ?? '⭐ Más popular'}
+                  <div className="text-center text-[10px] font-bold text-[#7C3AED] uppercase tracking-widest mb-5">
+                    ⭐ Más popular
                   </div>
                 )}
-                <div className="mb-1 text-sm font-bold text-gray-400 uppercase tracking-widest">{plan.name}</div>
-                {plan.referencePriceMxn && (
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm text-gray-500 line-through">${plan.referencePriceMxn.toLocaleString()} MXN</span>
-                    <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[9px] font-bold text-green-400">
-                      -{Math.round((1 - plan.price_mxn / plan.referencePriceMxn) * 100)}%
-                    </span>
-                  </div>
-                )}
-                <div className="mb-1 text-4xl font-black text-white">
-                  ${plan.price_mxn.toLocaleString()}
-                  <span className="text-base font-normal text-gray-500"> MXN/mes</span>
+
+                {/* Features sub-header */}
+                <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                  Todo incluido:
                 </div>
-                <div className="mb-1 text-xs text-gray-600">≈ ${plan.price_usd} USD</div>
-                <div className="mb-3 inline-flex items-center gap-1 rounded-full bg-[#7C3AED]/15 px-2.5 py-0.5 text-[9px] font-bold text-[#7C3AED]">
-                  <Zap className="h-2.5 w-2.5" />
-                  15 días gratis
-                </div>
-                <p className="mb-5 text-xs text-gray-500 italic">{plan.tagline}</p>
-                <ul className="mb-7 space-y-3 flex-1">
+
+                {/* Features */}
+                <ul className="space-y-2.5 flex-1">
                   {plan.features.map(f => {
                     const isHighlight = plan.highlightFeatures?.includes(f)
                     return (
-                      <li key={f} className="flex items-center gap-2.5 text-sm">
+                      <li key={f} className="flex items-center gap-2.5 text-xs">
                         {isHighlight
-                          ? <Sparkles className="h-4 w-4 text-indigo-400 shrink-0" />
-                          : <CheckCircle className="h-4 w-4 text-indigo-400 shrink-0" />
+                          ? <Sparkles className="h-3.5 w-3.5 text-[#7C3AED] shrink-0" />
+                          : <CheckCircle className="h-3.5 w-3.5 text-[#7C3AED] shrink-0" />
                         }
                         <span className={isHighlight ? 'text-white font-medium' : 'text-gray-300'}>{f}</span>
                       </li>
                     )
                   })}
                 </ul>
-                <Link
-                  to="/register"
-                  className={`block w-full rounded-xl py-3 text-center text-sm font-black transition-all hover:scale-105 ${
-                    plan.popular
-                      ? 'bg-gradient-to-r from-[#7C3AED] to-[#6366F1] text-white shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50'
-                      : 'glass text-gray-300 hover:text-white hover:border-indigo-500/40'
-                  }`}
-                >
-                  Empezar con {plan.name} →
-                </Link>
               </div>
-            ))}
+            )})}
           </div>
           <p className="mt-8 text-center text-sm text-gray-600">
             ¿Más de 10,000 mensajes/mes?{' '}
