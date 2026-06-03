@@ -10,7 +10,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -63,6 +63,9 @@ class User(Base):
     widget_color: Mapped[str] = mapped_column(String(7), default="#25D366", server_default="#25D366")
     widget_greeting: Mapped[str] = mapped_column(String(200), default="¡Hola! ¿En qué puedo ayudarte?", server_default="¡Hola! ¿En qué puedo ayudarte?")
     widget_position: Mapped[str] = mapped_column(String(10), default="right", server_default="right")
+
+    # White-label settings
+    white_label: Mapped[dict] = mapped_column(JSONB, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

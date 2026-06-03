@@ -5,6 +5,7 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,22 @@ from app.schemas.profile import ProfileUpdate
 from app.services.number_pool_service import assign_pool_number, release_pool_number, pool_status
 
 router = APIRouter(tags=["profile"])
+
+
+class WhiteLabelOut(BaseModel):
+    primary_color: str = "#6366f1"
+    app_name: str = ""
+    hide_branding: bool = False
+    custom_domain: str = ""
+    favicon_url: str = ""
+
+
+class WhiteLabelUpdate(BaseModel):
+    primary_color: str | None = None
+    app_name: str | None = None
+    hide_branding: bool | None = None
+    custom_domain: str | None = None
+    favicon_url: str | None = None
 
 
 @router.get("/me", response_model=UserOut)
@@ -177,6 +194,29 @@ async def dashboard_chart(
 # ---------------------------------------------------------------------------
 # Admin: number pool management
 # ---------------------------------------------------------------------------
+
+@router.get("/profile/white-label", response_model=WhiteLabelOut)
+async def get_white_label(
+    current_user: User = Depends(get_current_user),
+):
+    wl = current_user.white_label or {}
+    return WhiteLabelOut(**wl)
+
+
+@router.patch("/profile/white-label", response_model=WhiteLabelOut)
+async def update_white_label(
+    body: WhiteLabelUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wl = dict(current_user.white_label or {})
+    for field, value in body.model_dump(exclude_none=True).items():
+        wl[field] = value
+    current_user.white_label = wl
+    await db.commit()
+    await db.refresh(current_user)
+    return WhiteLabelOut(**current_user.white_label)
+
 
 @router.get("/admin/number-pool")
 async def list_number_pool(

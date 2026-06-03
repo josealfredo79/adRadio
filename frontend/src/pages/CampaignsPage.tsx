@@ -101,6 +101,10 @@ export default function CampaignsPage() {
   const [radioVoiceId, setRadioVoiceId] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
   const [error, setError] = useState('')
+  const [abEnabled, setAbEnabled] = useState(false)
+  const [abVariants, setAbVariants] = useState<string[]>(['', ''])
+  const [abSplit, setAbSplit] = useState('50/50')
+  const [abMetric, setAbMetric] = useState('response')
   const [analyticsId, setAnalyticsId] = useState<string | null>(null)
   const [vocesDetailId, setVocesDetailId] = useState<string | null>(null)
 
@@ -186,6 +190,7 @@ export default function CampaignsPage() {
     setRadioCountry('mx'); setRadioAudioUrl(''); setRadioScript('')
     setExtraContext(''); setBusinessCategory(''); setRadioVoiceId('')
     setScheduledAt(''); setError('')
+    setAbEnabled(false); setAbVariants(['', '']); setAbSplit('50/50'); setAbMetric('response')
     setBannerPromo(''); setBannerPalette('promo'); setBannerCaption(''); setBannerPreviewUrl(null)
     setVocesCollectionPrompt(''); setVocesStories([]); setVocesCapsuleAudioUrl(''); setVocesCapsuleScript('')
   }
@@ -259,6 +264,12 @@ export default function CampaignsPage() {
     }
     if (mode !== 'regular' && multiMessages.length > 0) {
       ab_test.messages = multiMessages
+    }
+    if (abEnabled) {
+      ab_test.enabled = true
+      ab_test.variants = abVariants.filter(Boolean)
+      ab_test.split = abSplit
+      ab_test.metric = abMetric
     }
     if (AUDIO_MODES.includes(mode)) {
       ab_test.audio_url = radioAudioUrl
@@ -447,6 +458,58 @@ export default function CampaignsPage() {
                           {Math.round(((campaign.stats.replied ?? 0) / campaign.stats.sent) * 100)}%
                         </span>
                       </div>
+                    </div>
+                  )}
+                  {/* A/B Test Results */}
+                  {campaign.ab_test?.enabled && (
+                    <div className="mt-4 border-t border-purple-100 pt-3">
+                      <p className="text-xs font-semibold text-purple-700 mb-2">🔬 Prueba A/B</p>
+                      {(() => {
+                        const variants = campaign.ab_test.variants || []
+                        const statsA = campaign.ab_test.stats_a || { sent: 0, replied: 0 }
+                        const statsB = campaign.ab_test.stats_b || { sent: 0, replied: 0 }
+                        const statsC = campaign.ab_test.stats_c || { sent: 0, replied: 0 }
+                        const allStats = [statsA, statsB]
+                        if (statsC.sent > 0) allStats.push(statsC)
+                        const chartData = allStats.map((s: any, i: number) => {
+                          const label = String.fromCharCode(65 + i)
+                          const responseRate = s.sent > 0 ? Math.round((s.replied / s.sent) * 100) : 0
+                          return {
+                            name: `Variante ${label}`,
+                            sent: s.sent ?? 0,
+                            rate: responseRate,
+                            fill: i === 0 ? '#a855f7' : i === 1 ? '#6366f1' : '#ec4899',
+                          }
+                        })
+                        const maxRate = Math.max(...chartData.map((d) => d.rate), 0)
+                        return (
+                          <div className="space-y-2">
+                            <div className="h-24">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                                  <YAxis tick={{ fontSize: 10 }} unit="%" domain={[0, 'auto']} />
+                                  <Tooltip formatter={(v: number, name: string) => [name === 'rate' ? `${v}%` : v, name === 'rate' ? 'Respuesta' : 'Enviados']} />
+                                  <Bar dataKey="rate" radius={[4, 4, 0, 0]} fill="#a855f7">
+                                    {chartData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                                  </Bar>
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                            <div className="flex gap-2 flex-wrap">
+                              {chartData.map((d) => (
+                                <div key={d.name} className="flex items-center gap-1.5 text-[11px] text-gray-600 bg-purple-50 rounded-lg px-2 py-1">
+                                  <span className="w-2 h-2 rounded-full" style={{ background: d.fill }} />
+                                  {d.name}: {d.rate}% ({d.sent} enviados)
+                                  {d.rate === maxRate && d.rate > 0 && (
+                                    <span className="text-amber-600 font-bold ml-1">🏆</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                   )}
                 </div>
@@ -881,6 +944,64 @@ export default function CampaignsPage() {
                         <option value={72}>72 horas</option>
                         <option value={168}>1 semana</option>
                       </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Prueba A/B */}
+              <div className={`rounded-xl border p-4 transition-all ${abEnabled ? 'border-purple-300 bg-purple-50' : 'border-gray-200'}`}>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input type="checkbox" checked={abEnabled} onChange={(e) => setAbEnabled(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-purple-500" />
+                  <span className="text-sm font-medium text-gray-700">🔬 Prueba A/B</span>
+                </label>
+                {abEnabled && (
+                  <div className="mt-3 space-y-3">
+                    {abVariants.map((v, i) => (
+                      <div key={i}>
+                        <label className="mb-1 block text-xs font-medium text-gray-600">
+                          Variante {String.fromCharCode(65 + i)}
+                        </label>
+                        <textarea rows={2} placeholder={`Mensaje variante ${String.fromCharCode(65 + i)}...`}
+                          value={v} onChange={(e) => {
+                            const updated = [...abVariants]
+                            updated[i] = e.target.value
+                            setAbVariants(updated)
+                          }}
+                          className="w-full rounded-lg border border-purple-200 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none resize-none" />
+                      </div>
+                    ))}
+                    {abVariants.length < 3 && (
+                      <button onClick={() => setAbVariants([...abVariants, ''])}
+                        className="text-xs text-purple-600 hover:text-purple-700 font-medium">
+                        + Añadir variante C
+                      </button>
+                    )}
+                    {abVariants.length === 3 && (
+                      <button onClick={() => setAbVariants(abVariants.slice(0, 2))}
+                        className="text-xs text-red-500 hover:text-red-600 font-medium">
+                        - Quitar variante C
+                      </button>
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-gray-600">División</label>
+                        <select value={abSplit} onChange={(e) => setAbSplit(e.target.value)}
+                          className="w-full rounded-lg border border-purple-200 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none">
+                          <option value="50/50">50% / 50%</option>
+                          <option value="70/30">70% / 30%</option>
+                          <option value="33/33/34">33% / 33% / 34%</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-gray-600">Métrica</label>
+                        <select value={abMetric} onChange={(e) => setAbMetric(e.target.value)}
+                          className="w-full rounded-lg border border-purple-200 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none">
+                          <option value="response">Tasa de respuesta</option>
+                          <option value="clicks">Tasa de clics</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 )}

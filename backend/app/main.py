@@ -20,6 +20,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.config import settings
 from app.core.redis import close_redis
 from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, template_seeds, team, automations, widget, analytics
+from app.api.v1 import user_webhooks, public_api, public_api_routes
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,9 @@ app.include_router(team.router, prefix=settings.API_PREFIX)
 app.include_router(automations.router, prefix=settings.API_PREFIX)
 app.include_router(widget.router, prefix=settings.API_PREFIX)
 app.include_router(analytics.router, prefix=settings.API_PREFIX)
+app.include_router(user_webhooks.router, prefix=settings.API_PREFIX)
+app.include_router(public_api.router, prefix=settings.API_PREFIX)
+app.include_router(public_api_routes.router, prefix=settings.API_PREFIX)
 
 # Serve WhatsApp widget static files publicly
 _WIDGET_DIR = Path(__file__).parent / "static" / "widget"

@@ -95,6 +95,14 @@ async def create_contact(
     db.add(contact)
     await db.commit()
     await db.refresh(contact)
+
+    from app.services.webhook_dispatcher import dispatch_webhook_event
+    await dispatch_webhook_event(
+        "contact.created",
+        {"id": str(contact.id), "name": contact.name, "phone": contact.phone},
+        db,
+    )
+
     return ContactOut.model_validate(contact)
 
 

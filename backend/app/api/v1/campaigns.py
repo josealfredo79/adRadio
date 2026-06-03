@@ -4,6 +4,7 @@ Campaigns router — /api/v1/campaigns
 import csv
 import io
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -237,6 +238,46 @@ async def export_campaigns_csv(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=campanas_iaradio.csv"},
     )
+
+
+class PublicCustomerStoryOut(BaseModel):
+    id: uuid.UUID
+    business_name: str | None = None
+    transcription: str
+    media_url: str
+    sentiment: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/stories/public")
+async def list_public_stories(
+    db: AsyncSession = Depends(get_db),
+):
+    """Return approved Customer Stories publicly (no auth required)."""
+    from sqlalchemy.orm import joinedload
+
+    result = await db.execute(
+        select(CustomerStory)
+        .options(joinedload(CustomerStory.advertiser))
+        .where(CustomerStory.approved == True)
+        .order_by(CustomerStory.created_at.desc())
+        .limit(20)
+    )
+    stories = result.unique().scalars().all()
+
+    return [
+        PublicCustomerStoryOut(
+            id=s.id,
+            business_name=s.advertiser.business_name if s.advertiser else None,
+            transcription=s.transcription,
+            media_url=s.media_url,
+            sentiment=s.sentiment,
+            created_at=s.created_at,
+        )
+        for s in stories
+    ]
 
 
 class ABTestSetup(BaseModel):

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Settings, Save, Copy, Check, ExternalLink, Lock, CreditCard, AlertTriangle } from 'lucide-react'
+import { Settings, Save, Copy, Check, ExternalLink, Lock, CreditCard, AlertTriangle, Trash2, Plus, X, Globe, Palette, Key, Webhook } from 'lucide-react'
 import SEO from '@/components/SEO'
 
 const WEBHOOK_URL = 'https://api.iaradio.app/api/v1/webhooks/twilio'
@@ -29,6 +29,461 @@ const PERSONALITIES = [
   { value: 'funny', label: 'Divertido y casual' },
   { value: 'persuasive', label: 'Persuasivo y vendedor' },
 ]
+
+const AVAILABLE_EVENTS = [
+  { value: 'campaign.sent', label: 'Campaña enviada' },
+  { value: 'campaign.completed', label: 'Campaña completada' },
+  { value: 'campaign.failed', label: 'Campaña fallida' },
+  { value: 'contact.created', label: 'Contacto creado' },
+  { value: 'order.created', label: 'Pedido creado' },
+]
+
+const AVAILABLE_SCOPES = [
+  { value: 'campaigns:read', label: 'Leer campañas' },
+  { value: 'campaigns:write', label: 'Escribir campañas' },
+  { value: 'contacts:read', label: 'Leer contactos' },
+  { value: 'contacts:write', label: 'Escribir contactos' },
+]
+
+function WebhooksSection() {
+  const { data: webhooks, refetch: refetchWebhooks } = useQuery({
+    queryKey: ['user-webhooks'],
+    queryFn: () => api.get('/user-webhooks').then(r => r.data),
+  })
+
+  const [showForm, setShowForm] = useState(false)
+  const [newWh, setNewWh] = useState({ name: '', url: '', events: [] as string[] })
+  const [testResult, setTestResult] = useState<{ id: string; result: any } | null>(null)
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof newWh) => api.post('/user-webhooks', data),
+    onSuccess: () => { refetchWebhooks(); setShowForm(false); setNewWh({ name: '', url: '', events: [] }) },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/user-webhooks/${id}`),
+    onSuccess: () => refetchWebhooks(),
+  })
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => api.patch(`/user-webhooks/${id}`, { active }),
+    onSuccess: () => refetchWebhooks(),
+  })
+
+  const testMutation = useMutation({
+    mutationFn: ({ id }: { id: string }) => api.post(`/user-webhooks/${id}/test`),
+    onSuccess: (res, vars) => setTestResult({ id: vars.id, result: res.data }),
+    onError: (err: any, vars) => setTestResult({ id: vars.id, result: { success: false, error: err.response?.data?.detail ?? 'Error' } }),
+  })
+
+  const toggleEvent = (ev: string) => {
+    setNewWh(prev => ({
+      ...prev,
+      events: prev.events.includes(ev) ? prev.events.filter(e => e !== ev) : [...prev.events, ev],
+    }))
+  }
+
+  return (
+    <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
+      <div className="flex items-center gap-2">
+        <Webhook className="h-4 w-4 text-gray-400" />
+        <h2 className="text-base font-semibold text-gray-900">Webhooks</h2>
+      </div>
+      <p className="text-sm text-gray-500">Recibe notificaciones HTTP cuando ocurran eventos en tu cuenta.</p>
+
+      {webhooks?.map((wh: any) => (
+        <div key={wh.id} className="flex items-start gap-3 rounded-lg border border-gray-200 p-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-900">{wh.name}</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${wh.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                {wh.active ? 'Activo' : 'Inactivo'}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 font-mono truncate mt-0.5">{wh.url}</p>
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {wh.events.map((ev: string) => (
+                <span key={ev} className="text-xs bg-brand-50 text-brand-600 px-1.5 py-0.5 rounded-full">
+                  {ev}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => toggleMutation.mutate({ id: wh.id, active: !wh.active })}
+              className={`text-xs px-2 py-1 rounded ${wh.active ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+            >
+              {wh.active ? 'Desactivar' : 'Activar'}
+            </button>
+            <button
+              onClick={() => testMutation.mutate({ id: wh.id })}
+              className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100"
+            >
+              Test
+            </button>
+            <button
+              onClick={() => { if (confirm('¿Eliminar webhook?')) deleteMutation.mutate(wh.id) }}
+              className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+          {testResult && testResult.id === wh.id && (
+            <div className={`text-xs mt-1 ${testResult.result.success ? 'text-green-600' : 'text-red-600'}`}>
+              {testResult.result.success ? '✅ Ping exitoso' : `❌ ${testResult.result.error || 'Error'}`}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {showForm ? (
+        <div className="space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50">
+          <input
+            type="text"
+            placeholder="Nombre del webhook"
+            value={newWh.name}
+            onChange={e => setNewWh({ ...newWh, name: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
+          <input
+            type="url"
+            placeholder="https://ejemplo.com/webhook"
+            value={newWh.url}
+            onChange={e => setNewWh({ ...newWh, url: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Eventos</label>
+            <div className="flex flex-wrap gap-2">
+              {AVAILABLE_EVENTS.map(ev => (
+                <label key={ev.value} className="flex items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={newWh.events.includes(ev.value)}
+                    onChange={() => toggleEvent(ev.value)}
+                    className="rounded"
+                  />
+                  {ev.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => createMutation.mutate(newWh)}
+              disabled={!newWh.name || !newWh.url || createMutation.isPending}
+              className="text-sm px-3 py-1.5 rounded-lg bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              {createMutation.isPending ? 'Creando...' : 'Crear'}
+            </button>
+            <button onClick={() => setShowForm(false)} className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowForm(true)}
+          className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700"
+        >
+          <Plus className="h-4 w-4" /> Agregar webhook
+        </button>
+      )}
+    </div>
+  )
+}
+
+
+function WhiteLabelSection() {
+  const { data: wl, refetch: refetchWl } = useQuery({
+    queryKey: ['white-label'],
+    queryFn: () => api.get('/profile/white-label').then(r => r.data),
+  })
+
+  const [form, setForm] = useState({
+    primary_color: '#6366f1',
+    app_name: '',
+    hide_branding: false,
+    custom_domain: '',
+    favicon_url: '',
+  })
+
+  useEffect(() => {
+    if (wl) {
+      setForm({
+        primary_color: wl.primary_color || '#6366f1',
+        app_name: wl.app_name || '',
+        hide_branding: wl.hide_branding || false,
+        custom_domain: wl.custom_domain || '',
+        favicon_url: wl.favicon_url || '',
+      })
+    }
+  }, [wl])
+
+  const mutation = useMutation({
+    mutationFn: (data: typeof form) => api.patch('/profile/white-label', data),
+    onSuccess: () => {
+      refetchWl()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    },
+  })
+
+  const [saved, setSaved] = useState(false)
+
+  return (
+    <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
+      <div className="flex items-center gap-2">
+        <Palette className="h-4 w-4 text-gray-400" />
+        <h2 className="text-base font-semibold text-gray-900">White Label</h2>
+      </div>
+      <p className="text-sm text-gray-500">Personaliza la apariencia de tu plataforma</p>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Color primario</label>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={form.primary_color}
+            onChange={e => setForm({ ...form, primary_color: e.target.value })}
+            className="h-9 w-9 rounded border border-gray-300 cursor-pointer"
+          />
+          <input
+            type="text"
+            value={form.primary_color}
+            onChange={e => setForm({ ...form, primary_color: e.target.value })}
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de la aplicación</label>
+        <input
+          type="text"
+          value={form.app_name}
+          onChange={e => setForm({ ...form, app_name: e.target.value })}
+          placeholder="Ej: Mi Radio"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        />
+      </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={form.hide_branding}
+          onChange={e => setForm({ ...form, hide_branding: e.target.checked })}
+          className="rounded"
+        />
+        <span>Ocultar marca IaRadio</span>
+      </label>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Dominio personalizado</label>
+        <div className="relative">
+          <input
+            type="text"
+            value={form.custom_domain}
+            onChange={e => setForm({ ...form, custom_domain: e.target.value })}
+            placeholder="ejemplo.com"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm pr-24"
+          />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+            Próximamente
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">URL del Favicon</label>
+        <input
+          type="url"
+          value={form.favicon_url}
+          onChange={e => setForm({ ...form, favicon_url: e.target.value })}
+          placeholder="https://ejemplo.com/favicon.ico"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        />
+      </div>
+
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => mutation.mutate(form)}
+          disabled={mutation.isPending}
+          className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60 transition-colors"
+        >
+          <Save className="h-4 w-4" />
+          {mutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+        </button>
+        {saved && (
+          <span className="text-sm font-medium text-green-600">¡Cambios guardados correctamente!</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+function ApiKeysSection() {
+  const { data: apiKeys, refetch: refetchKeys } = useQuery({
+    queryKey: ['api-keys'],
+    queryFn: () => api.get('/api-keys').then(r => r.data),
+  })
+
+  const [showCreate, setShowCreate] = useState(false)
+  const [newKey, setNewKey] = useState({ name: '', scopes: [] as string[] })
+  const [createdKey, setCreatedKey] = useState<string | null>(null)
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof newKey) => api.post('/api-keys', data),
+    onSuccess: (res) => {
+      setCreatedKey(res.data.key)
+      setNewKey({ name: '', scopes: [] })
+      refetchKeys()
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/api-keys/${id}`),
+    onSuccess: () => refetchKeys(),
+  })
+
+  const deactivateMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/api-keys/${id}/deactivate`),
+    onSuccess: () => refetchKeys(),
+  })
+
+  const toggleScope = (scope: string) => {
+    setNewKey(prev => ({
+      ...prev,
+      scopes: prev.scopes.includes(scope) ? prev.scopes.filter(s => s !== scope) : [...prev.scopes, scope],
+    }))
+  }
+
+  const [copiedKey, setCopiedKey] = useState(false)
+
+  return (
+    <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
+      <div className="flex items-center gap-2">
+        <Key className="h-4 w-4 text-gray-400" />
+        <h2 className="text-base font-semibold text-gray-900">API Keys</h2>
+      </div>
+      <p className="text-sm text-gray-500">Crea y gestiona claves de API para acceder a la API pública.</p>
+
+      {apiKeys?.map((ak: any) => (
+        <div key={ak.id} className="flex items-start gap-3 rounded-lg border border-gray-200 p-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-900">{ak.name}</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${ak.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                {ak.active ? 'Activa' : 'Inactiva'}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 font-mono mt-0.5">{ak.prefix}...</p>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {ak.scopes?.map((s: string) => (
+                <span key={s} className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">{s}</span>
+              ))}
+            </div>
+            {ak.last_used_at && (
+              <p className="text-xs text-gray-400 mt-0.5">Último uso: {new Date(ak.last_used_at).toLocaleDateString()}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {ak.active && (
+              <button
+                onClick={() => deactivateMutation.mutate(ak.id)}
+                className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+              >
+                Desactivar
+              </button>
+            )}
+            <button
+              onClick={() => { if (confirm('¿Eliminar API key?')) deleteMutation.mutate(ak.id) }}
+              className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {createdKey && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">¡Guarda esta clave! No se mostrará de nuevo.</p>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="flex-1 text-xs bg-white border border-amber-200 rounded px-2 py-1 font-mono break-all">{createdKey}</code>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(createdKey); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000) }}
+                  className="shrink-0 text-xs px-2 py-1 rounded bg-amber-600 text-white hover:bg-amber-700"
+                >
+                  {copiedKey ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </button>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setCreatedKey(null)}
+            className="text-xs text-amber-700 underline"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
+      {showCreate ? (
+        <div className="space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50">
+          <input
+            type="text"
+            placeholder="Nombre de la API key"
+            value={newKey.name}
+            onChange={e => setNewKey({ ...newKey, name: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Permisos</label>
+            <div className="flex flex-wrap gap-2">
+              {AVAILABLE_SCOPES.map(sc => (
+                <label key={sc.value} className="flex items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={newKey.scopes.includes(sc.value)}
+                    onChange={() => toggleScope(sc.value)}
+                    className="rounded"
+                  />
+                  {sc.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => createMutation.mutate(newKey)}
+              disabled={!newKey.name || createMutation.isPending}
+              className="text-sm px-3 py-1.5 rounded-lg bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
+            >
+              {createMutation.isPending ? 'Creando...' : 'Crear'}
+            </button>
+            <button onClick={() => setShowCreate(false)} className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700"
+        >
+          <Plus className="h-4 w-4" /> Crear API key
+        </button>
+      )}
+    </div>
+  )
+}
+
 
 export default function SettingsPage() {
   const { user, setUser } = useAuth()
@@ -401,6 +856,15 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* Webhooks */}
+      <WebhooksSection />
+
+      {/* White Label */}
+      <WhiteLabelSection />
+
+      {/* API Keys */}
+      <ApiKeysSection />
 
       {/* Music attribution — required by Kevin MacLeod CC BY 3.0 */}
       <div className="rounded-xl border border-gray-100 bg-gray-50 px-6 py-4">

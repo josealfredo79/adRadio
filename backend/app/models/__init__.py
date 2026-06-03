@@ -13,6 +13,8 @@ from app.models.template import MessageTemplate
 from app.models.team_member import TeamMember
 from app.models.automation import AutomationFlow, AutomationStep, AutomationEnrollment
 from app.models.customer_story import CustomerStory
+from app.models.user_webhook import UserWebhook
+from app.models.api_key import ApiKey
 
 __all__ = [
     "User",
@@ -32,4 +34,6 @@ __all__ = [
     "AutomationStep",
     "AutomationEnrollment",
     "CustomerStory",
+    "UserWebhook",
+    "ApiKey",
 ]

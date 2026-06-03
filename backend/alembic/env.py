@@ -19,6 +19,8 @@ from app.models.appointment import Appointment  # noqa: F401
 from app.models.order import Order  # noqa: F401
 from app.models.coupon import Coupon  # noqa: F401
 from app.models.customer_story import CustomerStory  # noqa: F401
+from app.models.user_webhook import UserWebhook  # noqa: F401
+from app.models.api_key import ApiKey  # noqa: F401
 from app.database import Base
 from app.config import settings
 

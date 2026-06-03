@@ -138,3 +138,124 @@ async def send_new_order_email(
     subject = f"🛒 Nuevo pedido #{order_number:04d} — {business_name}"
     return await send_email(to, subject, html)
 
+
+async def send_campaign_sent_email(
+    to: str,
+    business_name: str,
+    campaign_name: str,
+    sent_count: int,
+) -> bool:
+    """Notify the advertiser that their campaign has started sending."""
+    html = f"""
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="background:linear-gradient(135deg,#6366f1,#a855f7);padding:24px 28px">
+        <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800">
+          📢 Campaña enviada
+        </h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.8);font-size:14px">{business_name}</p>
+      </div>
+      <div style="padding:24px 28px">
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-bottom:16px">
+          <p style="margin:0 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8">Campaña</p>
+          <p style="margin:0;font-size:18px;font-weight:700;color:#1e293b">{campaign_name}</p>
+        </div>
+        <div style="background:#f0fdf4;border-radius:8px;padding:16px;text-align:center">
+          <p style="margin:0;font-size:32px;font-weight:800;color:#16a34a">{sent_count}</p>
+          <p style="margin:0;font-size:13px;color:#64748b">mensajes enviados</p>
+        </div>
+      </div>
+      <div style="background:#f8fafc;padding:16px 28px;border-top:1px solid #e2e8f0">
+        <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center">
+          Puedes ver el progreso en tu panel de IaRadio.
+        </p>
+      </div>
+    </div>
+    """
+    subject = f"📢 Campaña enviada — {campaign_name}"
+    return await send_email(to, subject, html)
+
+
+async def send_campaign_completed_email(
+    to: str,
+    business_name: str,
+    campaign_name: str,
+    stats_dict: dict,
+) -> bool:
+    """Notify the advertiser that their campaign has completed with stats."""
+    sent = stats_dict.get("sent", 0)
+    delivered = stats_dict.get("delivered", 0)
+    replied = stats_dict.get("replied", 0)
+    html = f"""
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="background:linear-gradient(135deg,#6366f1,#a855f7);padding:24px 28px">
+        <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800">
+          ✅ Campaña finalizada
+        </h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.8);font-size:14px">{business_name}</p>
+      </div>
+      <div style="padding:24px 28px">
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-bottom:16px">
+          <p style="margin:0 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8">Campaña</p>
+          <p style="margin:0;font-size:18px;font-weight:700;color:#1e293b">{campaign_name}</p>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <tr>
+            <td style="padding:8px 0;color:#64748b">📤 Enviados</td>
+            <td style="padding:8px 0;font-weight:700;color:#1e293b;text-align:right">{sent}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;color:#64748b">✅ Entregados</td>
+            <td style="padding:8px 0;font-weight:700;color:#16a34a;text-align:right">{delivered}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;color:#64748b">💬 Respondidos</td>
+            <td style="padding:8px 0;font-weight:700;color:#f59e0b;text-align:right">{replied}</td>
+          </tr>
+        </table>
+      </div>
+      <div style="background:#f8fafc;padding:16px 28px;border-top:1px solid #e2e8f0">
+        <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center">
+          Revisa las métricas detalladas en tu panel de IaRadio.
+        </p>
+      </div>
+    </div>
+    """
+    subject = f"✅ Campaña finalizada — {campaign_name}"
+    return await send_email(to, subject, html)
+
+
+async def send_campaign_failed_email(
+    to: str,
+    business_name: str,
+    campaign_name: str,
+    error: str,
+) -> bool:
+    """Notify the advertiser that their campaign has failed."""
+    html = f"""
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="background:linear-gradient(135deg,#ef4444,#dc2626);padding:24px 28px">
+        <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800">
+          ❌ Campaña fallida
+        </h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.8);font-size:14px">{business_name}</p>
+      </div>
+      <div style="padding:24px 28px">
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-bottom:16px">
+          <p style="margin:0 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8">Campaña</p>
+          <p style="margin:0;font-size:18px;font-weight:700;color:#1e293b">{campaign_name}</p>
+        </div>
+        <div style="background:#fef2f2;border-radius:8px;padding:16px;border:1px solid #fecaca">
+          <p style="margin:0 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#dc2626">Error</p>
+          <p style="margin:0;font-size:14px;color:#991b1b">{error}</p>
+        </div>
+      </div>
+      <div style="background:#f8fafc;padding:16px 28px;border-top:1px solid #e2e8f0">
+        <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center">
+          Puedes intentarlo de nuevo desde tu panel de IaRadio.
+        </p>
+      </div>
+    </div>
+    """
+    subject = f"❌ Campaña fallida — {campaign_name}"
+    return await send_email(to, subject, html)
+
