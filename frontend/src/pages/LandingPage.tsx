@@ -211,7 +211,7 @@ export default function LandingPage() {
           100% { background-position: 200% center; }
         }
         .text-shimmer {
-          background: linear-gradient(90deg, #7C3AED, #6366f1, #a855f7, #7C3AED);
+          background: linear-gradient(90deg, #674CC4, #6366f1, #a855f7, #674CC4);
           background-size: 200% auto;
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
@@ -242,7 +242,7 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-50 glass">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#6366F1] shadow-lg shadow-indigo-500/30">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#674CC4] to-[#6366F1] shadow-lg shadow-indigo-500/30">
               <Radio className="h-4.5 w-4.5 text-white" />
             </div>
             <span className="text-lg font-black tracking-tight">IaRadio</span>
@@ -258,7 +258,7 @@ export default function LandingPage() {
             </Link>
             <Link
               to="/register"
-              className="rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#6366F1] px-5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105 transition-all"
+              className="rounded-xl bg-gradient-to-r from-[#674CC4] to-[#6366F1] px-5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105 transition-all"
             >
               Prueba gratis →
             </Link>
@@ -266,71 +266,97 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* ─── HERO (Hostinger-style) ─── */}
-      <section className="relative px-5 pt-28 pb-28 overflow-hidden min-h-[90vh] flex items-center">
-        {/* Mesh bg inmersivo */}
-        <div className="absolute inset-0 mesh-bg opacity-60 z-0" />
-        <div className="absolute inset-0 z-0" style={{
-          background: 'radial-gradient(ellipse 50% 40% at 50% 50%, rgba(124,58,237,0.25) 0%, transparent 70%)',
-        }} />
+      {/* ─── HERO — Product Demo + Video Inmersivo ─── */}
+      <section className="relative px-5 pt-24 pb-8 overflow-hidden min-h-[90vh] flex items-center">
+        {/* Video background inmersivo */}
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          poster="https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1200&q=80"
+          className="absolute top-0 left-0 w-full h-full object-cover z-0"
+        >
+          <source src="https://assets.mixkit.co/videos/preview/mixkit-abstract-digital-network-of-lines-and-lights-41945-large.mp4" type="video/mp4" />
+        </video>
 
-        {/* Dot grid bg purple */}
-        <div className="pointer-events-none absolute inset-0 opacity-[0.12] z-10"
-          style={{backgroundImage: 'radial-gradient(circle, rgba(124,58,237,0.4) 1px, transparent 1px)', backgroundSize: '32px 32px'}} />
+        {/* Overlay oscuro para contraste */}
+        <div className="absolute inset-0 bg-[#06060f]/75 z-[1]" />
 
-        <div className="relative z-20 mx-auto max-w-4xl text-center">
-          {/* Badge */}
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#7C3AED]/30 bg-[#7C3AED]/10 px-4 py-1.5 text-sm font-medium text-[#7C3AED]">
-            <Sparkles className="h-3.5 w-3.5" />
-            Impulsado por Claude IA · Twilio · pgvector
+        {/* Mesh bg overlay para textura */}
+        <div className="absolute inset-0 mesh-bg opacity-30 z-[2]" />
+
+        {/* Dot grid */}
+        <div className="pointer-events-none absolute inset-0 opacity-[0.08] z-[3]"
+          style={{backgroundImage: 'radial-gradient(circle, rgba(103,76,196,0.3) 1px, transparent 1px)', backgroundSize: '32px 32px'}} />
+
+        <div className="relative z-[4] mx-auto max-w-6xl w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-2 items-center gap-12 lg:gap-16">
+            {/* Left: text */}
+            <div>
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#674CC4]/30 bg-[#674CC4]/10 px-4 py-1.5 text-sm font-medium text-[#674CC4]">
+                <Sparkles className="h-3.5 w-3.5" />
+                Impulsado por Claude IA · Twilio · pgvector
+              </div>
+
+              <h1 className="mb-6 text-5xl font-black leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
+                Tu negocio en<br />
+                <span className="text-shimmer">la radio del futuro</span>
+              </h1>
+
+              <p className="mb-8 text-lg text-gray-400 leading-relaxed max-w-lg">
+                Campañas masivas por WhatsApp, bot IA que conoce tu negocio,
+                cuñas de radio generadas en segundos. <strong className="text-white">Todo en una plataforma.</strong>
+              </p>
+
+              <div className="flex flex-wrap gap-3 mb-8">
+                <Link
+                  to="/register"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#674CC4] to-[#6366F1] px-7 py-3.5 text-base font-black text-white shadow-xl shadow-[#674CC4]/30 hover:shadow-[#674CC4]/50 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 glow-purple"
+                >
+                  Empieza gratis
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <a
+                  href="#como-funciona"
+                  className="flex items-center gap-2 rounded-xl glass px-6 py-3.5 text-base font-semibold text-gray-300 hover:text-white hover:border-white/20 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300"
+                >
+                  Ver demo
+                </a>
+              </div>
+
+              <div className="flex flex-wrap gap-5 text-sm text-gray-500">
+                <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Sin tarjeta de crédito</span>
+                <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Cancela cuando quieras</span>
+                <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Configuración en 10 min</span>
+                <span className="flex items-center gap-1.5"><Zap className="h-4 w-4 text-[#674CC4]" /> 15 días gratis</span>
+              </div>
+            </div>
+
+            {/* Right: WhatsApp product demo */}
+            <div className="flex justify-center lg:justify-end">
+              <div className="relative float-anim">
+                <div className="absolute -top-3 -right-3 z-20 inline-flex items-center gap-1.5 rounded-full bg-green-500 px-3 py-1.5 text-[10px] font-bold text-white shadow-lg animate-pulse">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                  Producto en vivo
+                </div>
+                <WhatsAppMockup />
+              </div>
+            </div>
           </div>
 
-          <h1 className="mb-6 text-5xl font-black leading-[1.05] tracking-tight sm:text-7xl">
-            Tu negocio en<br />
-            <span className="text-shimmer">la radio del futuro</span>
-          </h1>
-
-          <p className="mb-10 text-lg text-gray-400 leading-relaxed max-w-2xl mx-auto">
-            Campañas masivas por WhatsApp, bot IA que conoce tu negocio,
-            cuñas de radio generadas en segundos. <strong className="text-white">Todo en una plataforma.</strong>
-          </p>
-
-          <div className="flex flex-wrap justify-center gap-4 mb-10">
-            <Link
-              to="/register"
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#6366F1] px-8 py-4 text-base font-black text-white shadow-xl shadow-[#7C3AED]/30 hover:shadow-[#7C3AED]/50 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 glow-purple"
-            >
-              Empieza gratis
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-            <a
-              href="#como-funciona"
-              className="flex items-center gap-2 rounded-xl glass px-7 py-4 text-base font-semibold text-gray-300 hover:text-white hover:border-white/20 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300"
-            >
-              Ver demo
-            </a>
-          </div>
-
-          {/* Trust strip */}
-          <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-500">
-            <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Sin tarjeta de crédito</span>
-            <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Cancela cuando quieras</span>
-            <span className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-green-500" /> Configuración en 10 min</span>
-            <span className="flex items-center gap-1.5"><Zap className="h-4 w-4 text-[#7C3AED]" /> 15 días gratis</span>
-          </div>
-        </div>
-
-        {/* Stats row */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-4xl px-5">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <AnimatedStat n={2840} suffix="+" label="Negocios activos en México" />
-            <AnimatedStat n={10} suffix=" min" label="Para lanzar tu primera campaña" />
-            <AnimatedStat n={60} suffix="%" label="Cupones canjeados en promedio" />
-            <AnimatedStat n={1200000} suffix="" label="Mensajes enviados este mes" />
-          </div>
-          <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-600">
-            <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            <span><strong className="text-green-400">24</strong> negocios se registraron hoy · Actualizado en vivo</span>
+          {/* Stats row */}
+          <div className="mt-20 max-w-4xl mx-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <AnimatedStat n={2840} suffix="+" label="Negocios activos en México" />
+              <AnimatedStat n={10} suffix=" min" label="Para lanzar tu primera campaña" />
+              <AnimatedStat n={60} suffix="%" label="Cupones canjeados en promedio" />
+              <AnimatedStat n={1200000} suffix="" label="Mensajes enviados este mes" />
+            </div>
+            <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-600">
+              <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span><strong className="text-green-400">24</strong> negocios se registraron hoy · Actualizado en vivo</span>
+            </div>
           </div>
         </div>
       </section>
@@ -367,7 +393,7 @@ export default function LandingPage() {
               </ul>
             </div>
             {/* After */}
-            <div className="rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-[#7C3AED]/10 to-[#6366F1]/5 p-8">
+            <div className="rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-[#674CC4]/10 to-[#6366F1]/5 p-8">
               <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-indigo-500/20 px-3 py-1 text-xs font-bold text-indigo-300 uppercase tracking-widest">
                 ✓ Con IaRadio
               </div>
@@ -515,7 +541,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 items-center">
             <div className="glass rounded-3xl p-6 border border-indigo-500/20">
               <div className="flex items-center gap-3 mb-5">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#6366F1] flex items-center justify-center">
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#674CC4] to-[#6366F1] flex items-center justify-center">
                   <Bot className="h-5 w-5 text-white" />
                 </div>
                 <div>
@@ -657,7 +683,7 @@ export default function LandingPage() {
                 key={plan.key}
                 className={`relative rounded-3xl p-6 flex flex-col transition-all ${
                   plan.popular
-                    ? 'bg-gradient-to-br from-[#7C3AED]/30 to-[#6366F1]/20 border-2 border-[#7C3AED]/60 shadow-2xl shadow-[#7C3AED]/20 scale-[1.03]'
+                    ? 'bg-gradient-to-br from-[#674CC4]/30 to-[#6366F1]/20 border-2 border-[#674CC4]/60 shadow-2xl shadow-[#674CC4]/20 scale-[1.03]'
                     : 'glass'
                 }`}
               >
@@ -685,7 +711,7 @@ export default function LandingPage() {
                 {/* Offer + USD row */}
                 <div className="flex items-center gap-3 mb-5">
                   <span className="text-[10px] text-gray-600">≈ ${plan.price_usd} USD</span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[#7C3AED]/15 px-2 py-0.5 text-[9px] font-bold text-[#7C3AED]">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#674CC4]/15 px-2 py-0.5 text-[9px] font-bold text-[#674CC4]">
                     <Zap className="h-2.5 w-2.5" />
                     15 días gratis
                   </span>
@@ -696,7 +722,7 @@ export default function LandingPage() {
                   to="/register"
                   className={`block w-full rounded-xl py-3 text-center text-sm font-black transition-all hover:scale-105 mb-3 ${
                     plan.popular
-                      ? 'bg-gradient-to-r from-[#7C3AED] to-[#6366F1] text-white shadow-lg shadow-[#7C3AED]/30 hover:shadow-[#7C3AED]/50'
+                      ? 'bg-gradient-to-r from-[#674CC4] to-[#6366F1] text-white shadow-lg shadow-[#674CC4]/30 hover:shadow-[#674CC4]/50'
                       : 'glass text-gray-300 hover:text-white hover:border-white/20'
                   }`}
                 >
@@ -705,7 +731,7 @@ export default function LandingPage() {
 
                 {/* Popular badge inline (not floating) */}
                 {plan.popular && (
-                  <div className="text-center text-[10px] font-bold text-[#7C3AED] uppercase tracking-widest mb-5">
+                  <div className="text-center text-[10px] font-bold text-[#674CC4] uppercase tracking-widest mb-5">
                     ⭐ Más popular
                   </div>
                 )}
@@ -722,8 +748,8 @@ export default function LandingPage() {
                     return (
                       <li key={f} className="flex items-center gap-2.5 text-xs">
                         {isHighlight
-                          ? <Sparkles className="h-3.5 w-3.5 text-[#7C3AED] shrink-0" />
-                          : <CheckCircle className="h-3.5 w-3.5 text-[#7C3AED] shrink-0" />
+                          ? <Sparkles className="h-3.5 w-3.5 text-[#674CC4] shrink-0" />
+                          : <CheckCircle className="h-3.5 w-3.5 text-[#674CC4] shrink-0" />
                         }
                         <span className={isHighlight ? 'text-white font-medium' : 'text-gray-300'}>{f}</span>
                       </li>
@@ -798,7 +824,7 @@ export default function LandingPage() {
           </p>
           <Link
             to="/register"
-            className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#6366F1] px-10 py-5 text-lg font-black text-white shadow-2xl shadow-indigo-500/40 hover:shadow-indigo-500/60 hover:scale-105 transition-all glow-purple"
+            className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-[#674CC4] to-[#6366F1] px-10 py-5 text-lg font-black text-white shadow-2xl shadow-indigo-500/40 hover:shadow-indigo-500/60 hover:scale-105 transition-all glow-purple"
           >
             Crear mi cuenta gratis
             <ArrowRight className="h-5 w-5" />
@@ -816,7 +842,7 @@ export default function LandingPage() {
       <footer className="border-t border-white/5 px-5 py-10">
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#7C3AED] to-[#6366F1]">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#674CC4] to-[#6366F1]">
               <Radio className="h-3.5 w-3.5 text-white" />
             </div>
             <span className="font-black text-white">IaRadio</span>
