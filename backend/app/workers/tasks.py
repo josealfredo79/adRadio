@@ -31,6 +31,7 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
     async def _send():
         from app.database import AsyncSessionLocal
         from app.models.message import Message
+        from app.models.user import User
         from app.services.twilio_service import send_whatsapp
         from sqlalchemy import select
 
@@ -42,6 +43,17 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
             if msg:
                 from_number = await _get_advertiser_whatsapp_number(db, msg.advertiser_id)
 
+                # Enforce message quota
+                adv_res = await db.execute(select(User).where(User.id == msg.advertiser_id))
+                advertiser = adv_res.scalar_one_or_none()
+                if not advertiser or advertiser.messages_remaining <= 0:
+                    msg.status = "failed"
+                    msg.error_code = "quota_exceeded"
+                    msg.sent_at = None
+                    await db.commit()
+                    logger.warning("[QUOTA] %s — no messages remaining, message %s dropped", msg.advertiser_id, message_id)
+                    return
+
             sid, error = await send_whatsapp(to, body, from_number=from_number)
 
             if msg:
@@ -49,6 +61,8 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
                 msg.twilio_sid = sid
                 msg.error_code = error
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
+                if sid and advertiser:
+                    advertiser.messages_remaining -= 1
                 await db.commit()
 
             # Twilio rate-limit error codes: 63006, 63007, 63016 → retry with backoff
@@ -68,6 +82,7 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
     async def _send():
         from app.database import AsyncSessionLocal
         from app.models.message import Message
+        from app.models.user import User
         from app.services.twilio_service import send_whatsapp_media
         from sqlalchemy import select
 
@@ -76,8 +91,20 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
             msg = result.scalar_one_or_none()
 
             from_number = None
+            advertiser = None
             if msg:
                 from_number = await _get_advertiser_whatsapp_number(db, msg.advertiser_id)
+
+                # Enforce message quota
+                adv_res = await db.execute(select(User).where(User.id == msg.advertiser_id))
+                advertiser = adv_res.scalar_one_or_none()
+                if not advertiser or advertiser.messages_remaining <= 0:
+                    msg.status = "failed"
+                    msg.error_code = "quota_exceeded"
+                    msg.sent_at = None
+                    await db.commit()
+                    logger.warning("[QUOTA] %s — no messages remaining, voice note %s dropped", msg.advertiser_id, message_id)
+                    return
 
             sid, error = await send_whatsapp_media(to, audio_url, body=caption, from_number=from_number)
 
@@ -86,6 +113,8 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
                 msg.twilio_sid = sid
                 msg.error_code = error
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
+                if sid and advertiser:
+                    advertiser.messages_remaining -= 1
                 await db.commit()
 
             if error and any(code in str(error) for code in ("63006", "63007", "63016", "rate")):
@@ -1088,7 +1117,20 @@ def process_automation_enrollments():
                 advertiser = user_res.scalar_one_or_none()
                 from_number = advertiser.whatsapp_number if advertiser else None
 
+                # Enforce message quota
+                if not advertiser or advertiser.messages_remaining <= 0:
+                    logger.warning(
+                        "[AUTOMATION-QUOTA] %s — no messages remaining, skipping step %d for contact %s",
+                        enrollment.advertiser_id, step.position, contact.id,
+                    )
+                    enrollment.status = "cancelled"
+                    continue
+
                 sid, error = await send_whatsapp(contact.phone, step.message, from_number=from_number)
+
+                # Decrement quota on successful send
+                if sid:
+                    advertiser.messages_remaining -= 1
 
                 # Save message record
                 msg = Message(

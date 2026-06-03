@@ -761,6 +761,23 @@ async def stripe_webhook(
             db.add(txn)
             await db.commit()
 
+    elif event_type == "customer.subscription.updated":
+        customer_id = data.get("customer")
+        status = data.get("status")
+        result = await db.execute(
+            select(User).where(User.stripe_customer_id == customer_id)
+        )
+        user = result.scalar_one_or_none()
+        if user and status in ("past_due", "incomplete", "unpaid", "canceled"):
+            user.subscription_status = "suspended" if status in ("past_due", "unpaid") else "churned"
+            user.messages_remaining = 0
+            await release_pool_number(user, db)
+            await db.commit()
+            logger.info(
+                "[WEBHOOK] Subscription %s for user %s — status=%s, pool released",
+                event_type, customer_id, status,
+            )
+
     elif event_type == "customer.subscription.deleted":
         customer_id = data.get("customer")
         result = await db.execute(

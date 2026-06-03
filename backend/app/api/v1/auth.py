@@ -22,6 +22,7 @@ from app.core.security import (
 from app.database import get_db
 from app.models.user import User
 from app.services.number_pool_service import assign_pool_number
+from app.services.demo_data_service import seed_demo_data
 from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -91,6 +92,9 @@ async def verify_email(
 
     # Assign a pool number if available (enables inbound bot for this user)
     await assign_pool_number(user, db)
+
+    # Seed demo data so dashboard is not empty
+    await seed_demo_data(user.id, user.business_name or "Mi negocio", db)
 
     await redis.delete(f"email_verify:{body.email}")
 

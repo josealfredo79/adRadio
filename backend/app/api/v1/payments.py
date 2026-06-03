@@ -82,6 +82,38 @@ async def create_checkout_session(
     return {"checkout_url": session.url}
 
 
+@router.post("/cancel-subscription")
+async def cancel_subscription(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cancel the user's active Stripe subscription at period end and release pool number."""
+    from app.services.number_pool_service import release_pool_number
+
+    if current_user.subscription_status != "active" or not current_user.stripe_customer_id:
+        raise HTTPException(status_code=400, detail="No tienes una suscripción activa")
+
+    # Find active Stripe subscription
+    subs = stripe_lib.Subscription.list(
+        customer=current_user.stripe_customer_id,
+        status="active",
+        limit=1,
+    )
+    if not subs.data:
+        raise HTTPException(status_code=400, detail="No se encontró suscripción activa en Stripe")
+
+    sub = subs.data[0]
+    # Cancel at period end so they keep access for the paid period
+    stripe_lib.Subscription.modify(sub.id, cancel_at_period_end=True)
+
+    current_user.subscription_status = "churned"
+    current_user.messages_remaining = 0
+    await release_pool_number(current_user, db)
+    await db.commit()
+
+    return {"message": "Suscripción cancelada. Seguirás teniendo acceso hasta el final del período de facturación."}
+
+
 @router.get("/transactions")
 async def list_transactions(
     db: AsyncSession = Depends(get_db),

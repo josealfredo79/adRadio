@@ -59,6 +59,11 @@ class User(Base):
     google_refresh_token: Mapped[str | None] = mapped_column(Text)
     google_calendar_connected: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
+    # Widget customization
+    widget_color: Mapped[str] = mapped_column(String(7), default="#25D366", server_default="#25D366")
+    widget_greeting: Mapped[str] = mapped_column(String(200), default="¡Hola! ¿En qué puedo ayudarte?", server_default="¡Hola! ¿En qué puedo ayudarte?")
+    widget_position: Mapped[str] = mapped_column(String(10), default="right", server_default="right")
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
