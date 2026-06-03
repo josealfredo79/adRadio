@@ -536,37 +536,39 @@ def schedule_campaign(self, campaign_id: str):
         run_async(_process())
     except Exception as exc:
         # ── Email notification on failure ──────────────────────────────────────
-        try:
-            from app.core.email import send_campaign_failed_email
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(
-                    select(Campaign).where(Campaign.id == uuid.UUID(campaign_id))
-                )
-                c = result.scalar_one_or_none()
-                if c:
-                    adv_res = await db.execute(select(User).where(User.id == c.advertiser_id))
-                    adv = adv_res.scalar_one_or_none()
-                    if adv and adv.email:
-                        await send_campaign_failed_email(
-                            to=adv.email,
-                            business_name=adv.business_name or "Mi negocio",
-                            campaign_name=c.name,
-                            error=str(exc)[:500],
-                        )
-                    # ── Webhook dispatch on failure ──────────────────────────────
-                    try:
-                        from app.services.webhook_dispatcher import dispatch_webhook_event
-                        await dispatch_webhook_event(
-                            "campaign.failed",
-                            {"id": str(c.id), "name": c.name, "error": str(exc)[:500]},
-                            db,
-                        )
-                    except Exception as wh_err:
-                        logger.warning("[CAMPAIGN-WEBHOOK] Failed to dispatch campaign.failed: %s", wh_err)
-                    # ──────────────────────────────────────────────────────────────
-        except Exception as email_err:
-            logger.warning("[CAMPAIGN-EMAIL] Failed to send failure notification: %s", email_err)
-        # ────────────────────────────────────────────────────────────────────────
+        async def _notify_failure():
+            try:
+                from app.core.email import send_campaign_failed_email
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(
+                        select(Campaign).where(Campaign.id == uuid.UUID(campaign_id))
+                    )
+                    c = result.scalar_one_or_none()
+                    if c:
+                        adv_res = await db.execute(select(User).where(User.id == c.advertiser_id))
+                        adv = adv_res.scalar_one_or_none()
+                        if adv and adv.email:
+                            await send_campaign_failed_email(
+                                to=adv.email,
+                                business_name=adv.business_name or "Mi negocio",
+                                campaign_name=c.name,
+                                error=str(exc)[:500],
+                            )
+                        # ── Webhook dispatch on failure ──────────────────────────────
+                        try:
+                            from app.services.webhook_dispatcher import dispatch_webhook_event
+                            await dispatch_webhook_event(
+                                "campaign.failed",
+                                {"id": str(c.id), "name": c.name, "error": str(exc)[:500]},
+                                db,
+                            )
+                        except Exception as wh_err:
+                            logger.warning("[CAMPAIGN-WEBHOOK] Failed to dispatch campaign.failed: %s", wh_err)
+            except Exception as email_err:
+                logger.warning("[CAMPAIGN-EMAIL] Failed to send failure notification: %s", email_err)
+            # ────────────────────────────────────────────────────────────────────────
+
+        run_async(_notify_failure())
         raise self.retry(exc=exc)
 
 

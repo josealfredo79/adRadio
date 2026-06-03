@@ -23,3 +23,70 @@
     font-family: 'Outfit', sans-serif;
   }
 }
+
+@media print {
+  nav, .sidebar, header, footer,
+  button, .btn, [class*="button"],
+  noindex, .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+  }
+
+  main, [class*="content"], .print-area {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  [class*="rounded-"], [class*="card"], [class*="bg-white"] {
+    background: white !important;
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    font-size: 10pt;
+  }
+  th {
+    background: #f5f5f5 !important;
+    font-weight: bold;
+  }
+
+  [class*="grid"] {
+    display: block !important;
+  }
+
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+
+  a[href]:after {
+    content: " (" attr(href) ")";
+    font-size: 8pt;
+    color: #666;
+  }
+
+  body:after {
+    content: "Generado por IaRadio";
+    position: fixed;
+    bottom: 1cm;
+    right: 1cm;
+    font-size: 8pt;
+    color: #999;
+  }
+}

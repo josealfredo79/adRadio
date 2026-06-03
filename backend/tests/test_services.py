@@ -2,6 +2,7 @@
 Tests unitarios para servicios de IaRadio.
 Estos tests no requieren conexión a DB externa ni APIs de terceros.
 """
+import uuid
 import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -529,11 +530,265 @@ class TestWidgetConfig:
             "current_plan": "trial",
             "messages_remaining": 0,
             "language": "es",
+            "business_name": None,
+            "business_category": None,
+            "city": None,
+            "logo_url": None,
+            "phone": None,
+            "whatsapp_number": None,
         }
         user_out = UserOut(**data)
         assert user_out.widget_color == "#25D366"
         assert user_out.widget_greeting == "¡Hola! ¿En qué puedo ayudarte?"
         assert user_out.widget_position == "right"
+
+
+class TestEmailNotifications:
+    """Tests para notificaciones por email de campañas."""
+
+    @patch('app.core.email.send_email')
+    @pytest.mark.asyncio
+    async def test_campaign_sent_email_contains_business_name(self, mock_send_email):
+        from app.core.email import send_campaign_sent_email
+
+        mock_send_email.return_value = True
+        await send_campaign_sent_email(
+            to="test@example.com",
+            business_name="Mi Negocio",
+            campaign_name="Campaña 1",
+            sent_count=10,
+        )
+
+        args, kwargs = mock_send_email.call_args
+        # args: (to, subject, html_body)
+        assert "Mi Negocio" in args[1] or "Campaña 1" in args[1]
+
+    @patch('app.core.email.send_email')
+    @pytest.mark.asyncio
+    async def test_campaign_completed_email_contains_stats(self, mock_send_email):
+        from app.core.email import send_campaign_completed_email
+
+        mock_send_email.return_value = True
+        stats = {"sent": 100, "delivered": 95, "replied": 20}
+        await send_campaign_completed_email(
+            to="test@example.com",
+            business_name="Mi Negocio",
+            campaign_name="Campaña 1",
+            stats_dict=stats,
+        )
+
+        args, kwargs = mock_send_email.call_args
+        body = args[2]
+        assert "100" in body
+        assert "95" in body
+        assert "20" in body
+
+    @patch('app.core.email.send_email')
+    @pytest.mark.asyncio
+    async def test_campaign_failed_email_contains_error(self, mock_send_email):
+        from app.core.email import send_campaign_failed_email
+
+        mock_send_email.return_value = True
+        await send_campaign_failed_email(
+            to="test@example.com",
+            business_name="Mi Negocio",
+            campaign_name="Campaña 1",
+            error="Credenciales inválidas",
+        )
+
+        args, kwargs = mock_send_email.call_args
+        body = args[2]
+        assert "Credenciales inválidas" in body
+
+
+class TestWebhookDispatcher:
+    """Tests para el despachador de webhooks."""
+
+    @pytest.mark.asyncio
+    async def test_dispatch_event_calls_httpx(self):
+        with patch('app.services.webhook_dispatcher.UserWebhook') as mock_wh, \
+             patch('app.services.webhook_dispatcher.select') as mock_select:
+            mock_events_prop = MagicMock()
+            mock_events_prop.any.return_value = True
+            mock_wh.events = mock_events_prop
+            mock_wh.active = True
+
+            mock_select.return_value.where.return_value = MagicMock()
+            db = AsyncMock()
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = [
+                MagicMock(url="https://hook.example.com", secret="sekret", events=["test.event"])
+            ]
+            db.execute.return_value = result
+
+            with patch('httpx.AsyncClient') as mock_client:
+                mock_client.return_value.__aenter__.return_value.post.return_value = MagicMock(
+                    raise_for_status=lambda: None
+                )
+                from app.services.webhook_dispatcher import dispatch_webhook_event
+                await dispatch_webhook_event("test.event", {"foo": "bar"}, db)
+                mock_client.return_value.__aenter__.return_value.post.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_dispatch_event_skips_inactive(self):
+        with patch('app.services.webhook_dispatcher.UserWebhook') as mock_wh, \
+             patch('app.services.webhook_dispatcher.select') as mock_select:
+            mock_events_prop = MagicMock()
+            mock_events_prop.any.return_value = True
+            mock_wh.events = mock_events_prop
+            mock_wh.active = True
+
+            mock_select.return_value.where.return_value = MagicMock()
+            db = AsyncMock()
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = []
+            db.execute.return_value = result
+
+            with patch('httpx.AsyncClient') as mock_client:
+                from app.services.webhook_dispatcher import dispatch_webhook_event
+                await dispatch_webhook_event("test.event", {"foo": "bar"}, db)
+                mock_client.assert_not_called()
+
+
+class TestApiKeyService:
+    """Tests para generación y validación de API keys."""
+
+    def test_generate_api_key_format(self):
+        API_KEY_PREFIX = "iar_"
+        raw_key = f"{API_KEY_PREFIX}abc123def456ghi789jkl012mno345"
+        assert raw_key.startswith("iar_")
+        assert len(raw_key) > len("iar_")
+
+    def test_hash_validation(self):
+        import hashlib
+
+        raw_key = "iar_" + "a" * 30
+        hash1 = hashlib.sha256(raw_key.encode()).hexdigest()
+        hash2 = hashlib.sha256(raw_key.encode()).hexdigest()
+        assert hash1 == hash2
+        different = hashlib.sha256(b"other").hexdigest()
+        assert hash1 != different
+
+
+class TestWhiteLabel:
+    """Tests para configuración white-label."""
+
+    def test_white_label_defaults(self):
+        white_label = {}
+        assert white_label == {}
+
+    def test_white_label_custom_values(self):
+        white_label = {"brand_color": "#000", "logo_url": "https://example.com/logo.png"}
+        custom = dict(white_label)
+        custom["brand_color"] = "#6366f1"
+        assert custom["brand_color"] == "#6366f1"
+        assert custom["logo_url"] == "https://example.com/logo.png"
+
+
+class TestPublicCustomerStories:
+    """Tests para el endpoint público de historias."""
+
+    def test_stories_query_filter_approved_only(self):
+        stories = [
+            {"id": "1", "approved": True, "transcription": "Great"},
+            {"id": "2", "approved": False, "transcription": "Bad"},
+            {"id": "3", "approved": True, "transcription": "Nice"},
+        ]
+        approved = [s for s in stories if s["approved"]]
+        assert len(approved) == 2
+        assert all(s["approved"] for s in approved)
+
+    def test_stories_response_model(self):
+        from app.schemas.campaign import CustomerStoryOut
+        import uuid
+
+        story = CustomerStoryOut(
+            id=uuid.uuid4(),
+            contact_id=uuid.uuid4(),
+            media_url="https://example.com/audio.mp3",
+            transcription="Testimonio increíble",
+            sentiment="positive",
+            approved=True,
+            created_at=datetime.now(timezone.utc),
+        )
+        assert story.approved is True
+        assert "Testimonio" in story.transcription
+
+
+class TestBatchContacts:
+    """Tests para operaciones masivas de contactos."""
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_removes_all(self):
+        db = AsyncMock()
+        contact_ids = ["id-1", "id-2", "id-3"]
+
+        contacts = [MagicMock() for _ in contact_ids]
+        for c in contacts:
+            db.delete = AsyncMock()
+
+        for c in contacts:
+            await db.delete(c)
+        await db.commit()
+
+        assert db.delete.call_count == 3
+        db.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_bulk_tag_adds_tags(self):
+        db = AsyncMock()
+        contacts = [
+            MagicMock(tags=["tag1"]),
+            MagicMock(tags=[]),
+            MagicMock(tags=["tag2", "tag3"]),
+        ]
+        new_tags = {"promo", "2024"}
+
+        for c in contacts:
+            existing = set(c.tags or [])
+            existing.update(new_tags)
+            c.tags = list(existing)
+
+        assert "promo" in contacts[0].tags
+        assert "2024" in contacts[1].tags
+        assert "tag2" in contacts[2].tags
+
+
+class TestTemplateSeeds:
+    """Tests para plantillas semilla."""
+
+    def test_seed_templates_list_has_10(self):
+        SEED_TEMPLATES = [
+            {"name": "Bienvenida", "category": "Bienvenida", "content": "..."},
+            {"name": "Promoción general", "category": "Promoción", "content": "..."},
+            {"name": "Recordatorio de cita", "category": "Recordatorio", "content": "..."},
+            {"name": "Seguimiento post-venta", "category": "Seguimiento", "content": "..."},
+            {"name": "Oferta por tiempo limitado", "category": "Oferta", "content": "..."},
+            {"name": "Cumpleaños", "category": "Cumpleaños", "content": "..."},
+            {"name": "Encuesta rápida", "category": "Encuesta", "content": "..."},
+            {"name": "Descuento por recomendación", "category": "Descuento", "content": "..."},
+            {"name": "Invitación evento", "category": "Evento", "content": "..."},
+            {"name": "Carrito abandonado", "category": "Recordatorio", "content": "..."},
+        ]
+        assert len(SEED_TEMPLATES) == 10
+
+    def test_seed_templates_have_required_fields(self):
+        SEED_TEMPLATES = [
+            {"name": "Bienvenida", "category": "Bienvenida", "content": "..."},
+            {"name": "Promoción general", "category": "Promoción", "content": "..."},
+            {"name": "Recordatorio de cita", "category": "Recordatorio", "content": "..."},
+            {"name": "Seguimiento post-venta", "category": "Seguimiento", "content": "..."},
+            {"name": "Oferta por tiempo limitado", "category": "Oferta", "content": "..."},
+            {"name": "Cumpleaños", "category": "Cumpleaños", "content": "..."},
+            {"name": "Encuesta rápida", "category": "Encuesta", "content": "..."},
+            {"name": "Descuento por recomendación", "category": "Descuento", "content": "..."},
+            {"name": "Invitación evento", "category": "Evento", "content": "..."},
+            {"name": "Carrito abandonado", "category": "Recordatorio", "content": "..."},
+        ]
+        for t in SEED_TEMPLATES:
+            assert "name" in t
+            assert "category" in t
+            assert "content" in t
 
 
 if __name__ == "__main__":

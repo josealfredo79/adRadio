@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { ShoppingBag, Search, CheckCircle, XCircle, Clock, ChevronDown } from 'lucide-react'
+import PrintButton from '@/components/PrintButton'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import SEO from '@/components/SEO'
@@ -98,10 +99,13 @@ export default function OrdersPage() {
             Pedidos capturados por el bot de WhatsApp
           </p>
         </div>
+        <PrintButton />
       </div>
 
+      <div className="print-area">
+
       {/* Stats strip */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Total</p>
           <p className="mt-1 text-3xl font-bold text-gray-900">{data?.total ?? 0}</p>
@@ -251,6 +255,7 @@ export default function OrdersPage() {
           </ul>
         )}
       </div>
+    </div>
     </div>
     </>
   )

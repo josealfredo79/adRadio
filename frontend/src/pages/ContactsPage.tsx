@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { Users, Plus, Upload, Trash2, Search, Download, Tag, X, Tags, Send, CheckCheck } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
+import PrintButton from '@/components/PrintButton'
 
 interface Contact {
   id: string
@@ -245,6 +246,7 @@ export default function ContactsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <PrintButton />
           <label className={`flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-colors ${isUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
             <Upload className="h-4 w-4" />
             {isUploading ? 'Importando...' : 'Importar CSV'}
@@ -270,6 +272,7 @@ export default function ContactsPage() {
         </div>
       </div>
 
+      <div className="print-area">
       {/* Upload feedback */}
       {uploadMsg && (
         <div className={`rounded-lg border px-4 py-3 text-sm ${
@@ -362,120 +365,171 @@ export default function ContactsPage() {
             <p className="text-xs mt-1">Importa un CSV o agrega contactos manualmente</p>
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
-              <tr>
-                <th className="px-4 py-3 w-10">
-                  <input
-                    type="checkbox"
-                    checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                    onChange={toggleSelectAll}
-                    className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
-                  />
-                </th>
-                <th className="px-6 py-3 text-left">Nombre</th>
-                <th className="px-6 py-3 text-left">Teléfono</th>
-                <th className="px-6 py-3 text-left">Email</th>
-                <th className="px-6 py-3 text-left">Ciudad</th>
-                <th className="px-6 py-3 text-left">Tags</th>
-                <th className="px-6 py-3 text-left">Estado</th>
-                <th className="px-6 py-3 text-left">Agregado</th>
-                <th className="px-6 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map((contact) => (
-                <tr key={contact.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(contact.id) ? 'bg-brand-50/50' : ''}`}>
-                  <td className="px-4 py-4">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <tr>
+                  <th className="px-4 py-3 w-10">
                     <input
                       type="checkbox"
-                      checked={selectedIds.has(contact.id)}
-                      onChange={() => toggleSelect(contact.id)}
+                      checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                      onChange={toggleSelectAll}
                       className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
                     />
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{contact.name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{contact.phone}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{contact.email ?? '—'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{contact.city ?? '—'}</td>
-                  <td className="px-6 py-4">
-                    {editTagsId === contact.id ? (
-                      <div className="flex flex-wrap gap-1 min-w-[160px]">
-                        {editTagsValue.map((t) => (
-                          <span key={t} className="flex items-center gap-0.5 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
-                            {t}
-                            <button onClick={() => setEditTagsValue(editTagsValue.filter((x) => x !== t))} className="ml-0.5 hover:text-red-500">
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
-                        <input
-                          autoFocus
-                          type="text"
-                          value={editTagInput}
-                          onChange={(e) => setEditTagInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTagToEdit() }
-                            if (e.key === 'Escape') setEditTagsId(null)
-                          }}
-                          placeholder="+ tag"
-                          className="w-16 rounded border-0 bg-transparent text-xs text-gray-700 outline-none placeholder-gray-400"
-                        />
-                        <button
-                          onClick={() => updateTagsMutation.mutate({ id: contact.id, tags: editTagsValue })}
-                          className="rounded bg-brand-500 px-2 py-0.5 text-[10px] text-white hover:bg-brand-600"
-                        >
-                          ✓
-                        </button>
-                        <button onClick={() => setEditTagsId(null)} className="text-gray-400 hover:text-gray-600">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div
-                        className="flex flex-wrap gap-1 cursor-pointer group"
-                        onClick={() => { setEditTagsId(contact.id); setEditTagsValue([...contact.tags]); setEditTagInput('') }}
-                        title="Click para editar tags"
-                      >
-                        {contact.tags.length > 0
-                          ? contact.tags.map((t) => (
-                              <span key={t} className="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">
-                                {t}
-                              </span>
-                            ))
-                          : <span className="text-xs text-gray-300 group-hover:text-gray-400">+ tag</span>
-                        }
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      contact.status === 'active'
-                        ? 'bg-green-100 text-green-700'
-                        : contact.status === 'unsubscribed'
-                        ? 'bg-gray-100 text-gray-600'
-                        : 'bg-red-100 text-red-600'
-                    }`}>
-                      {contact.status === 'active' ? 'Activo' : contact.status === 'unsubscribed' ? 'Dado de baja' : 'Bloqueado'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{formatDate(contact.created_at)}</td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => {
-                        if (confirm('¿Eliminar este contacto?')) {
-                          deleteMutation.mutate(contact.id)
-                        }
-                      }}
-                      className="text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
+                  </th>
+                  <th className="px-6 py-3 text-left">Nombre</th>
+                  <th className="px-6 py-3 text-left">Teléfono</th>
+                  <th className="hidden md:table-cell px-6 py-3 text-left">Email</th>
+                  <th className="hidden md:table-cell px-6 py-3 text-left">Ciudad</th>
+                  <th className="px-6 py-3 text-left">Tags</th>
+                  <th className="px-6 py-3 text-left">Estado</th>
+                  <th className="hidden md:table-cell px-6 py-3 text-left">Agregado</th>
+                  <th className="px-6 py-3" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((contact) => (
+                  <Fragment key={contact.id}>
+                  <tr className={`hover:bg-gray-50 transition-colors ${selectedIds.has(contact.id) ? 'bg-brand-50/50' : ''}`}>
+                    <td className="px-4 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(contact.id)}
+                        onChange={() => toggleSelect(contact.id)}
+                        className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{contact.name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{contact.phone}</td>
+                    <td className="hidden md:table-cell px-6 py-4 text-sm text-gray-500">{contact.email ?? '—'}</td>
+                    <td className="hidden md:table-cell px-6 py-4 text-sm text-gray-500">{contact.city ?? '—'}</td>
+                    <td className="px-6 py-4 hidden md:table-cell">
+                      {editTagsId === contact.id ? (
+                        <div className="flex flex-wrap gap-1 min-w-[160px]">
+                          {editTagsValue.map((t) => (
+                            <span key={t} className="flex items-center gap-0.5 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
+                              {t}
+                              <button onClick={() => setEditTagsValue(editTagsValue.filter((x) => x !== t))} className="ml-0.5 hover:text-red-500">
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editTagInput}
+                            onChange={(e) => setEditTagInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTagToEdit() }
+                              if (e.key === 'Escape') setEditTagsId(null)
+                            }}
+                            placeholder="+ tag"
+                            className="w-16 rounded border-0 bg-transparent text-xs text-gray-700 outline-none placeholder-gray-400"
+                          />
+                          <button
+                            onClick={() => updateTagsMutation.mutate({ id: contact.id, tags: editTagsValue })}
+                            className="rounded bg-brand-500 px-2 py-0.5 text-[10px] text-white hover:bg-brand-600"
+                          >
+                            ✓
+                          </button>
+                          <button onClick={() => setEditTagsId(null)} className="text-gray-400 hover:text-gray-600">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          className="flex flex-wrap gap-1 cursor-pointer group"
+                          onClick={() => { setEditTagsId(contact.id); setEditTagsValue([...contact.tags]); setEditTagInput('') }}
+                          title="Click para editar tags"
+                        >
+                          {contact.tags.length > 0
+                            ? contact.tags.map((t) => (
+                                <span key={t} className="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">
+                                  {t}
+                                </span>
+                              ))
+                            : <span className="text-xs text-gray-300 group-hover:text-gray-400">+ tag</span>
+                          }
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        contact.status === 'active'
+                          ? 'bg-green-100 text-green-700'
+                          : contact.status === 'unsubscribed'
+                          ? 'bg-gray-100 text-gray-600'
+                          : 'bg-red-100 text-red-600'
+                      }`}>
+                        {contact.status === 'active' ? 'Activo' : contact.status === 'unsubscribed' ? 'Dado de baja' : 'Bloqueado'}
+                      </span>
+                    </td>
+                    <td className="hidden md:table-cell px-6 py-4 text-sm text-gray-500">{formatDate(contact.created_at)}</td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => {
+                          if (confirm('¿Eliminar este contacto?')) {
+                            deleteMutation.mutate(contact.id)
+                          }
+                        }}
+                        className="text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                  <tr key={`${contact.id}-mobile`} className="md:hidden">
+                    <td colSpan={9} className="px-4 py-3">
+                      <div className="border rounded-xl p-4 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-medium text-gray-900">{contact.name}</div>
+                          <span className={`shrink-0 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            contact.status === 'active'
+                              ? 'bg-green-100 text-green-700'
+                              : contact.status === 'unsubscribed'
+                              ? 'bg-gray-100 text-gray-600'
+                              : 'bg-red-100 text-red-600'
+                          }`}>
+                            {contact.status === 'active' ? 'Activo' : contact.status === 'unsubscribed' ? 'Dado de baja' : 'Bloqueado'}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-500">{contact.phone}</div>
+                        <div className="text-sm text-gray-400">{contact.email ?? '—'}  ·  {contact.city ?? '—'}</div>
+                        <div className="text-xs text-gray-400">Agregado {formatDate(contact.created_at)}</div>
+                        <div className="flex flex-wrap gap-1">
+                          {contact.tags.length > 0
+                            ? contact.tags.map((t) => (
+                                <span key={t} className="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{t}</span>
+                              ))
+                            : <span className="text-xs text-gray-300">Sin etiquetas</span>
+                          }
+                        </div>
+                        <div className="flex justify-end gap-2 pt-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(contact.id)}
+                            onChange={() => toggleSelect(contact.id)}
+                            className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                          />
+                          <button
+                            onClick={() => {
+                              if (confirm('¿Eliminar este contacto?')) {
+                                deleteMutation.mutate(contact.id)
+                              }
+                            }}
+                            className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -709,6 +763,7 @@ export default function ContactsPage() {
           </div>
         </div>
       )}
+    </div>
     </div>
     </>
   )

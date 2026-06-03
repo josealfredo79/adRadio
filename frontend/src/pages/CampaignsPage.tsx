@@ -4,6 +4,7 @@ import api from '@/lib/api'
 import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, ListOrdered, Ticket, CalendarClock, BarChart2, X, CalendarRange, CheckCircle2, AlertCircle, Download } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import SEO from '@/components/SEO'
+import PrintButton from '@/components/PrintButton'
 
 interface Campaign {
   id: string
@@ -337,6 +338,7 @@ export default function CampaignsPage() {
           <p className="mt-1 text-sm text-gray-500">{campaigns?.length ?? 0} campañas creadas</p>
         </div>
         <div className="flex gap-3">
+          <PrintButton />
           {(campaigns?.length ?? 0) > 0 && (
             <button
               onClick={async () => {
@@ -369,6 +371,7 @@ export default function CampaignsPage() {
         </div>
       </div>
 
+      <div className="print-area">
       {/* No credits warning */}
       {noCredits && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 px-5 py-4 flex items-center justify-between">
@@ -513,32 +516,32 @@ export default function CampaignsPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 ml-4">
+                <div className="flex items-center gap-2 ml-4 shrink-0 flex-wrap">
                   <button onClick={() => setAnalyticsId(campaign.id)}
-                    className="rounded-lg border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-50 transition-colors">
+                    className="rounded-lg border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-50 transition-colors shrink-0">
                     <BarChart2 className="h-3.5 w-3.5" />
                   </button>
                   {campaign.type === 'voces' && (
                     <button onClick={() => setVocesDetailId(campaign.id)}
-                      className="rounded-lg border border-purple-200 bg-purple-50 p-1.5 text-purple-600 hover:bg-purple-100 transition-colors">
+                      className="rounded-lg border border-purple-200 bg-purple-50 p-1.5 text-purple-600 hover:bg-purple-100 transition-colors shrink-0">
                       <Megaphone className="h-3.5 w-3.5" />
                     </button>
                   )}
                   {campaign.status === 'running' && (
                     <button onClick={() => pauseMutation.mutate(campaign.id)}
-                      className="rounded-lg border border-yellow-200 bg-yellow-50 p-1.5 text-yellow-600 hover:bg-yellow-100">
+                      className="rounded-lg border border-yellow-200 bg-yellow-50 p-1.5 text-yellow-600 hover:bg-yellow-100 shrink-0">
                       <Pause className="h-3.5 w-3.5" />
                     </button>
                   )}
                   {(campaign.status === 'paused' || campaign.status === 'draft' || campaign.status === 'scheduled') && (
                     <button onClick={() => resumeMutation.mutate(campaign.id)}
                       title={campaign.status === 'draft' ? "Enviar campaña ahora" : campaign.status === 'scheduled' ? "Forzar envío ahora" : "Reanudar campaña"}
-                      className="rounded-lg border border-green-200 bg-green-50 p-1.5 text-green-600 hover:bg-green-100 transition-colors">
+                      className="rounded-lg border border-green-200 bg-green-50 p-1.5 text-green-600 hover:bg-green-100 transition-colors shrink-0">
                       <Play className="h-3.5 w-3.5" />
                     </button>
                   )}
                   <button onClick={() => { if (confirm('¿Eliminar esta campaña?')) deleteMutation.mutate(campaign.id) }}
-                    className="text-gray-400 hover:text-red-500 transition-colors">
+                    className="text-gray-400 hover:text-red-500 transition-colors shrink-0">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -1368,6 +1371,7 @@ export default function CampaignsPage() {
           </div>
         )
       })()}
+    </div>
     </div>
     </>
   )
