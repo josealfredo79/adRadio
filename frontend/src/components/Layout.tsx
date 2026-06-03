@@ -19,6 +19,9 @@ import {
   X,
   UserCog,
   MessageCircle,
+  BarChart3,
+  GitBranch,
+  FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -31,7 +34,10 @@ const navItems = [
   { to: '/app/contacts', icon: Users, label: 'Contactos' },
   { to: '/app/knowledge-base', icon: BookOpen, label: 'Base de conocimiento' },
   { to: '/app/team', icon: UserCog, label: 'Equipo' },
+  { to: '/app/automations', icon: GitBranch, label: 'Automatizaciones' },
+  { to: '/app/templates', icon: FileText, label: 'Plantillas' },
   { to: '/app/widget', icon: MessageCircle, label: 'Widget WA' },
+  { to: '/app/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/app/plans', icon: CreditCard, label: 'Planes' },
   { to: '/app/settings', icon: Settings, label: 'Configuración' },
 ]

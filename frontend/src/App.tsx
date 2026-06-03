@@ -22,6 +22,9 @@ const TermsPage = lazy(() => import('@/pages/TermsPage'))
 const PrivacyPage = lazy(() => import('@/pages/PrivacyPage'))
 const TeamPage = lazy(() => import('@/pages/TeamPage'))
 const WidgetPage = lazy(() => import('@/pages/WidgetPage'))
+const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
+const AutomationsPage = lazy(() => import('@/pages/AutomationsPage'))
+const TemplatesPage = lazy(() => import('@/pages/TemplatesPage'))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -64,6 +67,9 @@ export default function App() {
               <Route path="appointments" element={<AppointmentsPage />} />
               <Route path="knowledge-base" element={<KnowledgeBasePage />} />
               <Route path="plans" element={<PlansPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="automations" element={<AutomationsPage />} />
+              <Route path="templates" element={<TemplatesPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="team" element={<TeamPage />} />
               <Route path="widget" element={<WidgetPage />} />

@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: iaradio_test
+          POSTGRES_USER: iaradio
+          POSTGRES_PASSWORD: iaradio_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-mock httpx
+
+      - name: Run tests
+        working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://iaradio:iaradio_test@localhost:5432/iaradio_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key-for-ci
+          ENCRYPTION_KEY: test-encryption-key-for-ci
+          TWILIO_ACCOUNT_SID: test
+          TWILIO_AUTH_TOKEN: test
+          TWILIO_WHATSAPP_NUMBER: test
+          STRIPE_SECRET_KEY: test
+          STRIPE_WEBHOOK_SECRET: test
+          OPENAI_API_KEY: test
+          ANTHROPIC_API_KEY: test
+          FRONTEND_URL: http://localhost:5173
+          BASE_URL: http://localhost:8000
+          APP_VERSION: ci-test
+        run: |
+          pytest tests/ -v --timeout=30
+
+  lint-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: ./frontend
+        run: npx tsc --noEmit

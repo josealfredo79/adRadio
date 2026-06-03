@@ -2,7 +2,6 @@
 #iaradio-widget-btn {
   position: fixed;
   bottom: 24px;
-  right: 24px;
   z-index: 9999;
   width: 60px;
   height: 60px;
@@ -16,6 +15,8 @@
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   border: none;
   outline: none;
+  right: 24px;
+  left: auto;
 }
 #iaradio-widget-btn:hover {
   transform: scale(1.08);
@@ -26,10 +27,13 @@
   height: 32px;
   fill: #fff;
 }
+:root[style*="--iaradio-position: left"] #iaradio-widget-btn {
+  right: auto;
+  left: 24px;
+}
 #iaradio-widget-popup {
   position: fixed;
   bottom: 96px;
-  right: 24px;
   z-index: 9999;
   width: 320px;
   border-radius: 16px;
@@ -39,6 +43,12 @@
   display: none;
   flex-direction: column;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  right: 24px;
+  left: auto;
+}
+:root[style*="--iaradio-position: left"] #iaradio-widget-popup {
+  right: auto;
+  left: 24px;
 }
 #iaradio-widget-popup.open { display: flex; }
 #iaradio-widget-header {

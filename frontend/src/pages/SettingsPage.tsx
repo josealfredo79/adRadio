@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Settings, Save, Copy, Check, ExternalLink, Lock } from 'lucide-react'
+import { Settings, Save, Copy, Check, ExternalLink, Lock, CreditCard, AlertTriangle } from 'lucide-react'
 
 const WEBHOOK_URL = 'https://api.iaradio.app/api/v1/webhooks/twilio'
 
@@ -42,6 +42,24 @@ export default function SettingsPage() {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  const [cancelConfirm, setCancelConfirm] = useState(false)
+  const [cancelDone, setCancelDone] = useState(false)
+
+  const cancelMutation = useMutation({
+    mutationFn: () => api.post('/cancel-subscription'),
+    onSuccess: () => {
+      setCancelDone(true)
+      setCancelConfirm(false)
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+
+  const { data: dashboard } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: () => api.get('/dashboard').then(r => r.data),
+    staleTime: 60_000,
+  })
 
   const [form, setForm] = useState({
     business_name: '',
@@ -260,6 +278,65 @@ export default function SettingsPage() {
           </span>
         )}
       </div>
+
+      {/* Subscription */}
+      {dashboard && (
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-gray-400" />
+            <h2 className="text-base font-semibold text-gray-900">Suscripción</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-gray-500">Plan</span>
+              <p className="font-medium capitalize">{dashboard.plan}</p>
+            </div>
+            <div>
+              <span className="text-gray-500">Estado</span>
+              <p className={`font-medium capitalize ${dashboard.subscription_status === 'active' ? 'text-green-600' : 'text-yellow-600'}`}>
+                {dashboard.subscription_status === 'active' ? 'Activa' : dashboard.subscription_status === 'trial' ? 'Prueba' : 'Inactiva'}
+              </p>
+            </div>
+            <div>
+              <span className="text-gray-500">Mensajes restantes</span>
+              <p className="font-medium">{dashboard.messages_remaining}</p>
+            </div>
+          </div>
+          {dashboard.subscription_status === 'active' && !cancelDone && (
+            <div className="pt-2">
+              {cancelConfirm ? (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
+                  <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
+                  <p className="text-sm text-red-700 flex-1">¿Cancelar suscripción? Seguirás con acceso hasta el fin del período pagado.</p>
+                  <button
+                    onClick={() => cancelMutation.mutate()}
+                    disabled={cancelMutation.isPending}
+                    className="text-sm px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {cancelMutation.isPending ? 'Cancelando...' : 'Sí, cancelar'}
+                  </button>
+                  <button
+                    onClick={() => setCancelConfirm(false)}
+                    className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50"
+                  >
+                    No
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setCancelConfirm(true)}
+                  className="text-sm text-red-600 hover:text-red-700 underline underline-offset-2"
+                >
+                  Cancelar suscripción
+                </button>
+              )}
+            </div>
+          )}
+          {cancelDone && (
+            <p className="text-sm text-green-600 font-medium">Suscripción cancelada. Seguirás teniendo acceso hasta el final del período de facturación.</p>
+          )}
+        </div>
+      )}
 
       {/* Change password */}
       <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">

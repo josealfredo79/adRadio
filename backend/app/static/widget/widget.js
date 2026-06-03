@@ -5,9 +5,11 @@
   var agent = cfg.agent || 'Asistente';
   var greeting = cfg.greeting || '¡Hola! ¿En qué puedo ayudarte?';
   var color = cfg.color || '#25D366';
+  var position = cfg.position || 'right';
 
   // Inject CSS variable
   document.documentElement.style.setProperty('--iaradio-color', color);
+  document.documentElement.style.setProperty('--iaradio-position', position);
 
   // Build popup
   var popup = document.createElement('div');
