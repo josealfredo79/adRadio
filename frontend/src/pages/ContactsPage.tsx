@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Users, Plus, Upload, Trash2, Search, Download, Tag, X } from 'lucide-react'
+import { Users, Plus, Upload, Trash2, Search, Download, Tag, X, Tags, Send, CheckCheck } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
 
@@ -15,6 +15,11 @@ interface Contact {
   engagement_score: number
   created_at: string
   city?: string | null
+}
+
+interface Campaign {
+  id: string
+  name: string
 }
 
 export default function ContactsPage() {
@@ -33,9 +38,25 @@ export default function ContactsPage() {
   const [editTagInput, setEditTagInput] = useState('')
   const tagInputRef = useRef<HTMLInputElement>(null)
 
+  // Batch selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showTagModal, setShowTagModal] = useState(false)
+  const [showStatusModal, setShowStatusModal] = useState(false)
+  const [showCampaignModal, setShowCampaignModal] = useState(false)
+  const [batchTagInput, setBatchTagInput] = useState('')
+  const [batchTagAction, setBatchTagAction] = useState<'add' | 'remove'>('add')
+  const [batchStatus, setBatchStatus] = useState('active')
+  const [batchCampaignId, setBatchCampaignId] = useState('')
+
   const { data, isLoading } = useQuery<{ items: Contact[]; total: number }>({
     queryKey: ['contacts'],
     queryFn: () => api.get('/contacts').then((r) => r.data),
+  })
+
+  const campaignsQuery = useQuery<Campaign[]>({
+    queryKey: ['campaigns'],
+    queryFn: () => api.get('/campaigns').then(r => r.data),
+    enabled: showCampaignModal,
   })
 
   const createMutation = useMutation({
@@ -77,6 +98,47 @@ export default function ContactsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['contacts'] })
       setEditTagsId(null)
+    },
+  })
+
+  const bulkTagMutation = useMutation({
+    mutationFn: (body: { contact_ids: string[]; tags: string[]; action: string }) =>
+      api.post('/contacts/bulk/tag', body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contacts'] })
+      setShowTagModal(false)
+      setBatchTagInput('')
+      setSelectedIds(new Set())
+    },
+  })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (contact_ids: string[]) =>
+      api.post('/contacts/bulk/delete', { contact_ids }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contacts'] })
+      setSelectedIds(new Set())
+    },
+  })
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: (body: { contact_ids: string[]; status: string }) =>
+      api.post('/contacts/bulk/status', body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contacts'] })
+      setShowStatusModal(false)
+      setSelectedIds(new Set())
+    },
+  })
+
+  const bulkCampaignMutation = useMutation({
+    mutationFn: (body: { contact_ids: string[]; campaign_id: string }) =>
+      api.post('/contacts/bulk/send-campaign', body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contacts'] })
+      setShowCampaignModal(false)
+      setBatchCampaignId('')
+      setSelectedIds(new Set())
     },
   })
 
@@ -143,10 +205,37 @@ export default function ContactsPage() {
     }
   }
 
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedIds(next)
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filtered.map(c => c.id)))
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (confirm(`¿Eliminar ${selectedIds.size} contactos seleccionados?`)) {
+      bulkDeleteMutation.mutate(Array.from(selectedIds))
+    }
+  }
+
+  const confirmBulkTag = () => {
+    const tags = batchTagInput.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
+    if (tags.length === 0) return
+    bulkTagMutation.mutate({ contact_ids: Array.from(selectedIds), tags, action: batchTagAction })
+  }
+
   return (
     <>
       <SEO title="Contactos" description="Panel de control de IaRadio." noIndex />
-      <div className="space-y-6">
+      <div className="space-y-6 pb-20">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -276,6 +365,14 @@ export default function ContactsPage() {
           <table className="w-full">
             <thead className="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
               <tr>
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                    onChange={toggleSelectAll}
+                    className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left">Nombre</th>
                 <th className="px-6 py-3 text-left">Teléfono</th>
                 <th className="px-6 py-3 text-left">Email</th>
@@ -288,7 +385,15 @@ export default function ContactsPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.map((contact) => (
-                <tr key={contact.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={contact.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(contact.id) ? 'bg-brand-50/50' : ''}`}>
+                  <td className="px-4 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(contact.id)}
+                      onChange={() => toggleSelect(contact.id)}
+                      className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                    />
+                  </td>
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{contact.name}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{contact.phone}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{contact.email ?? '—'}</td>
@@ -374,6 +479,47 @@ export default function ContactsPage() {
         )}
       </div>
 
+      {/* Batch actions toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl bg-white border border-brand-200 shadow-xl px-5 py-3">
+          <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+            <CheckCheck className="inline h-4 w-4 mr-1 text-brand-500" />
+            {selectedIds.size} seleccionados
+          </span>
+          <div className="h-6 w-px bg-gray-200" />
+          <button
+            onClick={() => setShowTagModal(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-purple-600 hover:bg-purple-50 transition-colors"
+          >
+            <Tags size={15} />
+            Etiqueta
+          </button>
+          <button
+            onClick={() => setShowStatusModal(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <CheckCheck size={15} />
+            Estado
+          </button>
+          <button
+            onClick={() => setShowCampaignModal(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 transition-colors"
+          >
+            <Send size={15} />
+            Campaña
+          </button>
+          <div className="h-6 w-px bg-gray-200" />
+          <button
+            onClick={handleBulkDelete}
+            disabled={bulkDeleteMutation.isPending}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+          >
+            <Trash2 size={15} />
+            Eliminar
+          </button>
+        </div>
+      )}
+
       {/* Add Contact Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -408,7 +554,6 @@ export default function ContactsPage() {
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
-              {/* Tags input */}
               <div>
                 <div className="flex flex-wrap gap-1.5 mb-1.5 min-h-[1.5rem]">
                   {form.tags.map((t) => (
@@ -457,6 +602,108 @@ export default function ContactsPage() {
                 className="flex-1 rounded-lg bg-brand-500 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
               >
                 {createMutation.isPending ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Tag Modal */}
+      {showTagModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowTagModal(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">Asignar etiquetas</h3>
+            <p className="text-sm text-gray-500 mb-3">{selectedIds.size} contactos seleccionados</p>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setBatchTagAction('add')}
+                  className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${batchTagAction === 'add' ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600'}`}
+                >
+                  Agregar
+                </button>
+                <button
+                  onClick={() => setBatchTagAction('remove')}
+                  className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${batchTagAction === 'remove' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600'}`}
+                >
+                  Quitar
+                </button>
+              </div>
+              <input
+                type="text"
+                placeholder="etiqueta1, etiqueta2, ..."
+                value={batchTagInput}
+                onChange={e => setBatchTagInput(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              />
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button onClick={() => setShowTagModal(false)} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+              <button
+                onClick={confirmBulkTag}
+                disabled={!batchTagInput.trim() || bulkTagMutation.isPending}
+                className="flex-1 rounded-lg bg-brand-500 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
+              >
+                {bulkTagMutation.isPending ? 'Guardando...' : 'Aplicar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Status Modal */}
+      {showStatusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowStatusModal(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">Cambiar estado</h3>
+            <p className="text-sm text-gray-500 mb-3">{selectedIds.size} contactos seleccionados</p>
+            <select
+              value={batchStatus}
+              onChange={e => setBatchStatus(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            >
+              <option value="active">Activo</option>
+              <option value="unsubscribed">Dado de baja</option>
+              <option value="blocked">Bloqueado</option>
+            </select>
+            <div className="mt-5 flex gap-3">
+              <button onClick={() => setShowStatusModal(false)} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+              <button
+                onClick={() => bulkStatusMutation.mutate({ contact_ids: Array.from(selectedIds), status: batchStatus })}
+                disabled={bulkStatusMutation.isPending}
+                className="flex-1 rounded-lg bg-brand-500 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
+              >
+                {bulkStatusMutation.isPending ? 'Guardando...' : 'Cambiar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Campaign Modal */}
+      {showCampaignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowCampaignModal(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">Enviar a campaña</h3>
+            <p className="text-sm text-gray-500 mb-3">{selectedIds.size} contactos seleccionados</p>
+            <select
+              value={batchCampaignId}
+              onChange={e => setBatchCampaignId(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            >
+              <option value="">Seleccionar campaña...</option>
+              {(campaignsQuery.data ?? []).map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <div className="mt-5 flex gap-3">
+              <button onClick={() => setShowCampaignModal(false)} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+              <button
+                onClick={() => bulkCampaignMutation.mutate({ contact_ids: Array.from(selectedIds), campaign_id: batchCampaignId })}
+                disabled={!batchCampaignId || bulkCampaignMutation.isPending}
+                className="flex-1 rounded-lg bg-brand-500 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
+              >
+                {bulkCampaignMutation.isPending ? 'Programando...' : 'Enviar'}
               </button>
             </div>
           </div>

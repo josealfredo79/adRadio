@@ -8,6 +8,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +18,26 @@ from app.models.contact import Contact
 from app.models.user import User
 from app.schemas.contact import ContactCreate, ContactListResponse, ContactOut, ContactUpdate
 from app.workers.tasks import import_contacts_csv
+
+class BulkTagRequest(BaseModel):
+    contact_ids: list[str]
+    tags: list[str]
+    action: str  # "add" | "remove"
+
+
+class BulkDeleteRequest(BaseModel):
+    contact_ids: list[str]
+
+
+class BulkStatusRequest(BaseModel):
+    contact_ids: list[str]
+    status: str
+
+
+class BulkSendCampaignRequest(BaseModel):
+    contact_ids: list[str]
+    campaign_id: str
+
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
@@ -148,6 +169,98 @@ async def import_csv(
     import_contacts_csv.delay(str(current_user.id), rows)
 
     return {"message": f"Importando {len(rows)} contactos en segundo plano"}
+
+
+@router.post("/bulk/tag", status_code=status.HTTP_200_OK)
+async def bulk_tag_contacts(
+    body: BulkTagRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Contact).where(
+            Contact.id.in_(body.contact_ids),
+            Contact.advertiser_id == current_user.id,
+        )
+    )
+    contacts = result.scalars().all()
+    tags_set = set(body.tags)
+    for c in contacts:
+        if body.action == "add":
+            existing = set(c.tags or [])
+            existing.update(tags_set)
+            c.tags = list(existing)
+        elif body.action == "remove":
+            c.tags = [t for t in (c.tags or []) if t not in tags_set]
+    await db.commit()
+    return {"message": f"Etiquetas actualizadas en {len(contacts)} contactos"}
+
+
+@router.post("/bulk/delete", status_code=status.HTTP_200_OK)
+async def bulk_delete_contacts(
+    body: BulkDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Contact).where(
+            Contact.id.in_(body.contact_ids),
+            Contact.advertiser_id == current_user.id,
+        )
+    )
+    contacts = result.scalars().all()
+    for c in contacts:
+        await db.delete(c)
+    await db.commit()
+    return {"message": f"{len(contacts)} contactos eliminados"}
+
+
+@router.post("/bulk/status", status_code=status.HTTP_200_OK)
+async def bulk_status_contacts(
+    body: BulkStatusRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Contact).where(
+            Contact.id.in_(body.contact_ids),
+            Contact.advertiser_id == current_user.id,
+        )
+    )
+    contacts = result.scalars().all()
+    for c in contacts:
+        c.status = body.status
+    await db.commit()
+    return {"message": f"Estado actualizado en {len(contacts)} contactos"}
+
+
+@router.post("/bulk/send-campaign", status_code=status.HTTP_200_OK)
+async def bulk_send_campaign(
+    body: BulkSendCampaignRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.models.campaign import Campaign
+    result = await db.execute(
+        select(Campaign).where(
+            Campaign.id == body.campaign_id,
+            Campaign.advertiser_id == current_user.id,
+        )
+    )
+    campaign = result.scalar_one_or_none()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaña no encontrada")
+
+    from app.workers.tasks import schedule_campaign
+    campaign.segment = {
+        **campaign.segment,
+        "specific_contacts": body.contact_ids,
+    }
+    campaign.status = "scheduled"
+    await db.commit()
+
+    schedule_campaign.delay(str(campaign.id))
+    return {"message": f"Campaña programada para {len(body.contact_ids)} contactos"}
 
 
 @router.get("/export-csv")
