@@ -64,9 +64,9 @@ const LEAD_ICON = {
 }
 
 const STATUS_STYLE = {
-  active: 'bg-green-100 text-green-700',
-  escalated: 'bg-orange-100 text-orange-700',
-  closed: 'bg-gray-100 text-gray-500',
+  active: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
+  escalated: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400',
+  closed: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500',
 }
 
 const STATUS_LABEL = {
@@ -149,9 +149,9 @@ export default function InboxPage() {
       <SEO title="Bandeja de entrada" description="Panel de control de IaRadio." noIndex />
       <div className="flex h-full gap-0 -m-6 overflow-hidden">
       {/* Left panel — conversation list */}
-      <div className="flex w-80 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-4 py-4">
-          <h1 className="text-lg font-bold text-gray-900">Inbox</h1>
+      <div className="flex w-80 flex-shrink-0 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+        <div className="border-b border-gray-100 px-4 py-4 dark:border-gray-800">
+          <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">Inbox</h1>
           <div className="mt-3 relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input
@@ -159,7 +159,7 @@ export default function InboxPage() {
               placeholder="Buscar por nombre o teléfono…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-xs text-gray-700 placeholder-gray-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-xs text-gray-700 placeholder-gray-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
             />
           </div>
           <div className="mt-2 flex gap-1.5">
@@ -171,7 +171,7 @@ export default function InboxPage() {
                   'rounded-full px-3 py-1 text-xs font-medium transition-colors',
                   statusFilter === s
                     ? 'bg-brand-500 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
                 )}
               >
                 {s === '' ? 'Todas' : STATUS_LABEL[s as keyof typeof STATUS_LABEL]}
@@ -186,11 +186,11 @@ export default function InboxPage() {
                 className={cn(
                   'rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
                   leadScoreFilter === opt.v
-                    ? opt.v === 'hot' && 'bg-red-100 text-red-600'
-                    || opt.v === 'warm' && 'bg-orange-100 text-orange-600'
-                    || opt.v === 'cold' && 'bg-blue-100 text-blue-600'
-                    || 'bg-gray-200 text-gray-700'
-                    : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                    ? opt.v === 'hot' && 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
+                    || opt.v === 'warm' && 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400'
+                    || opt.v === 'cold' && 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400'
+                    || 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                    : 'bg-gray-50 text-gray-500 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800'
                 )}
               >
                 {opt.l}
@@ -203,7 +203,7 @@ export default function InboxPage() {
           {isLoading ? (
             <div className="space-y-2 p-4">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse dark:bg-gray-800" />
               ))}
             </div>
           ) : !filtered?.length ? (
@@ -220,12 +220,12 @@ export default function InboxPage() {
                   key={conv.id}
                   onClick={() => setSelectedId(conv.id)}
                   className={cn(
-                    'w-full border-b border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50',
-                    selectedId === conv.id && 'bg-brand-50 border-l-2 border-l-brand-500'
+                    'w-full border-b border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900',
+                    selectedId === conv.id && 'bg-brand-50 border-l-2 border-l-brand-500 dark:bg-brand-950/30'
                   )}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 truncate text-sm font-medium text-gray-900">
+                    <span className="flex items-center gap-1.5 truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                       <User className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
                       {conv.contact.name}
                     </span>
@@ -234,7 +234,7 @@ export default function InboxPage() {
                     )}
                   </div>
                   {conv.last_message && (
-                    <p className="mt-0.5 truncate text-xs text-gray-500">
+                    <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
                       {conv.last_message.role === 'assistant' ? '🤖 ' : '👤 '}
                       {conv.last_message.content.startsWith('[media:')
                         ? '📎 Archivo adjunto'
@@ -258,7 +258,7 @@ export default function InboxPage() {
       </div>
 
       {/* Right panel — conversation detail */}
-      <div className="flex flex-1 flex-col bg-gray-50">
+      <div className="flex flex-1 flex-col bg-gray-50 dark:bg-gray-950">
         {!selectedId ? (
           <div className="flex h-full flex-col items-center justify-center text-gray-400">
             <MessageSquare className="mb-3 h-12 w-12" />
@@ -271,17 +271,17 @@ export default function InboxPage() {
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-950">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold text-gray-900">{detail.contact.name}</p>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{detail.contact.name}</p>
                   {detail.status === 'escalated' && (
-                    <span className="flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-600">
+                    <span className="flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-600 dark:bg-orange-900/40 dark:text-orange-400">
                       <BotOff className="h-3 w-3" /> Bot pausado
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500">{detail.contact.phone}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{detail.contact.phone}</p>
               </div>
               <div className="flex items-center gap-2">
                 <select
@@ -289,10 +289,10 @@ export default function InboxPage() {
                   onChange={(e) => leadScoreMutation.mutate({ id: detail.id, lead_score: e.target.value || null })}
                   className={cn(
                     'rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors',
-                    detail.lead_score === 'hot' && 'border-red-200 bg-red-50 text-red-600',
-                    detail.lead_score === 'warm' && 'border-orange-200 bg-orange-50 text-orange-600',
-                    detail.lead_score === 'cold' && 'border-blue-200 bg-blue-50 text-blue-600',
-                    !detail.lead_score && 'border-gray-200 bg-white text-gray-500'
+                    detail.lead_score === 'hot' && 'border-red-200 bg-red-50 text-red-600 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400',
+                    detail.lead_score === 'warm' && 'border-orange-200 bg-orange-50 text-orange-600 dark:border-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+                    detail.lead_score === 'cold' && 'border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+                    !detail.lead_score && 'border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400'
                   )}
                 >
                   <option value="">Sin calificar</option>
@@ -303,7 +303,7 @@ export default function InboxPage() {
                 {detail.status !== 'escalated' && (
                   <button
                     onClick={() => statusMutation.mutate({ id: detail.id, status: 'escalated' })}
-                    className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-600 hover:bg-orange-100 transition-colors"
+                    className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-600 hover:bg-orange-100 transition-colors dark:border-orange-800 dark:bg-orange-900/30 dark:text-orange-400 dark:hover:bg-orange-900/50"
                     title="Pausar bot y tomar el control manual"
                   >
                     <BotOff className="h-3.5 w-3.5" />
@@ -313,7 +313,7 @@ export default function InboxPage() {
                 {detail.status === 'escalated' && (
                   <button
                     onClick={() => statusMutation.mutate({ id: detail.id, status: 'active' })}
-                    className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-600 hover:bg-green-100 transition-colors"
+                    className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-600 hover:bg-green-100 transition-colors dark:border-green-800 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50"
                     title="Reactivar el bot para responder automáticamente"
                   >
                     <Bot className="h-3.5 w-3.5" />
@@ -323,7 +323,7 @@ export default function InboxPage() {
                 {detail.status !== 'closed' && (
                   <button
                     onClick={() => statusMutation.mutate({ id: detail.id, status: 'closed' })}
-                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800"
                   >
                     <CheckCircle className="h-3.5 w-3.5" />
                     Cerrar
@@ -331,7 +331,7 @@ export default function InboxPage() {
                 )}
                 <button
                   onClick={() => setSelectedId(null)}
-                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 transition-colors"
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 transition-colors dark:hover:bg-gray-800"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -355,7 +355,7 @@ export default function InboxPage() {
                       className={cn(
                         'max-w-[70%] rounded-2xl px-4 py-2.5 text-sm',
                         msg.role === 'assistant'
-                          ? 'rounded-tl-sm bg-white text-gray-800 shadow-sm'
+                          ? 'rounded-tl-sm bg-white text-gray-800 shadow-sm dark:bg-gray-800 dark:text-gray-200'
                           : 'rounded-tr-sm bg-brand-500 text-white'
                       )}
                     >
@@ -369,7 +369,7 @@ export default function InboxPage() {
 
             {/* Reply input */}
             {detail.status !== 'closed' && (
-              <div className="border-t border-gray-200 bg-white px-4 py-3">
+              <div className="border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
                 <div className="flex items-end gap-2">
                   <textarea
                     value={replyText}
@@ -382,7 +382,7 @@ export default function InboxPage() {
                     }}
                     placeholder="Escribe un mensaje… (Enter para enviar, Shift+Enter para nueva línea)"
                     rows={2}
-                    className="flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                    className="flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
                   />
                   <button
                     onClick={handleSend}
