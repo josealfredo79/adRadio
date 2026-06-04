@@ -1,4 +1,12 @@
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
+
+export function getApiError(err: unknown, fallback = 'Error'): string {
+  if (err instanceof AxiosError) {
+    return (err.response?.data as { detail?: string })?.detail ?? fallback
+  }
+  if (err instanceof Error) return err.message
+  return fallback
+}
 
 // Access token stored in memory — never in localStorage (XSS-safe)
 let _accessToken: string | null = null
@@ -19,6 +27,10 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   if (_accessToken) {
     config.headers.Authorization = `Bearer ${_accessToken}`
+  }
+  // Idempotency-Key for mutating requests to prevent duplicate processing
+  if (config.method && ['post', 'put', 'patch'].includes(config.method)) {
+    config.headers['Idempotency-Key'] = crypto.randomUUID()
   }
   return config
 })

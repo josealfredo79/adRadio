@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { MessageSquare, User, Clock, Flame, Thermometer, Snowflake, CheckCircle, AlertCircle, X, Image, Volume2, FileText, Search, Send, Bot, BotOff } from 'lucide-react'
+import { MessageSquare, User, Clock, Flame, Thermometer, Snowflake, CheckCircle, X, FileText, Search, Send, Bot, BotOff } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import SEO from '@/components/SEO'

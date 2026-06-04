@@ -88,8 +88,8 @@ async def create_checkout_session(
             }
         ],
         mode="subscription",
-        success_url=f"{settings.FRONTEND_URL}/dashboard?success=1",
-        cancel_url=f"{settings.FRONTEND_URL}/plans",
+        success_url=f"{settings.FRONTEND_URL}/app/dashboard?success=1",
+        cancel_url=f"{settings.FRONTEND_URL}/app/plans",
         metadata={"plan": plan_key, "user_id": str(current_user.id)},
     )
 
@@ -123,11 +123,10 @@ async def cancel_subscription(
     # Cancel at period end so they keep access for the paid period
     stripe_lib.Subscription.modify(sub.id, cancel_at_period_end=True)
 
-    current_user.subscription_status = "churned"
-    current_user.messages_remaining = 0
-    await release_pool_number(current_user, db)
+    current_user.cancel_at_period_end = True
     await db.commit()
 
+    logger.info("Subscription cancelled at period end for user %s", current_user.id)
     return {"message": "Suscripción cancelada. Seguirás teniendo acceso hasta el final del período de facturación."}
 
 

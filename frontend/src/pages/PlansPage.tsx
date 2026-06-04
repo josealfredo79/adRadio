@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import api from '@/lib/api'
+import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { CheckCircle, Zap, Sparkles } from 'lucide-react'
 import { PLANS_CONFIG, type PlanDefinition } from '@/lib/plans'
@@ -31,7 +31,7 @@ export default function PlansPage() {
       const { data } = await api.post('/checkout/create-session', { plan: planKey })
       window.location.href = data.checkout_url
     } catch (err: unknown) {
-      alert((err as any)?.response?.data?.detail ?? 'Error al iniciar pago')
+      alert(getApiError(err, 'Error al iniciar pago'))
     } finally {
       setLoading(null)
     }

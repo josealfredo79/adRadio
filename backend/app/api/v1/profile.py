@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_admin
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.core.redis import get_redis_optional
-from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.automation import AutomationFlow
 from app.models.campaign import Campaign
@@ -65,20 +64,25 @@ async def update_profile(
     return UserOut.model_validate(current_user)
 
 
+class ChangePasswordBody(BaseModel):
+    current_password: str
+    new_password: str
+
+
 @router.post("/me/change-password")
 async def change_password(
     request: Request,
-    body: dict,
+    body: ChangePasswordBody,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(idempotent_post),
     redis: AsyncRedis | None = Depends(get_redis_optional),
-):
+) -> dict[str, str]:
     """Change the current user's password after verifying the old one."""
     from app.core.security import verify_password, hash_password
 
-    current_pw = (body.get("current_password") or "").strip()
-    new_pw = (body.get("new_password") or "").strip()
+    current_pw = body.current_password.strip()
+    new_pw = body.new_password.strip()
 
     if not current_pw or not new_pw:
         raise HTTPException(status_code=400, detail="Debes proporcionar la contraseña actual y la nueva")
@@ -90,7 +94,7 @@ async def change_password(
     current_user.password_hash = hash_password(new_pw)
     await db.commit()
     logger.info("Password changed for user %s", current_user.id)
-    out = {"message": "Contraseña actualizada correctamente"}
+    out: dict[str, str] = {"message": "Contraseña actualizada correctamente"}
     await store_idempotency_response(request, redis, out)
     return out
 
@@ -282,9 +286,11 @@ async def assign_number_to_user(
 
     if body.get("release"):
         await release_pool_number(user, db)
+        await db.commit()
         return {"message": "Número liberado — usuario vuelve al número compartido"}
 
     assigned = await assign_pool_number(user, db)
     if not assigned:
         raise HTTPException(status_code=409, detail="Pool agotado o no configurado (TWILIO_NUMBER_POOL)")
+    await db.commit()
     return {"message": f"Número {user.whatsapp_number} asignado a {user.email}", "number": user.whatsapp_number}

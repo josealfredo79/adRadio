@@ -49,6 +49,7 @@ class User(Base):
     current_plan: Mapped[str] = mapped_column(String(20), default="trial")
     messages_remaining: Mapped[int] = mapped_column(Integer, default=0)
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     # Preferences
     language: Mapped[str] = mapped_column(String(5), default="es")

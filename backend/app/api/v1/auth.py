@@ -2,12 +2,12 @@
 Auth router — /api/v1/auth
 """
 import logging
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.rate_limit import limiter
 from app.config import settings
 from app.core.email import send_verification_email, send_password_reset_email
 from app.core.redis import get_redis
@@ -37,7 +37,6 @@ from app.schemas.auth import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -91,10 +90,12 @@ async def verify_email(
     # Grant trial credits on first verification
     if user.messages_remaining == 0:
         user.messages_remaining = 50
+        user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
     await db.commit()
 
     # Assign a pool number if available (enables inbound bot for this user)
     await assign_pool_number(user, db)
+    await db.commit()
 
     # Seed demo data so dashboard is not empty
     await seed_demo_data(user.id, user.business_name or "Mi negocio", db)

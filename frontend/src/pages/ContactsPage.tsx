@@ -1,6 +1,6 @@
 import { useState, useRef, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
+import api, { getApiError } from '@/lib/api'
 import { Users, Plus, Upload, Trash2, Search, Download, Tag, X, Tags, Send, CheckCheck, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
@@ -80,12 +80,8 @@ export default function ContactsPage() {
       setError('')
     },
     onError: (err: unknown) => {
-      const detail = (err as any)?.response?.data?.detail;
-      if (Array.isArray(detail)) {
-        setError(detail[0].msg);
-      } else {
-        setError(typeof detail === 'string' ? detail : 'Error al crear contacto');
-      }
+      const detail = getApiError(err);
+      setError(detail);
     },
   })
 
@@ -201,7 +197,7 @@ export default function ContactsPage() {
       setUploadMsg({ type: 'success', text: `Archivo "${file.name}" importado exitosamente.` })
       qc.invalidateQueries({ queryKey: ['contacts'] })
     } catch (err: unknown) {
-      setUploadMsg({ type: 'error', text: (err as any)?.response?.data?.detail ?? 'Error al importar CSV' })
+      setUploadMsg({ type: 'error', text: getApiError(err, 'Error al importar CSV') })
     } finally {
       setIsUploading(false)
       e.target.value = ''

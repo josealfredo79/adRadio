@@ -6,13 +6,14 @@ import io
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.api.rate_limit import limiter
 from app.database import get_db
 from app.models.contact import Contact
 from app.models.user import User
@@ -74,7 +75,9 @@ async def list_contacts(
 
 
 @router.post("", response_model=ContactOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 async def create_contact(
+    request: Request,
     body: ContactCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -155,7 +158,9 @@ async def delete_contact(
 
 
 @router.post("/import-csv")
+@limiter.limit("5/minute")
 async def import_csv(
+    request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
@@ -183,7 +188,9 @@ async def import_csv(
 
 
 @router.post("/bulk/tag", status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
 async def bulk_tag_contacts(
+    request: Request,
     body: BulkTagRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -208,7 +215,9 @@ async def bulk_tag_contacts(
 
 
 @router.post("/bulk/delete", status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
 async def bulk_delete_contacts(
+    request: Request,
     body: BulkDeleteRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -227,7 +236,9 @@ async def bulk_delete_contacts(
 
 
 @router.post("/bulk/status", status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
 async def bulk_status_contacts(
+    request: Request,
     body: BulkStatusRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -246,7 +257,9 @@ async def bulk_status_contacts(
 
 
 @router.post("/bulk/send-campaign", status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 async def bulk_send_campaign(
+    request: Request,
     body: BulkSendCampaignRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

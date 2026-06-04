@@ -18,7 +18,7 @@ class Conversation(Base):
     contact_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL")
     )
-    messages: Mapped[list] = mapped_column(JSONB, default=list)
+    messages: Mapped[list[dict]] = mapped_column(JSONB, default=list)
     status: Mapped[str] = mapped_column(String(20), default="active")
     lead_score: Mapped[str | None] = mapped_column(String(10))
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)

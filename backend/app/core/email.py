@@ -59,7 +59,7 @@ async def send_verification_email(to: str, code: str) -> bool:
 
 
 async def send_password_reset_email(to: str, token: str) -> bool:
-    reset_url = f"https://app.iaradio.app/reset-password?token={token}"
+    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
     html = f"""
     <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
       <h2 style="color:#6366f1">IaRadio — Recuperar contraseña</h2>
@@ -226,7 +226,7 @@ async def send_campaign_completed_email(
 
 async def send_trial_expiring_email(to: str, business_name: str, days_left: int) -> bool:
     """Notify the user that their trial is about to expire."""
-    plan_url = "https://app.iaradio.app/app/plans"
+    plan_url = f"{settings.FRONTEND_URL}/app/plans"
     html = f"""
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
       <div style="background:linear-gradient(135deg,#f59e0b,#d97706);padding:24px 28px">

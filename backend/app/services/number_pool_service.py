@@ -49,8 +49,7 @@ async def assign_pool_number(user: User, db: AsyncSession) -> bool:
 
     user.whatsapp_number = free_number
     user.whatsapp_number_source = "pool"
-    await db.commit()
-    await db.refresh(user)
+    await db.flush()
     logger.info("Assigned pool number %s to user %s (%s)", free_number, user.id, user.email)
     return True
 
@@ -63,7 +62,7 @@ async def release_pool_number(user: User, db: AsyncSession) -> None:
         released = user.whatsapp_number
         user.whatsapp_number = None
         user.whatsapp_number_source = "shared"
-        await db.commit()
+        await db.flush()
         logger.info("Released pool number %s from user %s", released, user.id)
 
 

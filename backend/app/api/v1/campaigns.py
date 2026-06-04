@@ -11,12 +11,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from redis.asyncio import Redis as AsyncRedis
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
+from slowapi.util import get_remote_address
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.api.idempotency import idempotent_post, store_idempotency_response
+from app.api.rate_limit import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.campaign import Campaign
@@ -78,6 +80,7 @@ async def list_campaigns(
 
 
 @router.post("", response_model=CampaignOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def create_campaign(
     request: Request,
     body: CampaignCreate,

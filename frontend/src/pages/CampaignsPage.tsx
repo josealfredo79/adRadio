@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
-import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, ListOrdered, Ticket, CalendarClock, BarChart2, X, CalendarRange, CheckCircle2, AlertCircle, Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import api, { getApiError } from '@/lib/api'
+import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, CalendarClock, BarChart2, X, CalendarRange, CheckCircle2, AlertCircle, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import SEO from '@/components/SEO'
 import PrintButton from '@/components/PrintButton'
@@ -185,7 +185,7 @@ export default function CampaignsPage() {
   const createMutation = useMutation({
     mutationFn: (body: object) => api.post('/campaigns', body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); setShowCreate(false); resetForm() },
-    onError: (err: unknown) => setError((err as any)?.response?.data?.detail ?? 'Error'),
+    onError: (err: unknown) => setError(getApiError(err)),
   })
 
   const pauseMutation = useMutation({
@@ -246,7 +246,7 @@ export default function CampaignsPage() {
         setRadioScript(data.script ?? '')
       }
     } catch (err: unknown) {
-      setError((err as any)?.response?.data?.detail ?? 'Error al generar contenido')
+      setError(getApiError(err, 'Error al generar contenido'))
     } finally {
       setGenerating(false)
     }
@@ -268,7 +268,7 @@ export default function CampaignsPage() {
       })
       setParrillaResult(data)
     } catch (err: unknown) {
-      setParrillaError((err as any)?.response?.data?.detail ?? 'Error al generar parrilla')
+      setParrillaError(getApiError(err, 'Error al generar parrilla'))
     } finally {
       setParrillaGenerating(false)
     }
@@ -1347,7 +1347,7 @@ export default function CampaignsPage() {
             setCapsuleAudioUrl(data.audio_url)
             setCapsuleScript(data.script ?? '')
           } catch (err: unknown) {
-            setError((err as any)?.response?.data?.detail ?? 'Error al generar cápsula')
+            setError(getApiError(err, 'Error al generar cápsula'))
           } finally {
             setCapsuleGenerating(false)
           }

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import api from '@/lib/api'
 import { Radio, CheckCircle } from 'lucide-react'
+import { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 
 export default function VerifyEmailPage() {
@@ -22,7 +23,7 @@ export default function VerifyEmailPage() {
       setSuccess(true)
       setTimeout(() => navigate('/login'), 2000)
     } catch (err: unknown) {
-      setError((err as any)?.response?.data?.detail ?? 'Código inválido')
+      setError(getApiError(err, 'Código inválido'))
     } finally {
       setLoading(false)
     }

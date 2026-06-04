@@ -18,7 +18,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.redis import close_redis
-from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, template_seeds, team, automations, widget, analytics
+from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, template_seeds, team, automations, widget, analytics, admin
 from app.api.v1 import user_webhooks, public_api, public_api_routes
 
 logger = logging.getLogger(__name__)
@@ -112,6 +112,7 @@ app.include_router(automations.router, prefix=settings.API_PREFIX)
 app.include_router(widget.router, prefix=settings.API_PREFIX)
 app.include_router(analytics.router, prefix=settings.API_PREFIX)
 app.include_router(user_webhooks.router, prefix=settings.API_PREFIX)
+app.include_router(admin.router, prefix=settings.API_PREFIX)
 app.include_router(public_api.router, prefix=settings.API_PREFIX)
 app.include_router(public_api_routes.router, prefix=settings.API_PREFIX)
 
@@ -123,7 +124,47 @@ if _WIDGET_DIR.is_dir():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": settings.APP_VERSION}
+    import stripe as stripe_lib
+    from sqlalchemy import text
+    from app.database import engine
+
+    checks = {}
+
+    # Database check
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {e}"
+
+    # Redis check
+    try:
+        import redis as sync_redis
+        r = sync_redis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
+        r.ping()
+        r.close()
+        checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"error: {e}"
+
+    # Stripe check
+    if settings.STRIPE_SECRET_KEY:
+        try:
+            stripe_lib.api_key = settings.STRIPE_SECRET_KEY
+            stripe_lib.Balance.retrieve()
+            checks["stripe"] = "ok"
+        except Exception as e:
+            checks["stripe"] = f"error: {e}"
+    else:
+        checks["stripe"] = "not_configured"
+
+    all_ok = all(v == "ok" for v in checks.values() if v != "not_configured")
+    return {
+        "status": "ok" if all_ok else "degraded",
+        "version": settings.APP_VERSION,
+        "checks": checks,
+    }
 
 
 @app.exception_handler(Exception)

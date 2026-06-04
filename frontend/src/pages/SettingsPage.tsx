@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
+import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Settings, Save, Copy, Check, ExternalLink, Lock, CreditCard, AlertTriangle, Trash2, Plus, X, Globe, Palette, Key, Webhook } from 'lucide-react'
 import SEO from '@/components/SEO'
 
-const WEBHOOK_URL = 'https://api.iaradio.app/api/v1/webhooks/twilio'
+const WEBHOOK_URL = `${import.meta.env.VITE_API_URL ?? 'https://api.iaradio.app'}/api/v1/webhooks/twilio`
 
 const CATEGORIES = [
   { value: 'restaurante', label: 'Restaurante / Bar / Taquería' },
@@ -53,7 +53,7 @@ function WebhooksSection() {
 
   const [showForm, setShowForm] = useState(false)
   const [newWh, setNewWh] = useState({ name: '', url: '', events: [] as string[] })
-  const [testResult, setTestResult] = useState<{ id: string; result: unknown } | null>(null)
+  const [testResult, setTestResult] = useState<{ id: string; result: { success?: boolean; error?: string } } | null>(null)
 
   const createMutation = useMutation({
     mutationFn: (data: typeof newWh) => api.post('/user-webhooks', data),
@@ -73,7 +73,7 @@ function WebhooksSection() {
   const testMutation = useMutation({
     mutationFn: ({ id }: { id: string }) => api.post(`/user-webhooks/${id}/test`),
     onSuccess: (res, vars) => setTestResult({ id: vars.id, result: res.data }),
-    onError: (err: unknown, vars) => setTestResult({ id: vars.id, result: { success: false, error: (err as any)?.response?.data?.detail ?? 'Error' } }),
+    onError: (err: unknown, vars) => setTestResult({ id: vars.id, result: { success: false, error: getApiError(err) } }),
   })
 
   const toggleEvent = (ev: string) => {
@@ -130,8 +130,8 @@ function WebhooksSection() {
             </button>
           </div>
           {testResult && testResult.id === wh.id && (
-            <div className={`text-xs mt-1 ${(testResult.result as any)?.success ? 'text-green-600' : 'text-red-600'}`}>
-              {(testResult.result as any)?.success ? '✅ Ping exitoso' : `❌ ${(testResult.result as any)?.error || 'Error'}`}
+            <div className={`text-xs mt-1 ${testResult.result.success ? 'text-green-600' : 'text-red-600'}`}>
+              {testResult.result.success ? '✅ Ping exitoso' : `❌ ${testResult.result.error || 'Error'}`}
             </div>
           )}
         </div>
@@ -569,7 +569,7 @@ export default function SettingsPage() {
       setTimeout(() => setPwMsg(null), 4000)
     },
     onError: (err: unknown) => {
-      setPwMsg({ type: 'error', text: (err as any)?.response?.data?.detail ?? 'Error al cambiar contraseña' })
+      setPwMsg({ type: 'error', text: getApiError(err, 'Error al cambiar contraseña') })
     },
   })
 

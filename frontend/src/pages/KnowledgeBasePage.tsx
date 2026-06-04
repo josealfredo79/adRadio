@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
+import api, { getApiError } from '@/lib/api'
 import { BookOpen, Upload, Trash2, FileText, FileSpreadsheet, File } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
@@ -51,7 +51,7 @@ export default function KnowledgeBasePage() {
       await api.post('/knowledge-base/upload', fd)
       qc.invalidateQueries({ queryKey: ['knowledge-base'] })
     } catch (err: unknown) {
-      alert((err as any)?.response?.data?.detail ?? 'Error al subir archivo')
+      alert(getApiError(err, 'Error al subir archivo'))
     }
     if (fileRef.current) fileRef.current.value = ''
   }

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,4 +33,5 @@ class Transaction(Base):
             "status IN ('succeeded','pending','failed','refunded')",
             name="ck_transactions_status",
         ),
+        UniqueConstraint("stripe_payment_id", name="uq_transactions_stripe_payment_id"),
     )

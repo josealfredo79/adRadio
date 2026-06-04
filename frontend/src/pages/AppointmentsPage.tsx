@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
+import api, { getApiError } from '@/lib/api'
 import { CalendarDays, Plus, Trash2, Check, X, Clock, ExternalLink, Unplug } from 'lucide-react'
 import SEO from '@/components/SEO'
 
@@ -72,7 +72,7 @@ export default function AppointmentsPage() {
       setShowCreate(false)
       resetForm()
     },
-    onError: (err: unknown) => setError((err as any)?.response?.data?.detail ?? 'Error al crear cita'),
+    onError: (err: unknown) => setError(getApiError(err, 'Error al crear cita')),
   })
 
   const updateMutation = useMutation({

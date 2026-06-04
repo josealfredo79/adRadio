@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Radio } from 'lucide-react'
+import { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 
 export default function RegisterPage() {
@@ -23,7 +24,7 @@ export default function RegisterPage() {
       await register(form.email, form.password, form.businessName)
       navigate(`/verify-email?email=${encodeURIComponent(form.email)}`)
     } catch (err: unknown) {
-      setError((err as any)?.response?.data?.detail ?? 'Error al registrarse')
+      setError(getApiError(err, 'Error al registrarse'))
     } finally {
       setLoading(false)
     }

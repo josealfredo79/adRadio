@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import api from '@/lib/api'
 import { Radio, Eye, EyeOff, CheckCircle } from 'lucide-react'
+import { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 
 export default function ResetPasswordPage() {
@@ -35,7 +36,7 @@ export default function ResetPasswordPage() {
       setSuccess(true)
       setTimeout(() => navigate('/login'), 2500)
     } catch (err: unknown) {
-      setError((err as any)?.response?.data?.detail ?? 'El enlace es inválido o ya expiró.')
+      setError(getApiError(err, 'El enlace es inválido o ya expiró.'))
     } finally {
       setLoading(false)
     }

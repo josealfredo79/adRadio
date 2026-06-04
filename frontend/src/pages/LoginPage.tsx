@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { getApiError } from '@/lib/api'
 import { Radio, Eye, EyeOff } from 'lucide-react'
 import SEO from '@/components/SEO'
 
@@ -21,7 +22,7 @@ export default function LoginPage() {
       await login(email, password)
       navigate('/app/dashboard')
     } catch (err: unknown) {
-      setError((err as any)?.response?.data?.detail ?? 'Error al iniciar sesión')
+      setError(getApiError(err, 'Error al iniciar sesión'))
     } finally {
       setLoading(false)
     }

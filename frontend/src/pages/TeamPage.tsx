@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
+import api, { getApiError } from '@/lib/api'
 import { Users, UserPlus, Trash2, Shield, Eye, Loader2 } from 'lucide-react'
 import SEO from '@/components/SEO'
 
@@ -39,7 +39,7 @@ export default function TeamPage() {
       setEmail('')
       setError('')
     },
-    onError: (err: unknown) => setError((err as any)?.response?.data?.detail ?? 'Error al invitar'),
+    onError: (err: unknown) => setError(getApiError(err, 'Error al invitar')),
   })
 
   const removeMutation = useMutation({
