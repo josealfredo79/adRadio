@@ -820,6 +820,82 @@ def cleanup_expired_data():
 
 
 @celery_app.task
+def send_trial_expiry_reminders():
+    """Celery Beat: send reminders to users whose trial/plan expires in 1-3 days.
+
+    Runs daily at ~midnight. Sends email + WhatsApp reminder.
+    Reminder cadence:
+      - 3 days before expiry → gentle reminder
+      - 1 day before expiry  → urgent reminder
+    """
+    async def _remind():
+        from app.database import AsyncSessionLocal
+        from app.models.user import User
+        from app.core.email import send_trial_expiring_email
+        from app.services.twilio_service import send_whatsapp
+        from sqlalchemy import select
+
+        now = datetime.now(timezone.utc)
+        # Remind users expiring in 1 or 3 days
+        target_days = [1, 3]
+
+        async with AsyncSessionLocal() as db:
+            for days_left in target_days:
+                window_start = now + timedelta(days=days_left)
+                window_end = window_start + timedelta(hours=2)
+
+                result = await db.execute(
+                    select(User).where(
+                        User.subscription_status.in_(["trial", "active"]),
+                        User.plan_expires_at >= window_start,
+                        User.plan_expires_at < window_end,
+                    )
+                )
+                users = result.scalars().all()
+
+                for user in users:
+                    business_name = user.business_name or user.email
+                    try:
+                        # Send email reminder
+                        await send_trial_expiring_email(
+                            to=user.email,
+                            business_name=business_name,
+                            days_left=days_left,
+                        )
+                        logger.info(
+                            "[TRIAL REMINDER] Email sent to %s (%s) — %d day(s) left",
+                            user.email, business_name, days_left,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            "[TRIAL REMINDER] Email failed for %s: %s",
+                            user.email, e,
+                        )
+
+                    # Send WhatsApp reminder if user has a number
+                    if user.whatsapp_number:
+                        try:
+                            message = (
+                                f"⏰ Hola {business_name}, tu prueba gratuita de IaRadio "
+                                f"termina en {days_left} día{'s' if days_left != 1 else ''}. "
+                                f"Elige un plan para conservar tus campañas y configuraciones. "
+                                f"👉 https://app.iaradio.app/app/plans"
+                            )
+                            send_whatsapp(
+                                message_id=f"trial_reminder_{user.id}_{days_left}d",
+                                to=user.whatsapp_number,
+                                body=message,
+                            )
+                        except Exception as e:
+                            logger.error(
+                                "[TRIAL REMINDER] WhatsApp failed for %s: %s",
+                                user.email, e,
+                            )
+
+    run_async(_remind())
+
+
+@celery_app.task
 def send_appointment_reminders():
     """Celery Beat: send WhatsApp reminders for upcoming appointments.
 

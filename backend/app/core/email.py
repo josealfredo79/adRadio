@@ -224,6 +224,48 @@ async def send_campaign_completed_email(
     return await send_email(to, subject, html)
 
 
+async def send_trial_expiring_email(to: str, business_name: str, days_left: int) -> bool:
+    """Notify the user that their trial is about to expire."""
+    plan_url = "https://app.iaradio.app/app/plans"
+    html = f"""
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="background:linear-gradient(135deg,#f59e0b,#d97706);padding:24px 28px">
+        <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800">
+          ⏰ Tu prueba gratuita termina en {days_left} día{'s' if days_left != 1 else ''}
+        </h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:14px">{business_name}</p>
+      </div>
+      <div style="padding:24px 28px">
+        <p style="font-size:15px;color:#1e293b;line-height:1.5">
+          Todo tu contenido, campañas y configuraciones se conservarán si eliges un plan.
+        </p>
+        <div style="background:#fffbeb;border-radius:8px;padding:16px;margin:16px 0;border:1px solid #fde68a">
+          <p style="margin:0;font-size:13px;color:#92400e;line-height:1.5">
+            <strong>⚠️ Si no eliges un plan, tu cuenta quedará suspendida.</strong><br />
+            Tus campañas dejarán de enviarse y tu bot dejará de responder.
+          </p>
+        </div>
+        <a href="{plan_url}"
+           style="display:block;text-align:center;padding:14px 24px;background:#6366f1;
+                  color:white;border-radius:10px;text-decoration:none;margin:20px 0;
+                  font-size:16px;font-weight:700">
+          Elegir mi plan →
+        </a>
+        <p style="font-size:13px;color:#64748b;text-align:center">
+          Cancelas cuando quieras — sin penalizaciones.
+        </p>
+      </div>
+      <div style="background:#f8fafc;padding:16px 28px;border-top:1px solid #e2e8f0">
+        <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center">
+          ¿Preguntas? Responde a este correo o escríbenos a iaradio@iaradio.online
+        </p>
+      </div>
+    </div>
+    """
+    subject = f"⏰ Tu prueba gratuita de IaRadio termina en {days_left} día{'s' if days_left != 1 else ''}"
+    return await send_email(to, subject, html)
+
+
 async def send_campaign_failed_email(
     to: str,
     business_name: str,

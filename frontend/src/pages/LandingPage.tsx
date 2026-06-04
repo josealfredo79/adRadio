@@ -664,6 +664,14 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+          <div className="mt-10 text-center">
+            <Link
+              to="/customer-stories"
+              className="inline-flex items-center gap-2 rounded-xl glass px-6 py-3 text-sm font-semibold text-gray-300 hover:text-white hover:border-white/20 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300"
+            >
+              Escuchar historias reales <Mic className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </section>
 

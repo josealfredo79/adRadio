@@ -46,4 +46,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.process_automation_enrollments",
         "schedule": 60.0,  # every minute — drip messages precision
     },
+    "send-trial-expiry-reminders": {
+        "task": "app.workers.tasks.send_trial_expiry_reminders",
+        "schedule": 43200.0,  # every 12 hours — enough for daily reminders
+    },
 }
