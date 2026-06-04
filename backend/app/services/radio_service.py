@@ -10,11 +10,9 @@ Flujo:
 
 Requisitos del sistema: ffmpeg instalado (para pydub)
 """
-import asyncio
 import io
-import math
+import logging
 import os
-import tempfile
 import unicodedata
 from pathlib import Path
 
@@ -23,6 +21,8 @@ import edge_tts
 from app.services.claude_service import _get_client
 from app.services.storage_service import upload_bytes
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Directorio donde viven los jingles de fondo
 JINGLES_DIR = Path(__file__).parent.parent / "static" / "jingles"
@@ -507,8 +507,7 @@ def _process_voice(voice: "AudioSegment") -> "AudioSegment":  # type: ignore[nam
     - Compresión suave (gain staging manual)
     """
     try:
-        from pydub import AudioSegment  # type: ignore
-        from pydub.effects import high_pass_filter, low_pass_filter, normalize  # type: ignore
+        from pydub.effects import high_pass_filter, normalize  # type: ignore
 
         # High-pass filter: elimina graves innecesarios (rumble, breath bass)
         voice = high_pass_filter(voice, cutoff=120)
@@ -521,6 +520,7 @@ def _process_voice(voice: "AudioSegment") -> "AudioSegment":  # type: ignore[nam
 
         return voice
     except Exception:
+        logger.warning("[RADIO] Audio processing failed, returning unprocessed voice", exc_info=True)
         return voice
 
 

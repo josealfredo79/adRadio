@@ -453,11 +453,11 @@ export default function CampaignsPage() {
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap">Entrega</span>
                         <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
                           <div
-                            className="h-full rounded-full bg-green-400 transition-all"
+                            className="h-full rounded-full bg-green-400 dark:bg-green-500 transition-all"
                             style={{ width: `${Math.min(100, Math.round(((campaign.stats.delivered ?? 0) / campaign.stats.sent) * 100))}%` }}
                           />
                         </div>
-                        <span className="text-[10px] font-semibold text-green-600">
+                        <span className="text-[10px] font-semibold text-green-600 dark:text-green-400">
                           {Math.round(((campaign.stats.delivered ?? 0) / campaign.stats.sent) * 100)}%
                         </span>
                       </div>
@@ -466,11 +466,11 @@ export default function CampaignsPage() {
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap">Respuesta</span>
                         <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
                           <div
-                            className="h-full rounded-full bg-brand-500 transition-all"
+                            className="h-full rounded-full bg-brand-500 dark:bg-brand-400 transition-all"
                             style={{ width: `${Math.min(100, Math.round(((campaign.stats.replied ?? 0) / campaign.stats.sent) * 100))}%` }}
                           />
                         </div>
-                        <span className="text-[10px] font-semibold text-brand-600">
+                        <span className="text-[10px] font-semibold text-brand-600 dark:text-brand-400">
                           {Math.round(((campaign.stats.replied ?? 0) / campaign.stats.sent) * 100)}%
                         </span>
                       </div>
@@ -514,7 +514,7 @@ export default function CampaignsPage() {
                             </div>
                             <div className="flex gap-2 flex-wrap">
                               {chartData.map((d) => (
-                                <div key={d.name} className="flex items-center gap-1.5 text-[11px] text-gray-600 bg-purple-50 dark:bg-purple-950/30 rounded-lg px-2 py-1">
+                                <div key={d.name} className="flex items-center gap-1.5 text-[11px] text-gray-600 dark:text-gray-400 bg-purple-50 dark:bg-purple-950/30 rounded-lg px-2 py-1">
                                   <span className="w-2 h-2 rounded-full" style={{ background: d.fill }} />
                                   {d.name}: {d.rate}% ({d.sent} enviados)
                                   {d.rate === maxRate && d.rate > 0 && (
@@ -542,7 +542,7 @@ export default function CampaignsPage() {
                   )}
                   {campaign.status === 'running' && (
                     <button onClick={() => pauseMutation.mutate(campaign.id)}
-                      className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30 p-1.5 text-yellow-600 hover:bg-yellow-100 shrink-0">
+                      className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30 p-1.5 text-yellow-600 dark:text-yellow-300 hover:bg-yellow-100 shrink-0">
                       <Pause className="h-3.5 w-3.5" />
                     </button>
                   )}
@@ -554,7 +554,7 @@ export default function CampaignsPage() {
                     </button>
                   )}
                   <button onClick={() => { if (confirm('¿Eliminar esta campaña?')) deleteMutation.mutate(campaign.id) }}
-                    className="text-muted-foreground hover:text-red-500 transition-colors shrink-0">
+                    className="text-muted-foreground hover:text-red-500 dark:hover:text-red-400 transition-colors shrink-0">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -574,7 +574,7 @@ export default function CampaignsPage() {
               {/* Template picker */}
               {(templatesData?.length ?? 0) > 0 && (
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">📋 Usar template guardado</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">📋 Usar template guardado</label>
                   <select
                     defaultValue=""
                     onChange={(e) => {
@@ -594,13 +594,13 @@ export default function CampaignsPage() {
               {/* Nombre + tipo */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Nombre</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre</label>
                   <input type="text" placeholder="Ej: Promo verano"
                     value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                     className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Tipo</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo</label>
                   <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
                     className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none">
                     {CAMPAIGN_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -610,7 +610,7 @@ export default function CampaignsPage() {
 
               {/* Modo de campaña — La Nueva Radio */}
               <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">🎙️ Modo de campaña</label>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">🎙️ Modo de campaña</label>
                 <div className="grid grid-cols-2 gap-2">
                   {CAMPAIGN_MODES.map((m) => (
                     <button key={m.value} onClick={() => { setMode(m.value as CampaignMode); setVariants([]); setMultiMessages([]); setRadioAudioUrl(''); setRadioScript('') }}
@@ -625,7 +625,7 @@ export default function CampaignsPage() {
               {/* Inputs según modo */}
               {mode === 'regular' && (
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">¿Qué quieres comunicar?</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">¿Qué quieres comunicar?</label>
                   <textarea rows={2} placeholder="Ej: 30% de descuento este fin de semana"
                     value={intent} onChange={(e) => setIntent(e.target.value)}
                     className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none" />
@@ -636,7 +636,7 @@ export default function CampaignsPage() {
               )}
               {mode === 'sequence' && (
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">¿Qué historia cuenta la secuencia?</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">¿Qué historia cuenta la secuencia?</label>
                   <textarea rows={2} placeholder="Ej: Lanzamiento de nuevos platillos de temporada"
                     value={intent} onChange={(e) => setIntent(e.target.value)}
                     className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none" />
@@ -646,13 +646,13 @@ export default function CampaignsPage() {
               {mode === 'saga' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">¿Qué producto/servicio protagoniza la saga?</label>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">¿Qué producto/servicio protagoniza la saga?</label>
                     <textarea rows={2} placeholder="Ej: Clases de yoga para mamás con poco tiempo"
                       value={productDesc} onChange={(e) => setProductDesc(e.target.value)}
                       className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Nombre del protagonista</label>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre del protagonista</label>
                     <input type="text" value={protagonist} onChange={(e) => setProtagonist(e.target.value)}
                       className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none" />
                   </div>
@@ -663,7 +663,7 @@ export default function CampaignsPage() {
               {isBannerMode && (
                 <div className="space-y-4">
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">¿Qué quieres promocionar?</label>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">¿Qué quieres promocionar?</label>
                     <textarea rows={2}
                       placeholder="Ej: 20% de descuento esta semana en todos los productos, solo por tiempo limitado"
                       value={bannerPromo} onChange={(e) => setBannerPromo(e.target.value)}
@@ -674,7 +674,7 @@ export default function CampaignsPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Paleta de colores</label>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Paleta de colores</label>
                     <div className="grid grid-cols-4 gap-2">
                       {[
                         { key: 'promo', label: 'Azul/Rojo', colors: ['#1d3557', '#e63946'] },
@@ -700,7 +700,7 @@ export default function CampaignsPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Texto del mensaje (opcional)</label>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Texto del mensaje (opcional)</label>
                     <input type="text"
                       placeholder="Ej: ¡Hola! Mira lo que tenemos para ti 👆"
                       value={bannerCaption} onChange={(e) => setBannerCaption(e.target.value)}
@@ -732,7 +732,7 @@ export default function CampaignsPage() {
 
               {isRadioMode && (
                 <div className="space-y-3">                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                       {mode === 'comunitaria' ? '¿Qué valor genuino puede dar tu negocio?'
                         : mode === 'capsula' ? '¿Sobre qué tema quieres el dato sorprendente?'
                         : mode === 'trivia' ? '¿Sobre qué área será la pregunta?'
@@ -788,7 +788,7 @@ export default function CampaignsPage() {
                   {/* Extra context — trivia (premio), alerta/estacional (fecha/temporada) */}
                   {(mode === 'trivia' || mode === 'alerta' || mode === 'estacional') && (
                     <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                         {mode === 'trivia' ? '🎁 Premio mencionado en la trivia'
                           : mode === 'alerta' ? '📅 Contexto actual (fecha, clima, evento)'
                           : '📅 Temporada o momento del año'}
@@ -806,14 +806,14 @@ export default function CampaignsPage() {
 
                   {/* Categoría del negocio (para elegir jingle y contextualizar) */}
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Categoría del negocio (opcional)</label>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Categoría del negocio (opcional)</label>
                     <input type="text" placeholder="Ej: farmacia, restaurante, gimnasio, inmobiliaria..."
                       value={businessCategory} onChange={(e) => setBusinessCategory(e.target.value)}
                       className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none" />
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">País / acento del locutor</label>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">País / acento del locutor</label>
                     <select value={radioCountry} onChange={(e) => setRadioCountry(e.target.value)}
                       className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none">
                       <option value="mx">🇲🇽 México</option>
@@ -824,7 +824,7 @@ export default function CampaignsPage() {
                   </div>
                   {(voicesData?.length ?? 0) > 0 && (
                     <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700">Voz del locutor</label>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Voz del locutor</label>
                       <select value={radioVoiceId} onChange={(e) => setRadioVoiceId(e.target.value)}
                         className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none">
                         <option value="">— Por defecto según país —</option>
@@ -859,7 +859,7 @@ export default function CampaignsPage() {
               {/* ── Voces del Barrio mode ──────────────────────────────────── */}
               {isVocesMode && (
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                     📝 Solicitud para tus clientes
                   </label>
                   <textarea rows={2}
@@ -929,7 +929,7 @@ export default function CampaignsPage() {
               {/* Mensaje final — solo en regular */}
               {mode === 'regular' && (
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Mensaje final</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Mensaje final</label>
                   <textarea rows={3} placeholder="El mensaje que recibirán tus clientes..."
                     value={form.message_text} onChange={(e) => setForm({ ...form, message_text: e.target.value })}
                     className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none" />
@@ -946,13 +946,13 @@ export default function CampaignsPage() {
                 {hasCoupon && (
                   <div className="mt-3 grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-600">Descripción del cupón</label>
+                      <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Descripción del cupón</label>
                       <input type="text" placeholder="Ej: 20% de descuento"
                         value={couponDesc} onChange={(e) => setCouponDesc(e.target.value)}
                         className="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none" />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-600">Válido por (horas)</label>
+                      <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Válido por (horas)</label>
                       <select value={couponHours} onChange={(e) => setCouponHours(Number(e.target.value))}
                         className="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none">
                         <option value={24}>24 horas</option>
@@ -976,7 +976,7 @@ export default function CampaignsPage() {
                   <div className="mt-3 space-y-3">
                     {abVariants.map((v, i) => (
                       <div key={i}>
-                        <label className="mb-1 block text-xs font-medium text-gray-600">
+                        <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
                           Variante {String.fromCharCode(65 + i)}
                         </label>
                         <textarea rows={2} placeholder={`Mensaje variante ${String.fromCharCode(65 + i)}...`}
@@ -1002,7 +1002,7 @@ export default function CampaignsPage() {
                     )}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="mb-1 block text-xs font-medium text-gray-600">División</label>
+                        <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">División</label>
                         <select value={abSplit} onChange={(e) => setAbSplit(e.target.value)}
                           className="w-full rounded-lg border border-purple-200 dark:border-purple-800 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none">
                           <option value="50/50">50% / 50%</option>
@@ -1011,7 +1011,7 @@ export default function CampaignsPage() {
                         </select>
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs font-medium text-gray-600">Métrica</label>
+                        <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Métrica</label>
                         <select value={abMetric} onChange={(e) => setAbMetric(e.target.value)}
                           className="w-full rounded-lg border border-purple-200 dark:border-purple-800 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none">
                           <option value="response">Tasa de respuesta</option>
@@ -1080,7 +1080,7 @@ export default function CampaignsPage() {
                   Genera 7 días de contenido en un clic. Una estrategia completa para tus clientes.
                 </p>
               </div>
-              <button onClick={() => setShowParrilla(false)} className="text-muted-foreground hover:text-gray-600">
+              <button onClick={() => setShowParrilla(false)} className="text-muted-foreground hover:text-gray-600 dark:hover:text-gray-400">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -1089,25 +1089,25 @@ export default function CampaignsPage() {
               {/* Formulario Izquierdo */}
               <div className="col-span-1 space-y-4 border-r pr-6">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Nombre del negocio</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre del negocio</label>
                   <input type="text" placeholder="Ej: Pizzería Don Corleone"
                     value={parrillaBusinessName} onChange={(e) => setParrillaBusinessName(e.target.value)}
                     className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Propósito principal de la semana</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Propósito principal de la semana</label>
                   <textarea rows={3} placeholder="Ej: Anunciar nuestras nuevas pizzas veganas y la promo del 2x1 los jueves"
                     value={parrillaIntent} onChange={(e) => setParrillaIntent(e.target.value)}
                     className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none resize-none" />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Categoría (opcional)</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Categoría (opcional)</label>
                   <input type="text" placeholder="Ej: restaurante, zapatería"
                     value={parrillaCategory} onChange={(e) => setParrillaCategory(e.target.value)}
                     className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Contexto extra (opcional)</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Contexto extra (opcional)</label>
                   <input type="text" placeholder="Ej: Premio de la trivia, temporada"
                     value={parrillaContext} onChange={(e) => setParrillaContext(e.target.value)}
                     className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
@@ -1186,7 +1186,7 @@ export default function CampaignsPage() {
                               <AlertCircle className="h-3 w-3" /> Error al generar audio
                             </div>
                           )}
-                          <div className="text-xs text-gray-600 bg-muted p-2 rounded border border-border flex-1 overflow-y-auto max-h-24">
+                          <div className="text-xs text-gray-600 dark:text-gray-400 bg-muted p-2 rounded border border-border flex-1 overflow-y-auto max-h-24">
                             {d.script}
                           </div>
                         </div>
@@ -1211,7 +1211,7 @@ export default function CampaignsPage() {
                   {STATUS_LABELS[analyticsTarget.status] ?? analyticsTarget.status}
                 </span>
               </div>
-              <button onClick={() => setAnalyticsId(null)} className="text-muted-foreground hover:text-gray-600">
+              <button onClick={() => setAnalyticsId(null)} className="text-muted-foreground hover:text-gray-600 dark:hover:text-gray-400">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -1247,8 +1247,8 @@ export default function CampaignsPage() {
                         <div className="text-xs text-green-600">Entrega</div>
                       </div>
                       <div className="rounded-lg bg-brand-50 dark:bg-brand-950/30 p-2 text-center">
-                        <div className="font-semibold text-brand-700">{Math.round(((s.replied ?? 0) / sent) * 100)}%</div>
-                        <div className="text-xs text-brand-600">Respuesta</div>
+                        <div className="font-semibold text-brand-700 dark:text-brand-300">{Math.round(((s.replied ?? 0) / sent) * 100)}%</div>
+                        <div className="text-xs text-brand-600 dark:text-brand-400">Respuesta</div>
                       </div>
                     </div>
                   )}
@@ -1288,7 +1288,7 @@ export default function CampaignsPage() {
                   <h3 className="font-semibold text-foreground">🎤 {vocesDetailTarget.name}</h3>
                   <p className="mt-0.5 text-xs text-muted-foreground">Voces del Barrio — Historias de clientes</p>
                 </div>
-                <button onClick={() => setVocesDetailId(null)} className="text-muted-foreground hover:text-gray-600">
+                <button onClick={() => setVocesDetailId(null)} className="text-muted-foreground hover:text-gray-600 dark:hover:text-gray-400">
                   <X className="h-5 w-5" />
                 </button>
               </div>

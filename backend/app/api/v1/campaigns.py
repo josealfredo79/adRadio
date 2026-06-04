@@ -3,6 +3,7 @@ Campaigns router — /api/v1/campaigns
 """
 import csv
 import io
+import logging
 import uuid
 from datetime import datetime
 
@@ -43,6 +44,8 @@ from app.services.claude_service import (
 from app.services.imagen_service import generate_flyer
 from app.services.radio_service import generate_radio_ad, generate_radio_script
 from app.workers.tasks import schedule_campaign
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
@@ -325,7 +328,7 @@ async def preview_banner(
     """Generate and return a preview PNG banner (no R2 upload, no DB write)."""
     from fastapi.responses import Response as FastAPIResponse
     from app.services.banner_service import (
-        generate_banner_png, generate_banner_copy_with_claude, BannerCopy
+        generate_banner_png, generate_banner_copy_with_claude
     )
 
     copy = await generate_banner_copy_with_claude(
@@ -676,6 +679,7 @@ async def generate_parrilla(
     try:
         hour, minute = (int(x) for x in body.send_time.split(":"))
     except Exception:
+        logger.warning("[CAMPAIGN] Failed to parse send_time, defaulting to 10:00", exc_info=True)
         hour, minute = 10, 0
 
     now = datetime.now(timezone.utc)

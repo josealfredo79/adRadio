@@ -1,7 +1,7 @@
 import logging
 
 import redis.asyncio as aioredis
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
 
 from app.config import settings

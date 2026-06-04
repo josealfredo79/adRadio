@@ -4,7 +4,6 @@ Celery tasks — background jobs for IaRadio.
 import asyncio
 import logging
 import random
-import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -162,7 +161,7 @@ def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str, fro
     try:
         run_async(_run())
     except Exception:
-        pass
+        logger.warning("[WELCOME-CUÑA] Failed to send welcome cuña for contact", exc_info=True)
 
 
 @celery_app.task
@@ -213,7 +212,7 @@ def auto_tag_contact_from_conversation(contact_id: str):
     try:
         run_async(_run())
     except Exception:
-        pass
+        logger.warning("[AUTO-TAG] Failed to auto-tag contact %s", contact_id, exc_info=True)
 
 
 @celery_app.task(bind=True, max_retries=2)
@@ -233,7 +232,7 @@ def schedule_campaign(self, campaign_id: str):
         from app.models.coupon import Coupon
         from app.models.message import Message
         from app.models.user import User
-        from app.services.twilio_service import anti_ban_delay, send_whatsapp_media, is_human_hour
+        from app.services.twilio_service import anti_ban_delay, is_human_hour
         from app.services.claude_service import personalize_message
         from app.services.coupon_service import (
             generate_coupon_code, format_coupon_in_message, default_expiry
@@ -315,7 +314,7 @@ def schedule_campaign(self, campaign_id: str):
             # ── Banner Visual mode: generate personalized PNG per contact ────────
             if mode == "banner":
                 from app.services.banner_service import (
-                    generate_banner_png, generate_banner_copy_with_claude, BannerCopy
+                    generate_banner_png, generate_banner_copy_with_claude
                 )
                 from app.services.storage_service import upload_bytes
 
@@ -659,7 +658,7 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
         try:
             run_async(_mark_error())
         except Exception:
-            pass
+            logger.warning("[KB] Failed to mark error for KB file %s", kb_id, exc_info=True)
         raise self.retry(exc=exc)
 
 
@@ -760,8 +759,7 @@ def check_scheduled_campaigns():
     async def _check():
         from app.database import AsyncSessionLocal
         from app.models.campaign import Campaign
-        from sqlalchemy import select, cast, DateTime
-        from sqlalchemy.dialects.postgresql import JSONB
+        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             now = datetime.now(timezone.utc)
@@ -779,7 +777,7 @@ def check_scheduled_campaigns():
                         if scheduled_dt <= now:
                             schedule_campaign.delay(str(campaign.id))
                     except ValueError:
-                        pass
+                        logger.warning("[CAMPAIGN] Invalid schedule date for campaign %s: %s", campaign.id, start_date)
 
     run_async(_check())
 
@@ -910,7 +908,7 @@ def send_appointment_reminders():
         from app.models.user import User
         from app.models.contact import Contact
         from app.services.twilio_service import send_whatsapp
-        from sqlalchemy import select, and_
+        from sqlalchemy import select
 
         now = datetime.now(timezone.utc)
 
@@ -1023,7 +1021,7 @@ def send_parrilla_day(
         from app.models.contact import Contact
         from app.models.user import User
         from app.models.message import Message
-        from app.services.twilio_service import anti_ban_delay, send_whatsapp_media
+        from app.services.twilio_service import anti_ban_delay
         from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
@@ -1206,11 +1204,11 @@ def process_automation_enrollments():
     """Celery beat task — send next drip message to all due enrollments."""
     async def _run():
         from app.database import AsyncSessionLocal
-        from app.models.automation import AutomationEnrollment, AutomationFlow, AutomationStep
+        from app.models.automation import AutomationEnrollment, AutomationFlow
         from app.models.contact import Contact
         from app.models.message import Message
         from app.services.twilio_service import send_whatsapp
-        from sqlalchemy import select, and_
+        from sqlalchemy import select
         from sqlalchemy.orm import selectinload
 
         now = datetime.now(timezone.utc)
@@ -1308,8 +1306,7 @@ def trigger_automation_for_contact(contact_id: str, advertiser_id: str, trigger:
     """Enroll a contact in all matching active flows."""
     async def _run():
         from app.database import AsyncSessionLocal
-        from app.models.automation import AutomationFlow, AutomationStep, AutomationEnrollment
-        from app.models.contact import Contact
+        from app.models.automation import AutomationFlow, AutomationEnrollment
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
 

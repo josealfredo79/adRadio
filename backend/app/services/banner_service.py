@@ -8,9 +8,7 @@ Pipeline:
 """
 import io
 import logging
-import math
 import random
-import textwrap
 from typing import NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
@@ -50,6 +48,7 @@ def _load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
     try:
         return ImageFont.truetype(path, size)
     except Exception:
+        logger.warning("[BANNER] Failed to load font, using default", exc_info=True)
         return ImageFont.load_default()
 
 

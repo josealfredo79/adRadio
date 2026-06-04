@@ -4,11 +4,14 @@ Uses a GCP service account (JSON stored in env var) for OAuth2.
 """
 import base64
 import json
+import logging
 
 import httpx
 
 from app.config import settings
 from app.services.storage_service import upload_bytes
+
+logger = logging.getLogger(__name__)
 
 
 def _get_access_token() -> str | None:
@@ -28,6 +31,7 @@ def _get_access_token() -> str | None:
         creds.refresh(request)
         return creds.token
     except Exception:
+        logger.warning("[IMAGEN] Failed to get access token, returning None", exc_info=True)
         return None
 
 

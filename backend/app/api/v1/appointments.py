@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -54,6 +54,7 @@ def _verify_state(token: str) -> str | None:
             return None
         return user_id
     except Exception:
+        logger.warning("[APPOINTMENTS] Failed to verify state token", exc_info=True)
         return None
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
@@ -191,7 +192,7 @@ async def delete_appointment(
             from app.services.calendar_service import delete_event
             delete_event(current_user.google_refresh_token, appointment.google_event_id)
         except Exception:
-            pass
+            logger.warning("[APPOINTMENTS] Failed to delete Google Calendar event", exc_info=True)
 
     await db.delete(appointment)
     await db.commit()

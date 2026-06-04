@@ -3,9 +3,8 @@ Webhooks router — /api/v1/webhooks
 """
 import hashlib
 import hmac
-import json
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -194,7 +193,7 @@ async def twilio_incoming(
         pending_appt = appt_result.scalars().first()
 
         if pending_appt:
-            from datetime import datetime, timezone as _tz
+            from datetime import datetime
             from app.services.twilio_service import send_whatsapp as _send_wa
             hora = pending_appt.scheduled_at.strftime("%I:%M %p").lstrip("0")
             fecha = pending_appt.scheduled_at.strftime("%A %d de %B")

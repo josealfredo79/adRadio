@@ -30,7 +30,6 @@ from app.schemas.auth import (
     RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
-    UserOut,
     VerifyEmailRequest,
 )
 
@@ -39,7 +38,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute")
+@limiter.limit("3/minute")
 async def register(
     request: Request,
     body: RegisterRequest,
@@ -102,7 +101,7 @@ async def verify_email(
 
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("10/minute")
+@limiter.limit("5/minute")
 async def login(
     request: Request,
     response: Response,
@@ -232,7 +231,9 @@ async def forgot_password(
 
 
 @router.post("/reset-password")
+@limiter.limit("5/minute")
 async def reset_password(
+    request: Request,
     body: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),

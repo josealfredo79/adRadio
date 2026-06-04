@@ -10,7 +10,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
-from app.config import settings
 from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.automation import AutomationFlow

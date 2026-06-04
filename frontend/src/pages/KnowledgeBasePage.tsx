@@ -62,12 +62,12 @@ export default function KnowledgeBasePage() {
       <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Base de conocimiento</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Base de conocimiento</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Sube documentos para que tu bot responda con información real de tu negocio
           </p>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors">
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-brand-500 dark:bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors">
           <Upload className="h-4 w-4" />
           Subir documento
           <input
@@ -81,23 +81,23 @@ export default function KnowledgeBasePage() {
       </div>
 
       {/* Supported formats */}
-      <div className="rounded-xl border border-blue-100 bg-blue-50 px-5 py-4">
-        <p className="text-sm font-medium text-blue-700">Formatos soportados</p>
-        <p className="mt-1 text-sm text-blue-600">
+      <div className="rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/30 px-5 py-4">
+        <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Formatos soportados</p>
+        <p className="mt-1 text-sm text-blue-600 dark:text-blue-400">
           Word (.docx), PDF (.pdf), Excel (.xlsx), Texto (.txt) — Máx. 50MB por archivo
         </p>
       </div>
 
       {/* Files list */}
-      <div className="rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden">
+      <div className="rounded-xl bg-white dark:bg-gray-950 shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
         {isLoading ? (
           <div className="space-y-3 p-6">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-14 rounded-lg bg-gray-100 animate-pulse" />
+              <div key={i} className="h-14 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />
             ))}
           </div>
         ) : !files?.length ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-16 text-gray-400 dark:text-gray-500">
             <BookOpen className="h-12 w-12 mb-3" />
             <p className="text-sm">No hay documentos todavía</p>
             <p className="text-xs mt-1">
@@ -105,33 +105,33 @@ export default function KnowledgeBasePage() {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {files.map((file) => {
               const Icon = FILE_ICONS[file.file_type] ?? File
               return (
                 <div
                   key={file.id}
-                  className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors"
+                  className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50">
-                    <Icon className="h-5 w-5 text-brand-500" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-950/30">
+                    <Icon className="h-5 w-5 text-brand-500 dark:text-brand-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{file.filename}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.filename}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       {file.file_type.toUpperCase()} · Subido {formatDate(file.created_at)}
                     </p>
                   </div>
                   {file.processing_status === 'processing' ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-700 animate-pulse">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-700 animate-pulse dark:bg-yellow-900/40 dark:text-yellow-300">
                       Procesando…
                     </span>
                   ) : file.processing_status === 'error' ? (
-                    <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-600">
+                    <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-600 dark:bg-red-900/40 dark:text-red-400">
                       Error
                     </span>
                   ) : (
-                    <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-600">
+                    <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-600 dark:bg-green-900/40 dark:text-green-300">
                       Procesado
                     </span>
                   )}
@@ -139,7 +139,7 @@ export default function KnowledgeBasePage() {
                     onClick={() => {
                       if (confirm('¿Eliminar este documento?')) deleteMutation.mutate(file.id)
                     }}
-                    className="text-gray-400 hover:text-red-500 transition-colors"
+                    className="text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>

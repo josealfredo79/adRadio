@@ -1,10 +1,12 @@
 """
 Claude 3.5 Sonnet service — generación de contenido publicitario.
 """
-import re
+import logging
 import anthropic
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _client: anthropic.AsyncAnthropic | None = None
 
@@ -325,7 +327,7 @@ Responde ÚNICAMENTE con el JSON array, sin texto adicional. Ejemplo: ["interesa
         if isinstance(tags, list):
             return [str(t) for t in tags if isinstance(t, str)]
     except Exception:
-        pass
+        logger.warning("[CLAUDE] Failed to parse intent tags", exc_info=True)
     return []
 
 

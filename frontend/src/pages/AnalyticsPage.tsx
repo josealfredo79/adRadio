@@ -30,46 +30,46 @@ export default function AnalyticsPage() {
       <SEO title="Analíticas" description="Panel de control de IaRadio." noIndex />
       <div className="space-y-8 max-w-4xl">
       <div className="flex items-center gap-3">
-        <div className="rounded-xl bg-brand-50 p-2.5">
-          <BarChart3 className="h-5 w-5 text-brand-500" />
+        <div className="rounded-xl bg-brand-50 dark:bg-brand-950/30 p-2.5">
+          <BarChart3 className="h-5 w-5 text-brand-500 dark:text-brand-400" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-          <p className="text-sm text-gray-500">Distribución de mensajes entrantes por hora</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Analytics</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Distribución de mensajes entrantes por hora</p>
         </div>
       </div>
 
       {isLoading ? (
-        <div className="h-80 bg-gray-100 animate-pulse rounded-xl" />
+        <div className="h-80 bg-gray-100 dark:bg-gray-800 animate-pulse rounded-xl" />
       ) : !data ? (
-        <p className="text-gray-400 text-sm">No hay datos suficientes aún.</p>
+        <p className="text-gray-400 dark:text-gray-500 text-sm">No hay datos suficientes aún.</p>
       ) : (
         <>
           {/* Summary cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-xl bg-white border border-gray-200 p-5 flex items-center gap-4">
-              <div className="rounded-lg bg-green-50 p-2.5">
-                <TrendingUp className="h-5 w-5 text-green-600" />
+            <div className="rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-5 flex items-center gap-4">
+              <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-2.5">
+                <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Mejor horario para enviar</p>
-                <p className="text-lg font-bold text-gray-900">{data.best_window}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Mejor horario para enviar</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{data.best_window}</p>
               </div>
             </div>
-            <div className="rounded-xl bg-white border border-gray-200 p-5 flex items-center gap-4">
-              <div className="rounded-lg bg-blue-50 p-2.5">
-                <Clock className="h-5 w-5 text-blue-600" />
+            <div className="rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-5 flex items-center gap-4">
+              <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 p-2.5">
+                <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Hora pico de actividad</p>
-                <p className="text-lg font-bold text-gray-900">{data.best_hour.toString().padStart(2, '0')}:00</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Hora pico de actividad</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{data.best_hour.toString().padStart(2, '0')}:00</p>
               </div>
             </div>
           </div>
 
           {/* Chart */}
-          <div className="rounded-xl bg-white border border-gray-200 p-6">
-            <h2 className="text-sm font-semibold text-gray-700 mb-6">Mensajes entrantes por hora</h2>
+          <div className="rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-6">
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-6">Mensajes entrantes por hora</h2>
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={data.hours} margin={{ top: 0, right: 8, left: -16, bottom: 0 }}>
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
@@ -91,8 +91,8 @@ export default function AnalyticsPage() {
             </ResponsiveContainer>
           </div>
 
-          <div className="rounded-xl bg-gray-50 border border-gray-200 p-5 text-sm text-gray-500">
-            <p className="font-medium text-gray-700 mb-1">💡 Cómo usarlo</p>
+          <div className="rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 text-sm text-gray-500 dark:text-gray-400">
+            <p className="font-medium text-gray-700 dark:text-gray-300 mb-1">💡 Cómo usarlo</p>
             <p>Programa tus campañas en el <strong>mejor horario</strong> para maximizar la tasa de apertura. Los colores más oscuros indican mayor actividad de tus clientes.</p>
           </div>
         </>

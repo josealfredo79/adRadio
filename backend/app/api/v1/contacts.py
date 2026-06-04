@@ -3,7 +3,6 @@ Contacts router — /api/v1/contacts
 """
 import csv
 import io
-import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status

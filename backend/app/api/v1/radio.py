@@ -5,9 +5,9 @@ Serves audio files from local storage (primary) or R2 (fallback).
 import boto3
 import os
 from botocore.config import Config
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import FileResponse
 
 from app.config import settings
 

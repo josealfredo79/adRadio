@@ -45,9 +45,9 @@ export default function ResetPasswordPage() {
     return (
       <>
         <SEO title="Enlace inválido" noIndex />
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl">
-          <p className="text-red-600">Enlace inválido. Solicita uno nuevo desde la página de login.</p>
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4 dark:from-gray-950 dark:to-gray-900">
+          <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl dark:bg-gray-950 dark:border dark:border-gray-800">
+          <p className="text-red-600 dark:text-red-400">Enlace inválido. Solicita uno nuevo desde la página de login.</p>
         </div>
       </div>
       </>
@@ -58,11 +58,11 @@ export default function ResetPasswordPage() {
     return (
       <>
         <SEO title="Contraseña actualizada" noIndex />
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl">
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4 dark:from-gray-950 dark:to-gray-900">
+          <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl dark:bg-gray-950 dark:border dark:border-gray-800">
             <CheckCircle className="mx-auto mb-4 h-14 w-14 text-green-500" />
-            <h2 className="text-xl font-bold text-gray-900">¡Contraseña actualizada!</h2>
-            <p className="mt-2 text-sm text-gray-500">Redirigiendo al login...</p>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">¡Contraseña actualizada!</h2>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Redirigiendo al login...</p>
           </div>
         </div>
       </>
@@ -72,34 +72,34 @@ export default function ResetPasswordPage() {
   return (
     <>
       <SEO title="Nueva contraseña" description="Establece una nueva contraseña para tu cuenta de IaRadio." noIndex />
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4 dark:from-gray-950 dark:to-gray-900">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-lg">
             <Radio className="h-7 w-7 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">IaRadio</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">IaRadio</h1>
         </div>
 
-        <div className="rounded-2xl bg-white p-8 shadow-xl">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">Nueva contraseña</h2>
+        <div className="rounded-2xl bg-white p-8 shadow-xl dark:bg-gray-950 dark:border dark:border-gray-800">
+          <h2 className="mb-6 text-xl font-semibold text-gray-900 dark:text-gray-100">Nueva contraseña</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Nueva contraseña</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Nueva contraseña</label>
               <div className="relative">
                 <input
                   type={showPwd ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 pr-10 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 pr-10 text-sm text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500"
                   placeholder="Mínimo 8 caracteres"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPwd(!showPwd)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -107,19 +107,19 @@ export default function ResetPasswordPage() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Confirmar contraseña</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Confirmar contraseña</label>
               <input
                 type="password"
                 required
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500"
                 placeholder="Repite la contraseña"
               />
             </div>
 
             {error && (
-              <p className="rounded-lg bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</p>
+              <p className="rounded-lg bg-red-50 px-4 py-2.5 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">{error}</p>
             )}
 
             <button

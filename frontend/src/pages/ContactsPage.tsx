@@ -1,7 +1,7 @@
 import { useState, useRef, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Users, Plus, Upload, Trash2, Search, Download, Tag, X, Tags, Send, CheckCheck } from 'lucide-react'
+import { Users, Plus, Upload, Trash2, Search, Download, Tag, X, Tags, Send, CheckCheck, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
 import PrintButton from '@/components/PrintButton'
@@ -33,6 +33,7 @@ export default function ContactsPage() {
   const [tagInput, setTagInput] = useState('')
   const [error, setError] = useState('')
   const [uploadMsg, setUploadMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [page, setPage] = useState(1)
   const [isUploading, setIsUploading] = useState(false)
   const [editTagsId, setEditTagsId] = useState<string | null>(null)
   const [editTagsValue, setEditTagsValue] = useState<string[]>([])
@@ -50,8 +51,8 @@ export default function ContactsPage() {
   const [batchCampaignId, setBatchCampaignId] = useState('')
 
   const { data, isLoading } = useQuery<{ items: Contact[]; total: number }>({
-    queryKey: ['contacts'],
-    queryFn: () => api.get('/contacts').then((r) => r.data),
+    queryKey: ['contacts', page],
+    queryFn: () => api.get('/contacts', { params: { page, page_size: 20 } }).then((r) => r.data),
   })
 
   const campaignsQuery = useQuery<Campaign[]>({
@@ -155,6 +156,21 @@ export default function ContactsPage() {
         c.phone.includes(search)
       )
   ) ?? []
+
+  const totalPages = data ? Math.ceil(data.total / 20) : 0
+
+  function getPageNumbers() {
+    const pages: (number | string)[] = [1]
+    if (totalPages <= 1) return pages
+    const delta = 1
+    const rangeStart = Math.max(2, page - delta)
+    const rangeEnd = Math.min(totalPages - 1, page + delta)
+    if (rangeStart > 2) pages.push('...')
+    for (let i = rangeStart; i <= rangeEnd; i++) pages.push(i)
+    if (rangeEnd < totalPages - 1) pages.push('...')
+    if (totalPages > 1) pages.push(totalPages)
+    return pages
+  }
 
   const addTagToForm = () => {
     const t = tagInput.trim().toLowerCase()
@@ -295,7 +311,7 @@ export default function ContactsPage() {
         ].map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setStatusFilter(tab.key)}
+            onClick={() => { setStatusFilter(tab.key); setPage(1) }}
             className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
               statusFilter === tab.key
                 ? 'bg-brand-500 text-white'
@@ -317,17 +333,16 @@ export default function ContactsPage() {
         <div className="flex flex-wrap gap-1.5 items-center">
           <Tag className="h-3.5 w-3.5 text-muted-foreground" />
           <button
-            onClick={() => setTagFilter('')}
+            onClick={() => { setTagFilter(''); setPage(1) }}
             className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
               !tagFilter ? 'bg-brand-500 text-white' : 'bg-muted text-muted-foreground hover:bg-muted'
-            }`}
-          >
-            Todas
+            }`}>
+              Todas
           </button>
           {allTags.map((tag) => (
             <button
               key={tag}
-              onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
+              onClick={() => { setTagFilter(tagFilter === tag ? '' : tag); setPage(1) }}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                 tagFilter === tag ? 'bg-brand-500 text-white' : 'bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50'
               }`}
@@ -344,7 +359,7 @@ export default function ContactsPage() {
         <input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
           placeholder="Buscar por nombre o teléfono..."
           className="w-full rounded-lg border border-border py-2.5 pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
         />
@@ -532,6 +547,48 @@ export default function ContactsPage() {
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {data && totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-1">
+          <p className="text-sm text-muted-foreground">
+            Mostrando {Math.min((page - 1) * 20 + 1, data.total)}-{Math.min(page * 20, data.total)} de {data.total} contactos
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:border-gray-800 dark:hover:bg-gray-900"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {getPageNumbers().map((p, i) =>
+              p === '...' ? (
+                <span key={`ellipsis-${i}`} className="px-2 text-sm text-muted-foreground">...</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => setPage(p as number)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    page === p
+                      ? 'bg-brand-500 text-white'
+                      : 'text-muted-foreground hover:bg-muted dark:hover:bg-gray-900'
+                  }`}
+                >
+                  {p}
+                </button>
+              )
+            )}
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:border-gray-800 dark:hover:bg-gray-900"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Batch actions toolbar */}
       {selectedIds.size > 0 && (
