@@ -39,8 +39,9 @@
 }
 
 @media print {
-  nav, .sidebar, header, footer,
+  nav, aside, .sidebar, header, footer,
   button, .btn, [class*="button"],
+  [class*="fixed"][class*="inset-0"],
   noindex, .no-print {
     display: none !important;
   }
@@ -57,6 +58,22 @@
     margin: 0 !important;
     padding: 0 !important;
     max-width: 100% !important;
+  }
+
+  /* Liberar contenedores del layout que recortan con overflow:hidden y height:100vh */
+  body, #root,
+  [class*="h-screen"], [class*="min-h-screen"],
+  [class*="overflow-hidden"] {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Expandir contenedores con max-height dentro del área imprimible */
+  .print-area [class*="max-h-"] {
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   [class*="rounded-"], [class*="card"], [class*="bg-white"] {
