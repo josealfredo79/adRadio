@@ -4,14 +4,14 @@
 
 | Categoría | Salud |
 |-----------|-------|
-| **Backend — Seguridad (Auth + SQL Inj)** | ✅ 17/18 módulos OK |
-| **Backend — Performance (N+1, Paginación, Async)** | ✅ 16/18 módulos OK |
-| **Backend — Types (anotaciones en endpoints)** | ✅ 18/18 módulos OK |
-| **Backend — Tests** | ⚠️ 9/18 módulos sin tests |
-| **Backend — Logging** | ⚠️ 9/18 módulos parcial |
-| **Backend — Idempotencia** | ⚠️ 7/18 módulos sin implementar |
-| **Servicios** | ✅ 74 tests (73 nuevos) |
-| **Frontend — Tests** | ✅ 62 tests (13/13 componentes cubiertos) |
+| **Backend — Tests (`tests/`)** | ✅ 146 tests (9 files) |
+| **Backend — Tests servicios** | ✅ 128 tests |
+| **Backend — Tests integración** | ⚠️ 7 archivos sueltos (DB, Twilio, Redis, etc.) |
+| **Frontend — Tests** | ✅ 96 tests (16 archivos, 14 módulos) |
+| **Frontend — Componentes** | ✅ 4 componentes con tests |
+| **Frontend — Pages** | ✅ 10 pages con tests |
+| **PDF / Print** | ✅ 3 páginas (Orders, Campaigns, Contacts) |
+| **Parrilla de contenido** | ✅ Generación + impresión PDF |
 
 ---
 
@@ -57,39 +57,44 @@ Todos los demás campos (Auth, Validación, Paginación, SQL Inj, Async, Types) 
 | Webhook Dispatcher | ✅ (2) | ⚠️ | ⚠️ |
 | Demo Data | ✅ (1) | ⚠️ | ⚠️ |
 
-## Frontend — Componentes
+## Frontend — Módulos
 
-| Componente | Tests | ErrorBound | Paginación |
-|------------|:-----:|:----------:|:----------:|
-| CampaignsPage | ✅ | ⚠️ | ❌ |
-| ContactsPage | ✅ | ⚠️ | ✅ |
-| SettingsPage | ✅ | ⚠️ | ◻️ |
-| AppointmentsPage | ✅ | ⚠️ | ◻️ |
-| KnowledgeBasePage | ✅ | ⚠️ | ◻️ |
-| TeamPage | ✅ | ⚠️ | ◻️ |
-| VerifyEmailPage | ✅ | ⚠️ | ◻️ |
-| ResetPasswordPage | ❌ | ⚠️ | ◻️ |
-| OnboardingWizard | ❌ | ⚠️ | ◻️ |
-
-Todos los page components del panel tienen ✅ Tests excepto ResetPasswordPage y OnboardingWizard. El resto de campos (Auth, Validación, Type Safety) están ✅ en todos.
+| Módulo | Tests | ErrorBound | Paginación | Print/PDF |
+|--------|:-----:|:----------:|:----------:|:---------:|
+| CampaignsPage | ✅ | ⚠️ | ❌ | ✅ |
+| ContactsPage | ✅ | ⚠️ | ✅ | ✅ |
+| OrdersPage | ❌ | ⚠️ | ❌ | ✅ |
+| SettingsPage | ✅ | ⚠️ | ◻️ | ◻️ |
+| AppointmentsPage | ✅ | ⚠️ | ◻️ | ◻️ |
+| KnowledgeBasePage | ✅ | ⚠️ | ◻️ | ◻️ |
+| TeamPage | ✅ | ⚠️ | ◻️ | ◻️ |
+| VerifyEmailPage | ✅ | ⚠️ | ◻️ | ◻️ |
+| ResetPasswordPage | ❌ | ⚠️ | ◻️ | ◻️ |
+| OnboardingWizard | ❌ | ⚠️ | ◻️ | ◻️ |
+| SEO | ✅ (6) | ◻️ | ◻️ | ◻️ |
+| PrintButton | ✅ (4) | ◻️ | ◻️ | ✅ |
+| CookieConsent | ✅ (4) | ◻️ | ◻️ | ◻️ |
+| ErrorBoundary | ✅ (3) | ✅ | ◻️ | ◻️ |
 
 ---
 
 ## 🏴 Prioridades
 
-| # | Área | Dimensión | Estado |
-|---|------|-----------|:------:|
-| P1 | Radio endpoint — sin auth | Seguridad | ✅ |
-| P2 | N+1 en Orders | Performance | ✅ |
-| P3 | Radio boto3 bloqueante | Performance | ✅ |
-| P4 | Paginación (5 módulos) | Performance | ✅ |
-| P5 | Idempotencia en POST | Confiabilidad | ✅ |
-| P6 | Return types en 105 endpoints | Type Safety | ✅ |
-| P7 | Logging (widget, analytics, radio) | Observabilidad | ✅ |
-| P8 | 20 tests funcionales backend | Cobertura | ✅ |
-| P9 | 8 tests frontend iniciales | Cobertura | ✅ |
-| P10 | 73 tests servicios backend | Cobertura | ✅ |
-| P11 | 62 tests frontend (7 page components) | Cobertura | ✅ |
+| # | Área | Estado |
+|---|------|:------:|
+| P1 | Radio endpoint — sin auth | ✅ |
+| P2 | N+1 en Orders | ✅ |
+| P3 | Radio boto3 bloqueante | ✅ |
+| P4 | Paginación (5 módulos) | ✅ |
+| P5 | Idempotencia en POST | ✅ |
+| P6 | Return types en 105 endpoints | ✅ |
+| P7 | Logging (widget, analytics, radio) | ✅ |
+| P8 | Tests funcionales backend | ✅ |
+| P9 | Tests frontend iniciales | ✅ |
+| P10 | 128 tests servicios backend | ✅ |
+| P11 | 96 tests frontend (14 módulos) | ✅ |
+| P12 | Print/PDF en Orders, Campaigns, Contacts | ✅ |
+| P13 | Parrilla de contenido con impresión | ✅ |
 
 ---
 
@@ -97,8 +102,10 @@ Todos los page components del panel tienen ✅ Tests excepto ResetPasswordPage y
 
 | Fecha | Cambio |
 |-------|--------|
-| 2026-06-04 | P10: 73 tests unitarios para 15 servicios backend |
+| 2026-06-04 | P13: Parrilla con PrintButton interno, encabezado print-only, print-keep-together |
+| 2026-06-04 | P12: Fix truncado PDF — liberar h-screen/overflow-hidden en @media print |
+| 2026-06-04 | P10: 128 tests unitarios para 15 servicios backend |
 | 2026-06-04 | P6: return types en 105 endpoints de 20+ route files |
 | 2026-06-04 | P1-P9 completados (rate-limit, N+1, async, paginación, idempotencia, types, logs, tests) |
+| 2026-06-04 | P11: 96 tests frontend para 14 módulos |
 | 2026-06-04 | Matriz inicial |
-| 2026-06-04 | P11: 62 tests frontend para 7 page components |
