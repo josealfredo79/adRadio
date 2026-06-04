@@ -1170,9 +1170,22 @@ export default function CampaignsPage() {
                       </span>
                     </div>
 
+                    {/* Print header — visible only in @media print */}
+                    <div className="print-only">
+                      <div className="print-header">
+                        <h2>Parrilla de contenido — {parrillaBusinessName}</h2>
+                        {parrillaIntent && <p>Propósito: {parrillaIntent}</p>}
+                        {parrillaCategory && <p>Categoría: {parrillaCategory}</p>}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end no-print">
+                      <PrintButton />
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-2">
                       {parrillaResult.days.map((d) => (
-                        <div key={d.day} className="rounded-xl border border-border bg-card p-3 shadow-sm flex flex-col">
+                        <div key={d.day} className="rounded-xl border border-border bg-card p-3 shadow-sm flex flex-col print-keep-together">
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-semibold text-gray-800">{d.day_name}</span>
                             <span className="text-xs font-medium text-muted-foreground flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
@@ -1186,7 +1199,7 @@ export default function CampaignsPage() {
                               <AlertCircle className="h-3 w-3" /> Error al generar audio
                             </div>
                           )}
-                          <div className="text-xs text-gray-600 dark:text-gray-400 bg-muted p-2 rounded border border-border flex-1 overflow-y-auto max-h-24">
+                          <div className="text-xs text-gray-600 dark:text-gray-400 bg-muted p-2 rounded border border-border flex-1 overflow-y-auto max-h-24 print-no-overflow">
                             {d.script}
                           </div>
                         </div>
