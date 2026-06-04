@@ -30,8 +30,8 @@ export default function PlansPage() {
     try {
       const { data } = await api.post('/checkout/create-session', { plan: planKey })
       window.location.href = data.checkout_url
-    } catch (err: any) {
-      alert(err.response?.data?.detail ?? 'Error al iniciar pago')
+    } catch (err: unknown) {
+      alert((err as any)?.response?.data?.detail ?? 'Error al iniciar pago')
     } finally {
       setLoading(null)
     }

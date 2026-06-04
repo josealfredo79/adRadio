@@ -50,8 +50,8 @@ export default function KnowledgeBasePage() {
     try {
       await api.post('/knowledge-base/upload', fd)
       qc.invalidateQueries({ queryKey: ['knowledge-base'] })
-    } catch (err: any) {
-      alert(err.response?.data?.detail ?? 'Error al subir archivo')
+    } catch (err: unknown) {
+      alert((err as any)?.response?.data?.detail ?? 'Error al subir archivo')
     }
     if (fileRef.current) fileRef.current.value = ''
   }

@@ -22,8 +22,8 @@ export default function RegisterPage() {
     try {
       await register(form.email, form.password, form.businessName)
       navigate(`/verify-email?email=${encodeURIComponent(form.email)}`)
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? 'Error al registrarse')
+    } catch (err: unknown) {
+      setError((err as any)?.response?.data?.detail ?? 'Error al registrarse')
     } finally {
       setLoading(false)
     }

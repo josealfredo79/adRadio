@@ -1,6 +1,7 @@
 """
 User Webhooks router — /api/v1/user-webhooks
 """
+import logging
 import secrets
 import uuid
 
@@ -13,6 +14,8 @@ from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.models.user_webhook import UserWebhook
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/user-webhooks", tags=["user-webhooks"])
 
@@ -51,7 +54,7 @@ class TestPingResult(BaseModel):
 async def list_webhooks(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> list[UserWebhookOut]:
     result = await db.execute(
         select(UserWebhook).where(UserWebhook.user_id == current_user.id)
     )
@@ -63,7 +66,7 @@ async def create_webhook(
     body: UserWebhookCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> UserWebhookOut:
     webhook = UserWebhook(
         user_id=current_user.id,
         name=body.name,
@@ -83,7 +86,7 @@ async def update_webhook(
     body: UserWebhookUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> UserWebhookOut:
     result = await db.execute(
         select(UserWebhook).where(
             UserWebhook.id == webhook_id,
@@ -106,7 +109,7 @@ async def delete_webhook(
     webhook_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     result = await db.execute(
         select(UserWebhook).where(
             UserWebhook.id == webhook_id,
@@ -125,7 +128,7 @@ async def test_webhook(
     webhook_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> TestPingResult:
     result = await db.execute(
         select(UserWebhook).where(
             UserWebhook.id == webhook_id,

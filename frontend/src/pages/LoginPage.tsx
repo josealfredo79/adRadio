@@ -20,8 +20,8 @@ export default function LoginPage() {
     try {
       await login(email, password)
       navigate('/app/dashboard')
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? 'Error al iniciar sesión')
+    } catch (err: unknown) {
+      setError((err as any)?.response?.data?.detail ?? 'Error al iniciar sesión')
     } finally {
       setLoading(false)
     }

@@ -39,7 +39,7 @@ export default function TeamPage() {
       setEmail('')
       setError('')
     },
-    onError: (err: any) => setError(err.response?.data?.detail ?? 'Error al invitar'),
+    onError: (err: unknown) => setError((err as any)?.response?.data?.detail ?? 'Error al invitar'),
   })
 
   const removeMutation = useMutation({

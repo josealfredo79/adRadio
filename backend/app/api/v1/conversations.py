@@ -2,21 +2,39 @@
 Conversations router — /api/v1/conversations
 Exposes the inbox of WhatsApp conversations for each advertiser.
 """
+import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.api.idempotency import idempotent_post
 from app.database import get_db
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.models.user import User
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+
+class StatusUpdateBody(BaseModel):
+    status: Literal["active", "closed"]
+
+
+class LeadScoreUpdateBody(BaseModel):
+    lead_score: Literal["hot", "warm", "cold"] | None = None
+
+
+class ReplyBody(BaseModel):
+    text: str
 
 
 @router.get("")
@@ -26,7 +44,7 @@ async def list_conversations(
     status_filter: str | None = Query(None, alias="status"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> list[dict[str, Any]]:
     """List all conversations for the current advertiser, newest activity first."""
     q = (
         select(Conversation, Contact)
@@ -65,7 +83,7 @@ async def get_conversation(
     conversation_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return full conversation history for a single conversation."""
     result = await db.execute(
         select(Conversation, Contact)
@@ -99,15 +117,11 @@ async def get_conversation(
 @router.patch("/{conversation_id}/status")
 async def update_conversation_status(
     conversation_id: uuid.UUID,
-    body: dict,
+    body: StatusUpdateBody,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """Manually escalate or close a conversation."""
-    new_status = body.get("status")
-    if new_status not in ("active", "closed"):
-        raise HTTPException(status_code=400, detail="Estado inválido")
-
     result = await db.execute(
         select(Conversation).where(
             Conversation.id == conversation_id,
@@ -118,23 +132,19 @@ async def update_conversation_status(
     if not conv:
         raise HTTPException(status_code=404, detail="Conversación no encontrada")
 
-    conv.status = new_status
+    conv.status = body.status
     await db.commit()
-    return {"message": f"Estado actualizado a {new_status}"}
+    return {"message": f"Estado actualizado a {body.status}"}
 
 
 @router.patch("/{conversation_id}/lead-score")
 async def update_lead_score(
     conversation_id: uuid.UUID,
-    body: dict,
+    body: LeadScoreUpdateBody,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """Manually set lead score: hot, warm, cold, or null to clear."""
-    new_score = body.get("lead_score")
-    if new_score not in (None, "hot", "warm", "cold"):
-        raise HTTPException(status_code=400, detail="Lead score inválido")
-
     result = await db.execute(
         select(Conversation).where(
             Conversation.id == conversation_id,
@@ -145,20 +155,21 @@ async def update_lead_score(
     if not conv:
         raise HTTPException(status_code=404, detail="Conversación no encontrada")
 
-    conv.lead_score = new_score
+    conv.lead_score = body.lead_score
     await db.commit()
-    return {"message": f"Lead score actualizado a {new_score}"}
+    return {"message": f"Lead score actualizado a {body.lead_score}"}
 
 
 @router.post("/{conversation_id}/reply")
 async def reply_to_conversation(
     conversation_id: uuid.UUID,
-    body: dict,
+    body: ReplyBody,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    _: None = Depends(idempotent_post),
+) -> dict[str, str]:
     """Send a manual reply from the dashboard to a WhatsApp contact."""
-    text = (body.get("text") or "").strip()
+    text = body.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Mensaje vacío")
     if len(text) > 4096:

@@ -1,9 +1,10 @@
 """Team member management — /api/v1/team"""
+import logging
 from typing import List
 from uuid import UUID
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.models.team_member import TeamMember
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/team", tags=["team"])
 
@@ -35,9 +38,15 @@ class TeamMemberOut(BaseModel):
 async def list_team(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> list[TeamMemberOut]:
     result = await db.execute(
-        select(TeamMember).where(TeamMember.owner_id == current_user.id).order_by(TeamMember.invited_at.desc())
+        select(TeamMember)
+        .where(TeamMember.owner_id == current_user.id)
+        .order_by(TeamMember.invited_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     return result.scalars().all()
 
@@ -47,7 +56,7 @@ async def invite_member(
     body: TeamMemberInvite,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> TeamMemberOut:
     if body.role not in ("agent", "viewer"):
         raise HTTPException(status_code=400, detail="role debe ser 'agent' o 'viewer'")
 
@@ -78,7 +87,7 @@ async def update_member_role(
     body: TeamMemberInvite,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> TeamMemberOut:
     result = await db.execute(
         select(TeamMember).where(TeamMember.id == member_id, TeamMember.owner_id == current_user.id)
     )
@@ -98,7 +107,7 @@ async def remove_member(
     member_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     result = await db.execute(
         select(TeamMember).where(TeamMember.id == member_id, TeamMember.owner_id == current_user.id)
     )

@@ -118,7 +118,7 @@ export default function CampaignsPage() {
 
   // Voces del Barrio
   const [vocesCollectionPrompt, setVocesCollectionPrompt] = useState('')
-  const [vocesStories, setVocesStories] = useState<any[]>([])
+  const [vocesStories, setVocesStories] = useState<{ id: string; transcription: string; sentiment: string; approved: boolean; contact_name?: string; created_at: string }[]>([])
   const [vocesCapsuleAudioUrl, setVocesCapsuleAudioUrl] = useState('')
   const [vocesCapsuleScript, setVocesCapsuleScript] = useState('')
   const [vocesGenerating, setVocesGenerating] = useState(false)
@@ -165,9 +165,9 @@ export default function CampaignsPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (body: any) => api.post('/campaigns', body),
+    mutationFn: (body: object) => api.post('/campaigns', body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); setShowCreate(false); resetForm() },
-    onError: (err: any) => setError(err.response?.data?.detail ?? 'Error'),
+    onError: (err: unknown) => setError((err as any)?.response?.data?.detail ?? 'Error'),
   })
 
   const pauseMutation = useMutation({
@@ -227,8 +227,8 @@ export default function CampaignsPage() {
         setRadioAudioUrl(data.audio_url)
         setRadioScript(data.script ?? '')
       }
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? 'Error al generar contenido')
+    } catch (err: unknown) {
+      setError((err as any)?.response?.data?.detail ?? 'Error al generar contenido')
     } finally {
       setGenerating(false)
     }
@@ -249,15 +249,15 @@ export default function CampaignsPage() {
         send_time: parrillaSendTime,
       })
       setParrillaResult(data)
-    } catch (err: any) {
-      setParrillaError(err.response?.data?.detail ?? 'Error al generar parrilla')
+    } catch (err: unknown) {
+      setParrillaError((err as any)?.response?.data?.detail ?? 'Error al generar parrilla')
     } finally {
       setParrillaGenerating(false)
     }
   }
 
   const handleCreate = () => {
-    const ab_test: Record<string, any> = {
+    const ab_test: Record<string, unknown> = {
       campaign_mode: mode,
       has_coupon: hasCoupon,
       coupon_description: couponDesc,
@@ -487,7 +487,7 @@ export default function CampaignsPage() {
                         const statsC = campaign.ab_test.stats_c || { sent: 0, replied: 0 }
                         const allStats = [statsA, statsB]
                         if (statsC.sent > 0) allStats.push(statsC)
-                        const chartData = allStats.map((s: any, i: number) => {
+                        const chartData = allStats.map((s: { sent: number; replied: number }, i: number) => {
                           const label = String.fromCharCode(65 + i)
                           const responseRate = s.sent > 0 ? Math.round((s.replied / s.sent) * 100) : 0
                           return {
@@ -1273,8 +1273,8 @@ export default function CampaignsPage() {
             const { data } = await api.post(`/campaigns/${vocesDetailTarget.id}/generate-capsule`)
             setCapsuleAudioUrl(data.audio_url)
             setCapsuleScript(data.script ?? '')
-          } catch (err: any) {
-            setError(err.response?.data?.detail ?? 'Error al generar cápsula')
+          } catch (err: unknown) {
+            setError((err as any)?.response?.data?.detail ?? 'Error al generar cápsula')
           } finally {
             setCapsuleGenerating(false)
           }
@@ -1306,7 +1306,7 @@ export default function CampaignsPage() {
                   </div>
 
                   <div className="space-y-3 mb-4 max-h-80 overflow-y-auto">
-                    {storiesData.stories.map((story: any) => (
+                    {storiesData.stories.map((story: { id: string; contact_name?: string; sentiment: string; transcription: string; approved: boolean; created_at: string }) => (
                       <div key={story.id} className="flex items-start gap-3 rounded-xl border border-border bg-card p-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">

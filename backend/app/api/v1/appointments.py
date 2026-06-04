@@ -72,7 +72,7 @@ async def list_appointments(
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> list[AppointmentOut]:
     """List appointments for the authenticated advertiser."""
     q = select(Appointment).where(Appointment.advertiser_id == current_user.id)
 
@@ -93,7 +93,7 @@ async def create_appointment(
     body: AppointmentCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> AppointmentOut:
     """Create a new appointment. Syncs to Google Calendar if connected."""
     appointment = Appointment(
         advertiser_id=current_user.id,
@@ -129,7 +129,7 @@ async def update_appointment(
     body: AppointmentUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> AppointmentOut:
     """Update an appointment. Syncs changes to Google Calendar."""
     result = await db.execute(
         select(Appointment).where(
@@ -174,7 +174,7 @@ async def delete_appointment(
     appointment_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """Delete an appointment and remove from Google Calendar."""
     result = await db.execute(
         select(Appointment).where(
@@ -202,7 +202,7 @@ async def delete_appointment(
 async def appointment_stats(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, object]:
     """Quick stats for the appointments dashboard."""
     now = datetime.now(timezone.utc)
 
@@ -240,7 +240,7 @@ async def appointment_stats(
 @router.get("/google/connect")
 async def google_connect(
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """Redirect user to Google OAuth consent screen."""
     if not settings.GOOGLE_CALENDAR_CLIENT_ID:
         raise HTTPException(status_code=503, detail="Google Calendar no configurado")
@@ -258,7 +258,7 @@ async def google_callback(
     code: str,
     state: str,
     db: AsyncSession = Depends(get_db),
-):
+) -> RedirectResponse:
     """Handle Google OAuth callback — exchange code for refresh token."""
     from app.services.calendar_service import exchange_code
 
@@ -291,7 +291,7 @@ async def google_callback(
 async def google_disconnect(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     """Disconnect Google Calendar."""
     current_user.google_refresh_token = None
     current_user.google_calendar_connected = False

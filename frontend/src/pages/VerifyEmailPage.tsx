@@ -21,8 +21,8 @@ export default function VerifyEmailPage() {
       await api.post('/auth/verify-email', { email, code })
       setSuccess(true)
       setTimeout(() => navigate('/login'), 2000)
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? 'Código inválido')
+    } catch (err: unknown) {
+      setError((err as any)?.response?.data?.detail ?? 'Código inválido')
     } finally {
       setLoading(false)
     }

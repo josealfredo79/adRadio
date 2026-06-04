@@ -1,9 +1,10 @@
 """Automation flows — /api/v1/automations"""
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,18 +56,24 @@ class FlowOut(BaseModel):
         from_attributes = True
 
 
+logger = logging.getLogger(__name__)
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=List[FlowOut])
 async def list_flows(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> list[FlowOut]:
     result = await db.execute(
         select(AutomationFlow)
         .options(selectinload(AutomationFlow.steps))
         .where(AutomationFlow.advertiser_id == current_user.id)
         .order_by(AutomationFlow.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     return result.scalars().all()
 
@@ -76,7 +83,7 @@ async def create_flow(
     body: FlowCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> FlowOut:
     if body.trigger not in ("new_contact", "keyword", "tag_added"):
         raise HTTPException(status_code=400, detail="trigger inválido")
 
@@ -111,7 +118,7 @@ async def toggle_flow(
     flow_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> FlowOut:
     result = await db.execute(
         select(AutomationFlow)
         .options(selectinload(AutomationFlow.steps))
@@ -123,6 +130,7 @@ async def toggle_flow(
     flow.is_active = not flow.is_active
     await db.commit()
     await db.refresh(flow)
+    logger.info("Flow %s toggled to %s by user %s", flow.id, flow.is_active, current_user.id)
     return flow
 
 
@@ -131,7 +139,7 @@ async def delete_flow(
     flow_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     result = await db.execute(
         select(AutomationFlow).where(AutomationFlow.id == flow_id, AutomationFlow.advertiser_id == current_user.id)
     )
@@ -148,7 +156,7 @@ async def enroll_contact(
     contact_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, bool]:
     """Manually enroll a contact into a flow."""
     flow_res = await db.execute(
         select(AutomationFlow)

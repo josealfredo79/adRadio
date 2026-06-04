@@ -1,5 +1,9 @@
 """Widget embebible — /api/v1/widget"""
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
@@ -13,7 +17,7 @@ router = APIRouter(prefix="/widget", tags=["widget"])
 @router.get("/snippet")
 async def get_widget_snippet(
     current_user: User = Depends(get_current_user),
-):
+) -> dict:
     """Return the embeddable HTML/JS snippet for this advertiser's WhatsApp widget."""
     wa_number = current_user.whatsapp_number or ""
     business = (current_user.business_name or "Nosotros").replace("'", "\\'")
@@ -39,7 +43,7 @@ async def get_widget_snippet(
 
 
 @router.get("/preview/{advertiser_id}", include_in_schema=False)
-async def widget_preview(advertiser_id: UUID, db: AsyncSession = Depends(get_db)):
+async def widget_preview(advertiser_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """Public endpoint to load widget config for a given advertiser (used by widget.js)."""
     result = await db.execute(select(User).where(User.id == advertiser_id))
     user = result.scalar_one_or_none()
@@ -60,7 +64,7 @@ async def update_widget_config(
     body: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """Update widget customization settings for the current advertiser."""
     if "color" in body:
         color = body["color"]
@@ -77,13 +81,14 @@ async def update_widget_config(
         current_user.widget_position = body["position"]
 
     await db.commit()
+    logger.info("Widget config updated for user %s", current_user.id)
     return {"message": "Widget actualizado"}
 
 
 @router.get("/config")
 async def get_widget_config(
     current_user: User = Depends(get_current_user),
-):
+) -> dict:
     """Return the current widget configuration."""
     return {
         "color": current_user.widget_color or "#25D366",

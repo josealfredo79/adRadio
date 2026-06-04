@@ -2,6 +2,7 @@
 Profile & Dashboard router — /api/v1/me, /api/v1/dashboard
 """
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
+from app.api.idempotency import idempotent_post
 from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.automation import AutomationFlow
@@ -21,6 +23,8 @@ from app.models.user import User
 from app.schemas.auth import UserOut
 from app.schemas.profile import ProfileUpdate
 from app.services.number_pool_service import assign_pool_number, release_pool_number, pool_status
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["profile"])
 
@@ -64,6 +68,7 @@ async def change_password(
     body: dict,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: None = Depends(idempotent_post),
 ):
     """Change the current user's password after verifying the old one."""
     from app.core.security import verify_password, hash_password
@@ -80,6 +85,7 @@ async def change_password(
 
     current_user.password_hash = hash_password(new_pw)
     await db.commit()
+    logger.info("Password changed for user %s", current_user.id)
     return {"message": "Contraseña actualizada correctamente"}
 
 

@@ -1,5 +1,9 @@
 """Analytics endpoints — /api/v1/analytics"""
+import logging
+
 from fastapi import APIRouter, Depends
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +18,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 async def optimal_send_time(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """
     Return hourly distribution of inbound messages for this advertiser.
     Higher count = more activity = better time to send.
@@ -32,6 +36,8 @@ async def optimal_send_time(
         .order_by(text("1"))
     )
     rows = result.all()
+    if not rows:
+        logger.info("No analytics data for user %s", current_user.id)
 
     hours_data = {int(row.hour): int(row.count) for row in rows}
     full = []

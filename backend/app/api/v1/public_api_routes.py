@@ -23,7 +23,7 @@ async def public_list_campaigns(
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_api_key_scope("campaigns:read")),
-):
+) -> dict:
     q = select(Campaign).where(Campaign.advertiser_id == current_user.id)
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar_one()
@@ -46,7 +46,7 @@ async def public_list_contacts(
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_api_key_scope("contacts:read")),
-):
+) -> ContactListResponse:
     q = select(Contact).where(Contact.advertiser_id == current_user.id)
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar_one()

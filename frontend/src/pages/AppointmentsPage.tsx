@@ -65,18 +65,18 @@ export default function AppointmentsPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (body: any) => api.post('/appointments', body),
+    mutationFn: (body: object) => api.post('/appointments', body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
       qc.invalidateQueries({ queryKey: ['appointment-stats'] })
       setShowCreate(false)
       resetForm()
     },
-    onError: (err: any) => setError(err.response?.data?.detail ?? 'Error al crear cita'),
+    onError: (err: unknown) => setError((err as any)?.response?.data?.detail ?? 'Error al crear cita'),
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...body }: any) => api.patch(`/appointments/${id}`, body),
+    mutationFn: ({ id, ...body }: { id: string; [key: string]: unknown }) => api.patch(`/appointments/${id}`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
       qc.invalidateQueries({ queryKey: ['appointment-stats'] })

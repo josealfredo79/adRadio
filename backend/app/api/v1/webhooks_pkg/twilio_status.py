@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 async def twilio_status(
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     """Update message delivery status from Twilio callbacks."""
     form_data = dict(await request.form())
     twilio_sid = form_data.get("MessageSid")

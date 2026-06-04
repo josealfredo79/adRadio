@@ -79,3 +79,42 @@ async def test_sitemap_xml_accessible():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/sitemap.xml")
         assert resp.status_code in (200, 404)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
+async def test_contacts_requires_auth():
+    """Contacts endpoints are protected."""
+    from httpx import AsyncClient, ASGITransport
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/v1/contacts")
+        assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
+async def test_payments_plans_public():
+    """Plans endpoint is public."""
+    from httpx import AsyncClient, ASGITransport
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/v1/plans")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "starter" in data
+        assert "pro" in data
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
+async def test_checkout_requires_auth():
+    """Checkout endpoint requires authentication."""
+    from httpx import AsyncClient, ASGITransport
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/v1/checkout/create-session", json={"plan": "pro"})
+        assert resp.status_code == 401

@@ -64,8 +64,12 @@ export default function OnboardingWizard({ onClose }: Props) {
     navigate('/app/campaigns')
   }
 
-  const stepError = (uploadKbMutation.error as any)?.response?.data?.detail
-    || (addContactMutation.error as any)?.response?.data?.detail
+  const stepError = (uploadKbMutation.error && 'response' in uploadKbMutation.error
+    ? (uploadKbMutation.error as { response: { data: { detail: string } } }).response.data.detail
+    : undefined)
+    || (addContactMutation.error && 'response' in addContactMutation.error
+      ? (addContactMutation.error as { response: { data: { detail: string } } }).response.data.detail
+      : undefined)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 dark:bg-black/80">

@@ -33,7 +33,7 @@ def _get_client():
     return _s3_client
 
 
-def _ensure_local_dir():
+def _ensure_local_dir() -> None:
     os.makedirs(_LOCAL_AUDIO_DIR, exist_ok=True)
 
 

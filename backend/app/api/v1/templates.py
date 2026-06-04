@@ -2,9 +2,10 @@
 Templates router — /api/v1/templates
 Message templates for reusable campaign content.
 """
+import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,8 @@ from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.template import MessageTemplate
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/templates", tags=["templates"])
 
@@ -36,11 +39,15 @@ class TemplateOut(BaseModel):
 async def list_templates(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> list[TemplateOut]:
     result = await db.execute(
         select(MessageTemplate)
         .where(MessageTemplate.advertiser_id == current_user.id)
         .order_by(MessageTemplate.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     return [TemplateOut.model_validate(t) for t in result.scalars().all()]
 
@@ -50,7 +57,7 @@ async def create_template(
     body: TemplateCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> TemplateOut:
     template = MessageTemplate(
         advertiser_id=current_user.id,
         name=body.name,
@@ -60,6 +67,7 @@ async def create_template(
     db.add(template)
     await db.commit()
     await db.refresh(template)
+    logger.info("Template created: %s by user %s", template.name, current_user.id)
     return TemplateOut.model_validate(template)
 
 
@@ -69,7 +77,7 @@ async def update_template(
     body: TemplateCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> TemplateOut:
     result = await db.execute(
         select(MessageTemplate).where(
             MessageTemplate.id == template_id,
@@ -92,7 +100,7 @@ async def delete_template(
     template_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     result = await db.execute(
         select(MessageTemplate).where(
             MessageTemplate.id == template_id,

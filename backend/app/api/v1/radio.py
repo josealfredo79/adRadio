@@ -2,14 +2,22 @@
 Radio audio proxy — /api/v1/radio
 Serves audio files from local storage (primary) or R2 (fallback).
 """
+import asyncio
 import boto3
+import logging
 import os
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/radio", tags=["radio"])
 
@@ -32,6 +40,17 @@ def _get_r2_client():
     )
 
 
+def _fetch_and_cache_from_r2(filename: str, local_path: str) -> str:
+    """Sync helper: fetch audio from R2 and cache to local disk. Returns content type."""
+    r2 = _get_r2_client()
+    obj = r2.get_object(Bucket=settings.CF_R2_BUCKET, Key=filename)
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    with open(local_path, "wb") as f:
+        for chunk in obj["Body"].iter_chunks(chunk_size=65536):
+            f.write(chunk)
+    return obj.get("ContentType", "audio/ogg")
+
+
 # Available voices for cuñas de radio
 AVAILABLE_VOICES = [
     {"id": "es-MX-JorgeNeural", "name": "Jorge (México)", "lang": "es-MX", "gender": "male", "provider": "edge"},
@@ -46,13 +65,15 @@ AVAILABLE_VOICES = [
 
 
 @router.get("/voices")
-async def list_voices():
+@limiter.limit("10/minute")
+async def list_voices(request: Request) -> list:
     """List available TTS voices for radio ads."""
     return AVAILABLE_VOICES
 
 
 @router.get("/audio/{filename:path}")
-async def serve_audio(request: Request, filename: str):
+@limiter.limit("30/minute")
+async def serve_audio(request: Request, filename: str) -> FileResponse:
     """Serve an audio file from local storage or R2 fallback."""
     _ensure_audio_dir()
 
@@ -69,18 +90,13 @@ async def serve_audio(request: Request, filename: str):
     if not settings.CF_R2_ACCESS_KEY:
         raise HTTPException(status_code=404, detail="Audio not found")
 
-    r2 = _get_r2_client()
+    logger.info("Audio not found locally, fetching from R2: %s", filename)
+    loop = asyncio.get_event_loop()
     try:
-        obj = r2.get_object(Bucket=settings.CF_R2_BUCKET, Key=filename)
+        content_type = await loop.run_in_executor(None, _fetch_and_cache_from_r2, filename, local_path)
     except ClientError as e:
         if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
             raise HTTPException(status_code=404, detail="Audio not found")
         raise HTTPException(status_code=502, detail=f"Storage error: {e.response['Error']['Code']}")
 
-    # Cache to local storage for next time
-    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-    with open(local_path, "wb") as f:
-        for chunk in obj["Body"].iter_chunks(chunk_size=65536):
-            f.write(chunk)
-
-    return FileResponse(local_path, media_type=obj.get("ContentType", "audio/ogg"))
+    return FileResponse(local_path, media_type=content_type)

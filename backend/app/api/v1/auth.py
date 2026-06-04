@@ -1,6 +1,7 @@
 """
 Auth router — /api/v1/auth
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -33,6 +34,8 @@ from app.schemas.auth import (
     VerifyEmailRequest,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
 
@@ -44,7 +47,7 @@ async def register(
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
-):
+) -> dict[str, str]:
     # Check email uniqueness
     result = await db.execute(select(User).where(User.email == body.email))
     if result.scalar_one_or_none():
@@ -65,6 +68,7 @@ async def register(
     await redis.setex(f"email_verify:{user.email}", settings.EMAIL_VERIFICATION_TTL, code)
     await send_verification_email(user.email, code)
 
+    logger.info("New user registered: %s", user.email)
     return {"message": "Registro exitoso. Revisa tu email para verificar tu cuenta."}
 
 
@@ -73,7 +77,7 @@ async def verify_email(
     body: VerifyEmailRequest,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
-):
+) -> dict[str, str]:
     stored_code = await redis.get(f"email_verify:{body.email}")
     if not stored_code or stored_code != body.code:
         raise HTTPException(status_code=400, detail="Código inválido o expirado")
@@ -97,6 +101,7 @@ async def verify_email(
 
     await redis.delete(f"email_verify:{body.email}")
 
+    logger.info("Email verified: %s", body.email)
     return {"message": "Email verificado correctamente"}
 
 
@@ -108,7 +113,7 @@ async def login(
     body: LoginRequest,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
-):
+) -> TokenResponse:
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
@@ -142,6 +147,7 @@ async def login(
         path="/api/v1/auth",
     )
 
+    logger.info("User logged in: %s", user.email)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -152,7 +158,7 @@ async def refresh(
     body: RefreshRequest | None = None,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
-):
+) -> TokenResponse:
     # Accept refresh_token from httpOnly cookie (primary) or request body (backward compat)
     token = request.cookies.get("refresh_token") or (body.refresh_token if body else None)
     if not token:
@@ -202,7 +208,7 @@ async def logout(
     response: Response,
     body: RefreshRequest | None = None,
     redis=Depends(get_redis),
-):
+) -> dict[str, str]:
     token = request.cookies.get("refresh_token") or (body.refresh_token if body else None)
     if token:
         payload = decode_token(token)
@@ -219,7 +225,7 @@ async def forgot_password(
     body: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
-):
+) -> dict[str, str]:
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
     if user:
@@ -237,7 +243,7 @@ async def reset_password(
     body: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
-):
+) -> dict[str, str]:
     user_id = await redis.get(f"pwd_reset:{body.token}")
     if not user_id:
         raise HTTPException(status_code=400, detail="Token inválido o expirado")
@@ -253,4 +259,5 @@ async def reset_password(
     # Invalidate all refresh tokens
     await redis.delete(f"refresh:{user_id}")
 
+    logger.info("Password reset completed for user %s", user_id)
     return {"message": "Contraseña restablecida correctamente"}

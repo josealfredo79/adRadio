@@ -8,12 +8,14 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
+from app.api.idempotency import idempotent_post
 from app.database import get_db
 from app.models.campaign import Campaign
 from app.models.customer_story import CustomerStory
@@ -56,7 +58,7 @@ async def list_campaigns(
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> list[CampaignOut]:
     result = await db.execute(
         select(Campaign)
         .where(Campaign.advertiser_id == current_user.id)
@@ -72,7 +74,8 @@ async def create_campaign(
     body: CampaignCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    _: None = Depends(idempotent_post),
+) -> CampaignOut:
     if current_user.subscription_status not in ("active", "trial"):
         raise HTTPException(status_code=402, detail="Necesitas un plan activo para crear campañas")
 
@@ -102,7 +105,7 @@ async def update_campaign(
     body: CampaignUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> CampaignOut:
     result = await db.execute(
         select(Campaign).where(
             Campaign.id == campaign_id,
@@ -126,7 +129,8 @@ async def pause_campaign(
     campaign_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    _: None = Depends(idempotent_post),
+) -> dict[str, str]:
     result = await db.execute(
         select(Campaign).where(
             Campaign.id == campaign_id,
@@ -146,7 +150,8 @@ async def resume_campaign(
     campaign_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    _: None = Depends(idempotent_post),
+) -> dict[str, str]:
     result = await db.execute(
         select(Campaign).where(
             Campaign.id == campaign_id,
@@ -167,7 +172,7 @@ async def delete_campaign(
     campaign_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     result = await db.execute(
         select(Campaign).where(
             Campaign.id == campaign_id,
@@ -186,7 +191,7 @@ async def campaign_stats(
     campaign_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict:
     result = await db.execute(
         select(Campaign).where(
             Campaign.id == campaign_id,
@@ -203,7 +208,7 @@ async def campaign_stats(
 async def export_campaigns_csv(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> StreamingResponse:
     """Export all campaigns with stats as a CSV file."""
     result = await db.execute(
         select(Campaign)
@@ -257,7 +262,7 @@ class PublicCustomerStoryOut(BaseModel):
 @router.get("/stories/public")
 async def list_public_stories(
     db: AsyncSession = Depends(get_db),
-):
+) -> list[PublicCustomerStoryOut]:
     """Return approved Customer Stories publicly (no auth required)."""
     from sqlalchemy.orm import joinedload
 
@@ -293,7 +298,7 @@ async def setup_ab_test(
     body: ABTestSetup,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> CampaignOut:
     """Enable A/B testing on a campaign with an alternate message variant."""
     result = await db.execute(
         select(Campaign).where(Campaign.id == campaign_id, Campaign.advertiser_id == current_user.id)
@@ -324,7 +329,7 @@ class BannerPreviewRequest(BaseModel):
 async def preview_banner(
     body: BannerPreviewRequest,
     current_user: User = Depends(get_current_user),
-):
+) -> Response:
     """Generate and return a preview PNG banner (no R2 upload, no DB write)."""
     from fastapi.responses import Response as FastAPIResponse
     from app.services.banner_service import (
@@ -344,7 +349,7 @@ async def preview_banner(
 async def generate_content(
     body: GenerateContentRequest,
     current_user: User = Depends(get_current_user),
-):
+) -> GenerateContentResponse:
     variants = await generate_campaign_variants(
         campaign_type=body.campaign_type,
         business_name=body.business_name,
@@ -357,7 +362,7 @@ async def generate_content(
 async def generate_image(
     body: GenerateImageRequest,
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     image_url = await generate_flyer(
         campaign_name=body.campaign_name,
         message_text=body.message_text,
@@ -370,7 +375,7 @@ async def generate_image(
 async def generate_sequence(
     body: GenerateSequenceRequest,
     current_user: User = Depends(get_current_user),
-):
+) -> GenerateSequenceResponse:
     """Genera una secuencia de 3 mensajes para campaña en días distintos."""
     messages = await generate_sequence_messages(
         business_name=body.business_name,
@@ -384,7 +389,7 @@ async def generate_sequence(
 async def generate_saga(
     body: GenerateSagaRequest,
     current_user: User = Depends(get_current_user),
-):
+) -> GenerateSequenceResponse:
     """Genera 4 episodios de radionovela de marketing para campaña saga."""
     episodes = await generate_saga_episodes(
         business_name=body.business_name,
@@ -398,7 +403,7 @@ async def generate_saga(
 async def generate_radio_ad_endpoint(
     body: GenerateRadioAdRequest,
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """
     Genera una cuña publicitaria completa en audio:
     Claude escribe el guión → edge-tts pone voz de locutor → sube a R2.
@@ -429,7 +434,7 @@ async def generate_capsule(
     campaign_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """Generate a Voces del Barrio narrative capsule from approved customer stories."""
     result = await db.execute(
         select(Campaign).where(
@@ -445,7 +450,9 @@ async def generate_capsule(
         raise HTTPException(status_code=400, detail="Esta campaña no es de tipo voces")
 
     stories_result = await db.execute(
-        select(CustomerStory).where(
+        select(CustomerStory)
+        .options(selectinload(CustomerStory.contact))
+        .where(
             CustomerStory.campaign_id == campaign_id,
             CustomerStory.approved == True,
         )
@@ -487,7 +494,7 @@ async def list_campaign_stories(
     campaign_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> CustomerStoryListOut:
     """List all customer stories for a Voces campaign."""
     result = await db.execute(
         select(Campaign).where(
@@ -500,7 +507,9 @@ async def list_campaign_stories(
         raise HTTPException(status_code=404, detail="Campaña no encontrada")
 
     stories_result = await db.execute(
-        select(CustomerStory).where(
+        select(CustomerStory)
+        .options(selectinload(CustomerStory.contact))
+        .where(
             CustomerStory.campaign_id == campaign_id,
         ).order_by(CustomerStory.created_at.desc())
     )
@@ -533,7 +542,7 @@ async def approve_story(
     story_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, bool]:
     """Toggle approval of a customer story."""
     result = await db.execute(
         select(CustomerStory).where(
@@ -590,7 +599,7 @@ async def generate_parrilla(
     body: ParrillaRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ParrillaOut:
     """
     Genera la parrilla semanal de radio: 7 cuñas con 1 clic.
 

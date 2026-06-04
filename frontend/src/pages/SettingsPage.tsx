@@ -53,7 +53,7 @@ function WebhooksSection() {
 
   const [showForm, setShowForm] = useState(false)
   const [newWh, setNewWh] = useState({ name: '', url: '', events: [] as string[] })
-  const [testResult, setTestResult] = useState<{ id: string; result: any } | null>(null)
+  const [testResult, setTestResult] = useState<{ id: string; result: unknown } | null>(null)
 
   const createMutation = useMutation({
     mutationFn: (data: typeof newWh) => api.post('/user-webhooks', data),
@@ -73,7 +73,7 @@ function WebhooksSection() {
   const testMutation = useMutation({
     mutationFn: ({ id }: { id: string }) => api.post(`/user-webhooks/${id}/test`),
     onSuccess: (res, vars) => setTestResult({ id: vars.id, result: res.data }),
-    onError: (err: any, vars) => setTestResult({ id: vars.id, result: { success: false, error: err.response?.data?.detail ?? 'Error' } }),
+    onError: (err: unknown, vars) => setTestResult({ id: vars.id, result: { success: false, error: (err as any)?.response?.data?.detail ?? 'Error' } }),
   })
 
   const toggleEvent = (ev: string) => {
@@ -91,7 +91,7 @@ function WebhooksSection() {
       </div>
       <p className="text-sm text-muted-foreground">Recibe notificaciones HTTP cuando ocurran eventos en tu cuenta.</p>
 
-      {webhooks?.map((wh: any) => (
+      {webhooks?.map((wh: { id: string; name: string; url: string; events: string[]; active: boolean }) => (
         <div key={wh.id} className="flex items-start gap-3 rounded-lg border border-border p-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -102,7 +102,7 @@ function WebhooksSection() {
             </div>
             <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">{wh.url}</p>
             <div className="flex flex-wrap gap-1 mt-1.5">
-              {wh.events.map((ev: string) => (
+              {wh.events.map((ev) => (
                 <span key={ev} className="text-xs bg-brand-50 text-brand-600 px-1.5 py-0.5 rounded-full">
                   {ev}
                 </span>
@@ -130,8 +130,8 @@ function WebhooksSection() {
             </button>
           </div>
           {testResult && testResult.id === wh.id && (
-            <div className={`text-xs mt-1 ${testResult.result.success ? 'text-green-600' : 'text-red-600'}`}>
-              {testResult.result.success ? '✅ Ping exitoso' : `❌ ${testResult.result.error || 'Error'}`}
+            <div className={`text-xs mt-1 ${(testResult.result as any)?.success ? 'text-green-600' : 'text-red-600'}`}>
+              {(testResult.result as any)?.success ? '✅ Ping exitoso' : `❌ ${(testResult.result as any)?.error || 'Error'}`}
             </div>
           )}
         </div>
@@ -370,7 +370,7 @@ function ApiKeysSection() {
       </div>
       <p className="text-sm text-muted-foreground">Crea y gestiona claves de API para acceder a la API pública.</p>
 
-      {apiKeys?.map((ak: any) => (
+      {apiKeys?.map((ak: { id: string; name: string; prefix: string; scopes: string[]; active: boolean; last_used_at?: string }) => (
         <div key={ak.id} className="flex items-start gap-3 rounded-lg border border-border p-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -381,7 +381,7 @@ function ApiKeysSection() {
             </div>
             <p className="text-xs text-muted-foreground font-mono mt-0.5">{ak.prefix}...</p>
             <div className="flex flex-wrap gap-1 mt-1">
-              {ak.scopes?.map((s: string) => (
+              {ak.scopes?.map((s) => (
                 <span key={s} className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">{s}</span>
               ))}
             </div>
@@ -568,8 +568,8 @@ export default function SettingsPage() {
       setPwForm({ current_password: '', new_password: '', confirm_password: '' })
       setTimeout(() => setPwMsg(null), 4000)
     },
-    onError: (err: any) => {
-      setPwMsg({ type: 'error', text: err.response?.data?.detail ?? 'Error al cambiar contraseña' })
+    onError: (err: unknown) => {
+      setPwMsg({ type: 'error', text: (err as any)?.response?.data?.detail ?? 'Error al cambiar contraseña' })
     },
   })
 
@@ -732,7 +732,7 @@ export default function SettingsPage() {
         )}
         {mutation.isError && (
           <span className="text-sm text-red-600">
-            {(mutation.error as any)?.response?.data?.detail ?? 'Error al guardar'}
+            {(mutation.error && 'response' in mutation.error ? (mutation.error as { response: { data: { detail: string } } }).response.data.detail : null) ?? 'Error al guardar'}
           </span>
         )}
       </div>

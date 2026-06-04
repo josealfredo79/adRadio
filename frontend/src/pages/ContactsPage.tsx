@@ -79,8 +79,8 @@ export default function ContactsPage() {
       setTagInput('')
       setError('')
     },
-    onError: (err: any) => {
-      const detail = err.response?.data?.detail;
+    onError: (err: unknown) => {
+      const detail = (err as any)?.response?.data?.detail;
       if (Array.isArray(detail)) {
         setError(detail[0].msg);
       } else {
@@ -200,8 +200,8 @@ export default function ContactsPage() {
       await api.post('/contacts/import-csv', fd)
       setUploadMsg({ type: 'success', text: `Archivo "${file.name}" importado exitosamente.` })
       qc.invalidateQueries({ queryKey: ['contacts'] })
-    } catch (err: any) {
-      setUploadMsg({ type: 'error', text: err.response?.data?.detail ?? 'Error al importar CSV' })
+    } catch (err: unknown) {
+      setUploadMsg({ type: 'error', text: (err as any)?.response?.data?.detail ?? 'Error al importar CSV' })
     } finally {
       setIsUploading(false)
       e.target.value = ''

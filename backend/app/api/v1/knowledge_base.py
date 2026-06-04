@@ -1,19 +1,23 @@
 """
 Knowledge Base router — /api/v1/knowledge-base
 """
+import logging
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.api.idempotency import idempotent_post
 from app.database import get_db
 from app.models.knowledge_base import KnowledgeBase
 from app.models.user import User
 from app.workers.tasks import process_knowledge_base_file
 
 router = APIRouter(prefix="/knowledge-base", tags=["knowledge-base"])
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
@@ -33,7 +37,9 @@ MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 async def list_files(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> list[dict[str, object]]:
     result = await db.execute(
         select(KnowledgeBase)
         .where(
@@ -41,6 +47,8 @@ async def list_files(
             KnowledgeBase.is_active == True,  # noqa: E712
         )
         .order_by(KnowledgeBase.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     files = result.scalars().all()
     return [
@@ -61,7 +69,8 @@ async def upload_file(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    _: None = Depends(idempotent_post),
+) -> dict[str, str]:
     # Validate MIME type (not just extension)
     if file.content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
@@ -88,6 +97,7 @@ async def upload_file(
     # Dispatch processing to Celery (text extraction + embeddings)
     process_knowledge_base_file.delay(str(kb.id), content, file_type)
 
+    logger.info("File uploaded to KB: %s (type=%s) by user %s", kb.filename, file_type, current_user.id)
     return {"message": "Archivo recibido. Se procesará en segundo plano.", "id": str(kb.id)}
 
 
@@ -96,7 +106,7 @@ async def delete_file(
     file_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     result = await db.execute(
         select(KnowledgeBase).where(
             KnowledgeBase.id == file_id,
@@ -116,7 +126,7 @@ async def test_bot(
     body: dict,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     from app.services.rag_service import answer_with_rag
 
     query = body.get("query", "")

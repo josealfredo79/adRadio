@@ -1,19 +1,28 @@
 """
 Payments router — /api/v1/plans, /api/v1/checkout, /api/v1/transactions
 """
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import stripe as stripe_lib  # type: ignore
 
 from app.api.deps import get_current_user
+from app.api.idempotency import idempotent_post
 from app.config import settings
 from app.database import get_db
 from app.models.transaction import Transaction
 from app.models.user import User
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["payments"])
+
+
+class CheckoutSessionBody(BaseModel):
+    plan: str
 
 stripe_lib.api_key = settings.STRIPE_SECRET_KEY
 
@@ -31,17 +40,18 @@ PLAN_MESSAGES: dict[str, int] = {key: val["messages"] for key, val in PLANS.item
 
 
 @router.get("/plans")
-async def list_plans():
+async def list_plans() -> dict:
     return PLANS
 
 
 @router.post("/checkout/create-session")
 async def create_checkout_session(
-    body: dict,
+    body: CheckoutSessionBody,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
-    plan_key = body.get("plan")
+    _: None = Depends(idempotent_post),
+) -> dict:
+    plan_key = body.plan
     if plan_key not in PLANS:
         raise HTTPException(status_code=400, detail="Plan inválido")
 
@@ -79,6 +89,7 @@ async def create_checkout_session(
         metadata={"plan": plan_key, "user_id": str(current_user.id)},
     )
 
+    logger.info("Checkout session created for user %s, plan %s", current_user.id, plan_key)
     return {"checkout_url": session.url}
 
 
@@ -86,7 +97,7 @@ async def create_checkout_session(
 async def cancel_subscription(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict:
     """Cancel the user's active Stripe subscription at period end and release pool number."""
     from app.services.number_pool_service import release_pool_number
 
@@ -118,11 +129,15 @@ async def cancel_subscription(
 async def list_transactions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> list:
     result = await db.execute(
         select(Transaction)
         .where(Transaction.advertiser_id == current_user.id)
         .order_by(Transaction.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     txns = result.scalars().all()
     return [

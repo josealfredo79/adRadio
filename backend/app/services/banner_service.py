@@ -52,7 +52,7 @@ def _load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
         return ImageFont.load_default()
 
 
-def _gradient_background(draw: ImageDraw.ImageDraw, w: int, h: int, c1: tuple, c2: tuple):
+def _gradient_background(draw: ImageDraw.ImageDraw, w: int, h: int, c1: tuple, c2: tuple) -> None:
     """Rellena el fondo con un gradiente diagonal suave."""
     for y in range(h):
         t = y / h
@@ -62,7 +62,7 @@ def _gradient_background(draw: ImageDraw.ImageDraw, w: int, h: int, c1: tuple, c
         draw.line([(0, y), (w, y)], fill=(r, g, b))
 
 
-def _draw_noise_circles(draw: ImageDraw.ImageDraw, w: int, h: int, accent: tuple):
+def _draw_noise_circles(draw: ImageDraw.ImageDraw, w: int, h: int, accent: tuple) -> None:
     """Agrega círculos decorativos semi-transparentes de fondo."""
     rng = random.Random(42)
     for _ in range(6):
@@ -98,7 +98,7 @@ def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[
     return lines
 
 
-def _draw_rounded_rect(draw: ImageDraw.ImageDraw, xy: tuple, radius: int, fill: tuple):
+def _draw_rounded_rect(draw: ImageDraw.ImageDraw, xy: tuple, radius: int, fill: tuple) -> None:
     x0, y0, x1, y1 = xy
     draw.rectangle([x0 + radius, y0, x1 - radius, y1], fill=fill)
     draw.rectangle([x0, y0 + radius, x1, y1 - radius], fill=fill)

@@ -34,8 +34,8 @@ export default function ResetPasswordPage() {
       await api.post('/auth/reset-password', { token, new_password: password })
       setSuccess(true)
       setTimeout(() => navigate('/login'), 2500)
-    } catch (err: any) {
-      setError(err.response?.data?.detail ?? 'El enlace es inválido o ya expiró.')
+    } catch (err: unknown) {
+      setError((err as any)?.response?.data?.detail ?? 'El enlace es inválido o ya expiró.')
     } finally {
       setLoading(false)
     }

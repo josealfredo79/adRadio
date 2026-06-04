@@ -35,7 +35,7 @@ class SeedTemplateOut(BaseModel):
 
 
 @router.get("/seeds", response_model=list[SeedTemplateOut])
-async def list_seed_templates():
+async def list_seed_templates() -> list[SeedTemplateOut]:
     return [SeedTemplateOut(**t) for t in SEED_TEMPLATES]
 
 
@@ -43,7 +43,7 @@ async def list_seed_templates():
 async def seed_all_templates(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, object]:
     existing = await db.execute(
         select(MessageTemplate).where(MessageTemplate.advertiser_id == current_user.id)
     )

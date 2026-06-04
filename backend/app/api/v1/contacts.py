@@ -3,6 +3,7 @@ Contacts router — /api/v1/contacts
 """
 import csv
 import io
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
@@ -38,8 +39,9 @@ class BulkSendCampaignRequest(BaseModel):
     campaign_id: str
 
 
-router = APIRouter(prefix="/contacts", tags=["contacts"])
+logger = logging.getLogger(__name__)
 
+router = APIRouter(prefix="/contacts", tags=["contacts"])
 
 @router.get("", response_model=ContactListResponse)
 async def list_contacts(
@@ -49,7 +51,7 @@ async def list_contacts(
     tag: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ContactListResponse:
     q = select(Contact).where(Contact.advertiser_id == current_user.id)
     if status_filter:
         q = q.where(Contact.status == status_filter)
@@ -76,7 +78,7 @@ async def create_contact(
     body: ContactCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ContactOut:
     # Check for duplicate phone for this advertiser
     existing = await db.execute(
         select(Contact).where(
@@ -95,6 +97,8 @@ async def create_contact(
     await db.commit()
     await db.refresh(contact)
 
+    logger.info("Contact created: %s (%s) by user %s", contact.name, contact.phone, current_user.id)
+
     from app.services.webhook_dispatcher import dispatch_webhook_event
     await dispatch_webhook_event(
         "contact.created",
@@ -111,7 +115,7 @@ async def update_contact(
     body: ContactUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ContactOut:
     result = await db.execute(
         select(Contact).where(
             Contact.id == contact_id,
@@ -135,7 +139,7 @@ async def delete_contact(
     contact_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     result = await db.execute(
         select(Contact).where(
             Contact.id == contact_id,
@@ -154,7 +158,7 @@ async def delete_contact(
 async def import_csv(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     if file.content_type not in ("text/csv", "application/vnd.ms-excel"):
         raise HTTPException(status_code=400, detail="Solo se aceptan archivos CSV")
 
@@ -183,7 +187,7 @@ async def bulk_tag_contacts(
     body: BulkTagRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     result = await db.execute(
         select(Contact).where(
             Contact.id.in_(body.contact_ids),
@@ -208,7 +212,7 @@ async def bulk_delete_contacts(
     body: BulkDeleteRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     result = await db.execute(
         select(Contact).where(
             Contact.id.in_(body.contact_ids),
@@ -227,7 +231,7 @@ async def bulk_status_contacts(
     body: BulkStatusRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     result = await db.execute(
         select(Contact).where(
             Contact.id.in_(body.contact_ids),
@@ -246,7 +250,7 @@ async def bulk_send_campaign(
     body: BulkSendCampaignRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     from app.models.campaign import Campaign
     result = await db.execute(
         select(Campaign).where(
@@ -274,7 +278,7 @@ async def bulk_send_campaign(
 async def export_contacts_csv(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> StreamingResponse:
     """Export all contacts for the current advertiser as a UTF-8 CSV download."""
     result = await db.execute(
         select(Contact)

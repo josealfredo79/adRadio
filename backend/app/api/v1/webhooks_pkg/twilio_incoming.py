@@ -46,7 +46,7 @@ def _validate_twilio_signature(request_url: str, params: dict, signature: str) -
 async def twilio_incoming(
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     """Handle incoming WhatsApp messages from Twilio."""
     signature = request.headers.get("X-Twilio-Signature", "")
     form_data = dict(await request.form())

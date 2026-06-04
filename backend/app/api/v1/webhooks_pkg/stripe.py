@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, bool]:
     """Handle Stripe webhook events."""
     import stripe as stripe_lib  # type: ignore
 
