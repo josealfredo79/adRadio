@@ -63,7 +63,7 @@
     background: white !important;
     border: 1px solid #ddd !important;
     box-shadow: none !important;
-    break-inside: avoid;
+    break-inside: auto;
   }
 
   table {
@@ -102,5 +102,9 @@
     right: 1cm;
     font-size: 8pt;
     color: #999;
+  }
+
+  .print-keep-together {
+    break-inside: avoid;
   }
 }
