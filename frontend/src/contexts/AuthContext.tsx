@@ -42,6 +42,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Evitar llamar /refresh en páginas públicas — el backend responde 401
+    // y eso genera ruido en consola aunque se maneje el error.
+    const publicPaths = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/terms', '/privacy', '/customer-stories']
+    if (publicPaths.includes(window.location.pathname)) {
+      setLoading(false)
+      return
+    }
     // Restore session using httpOnly cookie — no localStorage needed
     axios
       .post('/api/v1/auth/refresh', null, { withCredentials: true, timeout: 5000 })

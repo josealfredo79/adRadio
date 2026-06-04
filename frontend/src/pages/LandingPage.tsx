@@ -270,7 +270,7 @@ export default function LandingPage() {
       </nav>
 
       {/* ─── HERO — Product Demo + Video Inmersivo ─── */}
-      <section className="relative px-5 pt-24 pb-8 overflow-hidden min-h-[90vh] flex items-center">
+      <section className="relative px-5 pt-20 sm:pt-24 pb-16 sm:pb-8 overflow-hidden min-h-screen sm:min-h-[90vh] flex items-start sm:items-center">
         {/* Video background inmersivo */}
         <video
           autoPlay
@@ -303,13 +303,13 @@ export default function LandingPage() {
               </div>
 
               <h1 className="mb-6 text-5xl font-black leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
-                Tu negocio en<br />
-                <span className="text-shimmer">la radio del futuro</span>
+                Spots de radio con IA<br />
+                <span className="text-shimmer">para tu negocio en WhatsApp</span>
               </h1>
 
               <p className="mb-8 text-lg text-gray-400 leading-relaxed max-w-lg">
                 Campañas masivas por WhatsApp, bot IA que conoce tu negocio,
-                cuñas de radio generadas en segundos. <strong className="text-white">Todo en una plataforma.</strong>
+                audios publicitarios y cupones automáticos. <strong className="text-white">Todo en una plataforma.</strong>
               </p>
 
               <div className="flex flex-wrap gap-3 mb-8">
@@ -349,7 +349,7 @@ export default function LandingPage() {
           </div>
 
           {/* Stats row */}
-          <div className="mt-20 max-w-4xl mx-auto">
+          <div className="mt-10 sm:mt-20 max-w-4xl mx-auto">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <AnimatedStat n={2840} suffix="+" label="Negocios activos en México" />
               <AnimatedStat n={10} suffix=" min" label="Para lanzar tu primera campaña" />
@@ -820,10 +820,10 @@ export default function LandingPage() {
           </div>
           <h2 className="mb-6 text-5xl font-black leading-tight sm:text-6xl">
             Tu negocio merece<br />
-            <span className="text-shimmer">una radio propia</span>
+            <span className="text-shimmer">spots de voz con IA</span>
           </h2>
           <p className="mb-10 text-xl text-gray-400">
-            Únete a los negocios mexicanos que ya usan IA para vender más por WhatsApp.
+            Únete a los negocios mexicanos que ya usan IA para vender más por WhatsApp con campañas, bot y audios publicitarios.
           </p>
           <Link
             to="/register"
@@ -849,7 +849,7 @@ export default function LandingPage() {
               <Radio className="h-3.5 w-3.5 text-white" />
             </div>
             <span className="font-black text-white">IaRadio</span>
-            <span className="text-gray-600 text-sm">— Radio Publicitaria por WhatsApp con IA</span>
+            <span className="text-gray-600 text-sm">— Spots de radio con IA para WhatsApp</span>
           </div>
           <div className="flex flex-col gap-2 text-sm text-gray-600 sm:items-end">
             <div>
