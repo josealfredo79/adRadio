@@ -2,7 +2,8 @@
 Payments router — /api/v1/plans, /api/v1/checkout, /api/v1/transactions
 """
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from redis.asyncio import Redis as AsyncRedis
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import stripe as stripe_lib  # type: ignore
 
 from app.api.deps import get_current_user
-from app.api.idempotency import idempotent_post
+from app.api.idempotency import idempotent_post, store_idempotency_response
+from app.core.redis import get_redis_optional
 from app.config import settings
 from app.database import get_db
 from app.models.transaction import Transaction
@@ -46,10 +48,12 @@ async def list_plans() -> dict:
 
 @router.post("/checkout/create-session")
 async def create_checkout_session(
+    request: Request,
     body: CheckoutSessionBody,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     _: None = Depends(idempotent_post),
+    redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> dict:
     plan_key = body.plan
     if plan_key not in PLANS:
@@ -90,7 +94,9 @@ async def create_checkout_session(
     )
 
     logger.info("Checkout session created for user %s, plan %s", current_user.id, plan_key)
-    return {"checkout_url": session.url}
+    out = {"checkout_url": session.url}
+    await store_idempotency_response(request, redis, out)
+    return out
 
 
 @router.post("/cancel-subscription")

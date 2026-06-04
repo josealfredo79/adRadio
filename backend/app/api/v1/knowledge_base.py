@@ -4,12 +4,14 @@ Knowledge Base router — /api/v1/knowledge-base
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.api.idempotency import idempotent_post
+from app.api.idempotency import idempotent_post, store_idempotency_response
+from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.knowledge_base import KnowledgeBase
 from app.models.user import User
@@ -66,10 +68,12 @@ async def list_files(
 
 @router.post("/upload", status_code=status.HTTP_202_ACCEPTED)
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(idempotent_post),
+    redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> dict[str, str]:
     # Validate MIME type (not just extension)
     if file.content_type not in ALLOWED_MIME_TYPES:
@@ -98,7 +102,9 @@ async def upload_file(
     process_knowledge_base_file.delay(str(kb.id), content, file_type)
 
     logger.info("File uploaded to KB: %s (type=%s) by user %s", kb.filename, file_type, current_user.id)
-    return {"message": "Archivo recibido. Se procesará en segundo plano.", "id": str(kb.id)}
+    out = {"message": "Archivo recibido. Se procesará en segundo plano.", "id": str(kb.id)}
+    await store_idempotency_response(request, redis, out)
+    return out
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)

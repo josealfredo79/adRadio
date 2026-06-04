@@ -8,28 +8,28 @@
 |---|---:|---:|
 | Tests Backend (API) | 146 ✅ | 9 archivos |
 | Tests Servicios | 128 ✅ | 17 servicios |
-| Tests Frontend | 96 ✅ | 14 módulos |
+| Tests Frontend | 103 ✅ | 15 módulos |
 | Pages con Print/PDF | 3 ✅ | Orders, Campaigns, Contacts |
-| Prioridades Completadas | 13/13 | P1 → P13 ✅ |
+| Prioridades Completadas | 14/14 | P1 → P14 ✅ |
 
 ---
 
 ## 🖥️ Backend — API Endpoints
 
-| Módulo | Tests (⚠️ 11/13 ❌) | Logs | Idempotencia | N+1 |
+| Módulo | Tests | Logs | Idempotencia | N+1 |
 |---|---|---|---|---|
-| Campaigns | ✅ | ✅ | ❌ | ⚠️ |
-| Contacts | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| Campaigns | ✅ | ✅ | ✅ | ✅ |
+| Contacts | ⚠️ | ⚠️ | ⚠️ | ✅ |
 | Appointments | ❌ | ✅ | ⚠️ | ◻️ |
-| Payments | ❌ | ⚠️ | ⚠️ | ◻️ |
-| Knowledge Base | ❌ | ⚠️ | ❌ | ◻️ |
+| Payments | ❌ | ⚠️ | ✅ | ◻️ |
+| Knowledge Base | ❌ | ⚠️ | ✅ | ◻️ |
 | Automations | ❌ | ⚠️ | ⚠️ | ✅ |
 | Team | ❌ | ⚠️ | ⚠️ | ◻️ |
-| Conversations | ❌ | ⚠️ | ⚠️ | ⚠️ |
+| Conversations | ❌ | ⚠️ | ✅ | ✅ |
 | Radio | ❌ | ✅ | ◻️ | ◻️ |
-| Public API | ❌ | ⚠️ | ❌ | ◻️ |
-| Profile/Dash | ❌ | ⚠️ | ❌ | ◻️ |
-| Widget | ❌ | ✅ | ❌ | ◻️ |
+| Public API | ❌ | ⚠️ | ✅ | ◻️ |
+| Profile/Dash | ❌ | ⚠️ | ✅ | ◻️ |
+| Widget | ❌ | ✅ | ✅ | ◻️ |
 | Analytics | ❌ | ✅ | ◻️ | ◻️ |
 
 > ✅ = Auth, Validación, Paginación, SQL Injection, Async, Types — todo cubierto en los 13 módulos.
@@ -64,9 +64,9 @@
 
 | Módulo | Tests | ErrorBound | Paginación | Print/PDF |
 |---|---|---|---|---|
-| CampaignsPage | ✅ | ⚠️ | ❌ | ✅ |
+| CampaignsPage | ✅ | ⚠️ | ✅ | ✅ |
 | ContactsPage | ✅ | ⚠️ | ✅ | ✅ |
-| OrdersPage | ❌ | ⚠️ | ❌ | ✅ |
+| OrdersPage | ✅ | ⚠️ | ❌ | ✅ |
 | SettingsPage | ✅ | ⚠️ | ◻️ | ◻️ |
 | AppointmentsPage | ✅ | ⚠️ | ◻️ | ◻️ |
 | KnowledgeBasePage | ✅ | ⚠️ | ◻️ | ◻️ |
@@ -85,6 +85,9 @@
 
 | Fecha | Cambio |
 |---|---|
+| 2026-06-04 | **P14** — CampaignsPage paginación frontend + OrdersPage test |
+| 2026-06-04 | **P12-P13** — Idempotencia real: store_idempotency_response en 8 endpoints + Widget |
+| 2026-06-04 | **P2-P3** — N+1 verificado sin issues (todos ✅) |
 | 2026-06-04 | **P13** — Parrilla con PrintButton interno, encabezado print-only, print-keep-together |
 | 2026-06-04 | **P12** — Fix truncado PDF: h-screen/overflow-hidden liberados en @media print |
 | 2026-06-04 | **P10** — 128 tests unitarios para 15 servicios backend |

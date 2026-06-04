@@ -7,15 +7,17 @@ import logging
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from redis.asyncio import Redis as AsyncRedis
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
-from app.api.idempotency import idempotent_post
+from app.api.idempotency import idempotent_post, store_idempotency_response
+from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.campaign import Campaign
 from app.models.customer_story import CustomerStory
@@ -52,13 +54,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 
-@router.get("", response_model=list[CampaignOut])
+@router.get("")
 async def list_campaigns(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[CampaignOut]:
+) -> dict:
     result = await db.execute(
         select(Campaign)
         .where(Campaign.advertiser_id == current_user.id)
@@ -66,15 +68,23 @@ async def list_campaigns(
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
-    return [CampaignOut.model_validate(c) for c in result.scalars().all()]
+    total_result = await db.execute(
+        select(func.count()).select_from(Campaign)
+        .where(Campaign.advertiser_id == current_user.id)
+    )
+    total = total_result.scalar_one()
+    items = [CampaignOut.model_validate(c) for c in result.scalars().all()]
+    return {"items": [i.model_dump() for i in items], "total": total}
 
 
 @router.post("", response_model=CampaignOut, status_code=status.HTTP_201_CREATED)
 async def create_campaign(
+    request: Request,
     body: CampaignCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(idempotent_post),
+    redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> CampaignOut:
     if current_user.subscription_status not in ("active", "trial"):
         raise HTTPException(status_code=402, detail="Necesitas un plan activo para crear campañas")
@@ -96,7 +106,9 @@ async def create_campaign(
             countdown = 0
         schedule_campaign.apply_async(args=[str(campaign.id)], countdown=countdown)
 
-    return CampaignOut.model_validate(campaign)
+    out = CampaignOut.model_validate(campaign)
+    await store_idempotency_response(request, redis, out.model_dump())
+    return out
 
 
 @router.patch("/{campaign_id}", response_model=CampaignOut)
@@ -127,9 +139,11 @@ async def update_campaign(
 @router.post("/{campaign_id}/pause")
 async def pause_campaign(
     campaign_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(idempotent_post),
+    redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> dict[str, str]:
     result = await db.execute(
         select(Campaign).where(
@@ -142,15 +156,19 @@ async def pause_campaign(
         raise HTTPException(status_code=404, detail="Campaña no encontrada")
     campaign.status = "paused"
     await db.commit()
-    return {"message": "Campaña pausada"}
+    out = {"message": "Campaña pausada"}
+    await store_idempotency_response(request, redis, out)
+    return out
 
 
 @router.post("/{campaign_id}/resume")
 async def resume_campaign(
     campaign_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(idempotent_post),
+    redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> dict[str, str]:
     result = await db.execute(
         select(Campaign).where(
@@ -164,7 +182,9 @@ async def resume_campaign(
     campaign.status = "running"
     await db.commit()
     schedule_campaign.delay(str(campaign.id))
-    return {"message": "Campaña reanudada"}
+    out = {"message": "Campaña reanudada"}
+    await store_idempotency_response(request, redis, out)
+    return out
 
 
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)

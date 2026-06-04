@@ -1,7 +1,11 @@
 """Widget embebible — /api/v1/widget"""
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from redis.asyncio import Redis as AsyncRedis
+
+from app.api.idempotency import idempotent_post, store_idempotency_response
+from app.core.redis import get_redis_optional
 
 logger = logging.getLogger(__name__)
 from sqlalchemy import select
@@ -61,9 +65,12 @@ async def widget_preview(advertiser_id: UUID, db: AsyncSession = Depends(get_db)
 
 @router.put("/config")
 async def update_widget_config(
+    request: Request,
     body: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(idempotent_post),
+    redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> dict:
     """Update widget customization settings for the current advertiser."""
     if "color" in body:
@@ -82,7 +89,9 @@ async def update_widget_config(
 
     await db.commit()
     logger.info("Widget config updated for user %s", current_user.id)
-    return {"message": "Widget actualizado"}
+    out = {"message": "Widget actualizado"}
+    await store_idempotency_response(request, redis, out)
+    return out
 
 
 @router.get("/config")

@@ -7,13 +7,15 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from redis.asyncio import Redis as AsyncRedis
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.api.idempotency import idempotent_post
+from app.api.idempotency import idempotent_post, store_idempotency_response
+from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.contact import Contact
 from app.models.conversation import Conversation
@@ -163,10 +165,12 @@ async def update_lead_score(
 @router.post("/{conversation_id}/reply")
 async def reply_to_conversation(
     conversation_id: uuid.UUID,
+    request: Request,
     body: ReplyBody,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(idempotent_post),
+    redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> dict[str, str]:
     """Send a manual reply from the dashboard to a WhatsApp contact."""
     text = body.text.strip()
@@ -218,4 +222,6 @@ async def reply_to_conversation(
         countdown=1,
     )
 
-    return {"message": "ok", "msg_id": str(msg.id)}
+    out = {"message": "ok", "msg_id": str(msg.id)}
+    await store_idempotency_response(request, redis, out)
+    return out

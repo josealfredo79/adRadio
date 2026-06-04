@@ -5,21 +5,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import CampaignsPage from '@/pages/CampaignsPage'
 
-const mockCampaigns: Array<{
-  id: string
-  name: string
-  type: string
-  message_text: string
-  status: string
-  stats: Record<string, number>
-  ab_test: Record<string, unknown>
-  created_at: string
-  schedule?: { start_date?: string; end_date?: string } | null
-}> = [
-  { id: '1', name: 'Promo Junio', type: 'promo', message_text: 'Texto promo', status: 'running', stats: { sent: 100, delivered: 95, read: 50 }, ab_test: {}, created_at: '2025-01-01T00:00:00Z', schedule: null },
-  { id: '2', name: 'Recordatorio', type: 'reminder', message_text: 'Texto recordatorio', status: 'draft', stats: {}, ab_test: {}, created_at: '2025-01-02T00:00:00Z', schedule: { start_date: '2025-06-01', end_date: '2025-06-10' } },
-  { id: '3', name: 'Lanzamiento', type: 'launch', message_text: 'Texto lanzamiento', status: 'completed', stats: { sent: 200, delivered: 190, read: 120 }, ab_test: { enabled: false }, created_at: '2025-01-03T00:00:00Z', schedule: null },
-]
+const mockCampaignsPage = {
+  items: [
+    { id: '1', name: 'Promo Junio', type: 'promo', message_text: 'Texto promo', status: 'running', stats: { sent: 100, delivered: 95, read: 50 }, ab_test: {}, created_at: '2025-01-01T00:00:00Z', schedule: null },
+    { id: '2', name: 'Recordatorio', type: 'reminder', message_text: 'Texto recordatorio', status: 'draft', stats: {}, ab_test: {}, created_at: '2025-01-02T00:00:00Z', schedule: { start_date: '2025-06-01', end_date: '2025-06-10' } },
+    { id: '3', name: 'Lanzamiento', type: 'launch', message_text: 'Texto lanzamiento', status: 'completed', stats: { sent: 200, delivered: 190, read: 120 }, ab_test: { enabled: false }, created_at: '2025-01-03T00:00:00Z', schedule: null },
+  ],
+  total: 3,
+}
 
 function setupQueryClient() {
   return new QueryClient({
@@ -30,7 +23,7 @@ function setupQueryClient() {
 function renderPage() {
   const queryClient = setupQueryClient()
   queryClient.setQueryData(['dashboard'], { messages_remaining: 100 })
-  queryClient.setQueryData(['campaigns'], mockCampaigns)
+  queryClient.setQueryData(['campaigns', 1], mockCampaignsPage)
   return {
     queryClient,
     ...render(

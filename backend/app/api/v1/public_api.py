@@ -5,13 +5,15 @@ import logging
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from redis.asyncio import Redis as AsyncRedis
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.api.idempotency import idempotent_post
+from app.api.idempotency import idempotent_post, store_idempotency_response
+from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.api_key import ApiKey
 from app.models.user import User
@@ -55,10 +57,12 @@ class ApiKeyCreatedOut(BaseModel):
 
 @router.post("", response_model=ApiKeyCreatedOut, status_code=201)
 async def create_api_key(
+    request: Request,
     body: ApiKeyCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(idempotent_post),
+    redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> ApiKeyCreatedOut:
     raw_key = f"{API_KEY_PREFIX}{secrets.token_hex(30)}"
     prefix = raw_key[:8]
@@ -76,6 +80,7 @@ async def create_api_key(
 
     out = ApiKeyCreatedOut.model_validate(api_key)
     out.key = raw_key
+    await store_idempotency_response(request, redis, out.model_dump())
     return out
 
 

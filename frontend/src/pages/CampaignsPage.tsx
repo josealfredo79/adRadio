@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, ListOrdered, Ticket, CalendarClock, BarChart2, X, CalendarRange, CheckCircle2, AlertCircle, Download } from 'lucide-react'
+import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, ListOrdered, Ticket, CalendarClock, BarChart2, X, CalendarRange, CheckCircle2, AlertCircle, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import SEO from '@/components/SEO'
 import PrintButton from '@/components/PrintButton'
@@ -108,6 +108,7 @@ export default function CampaignsPage() {
   const [abMetric, setAbMetric] = useState('response')
   const [analyticsId, setAnalyticsId] = useState<string | null>(null)
   const [vocesDetailId, setVocesDetailId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
 
   // Banner Visual mode
   const [bannerPromo, setBannerPromo] = useState('')
@@ -140,10 +141,27 @@ export default function CampaignsPage() {
   } | null>(null)
   const [parrillaError, setParrillaError] = useState('')
 
-  const { data: campaigns, isLoading } = useQuery<Campaign[]>({
-    queryKey: ['campaigns'],
-    queryFn: () => api.get('/campaigns').then((r) => r.data),
+  const { data: campaignsData, isLoading } = useQuery<{ items: Campaign[]; total: number }>({
+    queryKey: ['campaigns', page],
+    queryFn: () => api.get('/campaigns', { params: { page, page_size: 20 } }).then((r) => r.data),
   })
+
+  const campaigns = campaignsData?.items
+  const totalCampaigns = campaignsData?.total ?? 0
+  const totalPages = Math.ceil(totalCampaigns / 20) || 1
+
+  function getPageNumbers() {
+    const pages: (number | string)[] = [1]
+    if (totalPages <= 1) return pages
+    const delta = 1
+    const rangeStart = Math.max(2, page - delta)
+    const rangeEnd = Math.min(totalPages - 1, page + delta)
+    if (rangeStart > 2) pages.push('...')
+    for (let i = rangeStart; i <= rangeEnd; i++) pages.push(i)
+    if (rangeEnd < totalPages - 1) pages.push('...')
+    if (totalPages > 1) pages.push(totalPages)
+    return pages
+  }
 
   interface Template { id: string; name: string; content: string; category: string | null }
   interface Voice { id: string; name: string; lang: string; gender: string; provider: string }
@@ -348,7 +366,7 @@ export default function CampaignsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Campañas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{campaigns?.length ?? 0} campañas creadas</p>
+          <p className="mt-1 text-sm text-muted-foreground">{totalCampaigns} campañas creadas</p>
         </div>
         <div className="flex gap-3">
           <PrintButton />
@@ -563,6 +581,48 @@ export default function CampaignsPage() {
           ))
         )}
       </div>
+
+      {/* Pagination */}
+      {campaignsData && totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-1">
+          <p className="text-sm text-muted-foreground">
+            Mostrando {Math.min((page - 1) * 20 + 1, totalCampaigns)}-{Math.min(page * 20, totalCampaigns)} de {totalCampaigns} campañas
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:border-gray-800 dark:hover:bg-gray-900"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {getPageNumbers().map((p, i) =>
+              p === '...' ? (
+                <span key={`ellipsis-${i}`} className="px-2 text-sm text-muted-foreground">...</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => setPage(p as number)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    page === p
+                      ? 'bg-brand-500 text-white'
+                      : 'text-muted-foreground hover:bg-muted dark:hover:bg-gray-900'
+                  }`}
+                >
+                  {p}
+                </button>
+              )
+            )}
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:border-gray-800 dark:hover:bg-gray-900"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Create Modal */}
       {showCreate && (
