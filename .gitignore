@@ -32,6 +32,7 @@ logs/
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/test-results/
 .cache/
 
 # OS
