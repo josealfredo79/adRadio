@@ -388,12 +388,13 @@ class TestSubscriptionPlans:
 
     def test_plan_limits(self):
         PLANS = {
-            "trial": {"messages": 0, "contacts": 50, "campaigns": 1},
+            "trial": {"messages": 50, "contacts": 50, "campaigns": 1},
             "starter": {"messages": 500, "contacts": 200, "campaigns": 5},
             "growth": {"messages": 2000, "contacts": 1000, "campaigns": 20},
             "pro": {"messages": 10000, "contacts": 5000, "campaigns": 100},
         }
         
+        assert PLANS["trial"]["messages"] == 50
         assert PLANS["trial"]["contacts"] == 50
         assert PLANS["starter"]["messages"] == 500
         assert PLANS["pro"]["campaigns"] == 100
