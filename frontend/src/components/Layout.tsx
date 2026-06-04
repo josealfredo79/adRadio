@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/app/campaigns', icon: Megaphone, label: 'Campañas' },
+  { to: '/app/automations', icon: Bot, label: 'Automatizaciones' },
   { to: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
   { to: '/app/orders', icon: ShoppingBag, label: 'Pedidos', badge: 'orders_pending' as const },
   { to: '/app/appointments', icon: CalendarDays, label: 'Citas' },
@@ -41,7 +42,6 @@ const navItems = [
   { to: '/app/widget', icon: MessageCircle, label: 'Widget WA' },
   { to: '/app/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/app/plans', icon: CreditCard, label: 'Planes' },
-  { to: '/app/automations', icon: Bot, label: 'Automations' },
   { to: '/app/settings', icon: Settings, label: 'Configuración' },
 ]
 

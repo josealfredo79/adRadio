@@ -13,6 +13,7 @@ from app.api.deps import get_current_user, require_admin
 from app.config import settings
 from app.core.redis import get_redis_optional
 from app.database import get_db
+from app.models.automation import AutomationFlow
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.message import Message
@@ -112,6 +113,14 @@ async def dashboard(
     )
 
     # Messages sent this month
+    # Active automations
+    automations_active = await db.execute(
+        select(func.count()).where(
+            AutomationFlow.advertiser_id == current_user.id,
+            AutomationFlow.is_active == True,
+        )
+    )
+
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
     first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -141,6 +150,7 @@ async def dashboard(
     data = {
         "contacts_total": contacts_total.scalar_one(),
         "campaigns_active": campaigns_active.scalar_one(),
+        "automations_active": automations_active.scalar_one(),
         "messages_sent_this_month": messages_sent.scalar_one(),
         "messages_remaining": current_user.messages_remaining,
         "plan": current_user.current_plan,
