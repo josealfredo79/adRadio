@@ -12,12 +12,18 @@ interface User {
   country: string
   phone: string | null
   whatsapp_number: string | null
+  whatsapp_number_source: string
   language: string
   bot_name: string | null
   bot_personality: string | null
   subscription_status: string
   current_plan: string
   messages_remaining: number
+  email_verified: boolean
+  logo_url: string | null
+  widget_color: string
+  widget_greeting: string
+  widget_position: string
 }
 
 interface AuthContextType {

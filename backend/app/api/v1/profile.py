@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
 from app.config import settings
-from app.core.redis import get_redis
+from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.campaign import Campaign
 from app.models.contact import Contact
@@ -87,12 +87,13 @@ async def change_password(
 async def dashboard(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    redis=Depends(get_redis),
+    redis=Depends(get_redis_optional),
 ):
-    cache_key = f"dashboard:{current_user.id}"
-    cached = await redis.get(cache_key)
-    if cached:
-        return json.loads(cached)
+    if redis:
+        cache_key = f"dashboard:{current_user.id}"
+        cached = await redis.get(cache_key)
+        if cached:
+            return json.loads(cached)
 
     # Contacts count
     contacts_total = await db.execute(
@@ -148,7 +149,8 @@ async def dashboard(
         "orders_pending": orders_pending.scalar_one(),
     }
 
-    await redis.setex(cache_key, 300, json.dumps(data))  # cache 5 min
+    if redis:
+        await redis.setex(cache_key, 120, json.dumps(data))  # cache 2 min
     return data
 
 
@@ -156,38 +158,51 @@ async def dashboard(
 async def dashboard_chart(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    redis=Depends(get_redis),
+    redis=Depends(get_redis_optional),
 ):
     """Returns outbound message counts for the last 7 days."""
     from datetime import datetime, timezone, timedelta
 
-    cache_key = f"dashboard_chart:{current_user.id}"
-    cached = await redis.get(cache_key)
-    if cached:
-        return json.loads(cached)
+    if redis:
+        cache_key = f"dashboard_chart:{current_user.id}"
+        cached = await redis.get(cache_key)
+        if cached:
+            return json.loads(cached)
 
     now = datetime.now(timezone.utc)
-    days = []
-    for i in range(6, -1, -1):
-        day_start = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = day_start + timedelta(days=1)
+    seven_days_ago = (now - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-        count_result = await db.execute(
-            select(func.count()).where(
-                Message.advertiser_id == current_user.id,
-                Message.direction == "outbound",
-                Message.created_at >= day_start,
-                Message.created_at < day_end,
-            )
+    rows = await db.execute(
+        select(
+            func.date(Message.created_at).label("day"),
+            func.count().label("mensajes"),
+        ).where(
+            Message.advertiser_id == current_user.id,
+            Message.direction == "outbound",
+            Message.created_at >= seven_days_ago,
+        ).group_by(
+            func.date(Message.created_at),
+        ).order_by(
+            func.date(Message.created_at),
         )
-        count = count_result.scalar_one()
+    )
+
+    counts_map: dict[str, int] = {}
+    for row in rows:
+        counts_map[row.day.isoformat()] = row.mensajes
+
+    days = []
+    for i in range(7):
+        day = (seven_days_ago + timedelta(days=i))
+        day_str = day.date().isoformat()
         days.append({
-            "day": day_start.strftime("%a"),
-            "mensajes": count,
-            "date": day_start.date().isoformat(),
+            "day": day.strftime("%a"),
+            "mensajes": counts_map.get(day_str, 0),
+            "date": day_str,
         })
 
-    await redis.setex(cache_key, 300, json.dumps(days))
+    if redis:
+        await redis.setex(cache_key, 120, json.dumps(days))
     return days
 
 

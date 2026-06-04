@@ -41,7 +41,8 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch {
         setAccessToken(null)
-        window.location.href = '/login'
+        const currentPath = window.location.pathname
+        window.location.href = currentPath !== '/login' ? `/login?redirect=${encodeURIComponent(currentPath)}` : '/login'
       }
     }
     return Promise.reject(error)

@@ -11,10 +11,10 @@ interface SEOProps {
   noIndex?: boolean
 }
 
-const BASE_URL = 'https://iaradio.app'
+const BASE_URL = import.meta.env.VITE_SITE_URL ?? 'https://iaradio.app'
 const DEFAULT_TITLE = 'IaRadio — Radio Publicitaria por WhatsApp con IA'
 const DEFAULT_DESCRIPTION = 'Campañas masivas por WhatsApp, bot IA que conoce tu negocio y cuñas de radio generadas en segundos. La plataforma de marketing conversacional para negocios mexicanos.'
-const DEFAULT_OG_IMAGE = 'https://iaradio.app/og-image.png'
+const DEFAULT_OG_IMAGE = `${BASE_URL}/og-image.png`
 
 export default function SEO({
   title,

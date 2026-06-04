@@ -166,21 +166,21 @@ export default function CampaignsPage() {
 
   const createMutation = useMutation({
     mutationFn: (body: any) => api.post('/campaigns', body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); setShowCreate(false); resetForm() },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); setShowCreate(false); resetForm() },
     onError: (err: any) => setError(err.response?.data?.detail ?? 'Error'),
   })
 
   const pauseMutation = useMutation({
     mutationFn: (id: string) => api.post(`/campaigns/${id}/pause`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }) },
   })
   const resumeMutation = useMutation({
     mutationFn: (id: string) => api.post(`/campaigns/${id}/resume`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }) },
   })
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/campaigns/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }) },
   })
 
   const resetForm = () => {
@@ -294,6 +294,19 @@ export default function CampaignsPage() {
 
   const analyticsTarget = campaigns?.find((c) => c.id === analyticsId)
   const vocesDetailTarget = campaigns?.find((c) => c.id === vocesDetailId)
+  const { data: storiesData, isLoading: storiesLoading, refetch: refetchStories } = useQuery({
+    queryKey: ['campaign-stories', vocesDetailId],
+    queryFn: () => api.get(`/campaigns/${vocesDetailId}/stories`).then((r) => r.data),
+    enabled: !!vocesDetailId,
+  })
+  const [capsuleAudioUrl, setCapsuleAudioUrl] = useState('')
+  const [capsuleScript, setCapsuleScript] = useState('')
+  const [capsuleGenerating, setCapsuleGenerating] = useState(false)
+
+  const approveStoryMutation = useMutation({
+    mutationFn: (storyId: string) => api.patch(`/campaigns/stories/${storyId}/approve`),
+    onSuccess: () => refetchStories(),
+  })
 
   const isMultiMode = mode === 'sequence' || mode === 'saga'
   const isRadioMode = AUDIO_MODES.includes(mode)
@@ -1254,20 +1267,6 @@ export default function CampaignsPage() {
 
       {/* Voces del Barrio Detail Modal */}
       {vocesDetailTarget && (() => {
-        const { data: storiesData, isLoading: storiesLoading, refetch: refetchStories } = useQuery({
-          queryKey: ['campaign-stories', vocesDetailTarget.id],
-          queryFn: () => api.get(`/campaigns/${vocesDetailTarget.id}/stories`).then((r) => r.data),
-          enabled: !!vocesDetailTarget,
-        })
-        const [capsuleAudioUrl, setCapsuleAudioUrl] = useState('')
-        const [capsuleScript, setCapsuleScript] = useState('')
-        const [capsuleGenerating, setCapsuleGenerating] = useState(false)
-
-        const approveMutation = useMutation({
-          mutationFn: (storyId: string) => api.patch(`/campaigns/stories/${storyId}/approve`),
-          onSuccess: () => refetchStories(),
-        })
-
         const generateCapsule = async () => {
           setCapsuleGenerating(true)
           try {
@@ -1324,7 +1323,7 @@ export default function CampaignsPage() {
                           </p>
                         </div>
                         <button
-                          onClick={() => approveMutation.mutate(story.id)}
+                          onClick={() => approveStoryMutation.mutate(story.id)}
                           className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
                             story.approved
                               ? 'bg-green-100 text-green-700 dark:text-green-300 hover:bg-green-200'

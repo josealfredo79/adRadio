@@ -84,23 +84,23 @@ function WebhooksSection() {
   }
 
   return (
-    <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
+    <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">
       <div className="flex items-center gap-2">
-        <Webhook className="h-4 w-4 text-gray-400" />
-        <h2 className="text-base font-semibold text-gray-900">Webhooks</h2>
+        <Webhook className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-base font-semibold text-foreground">Webhooks</h2>
       </div>
-      <p className="text-sm text-gray-500">Recibe notificaciones HTTP cuando ocurran eventos en tu cuenta.</p>
+      <p className="text-sm text-muted-foreground">Recibe notificaciones HTTP cuando ocurran eventos en tu cuenta.</p>
 
       {webhooks?.map((wh: any) => (
-        <div key={wh.id} className="flex items-start gap-3 rounded-lg border border-gray-200 p-3">
+        <div key={wh.id} className="flex items-start gap-3 rounded-lg border border-border p-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-900">{wh.name}</span>
-              <span className={`text-xs px-1.5 py-0.5 rounded-full ${wh.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+              <span className="text-sm font-medium text-foreground">{wh.name}</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${wh.active ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground'}`}>
                 {wh.active ? 'Activo' : 'Inactivo'}
               </span>
             </div>
-            <p className="text-xs text-gray-500 font-mono truncate mt-0.5">{wh.url}</p>
+            <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">{wh.url}</p>
             <div className="flex flex-wrap gap-1 mt-1.5">
               {wh.events.map((ev: string) => (
                 <span key={ev} className="text-xs bg-brand-50 text-brand-600 px-1.5 py-0.5 rounded-full">
@@ -112,7 +112,7 @@ function WebhooksSection() {
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => toggleMutation.mutate({ id: wh.id, active: !wh.active })}
-              className={`text-xs px-2 py-1 rounded ${wh.active ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+              className={`text-xs px-2 py-1 rounded ${wh.active ? 'bg-muted text-muted-foreground hover:bg-muted' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
             >
               {wh.active ? 'Desactivar' : 'Activar'}
             </button>
@@ -138,23 +138,23 @@ function WebhooksSection() {
       ))}
 
       {showForm ? (
-        <div className="space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50">
+        <div className="space-y-3 rounded-lg border border-border p-4 bg-muted">
           <input
             type="text"
             placeholder="Nombre del webhook"
             value={newWh.name}
             onChange={e => setNewWh({ ...newWh, name: e.target.value })}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm"
           />
           <input
             type="url"
             placeholder="https://ejemplo.com/webhook"
             value={newWh.url}
             onChange={e => setNewWh({ ...newWh, url: e.target.value })}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm"
           />
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Eventos</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Eventos</label>
             <div className="flex flex-wrap gap-2">
               {AVAILABLE_EVENTS.map(ev => (
                 <label key={ev.value} className="flex items-center gap-1 text-xs">
@@ -177,7 +177,7 @@ function WebhooksSection() {
             >
               {createMutation.isPending ? 'Creando...' : 'Crear'}
             </button>
-            <button onClick={() => setShowForm(false)} className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50">
+            <button onClick={() => setShowForm(false)} className="text-sm px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted">
               Cancelar
             </button>
           </div>
@@ -233,39 +233,39 @@ function WhiteLabelSection() {
   const [saved, setSaved] = useState(false)
 
   return (
-    <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
+    <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">
       <div className="flex items-center gap-2">
-        <Palette className="h-4 w-4 text-gray-400" />
-        <h2 className="text-base font-semibold text-gray-900">White Label</h2>
+        <Palette className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-base font-semibold text-foreground">White Label</h2>
       </div>
-      <p className="text-sm text-gray-500">Personaliza la apariencia de tu plataforma</p>
+      <p className="text-sm text-muted-foreground">Personaliza la apariencia de tu plataforma</p>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Color primario</label>
+        <label className="block text-sm font-medium text-foreground mb-1">Color primario</label>
         <div className="flex items-center gap-2">
           <input
             type="color"
             value={form.primary_color}
             onChange={e => setForm({ ...form, primary_color: e.target.value })}
-            className="h-9 w-9 rounded border border-gray-300 cursor-pointer"
+            className="h-9 w-9 rounded border border-border cursor-pointer"
           />
           <input
             type="text"
             value={form.primary_color}
             onChange={e => setForm({ ...form, primary_color: e.target.value })}
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
+            className="flex-1 rounded-lg border border-border px-3 py-2 text-sm font-mono"
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de la aplicación</label>
+        <label className="block text-sm font-medium text-foreground mb-1">Nombre de la aplicación</label>
         <input
           type="text"
           value={form.app_name}
           onChange={e => setForm({ ...form, app_name: e.target.value })}
           placeholder="Ej: Mi Radio"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-border px-3 py-2 text-sm"
         />
       </div>
 
@@ -280,14 +280,14 @@ function WhiteLabelSection() {
       </label>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Dominio personalizado</label>
+        <label className="block text-sm font-medium text-foreground mb-1">Dominio personalizado</label>
         <div className="relative">
           <input
             type="text"
             value={form.custom_domain}
             onChange={e => setForm({ ...form, custom_domain: e.target.value })}
             placeholder="ejemplo.com"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm pr-24"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm pr-24"
           />
           <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
             Próximamente
@@ -296,13 +296,13 @@ function WhiteLabelSection() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">URL del Favicon</label>
+        <label className="block text-sm font-medium text-foreground mb-1">URL del Favicon</label>
         <input
           type="url"
           value={form.favicon_url}
           onChange={e => setForm({ ...form, favicon_url: e.target.value })}
           placeholder="https://ejemplo.com/favicon.ico"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-border px-3 py-2 text-sm"
         />
       </div>
 
@@ -363,37 +363,37 @@ function ApiKeysSection() {
   const [copiedKey, setCopiedKey] = useState(false)
 
   return (
-    <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
+    <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">
       <div className="flex items-center gap-2">
-        <Key className="h-4 w-4 text-gray-400" />
-        <h2 className="text-base font-semibold text-gray-900">API Keys</h2>
+        <Key className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-base font-semibold text-foreground">API Keys</h2>
       </div>
-      <p className="text-sm text-gray-500">Crea y gestiona claves de API para acceder a la API pública.</p>
+      <p className="text-sm text-muted-foreground">Crea y gestiona claves de API para acceder a la API pública.</p>
 
       {apiKeys?.map((ak: any) => (
-        <div key={ak.id} className="flex items-start gap-3 rounded-lg border border-gray-200 p-3">
+        <div key={ak.id} className="flex items-start gap-3 rounded-lg border border-border p-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-900">{ak.name}</span>
-              <span className={`text-xs px-1.5 py-0.5 rounded-full ${ak.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+              <span className="text-sm font-medium text-foreground">{ak.name}</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${ak.active ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground'}`}>
                 {ak.active ? 'Activa' : 'Inactiva'}
               </span>
             </div>
-            <p className="text-xs text-gray-500 font-mono mt-0.5">{ak.prefix}...</p>
+            <p className="text-xs text-muted-foreground font-mono mt-0.5">{ak.prefix}...</p>
             <div className="flex flex-wrap gap-1 mt-1">
               {ak.scopes?.map((s: string) => (
                 <span key={s} className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">{s}</span>
               ))}
             </div>
             {ak.last_used_at && (
-              <p className="text-xs text-gray-400 mt-0.5">Último uso: {new Date(ak.last_used_at).toLocaleDateString()}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Último uso: {new Date(ak.last_used_at).toLocaleDateString()}</p>
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {ak.active && (
               <button
                 onClick={() => deactivateMutation.mutate(ak.id)}
-                className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground hover:bg-muted"
               >
                 Desactivar
               </button>
@@ -415,7 +415,7 @@ function ApiKeysSection() {
             <div>
               <p className="text-sm font-medium text-amber-800">¡Guarda esta clave! No se mostrará de nuevo.</p>
               <div className="flex items-center gap-2 mt-1">
-                <code className="flex-1 text-xs bg-white border border-amber-200 rounded px-2 py-1 font-mono break-all">{createdKey}</code>
+                <code className="flex-1 text-xs bg-card border border-amber-200 rounded px-2 py-1 font-mono break-all">{createdKey}</code>
                 <button
                   onClick={() => { navigator.clipboard.writeText(createdKey); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000) }}
                   className="shrink-0 text-xs px-2 py-1 rounded bg-amber-600 text-white hover:bg-amber-700"
@@ -435,16 +435,16 @@ function ApiKeysSection() {
       )}
 
       {showCreate ? (
-        <div className="space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50">
+        <div className="space-y-3 rounded-lg border border-border p-4 bg-muted">
           <input
             type="text"
             placeholder="Nombre de la API key"
             value={newKey.name}
             onChange={e => setNewKey({ ...newKey, name: e.target.value })}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm"
           />
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Permisos</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Permisos</label>
             <div className="flex flex-wrap gap-2">
               {AVAILABLE_SCOPES.map(sc => (
                 <label key={sc.value} className="flex items-center gap-1 text-xs">
@@ -467,7 +467,7 @@ function ApiKeysSection() {
             >
               {createMutation.isPending ? 'Creando...' : 'Crear'}
             </button>
-            <button onClick={() => setShowCreate(false)} className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50">
+            <button onClick={() => setShowCreate(false)} className="text-sm px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted">
               Cancelar
             </button>
           </div>
@@ -529,8 +529,8 @@ export default function SettingsPage() {
     bot_personality: 'friendly',
   })
 
-  const numberSource: string = (user as any)?.whatsapp_number_source ?? 'shared'
-  const currentPlan: string = (user as any)?.current_plan ?? 'trial'
+  const numberSource: string = user?.whatsapp_number_source ?? 'shared'
+  const currentPlan: string = user?.current_plan ?? 'trial'
   const numberIsManaged = numberSource === 'pool'
   const showTwilioSetup = numberSource === 'own' || currentPlan === 'enterprise'
 
@@ -538,14 +538,14 @@ export default function SettingsPage() {
     if (user) {
       setForm({
         business_name: user.business_name ?? '',
-        business_category: (user as any).business_category ?? '',
-        city: (user as any).city ?? '',
-        country: (user as any).country ?? 'MX',
-        phone: (user as any).phone ?? '',
-        whatsapp_number: (user as any).whatsapp_number ?? '',
-        language: (user as any).language ?? 'es',
-        bot_name: (user as any).bot_name ?? '',
-        bot_personality: (user as any).bot_personality ?? 'friendly',
+        business_category: user.business_category ?? '',
+        city: user.city ?? '',
+        country: user.country ?? 'MX',
+        phone: user.phone ?? '',
+        whatsapp_number: user.whatsapp_number ?? '',
+        language: user.language ?? 'es',
+        bot_name: user.bot_name ?? '',
+        bot_personality: user.bot_personality ?? 'friendly',
       })
     }
   }, [user])
@@ -575,13 +575,13 @@ export default function SettingsPage() {
 
   const field = (label: string, key: keyof typeof form, type = 'text', placeholder = '') => (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label className="block text-sm font-medium text-foreground mb-1">{label}</label>
       <input
         type={type}
         value={form[key]}
         onChange={(e) => setForm({ ...form, [key]: e.target.value })}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+        className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
       />
     </div>
   )
@@ -595,21 +595,21 @@ export default function SettingsPage() {
           <Settings className="h-5 w-5 text-brand-500" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
-          <p className="text-sm text-gray-500">Ajusta los datos de tu negocio y el perfil de tu bot</p>
+          <h1 className="text-2xl font-bold text-foreground">Configuración</h1>
+          <p className="text-sm text-muted-foreground">Ajusta los datos de tu negocio y el perfil de tu bot</p>
         </div>
       </div>
 
       {/* Business info */}
-      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
-        <h2 className="text-base font-semibold text-gray-900">Datos del negocio</h2>
+      <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">
+        <h2 className="text-base font-semibold text-foreground">Datos del negocio</h2>
         {field('Nombre del negocio', 'business_name', 'text', 'Ej: Restaurante La Paloma')}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Categoría</label>
           <select
             value={form.business_category}
             onChange={(e) => setForm({ ...form, business_category: e.target.value })}
-            className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none bg-white"
+            className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none bg-card"
           >
             <option value="">Seleccionar...</option>
             {CATEGORIES.map((c) => (
@@ -623,7 +623,7 @@ export default function SettingsPage() {
         </div>
         {field('Teléfono', 'phone', 'tel', 'Ej: +525512345678')}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-foreground mb-1">
             Número WhatsApp Business
             {numberIsManaged && (
               <span className="ml-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Asignado por IaRadio</span>
@@ -641,10 +641,10 @@ export default function SettingsPage() {
                 value={form.whatsapp_number}
                 onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
                 placeholder="Ej: +525512345678 (solo si tienes WABA propio)"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
               {numberSource === 'shared' && (
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-1 text-xs text-muted-foreground">
                   En el plan actual usas el número compartido de IaRadio.
                   Al subir al plan <strong>Pro</strong> se te asigna un número dedicado automáticamente.
                 </p>
@@ -663,12 +663,12 @@ export default function SettingsPage() {
           <span className="font-medium">Messaging → Sender → Webhook URL (Incoming Message)</span>
         </p>
         <div className="flex items-center gap-2">
-          <code className="flex-1 rounded-lg bg-white border border-amber-200 px-3 py-2 text-xs font-mono text-gray-800 break-all">
+          <code className="flex-1 rounded-lg bg-card border border-amber-200 px-3 py-2 text-xs font-mono text-foreground break-all">
             {WEBHOOK_URL}
           </code>
           <button
             onClick={copyWebhook}
-            className="shrink-0 flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-50 transition-colors"
+            className="shrink-0 flex items-center gap-1.5 rounded-lg border border-amber-300 bg-card px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-50 transition-colors"
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? 'Copiado' : 'Copiar'}
@@ -686,18 +686,18 @@ export default function SettingsPage() {
       </div>}
 
       {/* Bot config */}
-      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
-        <h2 className="text-base font-semibold text-gray-900">Configuración del bot</h2>
-        <p className="text-sm text-gray-500">
+      <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">
+        <h2 className="text-base font-semibold text-foreground">Configuración del bot</h2>
+        <p className="text-sm text-muted-foreground">
           El bot de WhatsApp usará este nombre y personalidad para responder a tus clientes.
         </p>
         {field('Nombre del bot', 'bot_name', 'text', 'Ej: Sofía, Carlos, Asistente')}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Personalidad</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Personalidad</label>
           <select
             value={form.bot_personality}
             onChange={(e) => setForm({ ...form, bot_personality: e.target.value })}
-            className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none bg-white"
+            className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none bg-card"
           >
             {PERSONALITIES.map((p) => (
               <option key={p.value} value={p.value}>{p.label}</option>
@@ -705,11 +705,11 @@ export default function SettingsPage() {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Idioma</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Idioma</label>
           <select
             value={form.language}
             onChange={(e) => setForm({ ...form, language: e.target.value })}
-            className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none bg-white"
+            className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none bg-card"
           >
             <option value="es">Español</option>
             <option value="en">English</option>
@@ -739,24 +739,24 @@ export default function SettingsPage() {
 
       {/* Subscription */}
       {dashboard && (
-        <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
+        <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">
           <div className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-gray-400" />
-            <h2 className="text-base font-semibold text-gray-900">Suscripción</h2>
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-base font-semibold text-foreground">Suscripción</h2>
           </div>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-gray-500">Plan</span>
+              <span className="text-muted-foreground">Plan</span>
               <p className="font-medium capitalize">{dashboard.plan}</p>
             </div>
             <div>
-              <span className="text-gray-500">Estado</span>
+              <span className="text-muted-foreground">Estado</span>
               <p className={`font-medium capitalize ${dashboard.subscription_status === 'active' ? 'text-green-600' : 'text-yellow-600'}`}>
                 {dashboard.subscription_status === 'active' ? 'Activa' : dashboard.subscription_status === 'trial' ? 'Prueba' : 'Inactiva'}
               </p>
             </div>
             <div>
-              <span className="text-gray-500">Mensajes restantes</span>
+              <span className="text-muted-foreground">Mensajes restantes</span>
               <p className="font-medium">{dashboard.messages_remaining}</p>
             </div>
           </div>
@@ -775,7 +775,7 @@ export default function SettingsPage() {
                   </button>
                   <button
                     onClick={() => setCancelConfirm(false)}
-                    className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50"
+                    className="text-sm px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted"
                   >
                     No
                   </button>
@@ -797,40 +797,40 @@ export default function SettingsPage() {
       )}
 
       {/* Change password */}
-      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100 space-y-4">
+      <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">
         <div className="flex items-center gap-2">
-          <Lock className="h-4 w-4 text-gray-400" />
-          <h2 className="text-base font-semibold text-gray-900">Cambiar contraseña</h2>
+          <Lock className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-base font-semibold text-foreground">Cambiar contraseña</h2>
         </div>
         <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña actual</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Contraseña actual</label>
             <input
               type="password"
               value={pwForm.current_password}
               onChange={(e) => setPwForm({ ...pwForm, current_password: e.target.value })}
               placeholder="••••••••"
-              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Nueva contraseña</label>
             <input
               type="password"
               value={pwForm.new_password}
               onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })}
               placeholder="Mínimo 8 caracteres"
-              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar nueva contraseña</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Confirmar nueva contraseña</label>
             <input
               type="password"
               value={pwForm.confirm_password}
               onChange={(e) => setPwForm({ ...pwForm, confirm_password: e.target.value })}
               placeholder="Repite la nueva contraseña"
-              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
         </div>
@@ -844,7 +844,7 @@ export default function SettingsPage() {
               pwMutation.mutate({ current_password: pwForm.current_password, new_password: pwForm.new_password })
             }}
             disabled={pwMutation.isPending || !pwForm.current_password || !pwForm.new_password}
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
           >
             <Lock className="h-4 w-4" />
             {pwMutation.isPending ? 'Actualizando...' : 'Actualizar contraseña'}
@@ -867,14 +867,14 @@ export default function SettingsPage() {
       <ApiKeysSection />
 
       {/* Music attribution — required by Kevin MacLeod CC BY 3.0 */}
-      <div className="rounded-xl border border-gray-100 bg-gray-50 px-6 py-4">
-        <p className="text-xs text-gray-400">
+      <div className="rounded-xl border border-border bg-muted px-6 py-4">
+        <p className="text-xs text-muted-foreground">
           Música de fondo para anuncios:{' '}
           <a
             href="https://incompetech.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-gray-600"
+            className="underline hover:text-muted-foreground"
           >
             Kevin MacLeod
           </a>{' '}
@@ -883,7 +883,7 @@ export default function SettingsPage() {
             href="https://creativecommons.org/licenses/by/3.0/"
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-gray-600"
+            className="underline hover:text-muted-foreground"
           >
             CC BY 3.0
           </a>

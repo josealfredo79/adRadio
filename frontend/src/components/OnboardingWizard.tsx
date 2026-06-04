@@ -42,9 +42,16 @@ export default function OnboardingWizard({ onClose }: Props) {
   // Step 2 — Add contact
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
+  const [phoneError, setPhoneError] = useState('')
+
+  const formatE164 = (raw: string): string => {
+    const digits = raw.replace(/\D/g, '')
+    if (raw.startsWith('+')) return `+${digits}`
+    return `+${digits}`
+  }
 
   const addContactMutation = useMutation({
-    mutationFn: () => api.post('/contacts', { name: contactName, phone: contactPhone }),
+    mutationFn: () => api.post('/contacts', { name: contactName, phone: formatE164(contactPhone) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['contacts'] })
       setCompleted((p) => [...p, 2])
@@ -152,8 +159,9 @@ export default function OnboardingWizard({ onClose }: Props) {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Teléfono (con código de país)</label>
-                <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="Ej: 521234567890"
+                <input value={contactPhone} onChange={(e) => { setContactPhone(e.target.value); setPhoneError('') }} placeholder="Ej: 521234567890"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none" />
+                {phoneError && <p className="mt-1 text-xs text-red-500">{phoneError}</p>}
               </div>
               <div className="flex items-center justify-between pt-1">
                 <button onClick={() => setStep(1)} className="text-sm text-gray-400 hover:text-gray-600">← Atrás</button>
@@ -162,7 +170,12 @@ export default function OnboardingWizard({ onClose }: Props) {
                     className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50">
                     Saltar <ChevronRight className="h-4 w-4" />
                   </button>
-                  <button onClick={() => addContactMutation.mutate()} disabled={!contactName || !contactPhone || addContactMutation.isPending}
+                  <button onClick={() => {
+                    const formatted = formatE164(contactPhone)
+                    if (formatted.length < 8) { setPhoneError('El número debe tener al menos 8 dígitos'); return }
+                    if (!formatted.startsWith('+')) { setPhoneError('Debe incluir código de país'); return }
+                    addContactMutation.mutate()
+                  }} disabled={!contactName || !contactPhone || addContactMutation.isPending}
                     className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60">
                     {addContactMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</> : <>Agregar y continuar <ChevronRight className="h-4 w-4" /></>}
                   </button>

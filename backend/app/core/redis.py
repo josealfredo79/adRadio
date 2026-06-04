@@ -20,7 +20,6 @@ async def get_redis() -> aioredis.Redis:
     """
     global _redis_pool
     if _redis_pool is not None:
-        # Verificar que el pool sigue vivo; si no, forzar recreación
         try:
             await _redis_pool.ping()
         except (RedisConnectionError, RedisTimeoutError, OSError):
@@ -34,23 +33,30 @@ async def get_redis() -> aioredis.Redis:
                 encoding="utf-8",
                 decode_responses=True,
                 max_connections=20,
-                socket_connect_timeout=10,   # 10 s para tolerar latencia Railway
-                socket_timeout=10,           # timeout para operaciones (get/set/ping)
-                socket_keepalive=True,       # mantiene conexiones vivas en Railway
-                retry_on_timeout=True,       # reintenta automáticamente en timeout
-                health_check_interval=30,    # Redis-py hace ping interno cada 30 s
+                socket_connect_timeout=10,
+                socket_timeout=10,
+                socket_keepalive=True,
+                retry_on_timeout=True,
+                health_check_interval=30,
             )
             await _redis_pool.ping()
             logger.info("Conexión a Redis establecida correctamente: %s", settings.REDIS_URL)
         except (RedisConnectionError, RedisTimeoutError, OSError) as exc:
             _redis_pool = None
-            logger.error("Redis no disponible (%s): %s", settings.REDIS_URL, exc)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Servicio temporalmente no disponible. Intenta de nuevo en unos segundos.",
-            ) from exc
+            logger.warning("Redis no disponible (%s): %s", settings.REDIS_URL, exc)
 
     return _redis_pool
+
+
+async def get_redis_optional() -> aioredis.Redis | None:
+    """
+    Versión opcional de get_redis — retorna None si Redis no está disponible
+    en lugar de lanzar 503. Útil para endpoints que pueden servir desde DB.
+    """
+    try:
+        return await get_redis()
+    except HTTPException:
+        return None
 
 
 async def close_redis():

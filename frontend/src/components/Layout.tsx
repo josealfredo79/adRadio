@@ -22,6 +22,7 @@ import {
   MessageCircle,
   BarChart3,
   FileText,
+  Bot,
   Moon,
   Sun,
 } from 'lucide-react'
@@ -40,6 +41,7 @@ const navItems = [
   { to: '/app/widget', icon: MessageCircle, label: 'Widget WA' },
   { to: '/app/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/app/plans', icon: CreditCard, label: 'Planes' },
+  { to: '/app/automations', icon: Bot, label: 'Automations' },
   { to: '/app/settings', icon: Settings, label: 'Configuración' },
 ]
 
@@ -70,16 +72,24 @@ export default function Layout() {
         <span className="text-xl font-bold text-foreground">IaRadio</span>
       </div>
 
-      {/* Plan badge */}
-      <div className="px-6 py-3">
+      {/* Plan badge + theme toggle */}
+      <div className="flex items-center justify-between px-6 py-3">
         <span className={cn(
           'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
           user?.subscription_status === 'active'
-            ? 'bg-green-100 text-green-700'
-            : 'bg-yellow-100 text-yellow-700'
+            ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
+            : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300'
         )}>
           {user?.current_plan?.toUpperCase() ?? 'TRIAL'} · {user?.messages_remaining ?? 0} msgs
         </span>
+        <button
+          onClick={toggleTheme}
+          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          aria-label="Cambiar tema"
+        >
+          <Sun className="h-4 w-4 dark:hidden" />
+          <Moon className="hidden h-4 w-4 dark:block" />
+        </button>
       </div>
 
       {/* Navigation */}
