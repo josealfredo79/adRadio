@@ -248,6 +248,9 @@ def schedule_campaign(self, campaign_id: str):
             else:
                 await send_regular_messages(db, campaign, contacts, advertiser, ab, messages_list, ban_delay=0)
 
+            campaign.status = "completed"
+            await db.commit()
+
     try:
         run_async(_process())
     except Exception as exc:
