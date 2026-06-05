@@ -240,7 +240,7 @@ de forma que el oyente sienta que el mensaje llegó justo cuando lo necesitaba."
         prompt = base + f"Mensaje: {message_or_intent}\n\nDevuelve SOLO el texto del locutor."
 
     response = await client.messages.create(
-        model="claude-3-5-sonnet-latest",
+        model="claude-sonnet-4-6",
         max_tokens=600,
         temperature=0.85,
         system=system,

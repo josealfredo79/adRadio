@@ -544,7 +544,7 @@ def update_contact_engagement_score(contact_id: str):
             client = _get_client()
             try:
                 response = await client.messages.create(
-                    model="claude-3-5-sonnet-latest", max_tokens=150, temperature=0.0,
+                    model="claude-sonnet-4-6", max_tokens=150, temperature=0.0,
                     system=system_prompt,
                     messages=[{"role": "user", "content": f"Conversación:\n{chat_str}"}],
                 )
