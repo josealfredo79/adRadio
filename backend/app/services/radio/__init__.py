@@ -22,6 +22,7 @@ async def generate_radio_ad(
     mode: str = "classic",
     business_category: str | None = None,
     voice_id: str | None = None,
+    day_variant: int = 0,
 ) -> str:
     """
     Pipeline completo: guión → voz → mezcla → R2 → URL pública.
@@ -47,8 +48,9 @@ async def generate_radio_ad(
     logger.info("[RADIO] Using jingle: %s", resolved_jingle)
 
     try:
-        audio_bytes = mix_with_jingle(mp3_bytes, resolved_jingle)
-        logger.info("[RADIO] Mixed audio: %d bytes", len(audio_bytes))
+        jingle_offset_ratio = (day_variant % 7) / 7.0
+        audio_bytes = mix_with_jingle(mp3_bytes, resolved_jingle, jingle_offset_ratio=jingle_offset_ratio)
+        logger.info("[RADIO] Mixed audio: %d bytes (variant day=%d, offset=%.2f)", len(audio_bytes), day_variant, jingle_offset_ratio)
     except Exception as mix_err:
         logger.error("[RADIO] Mix failed: %s", mix_err)
         raise RuntimeError(f"Mix failed: {mix_err}") from mix_err

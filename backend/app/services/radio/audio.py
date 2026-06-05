@@ -95,7 +95,7 @@ CATEGORY_JINGLE_MAP: dict[str, str] = {
 JINGLE_DEFAULT = "generico.mp3"
 
 
-def get_jingle_path(business_category: str | None) -> str | None:
+def get_jingle_path(business_category: str | None, day_variant: int = 0) -> str | None:
     """Retorna la ruta al jingle según la categoría del negocio."""
     if not business_category:
         filename = JINGLE_DEFAULT
@@ -141,6 +141,7 @@ def mix_with_jingle(
     jingle_full_db: float = -12.0,
     jingle_duck_db: float = -22.0,
     voice_target_dbfs: float = -10.0,
+    jingle_offset_ratio: float = 0.0,
 ) -> bytes:
     """
     Mezcla profesional de radio con ducking automático.
@@ -162,10 +163,17 @@ def mix_with_jingle(
         jingle_raw = AudioSegment.from_file(jingle_path)
 
         total_needed_ms = jingle_intro_ms + len(voice) + jingle_outro_ms + jingle_fade_out_ms
+
+        # Rotar el punto de inicio del jingle para dar variedad entre días
+        offset_ms = int(len(jingle_raw) * jingle_offset_ratio) if jingle_offset_ratio > 0 else 0
+        if offset_ms + total_needed_ms > len(jingle_raw):
+            offset_ms = 0
+
         if len(jingle_raw) < total_needed_ms:
             loops = total_needed_ms // len(jingle_raw) + 2
             jingle_raw = jingle_raw * loops
-        jingle_raw = jingle_raw[:total_needed_ms]
+
+        jingle_raw = jingle_raw[offset_ms:offset_ms + total_needed_ms]
 
         jingle_raw = _normalize_loudness(jingle_raw, -14.0)
 

@@ -677,6 +677,7 @@ async def generate_parrilla(
                     _script=script,
                     mode=mode,
                     business_category=body.business_category,
+                    day_variant=day_num,
                 )
             except Exception as audio_err:
                 logger.warning("[PARRILLA] Audio day %d failed: %s", day_num, audio_err)
