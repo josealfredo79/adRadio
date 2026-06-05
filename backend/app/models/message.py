@@ -32,7 +32,7 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     twilio_sid: Mapped[str | None] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(20), default="queued")
-    error_code: Mapped[str | None] = mapped_column(String(20))
+    error_code: Mapped[str | None] = mapped_column(String(100))
     scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

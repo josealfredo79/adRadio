@@ -47,7 +47,8 @@ async def send_whatsapp(to: str, body: str, from_number: str | None = None) -> t
     except Exception as e:
         error_msg = str(e)
         logger.error("[TWILIO ERROR] %s", error_msg)
-        return None, error_msg[:20]
+        logger.error("[TWILIO ERROR CTX] from=%s to=%s body=%s", f"whatsapp:{sender}", f"whatsapp:{to}", body[:80])
+        return None, error_msg[:100]
 
 
 async def send_whatsapp_media(to: str, media_url: str, body: str = "", from_number: str | None = None) -> tuple[str | None, str | None]:
@@ -80,7 +81,8 @@ async def send_whatsapp_media(to: str, media_url: str, body: str = "", from_numb
     except Exception as e:
         error_msg = str(e)
         logger.error("[TWILIO MEDIA ERROR] %s", error_msg)
-        return None, error_msg[:20]
+        logger.error("[TWILIO MEDIA CTX] from=%s to=%s media=%s", f"whatsapp:{sender}", f"whatsapp:{to}", media_url[:80])
+        return None, error_msg[:100]
 
 
 async def send_whatsapp_template(
