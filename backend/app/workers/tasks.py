@@ -53,6 +53,7 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
                 if sid and advertiser:
                     advertiser.messages_remaining -= 1
+                    await _append_to_conversation(db, msg.advertiser_id, msg.contact_id, body, msg.sent_at or datetime.now(timezone.utc))
                 await db.commit()
 
             if error and any(code in str(error) for code in ("63006", "63007", "63016", "rate")):
@@ -101,6 +102,10 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
                 if sid and advertiser:
                     advertiser.messages_remaining -= 1
+                    conv_content = f"[AUDIO] {audio_url}"
+                    if caption:
+                        conv_content += f" — {caption}"
+                    await _append_to_conversation(db, msg.advertiser_id, msg.contact_id, conv_content, msg.sent_at or datetime.now(timezone.utc))
                 await db.commit()
 
             if error and any(code in str(error) for code in ("63006", "63007", "63016", "rate")):
@@ -743,3 +748,37 @@ def trigger_automation_for_contact(contact_id: str, advertiser_id: str, trigger:
 
     now = datetime.now(timezone.utc)
     run_async(_run())
+
+
+async def _append_to_conversation(
+    db: "AsyncSessionLocal",
+    advertiser_id: uuid.UUID,
+    contact_id: uuid.UUID,
+    content: str,
+    timestamp: datetime,
+) -> None:
+    """Append a sent message to the conversation's JSONB so it appears in the Inbox."""
+    from app.models.conversation import Conversation
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.advertiser_id == advertiser_id,
+            Conversation.contact_id == contact_id,
+            Conversation.status == "active",
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if not conv:
+        conv = Conversation(
+            advertiser_id=advertiser_id,
+            contact_id=contact_id,
+            messages=[],
+            lead_score="cold",
+        )
+        db.add(conv)
+        await db.flush()
+
+    entry = {"role": "assistant", "content": content, "timestamp": timestamp.isoformat()}
+    conv.messages = (conv.messages + [entry])[-40:]
+    conv.last_activity = timestamp
