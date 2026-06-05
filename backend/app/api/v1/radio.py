@@ -22,7 +22,7 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/radio", tags=["radio"])
 
 # Local audio storage directory
-AUDIO_DIR = os.path.join(os.path.dirname(__file__), "..", "static", "audio")
+AUDIO_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "static", "audio")
 
 
 def _ensure_audio_dir():
