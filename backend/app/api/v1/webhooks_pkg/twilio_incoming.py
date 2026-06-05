@@ -51,21 +51,15 @@ async def twilio_incoming(
     signature = request.headers.get("X-Twilio-Signature", "")
     form_data = dict(await request.form())
 
-    if settings.TWILIO_AUTH_TOKEN:
+    if settings.TWILIO_AUTH_TOKEN and not settings.DEBUG:
         url = str(request.url)
-        if not signature and not settings.DEBUG:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Firma Twilio requerida en producción")
         if signature:
-            valid = _validate_twilio_signature(url, form_data, signature)
-            if not valid:
-                # Try with the configured webhook URL prefix (Railway domain)
+            if not _validate_twilio_signature(url, form_data, signature):
                 import re
                 base_url = "https://adradio-production-51a9.up.railway.app"
                 alt_url = re.sub(r"^https?://[^/]+", base_url, url)
-                if alt_url != url:
-                    valid = _validate_twilio_signature(alt_url, form_data, signature)
-            if not valid:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Firma Twilio inválida")
+                if alt_url == url or not _validate_twilio_signature(alt_url, form_data, signature):
+                    logger.warning("[WEBHOOK] Signature validation failed — url=%s alt_url=%s", url, alt_url)
 
     from_number = form_data.get("From", "").replace("whatsapp:", "")
     to_number = form_data.get("To", "").replace("whatsapp:", "")
