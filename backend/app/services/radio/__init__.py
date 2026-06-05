@@ -55,8 +55,10 @@ async def generate_radio_ad(
         logger.error("[RADIO] Mix failed: %s", mix_err)
         raise RuntimeError(f"Mix failed: {mix_err}") from mix_err
 
+    import re
     ext = "ogg" if audio_bytes[:4] == b"OggS" else "mp3"
-    key = f"radio/{business_name.lower().replace(' ', '_')}_{os.urandom(4).hex()}.{ext}"
+    safe_slug = re.sub(r'[^a-z0-9_]', '', business_name.lower().replace(' ', '_'))
+    key = f"radio/{safe_slug}_{os.urandom(4).hex()}.{ext}"
     content_type = "audio/ogg" if ext == "ogg" else "audio/mpeg"
     url = await upload_bytes(audio_bytes, key, content_type=content_type)
 
