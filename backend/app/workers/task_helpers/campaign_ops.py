@@ -37,14 +37,29 @@ async def _ensure_conversation_window(
         return 0
 
     contact_name = (contact.name or "Cliente").split()[0] if contact.name else "Cliente"
+    business_name = getattr(contact, "business_name", "IARadio") or "IARadio"
+
+    # Try UTILITY template first (can open window), fall back to MARKETING
+    used_sid = ""
     sid, error = await send_whatsapp_template(
         to=contact.phone,
-        template_sid=settings.TWILIO_INVITACION_TEMPLATE_SID,
-        variables={"1": contact_name},
+        template_sid=settings.TWILIO_UTILITY_TEMPLATE_SID,
+        variables={"1": contact_name, "2": business_name, "3": "aqui"},
         from_number=from_number,
     )
+    if sid:
+        used_sid = settings.TWILIO_UTILITY_TEMPLATE_SID
+    else:
+        sid, error = await send_whatsapp_template(
+            to=contact.phone,
+            template_sid=settings.TWILIO_INVITACION_TEMPLATE_SID,
+            variables={"1": contact_name},
+            from_number=from_number,
+        )
+        if sid:
+            used_sid = settings.TWILIO_INVITACION_TEMPLATE_SID
     if not sid:
-        logger.warning("[TEMPLATE] Failed for %s: %s", contact.phone, error)
+        logger.warning("[TEMPLATE] All templates failed for %s: %s", contact.phone, error)
         return 0
 
     if not conv:
@@ -53,7 +68,7 @@ async def _ensure_conversation_window(
         await db.flush()
     entry = {
         "role": "assistant",
-        "content": f"[TEMPLATE:invitacion_radio] Hola {contact_name}, …",
+        "content": f"[TEMPLATE:{used_sid}] Hola {contact_name}, …",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     conv.messages = (conv.messages + [entry])[-40:]
