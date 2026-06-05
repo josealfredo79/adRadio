@@ -265,7 +265,7 @@ export default function CampaignsPage() {
         extra_context: parrillaContext || undefined,
         auto_schedule: parrillaAutoSchedule,
         send_time: parrillaSendTime,
-      })
+      }, { timeout: 120000 })
       setParrillaResult(data)
     } catch (err: unknown) {
       setParrillaError(getApiError(err, 'Error al generar parrilla'))
