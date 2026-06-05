@@ -11,6 +11,57 @@ from sqlalchemy import select
 logger = logging.getLogger(__name__)
 
 
+async def _ensure_conversation_window(
+    db,
+    advertiser_id: uuid.UUID,
+    contact,
+    from_number: str | None = None,
+) -> int:
+    """Send the invitacion_radio template if the 24h window is closed.
+    Returns extra delay (seconds) to add before sending the campaign message.
+    """
+    from app.models.conversation import Conversation
+    from app.services.twilio_service import send_whatsapp_template
+    from app.config import settings
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.advertiser_id == advertiser_id,
+            Conversation.contact_id == contact.id,
+            Conversation.status == "active",
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if conv and conv.last_activity and conv.last_activity > cutoff:
+        return 0
+
+    contact_name = (contact.name or "Cliente").split()[0] if contact.name else "Cliente"
+    sid, error = await send_whatsapp_template(
+        to=contact.phone,
+        template_sid=settings.TWILIO_INVITACION_TEMPLATE_SID,
+        variables={"1": contact_name},
+        from_number=from_number,
+    )
+    if not sid:
+        logger.warning("[TEMPLATE] Failed for %s: %s", contact.phone, error)
+        return 0
+
+    if not conv:
+        conv = Conversation(advertiser_id=advertiser_id, contact_id=contact.id, messages=[], lead_score="cold")
+        db.add(conv)
+        await db.flush()
+    entry = {
+        "role": "assistant",
+        "content": f"[TEMPLATE:invitacion_radio] Hola {contact_name}, …",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    conv.messages = (conv.messages + [entry])[-40:]
+    conv.last_activity = datetime.now(timezone.utc)
+    conv.status = "active"
+    return random.randint(10, 20)
+
+
 async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay):
     """Send banner-style campaign messages."""
     from app.services.banner_service import generate_banner_png, generate_banner_copy_with_claude
@@ -23,6 +74,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     palette = ab.get("banner_palette", "promo")
     caption = ab.get("banner_caption", "")
     MAX_PER_HOUR = 60
+    from_number = getattr(advertiser, "whatsapp_number", None)
 
     for idx_b, contact in enumerate(contacts):
         if advertiser.messages_remaining <= 0:
@@ -30,6 +82,9 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
 
         if idx_b > 0 and idx_b % MAX_PER_HOUR == 0:
             ban_delay = int(idx_b / MAX_PER_HOUR) * 3600
+
+        extra = await _ensure_conversation_window(db, campaign.advertiser_id, contact, from_number)
+        ban_delay += extra
 
         contact_name = (contact.name or "").split()[0] if contact.name else "Cliente"
 
@@ -82,6 +137,7 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
     audio_url = ab.get("audio_url", "")
     radio_script = ab.get("radio_script", campaign.message_text)
     MAX_PER_HOUR = 60
+    from_number = getattr(advertiser, "whatsapp_number", None)
 
     for idx_r, contact in enumerate(contacts):
         if advertiser.messages_remaining <= 0:
@@ -89,6 +145,9 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
 
         if idx_r > 0 and idx_r % MAX_PER_HOUR == 0:
             ban_delay = int(idx_r / MAX_PER_HOUR) * 3600
+
+        extra = await _ensure_conversation_window(db, campaign.advertiser_id, contact, from_number)
+        ban_delay += extra
 
         msg = Message(
             campaign_id=campaign.id,
@@ -125,6 +184,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     from app.services.twilio_service import anti_ban_delay
 
     MAX_PER_HOUR = 60
+    from_number = getattr(advertiser, "whatsapp_number", None)
 
     ab_enabled = ab.get("enabled", False)
     ab_variant_b = ab.get("variant_b", "")
@@ -145,6 +205,9 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
 
         if i > 0 and i % MAX_PER_HOUR == 0:
             ban_delay = int(i / MAX_PER_HOUR) * 3600
+
+        extra = await _ensure_conversation_window(db, campaign.advertiser_id, contact, from_number)
+        ban_delay += extra
 
         contact_data = {
             "name": contact.name,
@@ -283,10 +346,14 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
 
     ban_delay = 0
     sent = 0
+    from_number = getattr(advertiser, "whatsapp_number", None)
 
     for contact in contacts:
         if advertiser.messages_remaining <= 0:
             break
+
+        extra = await _ensure_conversation_window(db, advertiser.id, contact, from_number)
+        ban_delay += extra
 
         msg = Message(
             advertiser_id=advertiser.id,

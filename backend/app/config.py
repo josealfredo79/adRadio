@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # Comma-separated list of pre-approved WhatsApp numbers for the Pro pool
     # e.g. "+525511111111,+525522222222,+525533333333"
     TWILIO_NUMBER_POOL: str = ""
+    # SID de la plantilla invitacion_radio aprobada para abrir ventana 24h
+    TWILIO_INVITACION_TEMPLATE_SID: str = "HXed8babff1a4a11ec5370d9dee358f8a7"
 
     @property
     def twilio_number_pool_list(self) -> list[str]:
