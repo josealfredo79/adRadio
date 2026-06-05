@@ -49,6 +49,8 @@ class AutomationStep(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     delay_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     message: Mapped[str] = mapped_column(Text, nullable=False)
+    use_ai: Mapped[bool] = mapped_column(default=False)
+    ai_prompt: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     flow: Mapped["AutomationFlow"] = relationship(back_populates="steps")

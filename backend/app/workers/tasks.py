@@ -592,6 +592,7 @@ def process_automation_enrollments():
         from app.database import AsyncSessionLocal
         from app.models.automation import AutomationEnrollment, AutomationFlow
         from app.models.contact import Contact
+        from app.models.conversation import Conversation
         from app.models.message import Message
         from app.models.user import User
         from app.services.twilio_service import send_whatsapp
@@ -640,15 +641,41 @@ def process_automation_enrollments():
                     enrollment.status = "cancelled"
                     continue
 
+                # Generate message content
+                if step.use_ai and step.ai_prompt:
+                    from app.services.rag_service import answer_with_rag
+
+                    conv_result = await db.execute(
+                        select(Conversation).where(
+                            Conversation.advertiser_id == enrollment.advertiser_id,
+                            Conversation.contact_id == contact.id,
+                            Conversation.status == "active",
+                        )
+                    )
+                    conv = conv_result.scalar_one_or_none()
+                    history = conv.messages[-40:] if conv and conv.messages else []
+
+                    message_content = await answer_with_rag(
+                        advertiser_id=str(enrollment.advertiser_id),
+                        query=step.ai_prompt,
+                        conversation_history=history,
+                        db=db,
+                        business_name=advertiser.business_name or "el negocio",
+                        bot_name=advertiser.bot_name or "Asistente",
+                        bot_personality=advertiser.bot_personality or "amigable y profesional",
+                    )
+                else:
+                    message_content = step.message
+
                 from_number = advertiser.whatsapp_number
-                sid, error = await send_whatsapp(contact.phone, step.message, from_number=from_number)
+                sid, error = await send_whatsapp(contact.phone, message_content, from_number=from_number)
 
                 if sid:
                     advertiser.messages_remaining -= 1
 
                 db.add(Message(
                     advertiser_id=enrollment.advertiser_id, contact_id=contact.id,
-                    direction="outbound", content=step.message,
+                    direction="outbound", content=message_content,
                     status="sent" if sid else "failed",
                     twilio_sid=sid, error_code=error, sent_at=now if sid else None,
                 ))

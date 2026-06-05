@@ -23,7 +23,9 @@ router = APIRouter(prefix="/automations", tags=["automations"])
 class StepIn(BaseModel):
     position: int = 0
     delay_minutes: int = 0
-    message: str
+    message: str = ""
+    use_ai: bool = False
+    ai_prompt: str | None = None
 
 
 class FlowCreate(BaseModel):
@@ -38,6 +40,8 @@ class StepOut(BaseModel):
     position: int
     delay_minutes: int
     message: str
+    use_ai: bool = False
+    ai_prompt: str | None = None
 
     class Config:
         from_attributes = True
@@ -101,7 +105,9 @@ async def create_flow(
             flow_id=flow.id,
             position=s.position,
             delay_minutes=s.delay_minutes,
-            message=s.message,
+            message=s.message or "",
+            use_ai=s.use_ai,
+            ai_prompt=s.ai_prompt,
         ))
 
     await db.commit()
