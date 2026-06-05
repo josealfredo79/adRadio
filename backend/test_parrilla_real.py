@@ -36,7 +36,7 @@ async def main():
             subscription_status="active",
             current_plan="pro",
             messages_remaining=100,
-            whatsapp_number="+5215599631448" # Remitente aprobado en Twilio
+            whatsapp_number="+525599631448" # Remitente aprobado en Twilio
         )
         db.add(user)
         await db.flush()
@@ -80,7 +80,7 @@ async def main():
         result = await db.execute(select(Message).where(Message.id == uuid.UUID(msg_id)))
         message_obj = result.scalar_one_or_none()
         
-        from_number = "+5215599631448"
+        from_number = "+525599631448"
         print(f"   -> Llamando a Twilio con nota de voz: de={from_number} a={destinatario}")
         sid = await send_whatsapp_media(destinatario, audio_url, body=script, from_number=from_number)
         
