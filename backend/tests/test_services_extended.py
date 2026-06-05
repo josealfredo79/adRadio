@@ -633,8 +633,7 @@ class TestNumberPoolService:
             assert result is True
             assert user.whatsapp_number == "+522222222222"
             assert user.whatsapp_number_source == "pool"
-            db.commit.assert_awaited_once()
-            db.refresh.assert_awaited_once_with(user)
+            db.flush.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_assign_pool_number_exhausted(self):
@@ -664,7 +663,7 @@ class TestNumberPoolService:
         await release_pool_number(user, db)
         assert user.whatsapp_number is None
         assert user.whatsapp_number_source == "shared"
-        db.commit.assert_awaited_once()
+        db.flush.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_release_pool_number_shared_ignored(self):
@@ -676,7 +675,7 @@ class TestNumberPoolService:
         db = AsyncMock()
 
         await release_pool_number(user, db)
-        db.commit.assert_not_called()
+        db.flush.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_pool_status(self):
