@@ -123,7 +123,7 @@ Tu personalidad es: {bot_personality}.
 - Siempre termina invitando al cliente a continuar la conversación.
 """
 
-    messages = conversation_history[-20:] + [
+    messages = conversation_history + [
         {"role": "user", "content": user_message}
     ]
 

@@ -63,6 +63,15 @@ async def twilio_incoming(
     to_number = form_data.get("To", "").replace("whatsapp:", "")
     body_text = form_data.get("Body", "").strip()
 
+    # Idempotency — skip if this message was already processed
+    message_sid = form_data.get("MessageSid", "")
+    if message_sid:
+        existing = await db.execute(
+            select(Message).where(Message.twilio_sid == message_sid).limit(1)
+        )
+        if existing.scalar_one_or_none():
+            return {"message": "ok"}
+
     num_media = int(form_data.get("NumMedia", "0"))
     audio_transcription: str | None = None
     if num_media > 0:
@@ -84,16 +93,15 @@ async def twilio_incoming(
             elif not body_text:
                 body_text = f"[media:{media_type}]{media_url}"
 
-    result = await db.execute(
-        select(User).where(User.whatsapp_number == to_number)
-    )
-    advertiser = result.scalar_one_or_none()
-
-    if not advertiser:
+    # Normalize and look up advertiser by WhatsApp number
+    to_number_clean = to_number.lstrip("+").replace(" ", "")
+    for candidate in (to_number, f"+{to_number_clean}", to_number_clean):
         result = await db.execute(
-            select(User).where(User.whatsapp_number == f"+{to_number}")
+            select(User).where(User.whatsapp_number == candidate)
         )
         advertiser = result.scalar_one_or_none()
+        if advertiser:
+            break
 
     stop_words = {"baja", "stop", "no quiero", "cancelar", "salir"}
     if body_text.lower() in stop_words:
@@ -319,6 +327,7 @@ async def twilio_incoming(
         direction="inbound",
         content=body_text,
         status="delivered",
+        twilio_sid=message_sid or None,
     )
     db.add(msg)
 
@@ -345,6 +354,7 @@ async def twilio_incoming(
         new_score = calculate_lead_score(body_text, msg_count)
         if new_score:
             conv.lead_score = new_score
+    conv.last_activity = func.now()
 
     # Order state machine
     pending_order_result = await db.execute(
@@ -454,6 +464,7 @@ async def twilio_incoming(
             {"role": "assistant", "content": order_reply},
         ]
         conv.messages = updated_msgs[-40:]
+        conv.last_activity = func.now()
 
         out_msg = Message(
             advertiser_id=advertiser.id,
@@ -500,6 +511,7 @@ async def twilio_incoming(
         {"role": "assistant", "content": reply},
     ]
     conv.messages = updated_msgs[-40:]
+    conv.last_activity = func.now()
 
     out_msg = Message(
         advertiser_id=advertiser.id,

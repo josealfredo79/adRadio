@@ -38,6 +38,15 @@ class ProfileUpdate(BaseModel):
         # Add + if not present
         return f"+{clean}" if not v.startswith("+") else v
 
+    @field_validator("bot_instructions")
+    @classmethod
+    def validate_bot_instructions(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if len(v) > 2000:
+            raise ValueError("Las instrucciones no pueden exceder 2000 caracteres")
+        return v
+
     @field_validator("language")
     @classmethod
     def validate_language(cls, v: str | None) -> str | None:

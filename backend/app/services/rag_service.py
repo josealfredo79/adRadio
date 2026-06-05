@@ -1,7 +1,10 @@
 """
 RAG service — similarity search over pgvector + Claude response generation.
 """
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,34 +38,39 @@ async def answer_with_rag(
     3. Build context string.
     4. Generate response with Claude (temp=0.3, only from context).
     """
-    query_embedding = await get_embedding(query)
+    try:
+        query_embedding = await get_embedding(query)
+    except Exception as e:
+        logger.warning("[RAG] Embedding failed: %s", e)
+        query_embedding = None
 
-    # pgvector similarity search — cosine distance
-    sql = text("""
-        SELECT chunk_text, 1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
-        FROM knowledge_base
-        WHERE advertiser_id = :advertiser_id
-          AND is_active = TRUE
-          AND embedding IS NOT NULL
-        ORDER BY embedding <=> CAST(:embedding AS vector)
-        LIMIT 5
-    """)
-
-    result = await db.execute(
-        sql,
-        {
-            "advertiser_id": uuid.UUID(advertiser_id),
-            "embedding": str(query_embedding),
-        },
-    )
-    rows = result.fetchall()
+    context = ""
+    if query_embedding:
+        sql = text("""
+            SELECT chunk_text, 1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
+            FROM knowledge_base
+            WHERE advertiser_id = :advertiser_id
+              AND is_active = TRUE
+              AND embedding IS NOT NULL
+            ORDER BY embedding <=> CAST(:embedding AS vector)
+            LIMIT 5
+        """)
+        try:
+            result = await db.execute(
+                sql,
+                {
+                    "advertiser_id": uuid.UUID(advertiser_id),
+                    "embedding": str(query_embedding),
+                },
+            )
+            rows = result.fetchall()
+            context_parts = [row.chunk_text for row in rows if row.similarity > 0.5]
+            context = "\n\n".join(context_parts) if context_parts else ""
+        except Exception as e:
+            logger.warning("[RAG] Vector search failed: %s", e)
 
     user = await _fetch_user(advertiser_id, db)
     bot_instructions = user.bot_instructions if user else None
-
-    # Build context from top chunks (filter by similarity threshold)
-    context_parts = [row.chunk_text for row in rows if row.similarity > 0.3]
-    context = "\n\n".join(context_parts) if context_parts else ""
 
     # Always call Claude if there are custom instructions or KB context
     if bot_instructions or context:
