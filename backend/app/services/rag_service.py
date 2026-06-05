@@ -3,9 +3,10 @@ RAG service — similarity search over pgvector + Claude response generation.
 """
 import uuid
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
 from app.services.embedding_service import get_embedding
 from app.services.claude_service import generate_bot_response
 
@@ -69,6 +70,14 @@ async def answer_with_rag(
 
     context = "\n\n".join(context_parts)
 
+    bot_instructions = None
+    user_result = await db.execute(
+        select(User).where(User.id == uuid.UUID(advertiser_id))
+    )
+    user = user_result.scalar_one_or_none()
+    if user:
+        bot_instructions = user.bot_instructions
+
     return await generate_bot_response(
         advertiser_context=context,
         conversation_history=conversation_history,
@@ -76,4 +85,5 @@ async def answer_with_rag(
         business_name=business_name,
         bot_name=bot_name,
         bot_personality=bot_personality,
+        bot_instructions=bot_instructions,
     )

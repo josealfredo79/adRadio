@@ -68,14 +68,22 @@ async def generate_bot_response(
     business_name: str,
     bot_name: str = "Asistente",
     bot_personality: str = "amigable y profesional",
+    bot_instructions: str | None = None,
 ) -> str:
     """Generate a RAG-based bot response using Claude."""
     client = _get_client()
 
+    custom_block = ""
+    if bot_instructions:
+        custom_block = f"""INSTRUCCIONES PERSONALIZADAS (prioridad sobre el resto):
+{bot_instructions}
+
+"""
+
     system = f"""Eres {bot_name}, el asistente virtual de {business_name}.
 Tu personalidad es: {bot_personality}.
 
-CONTEXTO DEL NEGOCIO (tu única fuente de verdad):
+{custom_block}CONTEXTO DEL NEGOCIO (tu única fuente de verdad):
 {advertiser_context}
 
 ═══ REGLAS DE RESPUESTA ═══
@@ -85,7 +93,7 @@ CONTEXTO DEL NEGOCIO (tu única fuente de verdad):
    - Nunca inventes precios, horarios, productos ni datos.
    - Si no tienes la información, di algo como:
      "No tengo ese dato a la mano, pero puedes consultarlo directamente con nosotros 😊
-      ¿Te ayudo con algo más de {{business_name}}?"
+      ¿Te ayudo con algo más de {business_name}?"
 
 2. PREGUNTAS FUERA DEL TEMA DEL NEGOCIO
    - Si el cliente pregunta algo que no tiene que ver con {business_name}

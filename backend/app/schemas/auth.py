@@ -71,6 +71,7 @@ class UserOut(BaseModel):
     language: str
     bot_name: str | None = None
     bot_personality: str | None = None
+    bot_instructions: str | None = None
     widget_color: str = "#25D366"
     widget_greeting: str = "¡Hola! ¿En qué puedo ayudarte?"
     widget_position: str = "right"

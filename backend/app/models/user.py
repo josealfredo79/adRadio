@@ -55,6 +55,7 @@ class User(Base):
     language: Mapped[str] = mapped_column(String(5), default="es")
     bot_personality: Mapped[str] = mapped_column(String(50), default="professional", server_default="professional")
     bot_name: Mapped[str] = mapped_column(String(100), default="Asistente", server_default="Asistente")
+    bot_instructions: Mapped[str | None] = mapped_column(Text)
 
     # Google Calendar OAuth
     google_refresh_token: Mapped[str | None] = mapped_column(Text)

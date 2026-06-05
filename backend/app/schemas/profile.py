@@ -12,6 +12,7 @@ class ProfileUpdate(BaseModel):
     language: str | None = None
     bot_name: str | None = None
     bot_personality: str | None = None
+    bot_instructions: str | None = None
     widget_color: str | None = None
     widget_greeting: str | None = None
     widget_position: str | None = None
