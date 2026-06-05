@@ -12,7 +12,7 @@ from app.database import get_db
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.number_pool_service import assign_pool_number, release_pool_number
-from app.api.v1.payments import PLAN_MESSAGES
+from app.api.v1.payments import PLAN_MESSAGES, PLANS
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ async def stripe_webhook(
 
         user = await _lookup_user(customer_id, db)
         if user and plan:
-            plan_days = 30
+            plan_days = PLANS.get(plan, {}).get("days", 30)
             user.subscription_status = "active"
             user.current_plan = plan
             user.cancel_at_period_end = False
@@ -125,10 +125,11 @@ async def stripe_webhook(
 
         user = await _lookup_user(customer_id, db)
         if user and user.current_plan:
+            plan_days = PLANS.get(user.current_plan, {}).get("days", 30)
             user.messages_remaining = (user.messages_remaining or 0) + PLAN_MESSAGES.get(user.current_plan, 0)
             user.subscription_status = "active"
             user.cancel_at_period_end = False
-            user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+            user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=plan_days)
 
             await _ensure_pool_number(user, db)
 
@@ -180,14 +181,36 @@ async def stripe_webhook(
 
     elif event_type == "customer.subscription.updated":
         status = data.get("status")
+        subscription_id = data.get("id", "unknown")
         user = await _lookup_user(customer_id, db)
         if not user:
+            return {"received": True}
+
+        # Idempotency — skip if no meaningful change
+        cancel = data.get("cancel_at_period_end", False)
+        target_status = None
+        if status == "active":
+            target_status = "active"
+        elif status in ("past_due", "incomplete", "unpaid"):
+            target_status = "suspended"
+        elif status == "canceled":
+            target_status = "churned"
+
+        status_unchanged = (
+            target_status and
+            user.subscription_status == target_status and
+            user.cancel_at_period_end == cancel
+        )
+        if status_unchanged:
+            logger.info(
+                "[WEBHOOK] Duplicate subscription.updated event %s skipped (already %s)",
+                event_id, target_status,
+            )
             return {"received": True}
 
         changed = False
 
         # Sync cancel_at_period_end from Stripe
-        cancel = data.get("cancel_at_period_end", False)
         if cancel != user.cancel_at_period_end:
             user.cancel_at_period_end = cancel
             changed = True
@@ -221,13 +244,17 @@ async def stripe_webhook(
 
     elif event_type == "customer.subscription.deleted":
         user = await _lookup_user(customer_id, db)
-        if user:
-            user.subscription_status = "churned"
-            user.messages_remaining = 0
-            user.cancel_at_period_end = False
-            await release_pool_number(user, db)
-            await db.commit()
-            logger.info("[WEBHOOK] Subscription deleted for user %s", user.id)
+        if not user:
+            return {"received": True}
+        if user.subscription_status == "churned":
+            logger.info("[WEBHOOK] Duplicate subscription.deleted event %s skipped", event_id)
+            return {"received": True}
+        user.subscription_status = "churned"
+        user.messages_remaining = 0
+        user.cancel_at_period_end = False
+        await release_pool_number(user, db)
+        await db.commit()
+        logger.info("[WEBHOOK] Subscription deleted for user %s", user.id)
 
     elif event_type in ("charge.refunded", "charge.dispute.created"):
 
