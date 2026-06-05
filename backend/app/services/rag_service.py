@@ -11,6 +11,15 @@ from app.services.embedding_service import get_embedding
 from app.services.claude_service import generate_bot_response
 
 
+async def _fetch_user(
+    advertiser_id: str, db: AsyncSession
+) -> User | None:
+    result = await db.execute(
+        select(User).where(User.id == uuid.UUID(advertiser_id))
+    )
+    return result.scalar_one_or_none()
+
+
 async def answer_with_rag(
     advertiser_id: str,
     query: str,
@@ -29,7 +38,6 @@ async def answer_with_rag(
     query_embedding = await get_embedding(query)
 
     # pgvector similarity search — cosine distance
-    # Note: use CAST() instead of ::vector because asyncpg treats :: as a param prefix
     sql = text("""
         SELECT chunk_text, 1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
         FROM knowledge_base
@@ -49,41 +57,26 @@ async def answer_with_rag(
     )
     rows = result.fetchall()
 
-    if not rows:
-        # Use business profile info as fallback context
-        from sqlalchemy import select
-        from app.models.user import User
-
-        user_result = await db.execute(
-            select(User).where(User.id == uuid.UUID(advertiser_id))
-        )
-        user = user_result.scalar_one_or_none()
-
-        if user and user.business_name:
-            return f"Hola! Soy {user.bot_name or 'el asistente'} de {user.business_name}. {user.bot_personality or 'Estoy aquí para ayudarte con información sobre nuestros servicios y productos.'} ¿En qué puedo ayudarte hoy?"
-        return "Gracias por tu mensaje. En breve un asesor te atenderá. 😊"
+    user = await _fetch_user(advertiser_id, db)
+    bot_instructions = user.bot_instructions if user else None
 
     # Build context from top chunks (filter by similarity threshold)
     context_parts = [row.chunk_text for row in rows if row.similarity > 0.3]
-    if not context_parts:
-        return "Por el momento no tengo esa información disponible. ¿Te puedo ayudar con algo más?"
+    context = "\n\n".join(context_parts) if context_parts else ""
 
-    context = "\n\n".join(context_parts)
+    # Always call Claude if there are custom instructions or KB context
+    if bot_instructions or context:
+        return await generate_bot_response(
+            advertiser_context=context,
+            conversation_history=conversation_history,
+            user_message=query,
+            business_name=business_name,
+            bot_name=bot_name,
+            bot_personality=bot_personality,
+            bot_instructions=bot_instructions,
+        )
 
-    bot_instructions = None
-    user_result = await db.execute(
-        select(User).where(User.id == uuid.UUID(advertiser_id))
-    )
-    user = user_result.scalar_one_or_none()
-    if user:
-        bot_instructions = user.bot_instructions
-
-    return await generate_bot_response(
-        advertiser_context=context,
-        conversation_history=conversation_history,
-        user_message=query,
-        business_name=business_name,
-        bot_name=bot_name,
-        bot_personality=bot_personality,
-        bot_instructions=bot_instructions,
-    )
+    # Pure fallback — no instructions, no context
+    if user and user.business_name:
+        return f"Hola! Soy {user.bot_name or 'el asistente'} de {user.business_name}. {user.bot_personality or 'Estoy aquí para ayudarte con información sobre nuestros servicios y productos.'} ¿En qué puedo ayudarte hoy?"
+    return "Gracias por tu mensaje. En breve un asesor te atenderá. 😊"
