@@ -97,13 +97,23 @@ async def twilio_incoming(
 
     # Normalize and look up advertiser by WhatsApp number
     to_number_clean = to_number.lstrip("+").replace(" ", "")
-    for candidate in (to_number, f"+{to_number_clean}", to_number_clean):
+    candidates = [to_number, f"+{to_number_clean}", to_number_clean]
+    # Handle MX numbers: +52 vs +521 (sometimes the 1 after 52 is present or absent)
+    if to_number_clean.startswith("52"):
+        without1 = "+52" + to_number_clean[2:]  # +5255...
+        with1 = "+521" + to_number_clean[2:]    # +52155...
+        candidates.extend([without1, with1])
+    for candidate in candidates:
         result = await db.execute(
             select(User).where(User.whatsapp_number == candidate)
         )
         advertiser = result.scalar_one_or_none()
         if advertiser:
             break
+
+    if not advertiser:
+        logger.warning("[WEBHOOK] No advertiser found for number %s", to_number)
+        return {"message": "advertiser_not_found"}
 
     stop_words = {"baja", "stop", "no quiero", "cancelar", "salir"}
     if body_text.lower() in stop_words:
