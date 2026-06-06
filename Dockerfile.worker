@@ -18,4 +18,4 @@ COPY backend/ .
 ENV PYTHONPATH=/app
 ENV C_FORCE_ROOT=true
 
-CMD ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "-Q", "whatsapp,campaigns,processing", "-c", "2"]
+CMD ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "-Q", "whatsapp,campaigns,processing", "--pool", "threads", "-c", "4"]

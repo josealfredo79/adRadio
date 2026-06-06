@@ -15,7 +15,7 @@ if [ "${SERVICE_ROLE:-api}" = "api" ]; then
     celery -A app.workers.celery_app worker \
         --loglevel=info \
         -Q whatsapp,campaigns,processing \
-        -c 1 &
+        --pool threads -c 4 &
     CELERY_WORKER_PID=$!
     echo "Celery worker started (PID: $CELERY_WORKER_PID)"
 
@@ -32,7 +32,7 @@ elif [ "${SERVICE_ROLE}" = "worker" ]; then
     exec celery -A app.workers.celery_app worker \
         --loglevel=info \
         -Q whatsapp,campaigns,processing \
-        -c 1
+        --pool threads -c 4
 
 elif [ "${SERVICE_ROLE}" = "beat" ]; then
     exec celery -A app.workers.celery_app beat --loglevel=info
