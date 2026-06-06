@@ -12,19 +12,16 @@ if [ "${SERVICE_ROLE:-api}" = "api" ]; then
     alembic upgrade head || echo "Migrations skipped"
 
     echo "Starting Celery worker (background)..."
-    mkdir -p /tmp/logs
     celery -A app.workers.celery_app worker \
         --loglevel=info \
         -Q whatsapp,campaigns,processing \
-        -c 1 \
-        > /tmp/logs/celery_worker.log 2>&1 &
+        -c 1 &
     CELERY_WORKER_PID=$!
     echo "Celery worker started (PID: $CELERY_WORKER_PID)"
 
     echo "Starting Celery beat (background)..."
     celery -A app.workers.celery_app beat \
-        --loglevel=info \
-        > /tmp/logs/celery_beat.log 2>&1 &
+        --loglevel=info &
     CELERY_BEAT_PID=$!
     echo "Celery beat started (PID: $CELERY_BEAT_PID)"
 
