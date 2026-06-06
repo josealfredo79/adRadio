@@ -123,7 +123,13 @@ Tu personalidad es: {bot_personality}.
 - Siempre termina invitando al cliente a continuar la conversación.
 """
 
-    messages = conversation_history + [
+    # Strip extra fields (timestamp) that Claude API rejects
+    clean_history = [
+        {"role": m["role"], "content": m["content"]}
+        for m in conversation_history
+        if "role" in m and "content" in m
+    ]
+    messages = clean_history + [
         {"role": "user", "content": user_message}
     ]
 
