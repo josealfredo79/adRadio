@@ -457,7 +457,7 @@ def send_trial_expiry_reminders():
                             f"⏰ Hola {biz_name}, tu prueba gratuita termina en {days_left} día{'s' if days_left != 1 else ''}. "
                             f"👉 https://app.iaradio.app/app/plans"
                         )
-                        send_whatsapp(to=user.whatsapp_number, body=msg)
+                        await send_whatsapp(to=user.whatsapp_number, body=msg)
                     except Exception as e:
                         logger.error("[TRIAL REMINDER] WhatsApp failed for %s: %s", user.email, e)
 
