@@ -272,9 +272,11 @@ Devuelve solo los 4 episodios separados por "---"."""
 # Palabras clave para detectar intención de pedido — sin llamada a Claude (costo $0)
 _ORDER_KEYWORDS: frozenset[str] = frozenset([
     "quiero pedir", "quiero ordenar", "quiero comprar", "me das", "me da",
-    "dame", "deme", "quiero", "necesito", "ordenar", "pedir", "comprar",
+    "dame", "deme", "quiero pedir", "necesito pedir", "necesito comprar",
+    "necesito ordenar", "ordenar", "pedir", "comprar",
     "apartar", "reservar", "llevo", "me llevo", "quisiera", "quisiera pedir",
-    "quisiera ordenar", "un kilo", "media kilo", "media docena", "una docena",
+    "quisiera ordenar", "quisiera comprar", "un kilo", "media kilo",
+    "media docena", "una docena",
     "cuánto cuesta", "cuanto cuesta", "precio de", "tiene disponible",
     "hay disponible", "hacen pedidos", "hacen entregas", "entregan a domicilio",
     "servicio a domicilio", "para llevar", "a domicilio", "delivery",
