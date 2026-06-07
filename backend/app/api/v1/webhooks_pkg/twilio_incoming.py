@@ -546,7 +546,6 @@ async def twilio_incoming(
     send_whatsapp_message.apply_async(
         args=[str(out_msg.id), from_number, reply],
         queue="whatsapp",
-        countdown=__import__("random").randint(1, 5),
     )
     update_contact_engagement_score.apply_async(
         args=[str(contact.id)],
