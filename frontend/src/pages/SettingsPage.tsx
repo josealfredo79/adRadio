@@ -527,6 +527,7 @@ export default function SettingsPage() {
     language: 'es',
     bot_name: '',
     bot_personality: 'friendly',
+    bot_instructions: '',
   })
 
   const numberSource: string = user?.whatsapp_number_source ?? 'shared'
@@ -546,6 +547,7 @@ export default function SettingsPage() {
         language: user.language ?? 'es',
         bot_name: user.bot_name ?? '',
         bot_personality: user.bot_personality ?? 'friendly',
+        bot_instructions: user.bot_instructions ?? '',
       })
     }
   }, [user])
@@ -715,6 +717,19 @@ export default function SettingsPage() {
             <option value="en">English</option>
             <option value="pt">Português</option>
           </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Instrucciones personalizadas</label>
+          <p className="text-xs text-muted-foreground mb-2">
+            Estas instrucciones tienen prioridad sobre cualquier otra regla. Úsalas para definir comportamientos específicos del bot.
+          </p>
+          <textarea
+            value={form.bot_instructions}
+            onChange={(e) => setForm({ ...form, bot_instructions: e.target.value })}
+            rows={4}
+            className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none bg-card resize-y"
+            placeholder="Ej: Si preguntan por precio, ofrece un 10% de descuento por primera compra. Deriva a enlace de pago si confirman el pedido."
+          />
         </div>
       </div>
 

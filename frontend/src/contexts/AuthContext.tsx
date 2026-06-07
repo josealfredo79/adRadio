@@ -16,6 +16,7 @@ interface User {
   language: string
   bot_name: string | null
   bot_personality: string | null
+  bot_instructions: string | null
   subscription_status: string
   current_plan: string
   messages_remaining: number
