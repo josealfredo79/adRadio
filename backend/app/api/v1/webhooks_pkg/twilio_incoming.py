@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
+from sqlalchemy.exc import IntegrityError
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.conversation import Conversation
@@ -332,16 +333,22 @@ async def twilio_incoming(
             )
             db.add(story)
 
-    # Save inbound message
-    msg = Message(
-        advertiser_id=advertiser.id,
-        contact_id=contact.id,
-        direction="inbound",
-        content=body_text,
-        status="delivered",
-        twilio_sid=message_sid or None,
-    )
-    db.add(msg)
+    # Save inbound message (con unique constraint en twilio_sid para idempotencia)
+    try:
+        msg = Message(
+            advertiser_id=advertiser.id,
+            contact_id=contact.id,
+            direction="inbound",
+            content=body_text,
+            status="delivered",
+            twilio_sid=message_sid or None,
+        )
+        db.add(msg)
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        logger.info("[WEBHOOK] Duplicate webhook ignored (twilio_sid=%s)", message_sid)
+        return {"message": "ok"}
 
     # Get or create conversation
     conv_result = await db.execute(
