@@ -5,6 +5,9 @@ from celery import Celery
 
 from app.config import settings
 
+# Force model loading so SQLAlchemy mappers resolve all relationships (e.g. User → KnowledgeBase)
+import app.models  # noqa: F401
+
 celery_app = Celery(
     "iaradio",
     broker=settings.REDIS_URL,
