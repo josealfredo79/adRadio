@@ -1,7 +1,7 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
-import { BookOpen, Upload, Trash2, FileText, FileSpreadsheet, File } from 'lucide-react'
+import { BookOpen, Upload, Trash2, FileText, FileSpreadsheet, File, Eye, X } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
 
@@ -23,6 +23,13 @@ const FILE_ICONS: Record<string, typeof File> = {
 export default function KnowledgeBasePage() {
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
+  const [viewFileId, setViewFileId] = useState<string | null>(null)
+
+  const { data: viewContent } = useQuery<{ id: string; filename: string; file_type: string; raw_text: string }>({
+    queryKey: ['knowledge-base', viewFileId, 'content'],
+    queryFn: () => api.get(`/knowledge-base/${viewFileId}/content`).then((r) => r.data),
+    enabled: !!viewFileId,
+  })
 
   const { data: files, isLoading } = useQuery<KBFile[]>({
     queryKey: ['knowledge-base'],
@@ -136,6 +143,13 @@ export default function KnowledgeBasePage() {
                     </span>
                   )}
                   <button
+                    onClick={() => setViewFileId(file.id)}
+                    className="text-gray-400 dark:text-gray-500 hover:text-brand-500 dark:hover:text-brand-400 transition-colors"
+                    title="Ver contenido"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                  <button
                     onClick={() => {
                       if (confirm('¿Eliminar este documento?')) deleteMutation.mutate(file.id)
                     }}
@@ -150,6 +164,46 @@ export default function KnowledgeBasePage() {
         )}
       </div>
     </div>
+
+    {/* Content viewer modal */}
+    {viewFileId && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setViewFileId(null)}>
+        <div
+          className="relative w-full max-w-3xl max-h-[80vh] rounded-xl bg-white dark:bg-gray-950 shadow-xl border border-gray-200 dark:border-gray-800 flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">{viewContent?.filename ?? 'Cargando...'}</h2>
+              {viewContent && <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">{viewContent.file_type}</p>}
+            </div>
+            <button
+              onClick={() => setViewFileId(null)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="overflow-y-auto p-6">
+            {!viewContent ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-4 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                ))}
+              </div>
+            ) : viewContent.raw_text ? (
+              <pre className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 font-sans leading-relaxed">
+                {viewContent.raw_text}
+              </pre>
+            ) : (
+              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">
+                No hay texto extraído disponible para este documento.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
     </>
   )
 }

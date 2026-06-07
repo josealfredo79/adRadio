@@ -107,6 +107,29 @@ async def upload_file(
     return out
 
 
+@router.get("/{file_id}/content")
+async def get_file_content(
+    file_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    result = await db.execute(
+        select(KnowledgeBase).where(
+            KnowledgeBase.id == file_id,
+            KnowledgeBase.advertiser_id == current_user.id,
+        )
+    )
+    kb = result.scalar_one_or_none()
+    if not kb:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    return {
+        "id": str(kb.id),
+        "filename": kb.filename,
+        "file_type": kb.file_type,
+        "raw_text": kb.raw_text or "",
+    }
+
+
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_file(
     file_id: uuid.UUID,
