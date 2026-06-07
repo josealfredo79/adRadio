@@ -96,21 +96,33 @@ async def twilio_incoming(
             elif not body_text:
                 body_text = f"[media:{media_type}]{media_url}"
 
-    # Normalize and look up advertiser by WhatsApp number
-    to_number_clean = to_number.lstrip("+").replace(" ", "")
-    candidates = [to_number, f"+{to_number_clean}", to_number_clean]
-    # Handle MX numbers: +52 vs +521 (sometimes the 1 after 52 is present or absent)
-    if to_number_clean.startswith("52"):
-        without1 = "+52" + to_number_clean[2:]  # +5255...
-        with1 = "+521" + to_number_clean[2:]    # +52155...
-        candidates.extend([without1, with1])
-    for candidate in candidates:
-        result = await db.execute(
-            select(User).where(User.whatsapp_number == candidate)
-        )
-        advertiser = result.scalar_one_or_none()
-        if advertiser:
-            break
+    # Look up advertiser: first by contact's From number (shared number support),
+    # then fall back to To number lookup (dedicated/pool numbers).
+    advertiser = None
+
+    # 1. Try to find existing contact by their phone → get their advertiser
+    contact_from_result = await db.execute(
+        select(Contact).where(Contact.phone == from_number).order_by(Contact.created_at.desc())
+    )
+    existing_contact = contact_from_result.scalars().first()
+    if existing_contact:
+        advertiser = await db.get(User, existing_contact.advertiser_id)
+
+    # 2. Fallback: look up advertiser by To number (dedicated/pool numbers, or shared number default)
+    if not advertiser:
+        to_number_clean = to_number.lstrip("+").replace(" ", "")
+        candidates = [to_number, f"+{to_number_clean}", to_number_clean]
+        if to_number_clean.startswith("52"):
+            without1 = "+52" + to_number_clean[2:]
+            with1 = "+521" + to_number_clean[2:]
+            candidates.extend([without1, with1])
+        for candidate in candidates:
+            result = await db.execute(
+                select(User).where(User.whatsapp_number == candidate)
+            )
+            advertiser = result.scalar_one_or_none()
+            if advertiser:
+                break
 
     if not advertiser:
         logger.warning("[WEBHOOK] No advertiser found for number %s", to_number)
