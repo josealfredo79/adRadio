@@ -16,6 +16,7 @@ async def _ensure_conversation_window(
     advertiser_id: uuid.UUID,
     contact,
     from_number: str | None = None,
+    business_name: str | None = None,
 ) -> int:
     """Send the invitacion_radio template if the 24h window is closed.
     Returns extra delay (seconds) to add before sending the campaign message.
@@ -37,7 +38,7 @@ async def _ensure_conversation_window(
         return 0
 
     contact_name = (contact.name or "Cliente").split()[0] if contact.name else "Cliente"
-    business_name = getattr(contact, "business_name", "IARadio") or "IARadio"
+    business_name = business_name or "IARadio"
 
     # Try UTILITY template first (can open window), fall back to MARKETING
     used_sid = ""
@@ -98,7 +99,10 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         if idx_b > 0 and idx_b % MAX_PER_HOUR == 0:
             ban_delay = int(idx_b / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, campaign.advertiser_id, contact, from_number)
+        extra = await _ensure_conversation_window(
+            db, campaign.advertiser_id, contact, from_number,
+            business_name=advertiser.business_name,
+        )
         ban_delay += extra
 
         contact_name = (contact.name or "").split()[0] if contact.name else "Cliente"
@@ -161,7 +165,10 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         if idx_r > 0 and idx_r % MAX_PER_HOUR == 0:
             ban_delay = int(idx_r / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, campaign.advertiser_id, contact, from_number)
+        extra = await _ensure_conversation_window(
+            db, campaign.advertiser_id, contact, from_number,
+            business_name=advertiser.business_name,
+        )
         ban_delay += extra
 
         msg = Message(
@@ -221,7 +228,10 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         if i > 0 and i % MAX_PER_HOUR == 0:
             ban_delay = int(i / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, campaign.advertiser_id, contact, from_number)
+        extra = await _ensure_conversation_window(
+            db, campaign.advertiser_id, contact, from_number,
+            business_name=advertiser.business_name,
+        )
         ban_delay += extra
 
         contact_data = {
@@ -367,7 +377,10 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
         if advertiser.messages_remaining <= 0:
             break
 
-        extra = await _ensure_conversation_window(db, advertiser.id, contact, from_number)
+        extra = await _ensure_conversation_window(
+            db, advertiser.id, contact, from_number,
+            business_name=advertiser.business_name,
+        )
         ban_delay += extra
 
         msg = Message(
