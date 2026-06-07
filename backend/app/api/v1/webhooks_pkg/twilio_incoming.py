@@ -388,7 +388,24 @@ async def twilio_incoming(
     order_reply: str | None = None
 
     if pending_order:
-        if pending_order.state == "collecting_name":
+        if pending_order.state == "pending_confirmation":
+            normalized_msg = body_text.lower().strip()
+            affirm_words = {"sí", "si", "s", "yes", "y", "ok", "dale", "claro", "adelante", "por supuesto"}
+            is_affirmative = (
+                normalized_msg in affirm_words
+                or any(normalized_msg.startswith(f"{w} ") for w in ["sí", "si", "yes", "ok", "dale"])
+            )
+            if is_affirmative:
+                pending_order.state = "collecting_name"
+                order_reply = (
+                    "¡Excelente! 🎉\n"
+                    "Para completarlo, ¿a qué nombre va el pedido?"
+                )
+            else:
+                pending_order.state = "cancelled"
+                await db.flush()
+
+        elif pending_order.state == "collecting_name":
             pending_order.customer_name = body_text.strip()
             pending_order.state = "collecting_address"
             order_reply = (
@@ -466,15 +483,15 @@ async def twilio_incoming(
                 advertiser_id=advertiser.id,
                 contact_id=contact.id,
                 items_raw=body_text,
-                state="collecting_name",
+                state="pending_confirmation",
                 order_number=order_count + 1,
             )
             db.add(new_order)
             await db.flush()
 
             order_reply = (
-                "¡Con gusto te ayudo con tu pedido! 🛒\n"
-                "Para completarlo, ¿a qué nombre va el pedido?"
+                "¡Gracias por tu interés! 🛒\n"
+                "¿Te gustaría hacer un pedido? Responde *Sí* o *No* 😊"
             )
 
     if order_reply is not None:

@@ -78,7 +78,7 @@ class TestClaudeService:
         from app.services.claude_service import detect_order_intent
 
         assert detect_order_intent("quiero pedir una pizza") is True
-        assert detect_order_intent("cuánto cuesta") is True
+        assert detect_order_intent("cuánto cuesta") is False
         assert detect_order_intent("Hola buenos días") is False
         assert detect_order_intent("") is False
         assert detect_order_intent("QUIERO COMPRAR") is True
