@@ -479,8 +479,13 @@ export default function ContactsPage() {
                     <td className="px-6 py-4">
                       <button
                         onClick={() => {
-                          if (confirm('¿Eliminar este contacto?')) {
-                            deleteMutation.mutate(contact.id)
+                          const ids = selectedIds.size > 0 ? Array.from(selectedIds) : [contact.id]
+                          if (confirm(`¿Eliminar ${ids.length} contacto${ids.length > 1 ? 's' : ''}?`)) {
+                            if (ids.length > 1) {
+                              bulkDeleteMutation.mutate(ids)
+                            } else {
+                              deleteMutation.mutate(contact.id)
+                            }
                           }
                         }}
                         className="text-muted-foreground hover:text-red-500 transition-colors"
@@ -524,8 +529,13 @@ export default function ContactsPage() {
                           />
                           <button
                             onClick={() => {
-                              if (confirm('¿Eliminar este contacto?')) {
-                                deleteMutation.mutate(contact.id)
+                              const ids = selectedIds.size > 0 ? Array.from(selectedIds) : [contact.id]
+                              if (confirm(`¿Eliminar ${ids.length} contacto${ids.length > 1 ? 's' : ''}?`)) {
+                                if (ids.length > 1) {
+                                  bulkDeleteMutation.mutate(ids)
+                                } else {
+                                  deleteMutation.mutate(contact.id)
+                                }
                               }
                             }}
                             className="text-muted-foreground hover:text-red-500 transition-colors p-1"
