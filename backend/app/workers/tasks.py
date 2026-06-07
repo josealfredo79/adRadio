@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def send_whatsapp_message(self, message_id: str, to: str, body: str):
     """Send a WhatsApp message via Twilio with retry logic."""
     async def _send():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
         from app.models.user import User
         from app.services.twilio_service import send_whatsapp
@@ -69,7 +69,7 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
 def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, caption: str = ""):
     """Send a WhatsApp voice note (audio cuña) via Twilio media message."""
     async def _send():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
         from app.models.user import User
         from app.services.twilio_service import send_whatsapp_media
@@ -148,7 +148,7 @@ def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str, fro
 def auto_tag_contact_from_conversation(contact_id: str):
     """Use Claude Haiku to detect intent from last 10 messages and add auto-tags."""
     async def _run():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.contact import Contact
         from app.models.message import Message
         from app.services.claude_service import detect_intent_tags
@@ -193,7 +193,7 @@ def auto_tag_contact_from_conversation(contact_id: str):
 def schedule_campaign(self, campaign_id: str):
     """Process and send all messages for a scheduled campaign."""
     async def _process():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.campaign import Campaign
         from app.models.contact import Contact
         from app.models.user import User
@@ -268,7 +268,7 @@ def schedule_campaign(self, campaign_id: str):
 def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type: str):
     """Extract text, chunk, generate embeddings and store in pgvector."""
     async def _process():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.knowledge_base import KnowledgeBase
         from app.services.embedding_service import get_embedding, chunk_text
         from app.config import settings
@@ -323,7 +323,7 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
         run_async(_process())
     except Exception as exc:
         async def _mark_error():
-            from app.database import AsyncSessionLocal
+            from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
             from app.models.knowledge_base import KnowledgeBase
             from sqlalchemy import select
             async with AsyncSessionLocal() as db:
@@ -344,7 +344,7 @@ def import_contacts_csv(advertiser_id: str, rows: list[dict]):
     """Bulk import contacts from CSV rows."""
     async def _import():
         import re
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.contact import Contact
         from sqlalchemy import select
 
@@ -379,7 +379,7 @@ def import_contacts_csv(advertiser_id: str, rows: list[dict]):
 def check_scheduled_campaigns():
     """Celery Beat: trigger campaigns scheduled for now."""
     async def _check():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.campaign import Campaign
         from sqlalchemy import select
 
@@ -402,7 +402,7 @@ def check_scheduled_campaigns():
 def cleanup_expired_data():
     """Remove messages older than 12 months and expired subscriptions."""
     async def _cleanup():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
         from app.models.user import User
         from sqlalchemy import delete, update
@@ -427,7 +427,7 @@ def cleanup_expired_data():
 def send_trial_expiry_reminders():
     """Celery Beat: send reminders to expiring users."""
     async def _remind():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.user import User
         from app.core.email import send_trial_expiring_email
         from app.services.twilio_service import send_whatsapp
@@ -468,7 +468,7 @@ def send_trial_expiry_reminders():
 def send_appointment_reminders():
     """Celery Beat: send WhatsApp reminders for upcoming appointments."""
     async def _remind():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         async with AsyncSessionLocal() as db:
             now = datetime.now(timezone.utc)
             await send_24h_reminders(db, now)
@@ -482,7 +482,7 @@ def send_appointment_reminders():
 def send_parrilla_day(self, advertiser_id: str, audio_url: str, script: str, day_name: str, mode: str):
     """Sends the daily cuña from the weekly parrilla to all active contacts."""
     async def _send():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.contact import Contact
         from app.models.user import User
         from sqlalchemy import select
@@ -515,7 +515,7 @@ def update_contact_engagement_score(contact_id: str):
     """Update contact engagement_score and lead_score using Claude."""
     async def _update():
         import json
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.contact import Contact
         from app.models.conversation import Conversation
         from app.models.message import Message
@@ -597,7 +597,7 @@ def update_contact_engagement_score(contact_id: str):
 def process_automation_enrollments():
     """Celery beat — send next drip message to all due enrollments."""
     async def _run():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.automation import AutomationEnrollment, AutomationFlow
         from app.models.contact import Contact
         from app.models.conversation import Conversation
@@ -704,7 +704,7 @@ def process_automation_enrollments():
 def trigger_automation_for_contact(contact_id: str, advertiser_id: str, trigger: str, trigger_value: str = ""):
     """Enroll a contact in all matching active flows."""
     async def _run():
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.automation import AutomationFlow, AutomationEnrollment
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload

@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 from app.config import settings
 
 engine = create_async_engine(
@@ -13,6 +14,27 @@ engine = create_async_engine(
 
 AsyncSessionLocal = async_sessionmaker(
     engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+# Engine sin pool para Celery workers (cada tarea crea su propia conexión en su event loop)
+_celery_engine = None
+
+
+def _get_celery_engine():
+    global _celery_engine
+    if _celery_engine is None:
+        _celery_engine = create_async_engine(
+            settings.DATABASE_URL,
+            echo=settings.DEBUG,
+            poolclass=NullPool,
+        )
+    return _celery_engine
+
+
+CeleryAsyncSessionLocal = async_sessionmaker(
+    _get_celery_engine(),
     class_=AsyncSession,
     expire_on_commit=False,
 )

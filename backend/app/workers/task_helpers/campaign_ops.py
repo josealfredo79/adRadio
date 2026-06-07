@@ -319,7 +319,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
 async def notify_campaign_failed(campaign_id, exc):
     """Send failure notifications for campaign."""
     try:
-        from app.database import AsyncSessionLocal
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.campaign import Campaign
         from app.models.user import User
         from app.core.email import send_campaign_failed_email
