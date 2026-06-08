@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { CheckCircle, Zap, Sparkles } from 'lucide-react'
 import { PLANS_CONFIG, type PlanDefinition } from '@/lib/plans'
 import SEO from '@/components/SEO'
@@ -16,6 +17,7 @@ interface BackendPlan {
 
 export default function PlansPage() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const [loading, setLoading] = useState<string | null>(null)
   const [currency, setCurrency] = useState<'MXN' | 'USD'>('MXN')
 
@@ -31,7 +33,7 @@ export default function PlansPage() {
       const { data } = await api.post('/checkout/create-session', { plan: planKey })
       window.location.href = data.checkout_url
     } catch (err: unknown) {
-      alert(getApiError(err, 'Error al iniciar pago'))
+      toast({ title: 'Error', description: getApiError(err, 'Error al iniciar pago'), variant: 'error' })
     } finally {
       setLoading(null)
     }

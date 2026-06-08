@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import SEO from '@/components/SEO'
 import PrintButton from '@/components/PrintButton'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 
 interface Campaign {
   id: string
@@ -77,6 +78,7 @@ const AUDIO_MODES: CampaignMode[] = ['radio', 'comunitaria', 'capsula', 'trivia'
 export default function CampaignsPage() {
   const qc = useQueryClient()
   const { user: currentUser } = useAuth()
+  const { toast } = useToast()
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: '', type: 'promo', message_text: '' })
   const [mode, setMode] = useState<CampaignMode>('regular')
@@ -151,7 +153,7 @@ export default function CampaignsPage() {
 
   const campaigns = campaignsData?.items
   const totalCampaigns = campaignsData?.total ?? 0
-  const totalPages = Math.ceil(totalCampaigns / 20) || 1
+  const totalPages = totalCampaigns > 0 ? Math.ceil(totalCampaigns / 20) : 0
 
   function getPageNumbers() {
     const pages: (number | string)[] = [1]
@@ -339,7 +341,7 @@ export default function CampaignsPage() {
     (isMultiMode && multiMessages.length > 0) ||
     (isRadioMode && !!radioAudioUrl) ||
     (isBannerMode && !!bannerPromo) ||
-    (isVocesMode && !!vocesCapsuleAudioUrl)
+    (isVocesMode && !!vocesCollectionPrompt)
   )
 
   const previewBanner = async () => {
@@ -384,7 +386,7 @@ export default function CampaignsPage() {
                   const url = URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }))
                   const a = document.createElement('a'); a.href = url; a.download = 'campanas_iaradio.csv'; a.click()
                   URL.revokeObjectURL(url)
-                } catch { alert('Error al exportar') }
+                } catch { toast({ title: 'Error', description: 'Error al exportar', variant: 'error' }) }
               }}
               className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-gray-700 hover:bg-muted transition-colors"
             >

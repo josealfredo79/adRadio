@@ -51,8 +51,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     // Restore session using httpOnly cookie — no localStorage needed
+    const baseUrl = import.meta.env.VITE_API_URL ?? ''
     axios
-      .post('/api/v1/auth/refresh', null, { withCredentials: true, timeout: 5000 })
+      .post(`${baseUrl}/api/v1/auth/refresh`, null, { withCredentials: true, timeout: 5000 })
       .then(({ data }) => {
         setAccessToken(data.access_token)
         return api.get('/me')

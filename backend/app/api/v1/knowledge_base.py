@@ -9,7 +9,7 @@ from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, check_feature_access
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.core.redis import get_redis_optional
 from app.database import get_db
@@ -75,6 +75,8 @@ async def upload_file(
     _: None = Depends(idempotent_post),
     redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> dict[str, str]:
+    if not check_feature_access(current_user, "rag"):
+        raise HTTPException(status_code=402, detail="Tu plan no incluye base de conocimiento (RAG). Actualiza a Growth o superior.")
     # Validate MIME type (not just extension)
     if file.content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
@@ -156,6 +158,8 @@ async def test_bot(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
+    if not check_feature_access(current_user, "rag"):
+        raise HTTPException(status_code=402, detail="Tu plan no incluye base de conocimiento (RAG). Actualiza a Growth o superior.")
     from app.services.rag_service import answer_with_rag
 
     query = body.get("query", "")

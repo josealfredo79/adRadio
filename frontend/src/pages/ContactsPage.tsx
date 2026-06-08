@@ -5,6 +5,7 @@ import { Users, Plus, Upload, Trash2, Search, Download, Tag, X, Tags, Send, Chec
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
 import PrintButton from '@/components/PrintButton'
+import { useToast } from '@/contexts/ToastContext'
 
 interface Contact {
   id: string
@@ -25,6 +26,7 @@ interface Campaign {
 
 export default function ContactsPage() {
   const qc = useQueryClient()
+  const { toast } = useToast()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [tagFilter, setTagFilter] = useState<string>('')
@@ -143,7 +145,7 @@ export default function ContactsPage() {
   // Collect all unique tags from loaded contacts
   const allTags = Array.from(new Set((data?.items ?? []).flatMap((c) => c.tags))).sort()
 
-  const filtered = data?.items.filter(
+  const filtered = (data?.items ?? []).filter(
     (c) =>
       (statusFilter === 'all' || c.status === statusFilter) &&
       (!tagFilter || c.tags.includes(tagFilter)) &&
@@ -214,7 +216,7 @@ export default function ContactsPage() {
       a.click()
       URL.revokeObjectURL(url)
     } catch {
-      alert('Error al exportar contactos')
+      toast({ title: 'Error', description: 'Error al exportar contactos', variant: 'error' })
     }
   }
 
@@ -301,9 +303,9 @@ export default function ContactsPage() {
       <div className="flex gap-1.5 flex-wrap">
         {[
           { key: 'all', label: 'Todos', count: data?.total ?? 0 },
-          { key: 'active', label: 'Activos', count: data?.items.filter((c) => c.status === 'active').length ?? 0 },
-          { key: 'unsubscribed', label: 'Bajas', count: data?.items.filter((c) => c.status === 'unsubscribed').length ?? 0 },
-          { key: 'blocked', label: 'Bloqueados', count: data?.items.filter((c) => c.status === 'blocked').length ?? 0 },
+          { key: 'active', label: 'Activos', count: (data?.items ?? []).filter((c) => c.status === 'active').length },
+          { key: 'unsubscribed', label: 'Bajas', count: (data?.items ?? []).filter((c) => c.status === 'unsubscribed').length },
+          { key: 'blocked', label: 'Bloqueados', count: (data?.items ?? []).filter((c) => c.status === 'blocked').length },
         ].map((tab) => (
           <button
             key={tab.key}

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
 import * as ToastPrimitive from '@radix-ui/react-toast'
 import { Toast } from '@/components/Toast'
 
@@ -17,16 +17,31 @@ const ToastContext = createContext<ToastContextType | null>(null)
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   const removeToast = useCallback((id: string) => {
+    const timer = timersRef.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      timersRef.current.delete(id)
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
   const toast = useCallback((props: Omit<ToastItem, 'id'>) => {
     const id = Math.random().toString(36).slice(2, 9)
     setToasts((prev) => [...prev, { ...props, id }])
-    setTimeout(() => removeToast(id), 4000)
+    const timer = setTimeout(() => removeToast(id), 4000)
+    timersRef.current.set(id, timer)
   }, [removeToast])
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach((timer) => clearTimeout(timer))
+      timersRef.current.clear()
+    }
+  }, [])
 
   return (
     <ToastContext.Provider value={{ toast }}>

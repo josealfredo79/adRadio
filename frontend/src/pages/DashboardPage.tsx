@@ -47,8 +47,9 @@ export default function DashboardPage() {
 
   // Remove ?success param from URL after showing the banner
   const dismissSuccess = () => {
-    searchParams.delete('success')
-    setSearchParams(searchParams, { replace: true })
+    const next = new URLSearchParams(searchParams)
+    next.delete('success')
+    setSearchParams(next, { replace: true })
   }
   const { data, isLoading, isError } = useQuery<DashboardData>({
     queryKey: ['dashboard'],

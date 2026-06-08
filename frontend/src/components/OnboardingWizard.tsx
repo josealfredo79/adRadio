@@ -30,7 +30,7 @@ export default function OnboardingWizard({ onClose }: Props) {
       const fd = new FormData()
       fd.append('file', kbFile!)
       fd.append('name', kbName || kbFile!.name)
-      return api.post('/knowledge-base/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      return api.post('/knowledge-base/upload', fd)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['knowledge-base'] })

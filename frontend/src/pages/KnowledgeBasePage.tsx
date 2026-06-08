@@ -4,6 +4,7 @@ import api, { getApiError } from '@/lib/api'
 import { BookOpen, Upload, Trash2, FileText, FileSpreadsheet, File, Eye, X } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
+import { useToast } from '@/contexts/ToastContext'
 
 interface KBFile {
   id: string
@@ -22,6 +23,7 @@ const FILE_ICONS: Record<string, typeof File> = {
 
 export default function KnowledgeBasePage() {
   const qc = useQueryClient()
+  const { toast } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [viewFileId, setViewFileId] = useState<string | null>(null)
 
@@ -58,7 +60,7 @@ export default function KnowledgeBasePage() {
       await api.post('/knowledge-base/upload', fd)
       qc.invalidateQueries({ queryKey: ['knowledge-base'] })
     } catch (err: unknown) {
-      alert(getApiError(err, 'Error al subir archivo'))
+      toast({ title: 'Error', description: getApiError(err, 'Error al subir archivo'), variant: 'error' })
     }
     if (fileRef.current) fileRef.current.value = ''
   }

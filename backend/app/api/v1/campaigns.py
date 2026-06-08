@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, check_feature_access, get_radio_limit
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.api.rate_limit import limiter
 from app.core.redis import get_redis_optional
@@ -323,6 +323,8 @@ async def setup_ab_test(
     current_user: User = Depends(get_current_user),
 ) -> CampaignOut:
     """Enable A/B testing on a campaign with an alternate message variant."""
+    if not check_feature_access(current_user, "ab_testing"):
+        raise HTTPException(status_code=402, detail="Tu plan no incluye A/B testing. Actualiza a Business o superior.")
     result = await db.execute(
         select(Campaign).where(Campaign.id == campaign_id, Campaign.advertiser_id == current_user.id)
     )
@@ -407,6 +409,8 @@ async def generate_sequence(
     current_user: User = Depends(get_current_user),
 ) -> GenerateSequenceResponse:
     """Genera una secuencia de 3 mensajes para campaña en días distintos."""
+    if not check_feature_access(current_user, "sequence"):
+        raise HTTPException(status_code=402, detail="Tu plan no incluye campañas secuencia. Actualiza a Pro o superior.")
     messages = await generate_sequence_messages(
         business_name=body.business_name,
         intent=body.intent,
@@ -421,6 +425,8 @@ async def generate_saga(
     current_user: User = Depends(get_current_user),
 ) -> GenerateSequenceResponse:
     """Genera 4 episodios de radionovela de marketing para campaña saga."""
+    if not check_feature_access(current_user, "saga"):
+        raise HTTPException(status_code=402, detail="Tu plan no incluye campañas saga. Actualiza a Business o superior.")
     episodes = await generate_saga_episodes(
         business_name=body.business_name,
         product_description=body.product_description,
@@ -433,12 +439,30 @@ async def generate_saga(
 async def generate_radio_ad_endpoint(
     body: GenerateRadioAdRequest,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """
     Genera una cuña publicitaria completa en audio:
     Claude escribe el guión → edge-tts pone voz de locutor → sube a R2.
     Retorna URL del audio .ogg listo para enviar como nota de voz por WhatsApp.
     """
+    if not check_feature_access(current_user, "radio_cuna"):
+        raise HTTPException(status_code=402, detail="Tu plan no incluye cuñas de radio. Actualiza a Growth o superior.")
+    limit = get_radio_limit(current_user)
+    if limit != -1:
+        from app.models.campaign import Campaign
+        from datetime import datetime, timezone, timedelta
+        period_start = datetime.now(timezone.utc) - timedelta(days=30)
+        count_result = await db.execute(
+            select(func.count()).select_from(Campaign).where(
+                Campaign.advertiser_id == current_user.id,
+                Campaign.created_at >= period_start,
+                Campaign.type.in_(["radio", "comunitaria", "capsula", "trivia", "historia", "alerta", "estacional"]),
+            )
+        )
+        used = count_result.scalar() or 0
+        if used >= limit:
+            raise HTTPException(status_code=402, detail=f"Has alcanzado el límite de {limit} cuñas de radio de tu plan. Actualiza a Pro para cuñas ilimitadas.")
     script = await generate_radio_script(
         business_name=body.business_name,
         message_or_intent=body.intent,
