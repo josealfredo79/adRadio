@@ -1,0 +1,122 @@
+# Base de Conocimiento — IaRadio
+
+## Identidad del Bot
+- Nombre del asistente: Asesor Virtual de IaRadio
+- Tono: Profesional, empático y persuasivo
+- Objetivo: Calificar leads, agendar videollamadas y cerrar ventas del servicio IaRadio
+
+## ¿Qué es IaRadio?
+IaRadio es una plataforma SaaS de inteligencia artificial que automatiza la atención al cliente y la publicidad de negocios locales a través de WhatsApp.
+
+### Funcionalidades principales
+- Bot de WhatsApp con IA que responde clientes automáticamente usando la base de conocimiento del negocio
+- Campañas publicitarias con mensajes masivos personalizados
+- Generación de comerciales de radio con IA (voz sintética)
+- Sistema de pedidos automatizado
+- Cupones de descuento con QR
+- Automatizaciones para cumpleaños, seguimiento, recordatorios
+- Base de conocimiento (RAG) para que el bot responda con información real
+
+### Tecnología
+- IA: Claude Sonnet/Haiku de Anthropic
+- Embeddings: OpenAI text-embedding-3-small
+- Voz: Fish Audio / ElevenLabs
+- RAG: pgvector (búsqueda semántica)
+
+## Planes y Precios
+
+### Plan Starter — $499/mes
+- 200 mensajes al mes
+- Bot de WhatsApp básico
+- Campañas publicitarias
+- Importación de contactos por CSV
+- Base de conocimiento (sube PDF, DOCX, TXT)
+
+### Plan Growth — $999/mes
+- 500 mensajes al mes
+- Todo lo de Starter
+- Bot con RAG (inteligencia aumentada con base de conocimiento)
+- 3 comerciales de radio al mes
+- Cupones con QR
+
+### Plan Pro — $2,499/mes
+- 1,000 mensajes al mes
+- Todo lo de Growth
+- Comerciales de radio ilimitados
+- Número de WhatsApp dedicado
+- URLs personalizadas para cupones
+- Automatizaciones ilimitadas
+
+### Plan Business — $6,799/mes
+- 3,000 mensajes al mes
+- Todo lo de Pro
+- Multi-agente IA (varios bots)
+- Campañas saga (radionovela)
+- Pruebas A/B en campañas
+- Panel de análisis avanzado
+
+### Plan Enterprise — $19,999/mes
+- 10,000 mensajes al mes
+- Todo lo de Business
+- Multi-número WhatsApp
+- White-label (marca blanca)
+- SLA prioritario
+- Onboarding dedicado
+
+## Preguntas Frecuentes
+
+### ¿Cómo funciona el bot de WhatsApp?
+El negocio sube documentos (PDF, Word, Excel o TXT) con su menú, precios, horarios, etc. El bot usa IA para responder preguntas de los clientes basándose en esa información. También puede tomar pedidos automáticamente.
+
+### ¿Qué necesito para usar IaRadio?
+Solo una cuenta de WhatsApp (la que ya usas) y conexión a internet. Nosotros te damos el número de Twilio para enviar mensajes.
+
+### ¿El cliente necesita instalar algo?
+No. Funciona directo en WhatsApp, igual que cualquier conversación.
+
+### ¿Cómo se integra con mi WhatsApp?
+Te asignamos un número virtual de Twilio. Tus clientes te escriben a ese número y el bot responde automáticamente. Tú recibes notificaciones de pedidos y ventas.
+
+### ¿Puedo probar antes de pagar?
+Sí. Ofrecemos 30 días de prueba gratis con 50 mensajes para que pruebes todas las funcionalidades.
+
+### ¿Soporta audio / voz?
+Sí. El bot puede recibir mensajes de voz y transcribirlos. También puedes generar comerciales de radio con IA.
+
+### ¿En qué idiomas funciona?
+Español, inglés y portugués.
+
+### ¿Hay contrato mensual o anual?
+Mensual sin penalización. También ofrecemos descuento en plan anual.
+
+## Proceso de Ventas
+
+1. El lead pregunta por el servicio
+2. Preguntar: "¿A qué se dedica tu negocio?"
+3. Escuchar su giro y recomendar el plan adecuado
+4. Si pide precio, mencionar que hay planes desde $499/mes
+5. Ofrecer agendar una videollamada de 15 min para mostrar la plataforma
+6. Si acepta, agendar en el calendario y confirmar cita
+7. Si duda, ofrecer prueba gratis de 30 días
+
+## Objeciones Comunes
+
+### "Es muy caro"
+- Comparar contra lo que cuesta un empleado de tiempo completo
+- Mencionar que atiende 24/7
+- Ofrecer plan Starter como entrada
+
+### "Ya tengo WhatsApp Business"
+- IaRadio automatiza respuestas que WhatsApp Business no puede
+- IA entiende contexto, no solo palabras clave
+- Toma pedidos, califica leads, genera campañas
+
+### "No sé subir documentos"
+- Es tan fácil como adjuntar un archivo
+- Acepta PDF, Word, Excel y TXT
+- Nosotros ayudamos en el onboarding
+
+## Contacto y Soporte
+- Email: soporte@iaradio.online
+- WhatsApp del equipo: el número del negocio registrado
+- Tiempo de respuesta: menos de 2 horas en horario laboral
