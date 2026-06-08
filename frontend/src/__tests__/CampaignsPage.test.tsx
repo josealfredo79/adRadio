@@ -5,6 +5,35 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import CampaignsPage from '@/pages/CampaignsPage'
 
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: {
+      id: 'test-id',
+      email: 'test@test.com',
+      business_name: 'Test Business',
+      business_category: 'tienda',
+      role: 'advertiser',
+      city: 'City',
+      country: 'MX',
+      phone: null,
+      whatsapp_number: null,
+      whatsapp_number_source: 'shared',
+      language: 'es',
+      bot_name: 'Asistente',
+      bot_personality: 'professional',
+      bot_instructions: null,
+      subscription_status: 'active',
+      current_plan: 'growth',
+      messages_remaining: 100,
+      email_verified: true,
+      logo_url: null,
+      widget_color: '#25D366',
+      widget_greeting: '¡Hola!',
+      widget_position: 'right',
+    },
+  }),
+}))
+
 const mockCampaignsPage = {
   items: [
     { id: '1', name: 'Promo Junio', type: 'promo', message_text: 'Texto promo', status: 'running', stats: { sent: 100, delivered: 95, read: 50 }, ab_test: {}, created_at: '2025-01-01T00:00:00Z', schedule: null },

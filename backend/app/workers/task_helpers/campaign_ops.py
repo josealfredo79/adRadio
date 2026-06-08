@@ -97,17 +97,25 @@ async def _ensure_conversation_window(
 
 async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay):
     """Send banner-style campaign messages."""
-    from app.services.banner_service import generate_banner_png, generate_banner_copy_with_claude
+    from app.services.banner_service import (
+        generate_banner_png, generate_banner_copy_with_claude, select_design,
+    )
     from app.services.storage_service import upload_bytes
     from app.models.message import Message
     from app.workers.tasks import send_whatsapp_voice_note
     from app.services.twilio_service import anti_ban_delay
 
     promo_description = ab.get("promo_description", campaign.message_text)
-    palette = ab.get("banner_palette", "promo")
+    palette = ab.get("banner_palette", "")  # vacío = auto según negocio
     caption = ab.get("banner_caption", "")
+    layout_override = ab.get("banner_layout", "")
     MAX_PER_HOUR = 60
     from_number = getattr(advertiser, "whatsapp_number", None)
+
+    # Selección de diseño según negocio y tipo de campaña
+    design = select_design(advertiser.business_category, campaign.type)
+    palette = palette or design.palette
+    layout = layout_override or design.layout
 
     for idx_b, contact in enumerate(contacts):
         if advertiser.messages_remaining <= 0:
@@ -132,9 +140,11 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             business_name=advertiser.business_name or "Tu negocio",
             contact_name=contact_name,
             promo_description=promo_description,
+            business_category=advertiser.business_category,
+            campaign_type=campaign.type,
         )
 
-        png_bytes = generate_banner_png(copy, palette)
+        png_bytes = generate_banner_png(copy, palette, layout, contact_id=str(contact.id))
 
         key = f"banners/{campaign.id}/{contact.id}_{uuid.uuid4().hex[:8]}.png"
         banner_url = await upload_bytes(png_bytes, key, "image/png")

@@ -18,6 +18,3 @@ try:
     print(f"✅ Success! Message SID: {message.sid}")
 except Exception as e:
     print(f"❌ Failed: {e}")
-        print(f"✅ Success! Message SID: {message.sid}")
-    except Exception as e:
-        print(f"❌ Failed with +5255: {e}")

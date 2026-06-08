@@ -345,7 +345,9 @@ class BannerPreviewRequest(BaseModel):
     promo_description: str
     business_name: str
     contact_name: str = "Juan"
-    palette: str = "promo"
+    palette: str = ""
+    layout: str = ""
+    business_category: str = ""
 
 
 @router.post("/banner/preview")
@@ -356,15 +358,20 @@ async def preview_banner(
     """Generate and return a preview PNG banner (no R2 upload, no DB write)."""
     from fastapi.responses import Response as FastAPIResponse
     from app.services.banner_service import (
-        generate_banner_png, generate_banner_copy_with_claude
+        generate_banner_png, generate_banner_copy_with_claude, select_design,
     )
+
+    design = select_design(body.business_category or current_user.business_category, None)
+    palette = body.palette or design.palette
+    layout = body.layout or design.layout
 
     copy = await generate_banner_copy_with_claude(
         business_name=body.business_name,
         contact_name=body.contact_name,
         promo_description=body.promo_description,
+        business_category=body.business_category or current_user.business_category,
     )
-    png_bytes = generate_banner_png(copy, body.palette)
+    png_bytes = generate_banner_png(copy, palette, layout)
     return FastAPIResponse(content=png_bytes, media_type="image/png")
 
 

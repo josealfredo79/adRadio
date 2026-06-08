@@ -17,7 +17,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
-    gcc libffi-dev libssl-dev libmupdf-dev ffmpeg \
+    gcc libffi-dev libssl-dev libmupdf-dev ffmpeg fonts-ubuntu fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt ./

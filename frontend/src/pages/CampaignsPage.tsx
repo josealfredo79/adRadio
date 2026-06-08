@@ -5,6 +5,7 @@ import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, CalendarClock, B
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import SEO from '@/components/SEO'
 import PrintButton from '@/components/PrintButton'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Campaign {
   id: string
@@ -75,6 +76,7 @@ const AUDIO_MODES: CampaignMode[] = ['radio', 'comunitaria', 'capsula', 'trivia'
 
 export default function CampaignsPage() {
   const qc = useQueryClient()
+  const { user: currentUser } = useAuth()
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: '', type: 'promo', message_text: '' })
   const [mode, setMode] = useState<CampaignMode>('regular')
@@ -113,6 +115,7 @@ export default function CampaignsPage() {
   // Banner Visual mode
   const [bannerPromo, setBannerPromo] = useState('')
   const [bannerPalette, setBannerPalette] = useState('promo')
+  const [bannerLayout, setBannerLayout] = useState('clasico')
   const [bannerCaption, setBannerCaption] = useState('')
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string | null>(null)
   const [bannerPreviewing, setBannerPreviewing] = useState(false)
@@ -210,7 +213,7 @@ export default function CampaignsPage() {
     setExtraContext(''); setBusinessCategory(''); setRadioVoiceId('')
     setScheduledAt(''); setError('')
     setAbEnabled(false); setAbVariants(['', '']); setAbSplit('50/50'); setAbMetric('response')
-    setBannerPromo(''); setBannerPalette('promo'); setBannerCaption(''); setBannerPreviewUrl(null)
+    setBannerPromo(''); setBannerPalette('promo'); setBannerLayout('clasico'); setBannerCaption(''); setBannerPreviewUrl(null)
     setVocesCollectionPrompt(''); setVocesStories([]); setVocesCapsuleAudioUrl(''); setVocesCapsuleScript('')
   }
 
@@ -297,6 +300,7 @@ export default function CampaignsPage() {
     if (mode === 'banner') {
       ab_test.promo_description = bannerPromo
       ab_test.banner_palette = bannerPalette
+      ab_test.banner_layout = bannerLayout
       ab_test.banner_caption = bannerCaption
     }
     const schedule = scheduledAt ? { start_date: new Date(scheduledAt).toISOString() } : {}
@@ -348,6 +352,8 @@ export default function CampaignsPage() {
         business_name: form.name || 'Mi negocio',
         contact_name: 'Juan',
         palette: bannerPalette,
+        layout: bannerLayout,
+        business_category: currentUser?.business_category || '',
       }, { responseType: 'blob' })
       const url = URL.createObjectURL(resp.data)
       setBannerPreviewUrl(url)
@@ -757,6 +763,25 @@ export default function CampaignsPage() {
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Diseño del banner</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { key: 'clasico', label: 'Clásico', desc: 'Izquierda, CTA abajo' },
+                        { key: 'centrado', label: 'Centrado', desc: 'Todo al centro' },
+                        { key: 'split', label: 'Split', desc: 'Mitad y mitad' },
+                        { key: 'minimal', label: 'Minimal', desc: 'Elegante, sutil' },
+                      ].map((l) => (
+                        <button key={l.key} onClick={() => { setBannerLayout(l.key); setBannerPreviewUrl(null) }}
+                          className={`rounded-lg border-2 px-2 py-2 text-xs font-medium transition ${bannerLayout === l.key ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30' : 'border-border hover:border-brand-300'}`}>
+                          <div className="font-semibold">{l.label}</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">{l.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">Se usa automáticamente según tu categoría de negocio si no eliges uno.</p>
                   </div>
 
                   <div>
