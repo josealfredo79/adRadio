@@ -10,8 +10,9 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from redis.asyncio import Redis as AsyncRedis
 from pydantic import BaseModel
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.api.deps import get_current_user
 from app.api.idempotency import idempotent_post, store_idempotency_response
@@ -48,10 +49,44 @@ async def list_conversations(
     current_user: User = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
     """List all conversations for the current advertiser, newest activity first."""
+    msg_count = (
+        select(Message.contact_id, func.count(Message.id).label("cnt"))
+        .where(Message.advertiser_id == current_user.id)
+        .group_by(Message.contact_id)
+        .subquery()
+    )
+
+    latest_msg = (
+        select(
+            Message.contact_id,
+            Message.content,
+            Message.direction,
+            func.row_number().over(
+                partition_by=Message.contact_id,
+                order_by=Message.created_at.desc(),
+            ).label("rn"),
+        )
+        .where(Message.advertiser_id == current_user.id)
+        .subquery()
+    )
+
     q = (
-        select(Conversation, Contact)
+        select(
+            Conversation,
+            Contact,
+            func.coalesce(msg_count.c.cnt, 0).label("message_count"),
+            latest_msg.c.content,
+            latest_msg.c.direction,
+        )
         .outerjoin(Contact, Conversation.contact_id == Contact.id)
+        .outerjoin(msg_count, Conversation.contact_id == msg_count.c.contact_id)
+        .outerjoin(
+            latest_msg,
+            (Conversation.contact_id == latest_msg.c.contact_id)
+            & (latest_msg.c.rn == 1),
+        )
         .where(Conversation.advertiser_id == current_user.id)
+        .options(defer(Conversation.messages))
     )
     if status_filter:
         q = q.where(Conversation.status == status_filter)
@@ -67,8 +102,9 @@ async def list_conversations(
             "lead_score": conv.lead_score,
             "tags": conv.tags,
             "last_activity": conv.last_activity,
-            "message_count": len(conv.messages),
-            "last_message": conv.messages[-1] if conv.messages else None,
+            "message_count": message_count,
+            "last_message": {"role": "assistant" if direction == "outbound" else "user", "content": content}
+            if content else None,
             "contact": {
                 "id": str(contact.id) if contact else None,
                 "name": contact.name if contact else "Desconocido",
@@ -76,7 +112,7 @@ async def list_conversations(
                 "engagement_score": contact.engagement_score if contact else 0,
             },
         }
-        for conv, contact in rows
+        for conv, contact, message_count, content, direction in rows
     ]
 
 
