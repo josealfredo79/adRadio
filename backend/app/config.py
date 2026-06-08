@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     TWILIO_INVITACION_TEMPLATE_SID: str = "HX5dc3c07019d22ed5b128df45d2ed1b15"
     # SID de la plantilla notificacion_audio_v2 (UTILITY) que sí puede enviarse fuera de ventana 24h
     TWILIO_UTILITY_TEMPLATE_SID: str = "HXd5f54a4479517e056e3dc216f95d1067"
+    # SID de plantilla con botones interactivos Sí/No para confirmación de pedidos
+    # Crear en Twilio Content Editor con botones "Sí, quiero pedir" / "No, gracias"
+    TWILIO_ORDER_CONFIRM_BUTTONS_SID: str = ""
+    # SID de plantilla con botones interactivos Sí/No para confirmación de citas
+    # Crear en Twilio Content Editor con botones "Sí, confirmar" / "Cancelar"
+    TWILIO_APPOINTMENT_CONFIRM_BUTTONS_SID: str = ""
 
     @property
     def twilio_number_pool_list(self) -> list[str]:

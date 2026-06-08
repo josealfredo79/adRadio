@@ -121,6 +121,28 @@ async def send_whatsapp_template(
         return None, error_msg[:20]
 
 
+async def send_whatsapp_buttons(
+    to: str,
+    body: str,
+    template_sid: str,
+    variables: dict | None = None,
+    from_number: str | None = None,
+) -> tuple[str | None, str | None]:
+    """
+    Send a WhatsApp interactive button message via a Content template.
+    Falls back to plain text if template_sid is not configured.
+    Returns (sid, error_message) tuple.
+    """
+    if template_sid:
+        return await send_whatsapp_template(
+            to=to,
+            template_sid=template_sid,
+            variables=variables,
+            from_number=from_number,
+        )
+    return await send_whatsapp(to=to, body=body, from_number=from_number)
+
+
 def anti_ban_delay() -> int:
     """Return a human-paced random delay in seconds to stay under Twilio/WhatsApp rate limits.
 

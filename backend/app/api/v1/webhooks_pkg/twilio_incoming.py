@@ -387,6 +387,8 @@ async def twilio_incoming(
             conv.lead_score = new_score
     conv.last_activity = func.now()
 
+    contact_name = (contact.name or "Cliente").split()[0] if contact else "Cliente"
+
     # Order state machine
     pending_order_result = await db.execute(
         select(Order).where(
@@ -524,12 +526,31 @@ async def twilio_incoming(
         db.add(out_msg)
         await db.commit()
 
+        from app.services.twilio_service import send_whatsapp_buttons
         from app.workers.tasks import send_whatsapp_message, update_contact_engagement_score
-        send_whatsapp_message.apply_async(
-            args=[str(out_msg.id), from_number, order_reply],
-            queue="whatsapp",
-            countdown=2,
-        )
+
+        button_sid = settings.TWILIO_ORDER_CONFIRM_BUTTONS_SID
+        if button_sid:
+            sid, err = await send_whatsapp_buttons(
+                to=contact.phone,
+                body=order_reply,
+                template_sid=button_sid,
+                variables={"1": contact_name},
+                from_number=from_number,
+            )
+            if not sid:
+                logger.warning("[ORDER] Button template failed, falling back to text: %s", err)
+                send_whatsapp_message.apply_async(
+                    args=[str(out_msg.id), from_number, order_reply],
+                    queue="whatsapp",
+                    countdown=2,
+                )
+        else:
+            send_whatsapp_message.apply_async(
+                args=[str(out_msg.id), from_number, order_reply],
+                queue="whatsapp",
+                countdown=2,
+            )
         update_contact_engagement_score.apply_async(
             args=[str(contact.id)],
             queue="whatsapp",

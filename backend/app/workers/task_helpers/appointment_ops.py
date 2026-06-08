@@ -14,7 +14,8 @@ async def send_24h_reminders(db, now):
     from app.models.appointment import Appointment
     from app.models.user import User
     from app.models.contact import Contact
-    from app.services.twilio_service import send_whatsapp
+    from app.services.twilio_service import send_whatsapp, send_whatsapp_buttons
+    from app.config import settings
 
     window_24h_start = now + timedelta(hours=23)
     window_24h_end = now + timedelta(hours=25)
@@ -40,12 +41,13 @@ async def send_24h_reminders(db, now):
                 phone = contact.phone
 
         if phone:
+            contact_name = appt.customer_name.split()[0] if appt.customer_name else ""
             hora = appt.scheduled_at.strftime("%I:%M %p").lstrip("0")
             fecha = appt.scheduled_at.strftime("%A %d de %B")
             biz_name = advertiser.business_name if advertiser else "tu cita"
             msg = (
                 f"📅 *Recordatorio de cita*\n\n"
-                f"Hola {appt.customer_name.split()[0]} 👋, tienes cita mañana:\n"
+                f"Hola {contact_name} 👋, tienes cita mañana:\n"
                 f"📌 *{appt.service}*\n"
                 f"🕐 {fecha} a las {hora}\n"
                 f"🏪 {biz_name}\n\n"
@@ -53,7 +55,20 @@ async def send_24h_reminders(db, now):
                 f"Responde *1* para confirmar ✅\n"
                 f"Responde *2* para cancelar ❌"
             )
-            await send_whatsapp(phone, msg, from_number=from_number)
+            button_sid = settings.TWILIO_APPOINTMENT_CONFIRM_BUTTONS_SID
+            if button_sid:
+                sid, err = await send_whatsapp_buttons(
+                    to=phone,
+                    body=msg,
+                    template_sid=button_sid,
+                    variables={"1": contact_name, "2": appt.service},
+                    from_number=from_number,
+                )
+                if not sid:
+                    logger.warning("[APPT] Button template failed, falling back to text: %s", err)
+                    await send_whatsapp(phone, msg, from_number=from_number)
+            else:
+                await send_whatsapp(phone, msg, from_number=from_number)
             appt.awaiting_confirmation = True
 
         appt.reminder_24h_sent = True
