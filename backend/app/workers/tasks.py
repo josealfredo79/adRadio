@@ -227,7 +227,11 @@ def schedule_campaign(self, campaign_id: str):
                 Contact.status == "active",
             )
             segment_tags = campaign.segment.get("tags", [])
-            if segment_tags:
+            specific_ids = campaign.segment.get("specific_contacts", [])
+
+            if specific_ids:
+                q = q.where(Contact.id.in_([uuid.UUID(c) for c in specific_ids]))
+            elif segment_tags:
                 q = q.where(Contact.tags.overlap(segment_tags))
 
             contacts_result = await db.execute(q)

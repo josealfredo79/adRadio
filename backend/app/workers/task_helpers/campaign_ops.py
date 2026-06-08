@@ -15,9 +15,14 @@ _MIN_ENGAGEMENT_SCORE = 10
 
 
 def _is_contact_active(contact) -> bool:
-    """Skip inactive contacts to reduce ban risk."""
+    """Skip inactive contacts to reduce ban risk.
+    New contacts (never interacted) are always considered active.
+    """
     if contact.status != "active":
         return False
+    # New contact: no interaction history yet, allow through
+    if contact.last_interaction is None and (contact.engagement_score or 0) == 0:
+        return True
     if (contact.engagement_score or 0) < _MIN_ENGAGEMENT_SCORE:
         return False
     if contact.last_interaction is None:
