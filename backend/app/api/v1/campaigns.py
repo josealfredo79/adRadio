@@ -63,6 +63,8 @@ async def list_campaigns(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    from app.models.message import Message
+
     result = await db.execute(
         select(Campaign)
         .where(Campaign.advertiser_id == current_user.id)
@@ -75,8 +77,27 @@ async def list_campaigns(
         .where(Campaign.advertiser_id == current_user.id)
     )
     total = total_result.scalar_one()
-    items = [CampaignOut.model_validate(c) for c in result.scalars().all()]
-    return {"items": [i.model_dump() for i in items], "total": total}
+    campaigns = result.scalars().all()
+
+    # Message counts per campaign
+    campaign_ids = [c.id for c in campaigns]
+    counts_raw = await db.execute(
+        select(Message.campaign_id, Message.status, func.count(Message.id))
+        .where(Message.campaign_id.in_(campaign_ids))
+        .group_by(Message.campaign_id, Message.status)
+    )
+    counts: dict[uuid.UUID, dict[str, int]] = {}
+    for row in counts_raw:
+        cid, status, cnt = row
+        counts.setdefault(cid, {})[status] = cnt
+
+    items = []
+    for c in campaigns:
+        out = CampaignOut.model_validate(c)
+        out.message_counts = counts.get(c.id, {})
+        items.append(out.model_dump())
+
+    return {"items": items, "total": total}
 
 
 @router.post("", response_model=CampaignOut, status_code=status.HTTP_201_CREATED)
@@ -182,6 +203,14 @@ async def resume_campaign(
     campaign = result.scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaña no encontrada")
+    mode = (campaign.ab_test or {}).get("campaign_mode", "regular")
+    if campaign.status == "draft":
+        if mode in ("radio", "comunitaria") and not (campaign.ab_test or {}).get("audio_url"):
+            raise HTTPException(status_code=400, detail="Completa la generación de audio antes de enviar la campaña")
+        if mode in ("banner",) and not campaign.image_url:
+            raise HTTPException(status_code=400, detail="Completa la generación del banner antes de enviar la campaña")
+        if not campaign.message_text and mode == "regular":
+            raise HTTPException(status_code=400, detail="Agrega un mensaje a la campaña antes de enviarla")
     campaign.status = "running"
     await db.commit()
     schedule_campaign.delay(str(campaign.id))

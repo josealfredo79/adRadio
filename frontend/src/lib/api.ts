@@ -44,7 +44,8 @@ api.interceptors.response.use(
     // Don't intercept auth endpoints (login, register, etc.)
     // Let those errors flow to the caller for proper UI feedback.
     const isAuthEndpoint = originalRequest?.url?.includes('/auth/')
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+    const isForbidden = error.response?.status === 403 && error.response?.data?.detail === 'Not authenticated'
+    if ((error.response?.status === 401 || isForbidden) && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true
       try {
         const { data } = await axios.post(

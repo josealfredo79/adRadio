@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
-import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, CalendarClock, BarChart2, X, CalendarRange, CheckCircle2, AlertCircle, Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Megaphone, Plus, Play, Pause, Trash2, Sparkles, Radio, CalendarClock, BarChart2, X, CalendarRange, CheckCircle2, AlertCircle, Download, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import SEO from '@/components/SEO'
 import PrintButton from '@/components/PrintButton'
@@ -15,6 +15,7 @@ interface Campaign {
   message_text: string
   status: string
   stats: Record<string, number>
+  message_counts: Record<string, number>
   ab_test: Record<string, any>
   created_at: string
   schedule?: { start_date?: string; end_date?: string } | null
@@ -196,10 +197,12 @@ export default function CampaignsPage() {
   const pauseMutation = useMutation({
     mutationFn: (id: string) => api.post(`/campaigns/${id}/pause`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }) },
+    onError: (err: unknown) => toast({ title: 'Error', description: getApiError(err, 'Error al pausar campaña'), variant: 'error' }),
   })
   const resumeMutation = useMutation({
     mutationFn: (id: string) => api.post(`/campaigns/${id}/resume`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }) },
+    onError: (err: unknown) => toast({ title: 'Error', description: getApiError(err, 'Error al iniciar campaña'), variant: 'error' }),
   })
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/campaigns/${id}`),
@@ -471,6 +474,15 @@ export default function CampaignsPage() {
                     <span>✅ {campaign.stats.delivered ?? 0} entregados</span>
                     <span>💬 {campaign.stats.replied ?? 0} respondidos</span>
                     <span>🎫 {campaign.stats.coupons_redeemed ?? 0} canjeados</span>
+                    {Object.keys(campaign.message_counts).length > 0 && (
+                      <span title="Estado real de entrega por contacto" className="flex gap-2 ml-2 border-l border-border pl-2">
+                        {campaign.message_counts.sent > 0 && <span className="text-blue-500">📤{campaign.message_counts.sent}</span>}
+                        {campaign.message_counts.delivered > 0 && <span className="text-green-500">✅{campaign.message_counts.delivered}</span>}
+                        {campaign.message_counts.read > 0 && <span className="text-violet-500">👁️{campaign.message_counts.read}</span>}
+                        {campaign.message_counts.failed > 0 && <span className="text-red-500">❌{campaign.message_counts.failed}</span>}
+                        {campaign.message_counts.queued > 0 && <span className="text-amber-500">⏳{campaign.message_counts.queued}</span>}
+                      </span>
+                    )}
                   </div>
                   {(campaign.stats.sent ?? 0) > 0 && (
                     <div className="mt-3 flex flex-wrap items-center gap-4">
@@ -568,15 +580,17 @@ export default function CampaignsPage() {
                   )}
                   {campaign.status === 'running' && (
                     <button onClick={() => pauseMutation.mutate(campaign.id)}
-                      className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30 p-1.5 text-yellow-600 dark:text-yellow-300 hover:bg-yellow-100 shrink-0">
-                      <Pause className="h-3.5 w-3.5" />
+                      disabled={pauseMutation.isPending}
+                      className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30 p-1.5 text-yellow-600 dark:text-yellow-300 hover:bg-yellow-100 shrink-0 disabled:opacity-50">
+                      {pauseMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pause className="h-3.5 w-3.5" />}
                     </button>
                   )}
                   {(campaign.status === 'paused' || campaign.status === 'draft' || campaign.status === 'scheduled') && (
                     <button onClick={() => resumeMutation.mutate(campaign.id)}
+                      disabled={resumeMutation.isPending}
                       title={campaign.status === 'draft' ? "Enviar campaña ahora" : campaign.status === 'scheduled' ? "Forzar envío ahora" : "Reanudar campaña"}
-                      className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-1.5 text-green-600 dark:text-green-300 hover:bg-green-100 transition-colors shrink-0">
-                      <Play className="h-3.5 w-3.5" />
+                      className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-1.5 text-green-600 dark:text-green-300 hover:bg-green-100 transition-colors shrink-0 disabled:opacity-50">
+                      {resumeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                     </button>
                   )}
                   <button onClick={() => { if (confirm('¿Eliminar esta campaña?')) deleteMutation.mutate(campaign.id) }}

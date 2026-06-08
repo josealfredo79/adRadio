@@ -18,10 +18,11 @@ services:
   backend:
     build: ./backend
     env_file: ./backend/.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
-      - db
       - redis
     volumes:
       - ./backend:/app
@@ -30,8 +31,9 @@ services:
   worker:
     build: ./backend
     env_file: ./backend/.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
-      - db
       - redis
     volumes:
       - ./backend:/app
@@ -40,6 +42,8 @@ services:
   beat:
     build: ./backend
     env_file: ./backend/.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - redis
     volumes:

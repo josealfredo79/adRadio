@@ -36,6 +36,7 @@ class CampaignOut(BaseModel):
     ab_test: dict
     status: str
     stats: dict
+    message_counts: dict = {}
     created_at: datetime
 
     model_config = {"from_attributes": True}
