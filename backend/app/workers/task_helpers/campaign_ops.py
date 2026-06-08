@@ -40,7 +40,7 @@ async def _ensure_conversation_window(
     contact_name = (contact.name or "Cliente").split()[0] if contact.name else "Cliente"
     business_name = business_name or "IARadio"
 
-    # Try UTILITY template first (can open window), fall back to MARKETING
+    # Try UTILITY (notificacion_audio_v2) first — can open window outside 24h, fall back to MARKETING (notificacion_informativa)
     used_sid = ""
     sid, error = await send_whatsapp_template(
         to=contact.phone,
