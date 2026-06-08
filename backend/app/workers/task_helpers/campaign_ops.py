@@ -220,14 +220,16 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
 
 
 async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages_list, ban_delay):
-    """Send regular campaign messages with personalization and coupons."""
+    """Send regular campaign messages as audio voice notes with personalization and coupons."""
     from app.models.coupon import Coupon
     from app.models.message import Message
-    from app.workers.tasks import send_whatsapp_message
+    from app.workers.tasks import send_whatsapp_voice_note
     from app.services.claude_service import personalize_message
     from app.services.coupon_service import (
         generate_coupon_code, format_coupon_in_message, default_expiry
     )
+    from app.services.storage_service import upload_bytes
+    from app.services.radio.tts import text_to_speech, LOCUTOR_VOICES
     from app.services.twilio_service import anti_ban_delay
 
     MAX_PER_HOUR = 60
@@ -292,28 +294,58 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             await db.flush()
             body = format_coupon_in_message(body, code, expires_at, coupon_description)
 
-        msg = Message(
-            campaign_id=campaign.id,
-            contact_id=contact.id,
-            advertiser_id=campaign.advertiser_id,
-            direction="outbound",
-            content=body,
-            status="queued",
-            scheduled_for=datetime.now(timezone.utc),
-        )
-        db.add(msg)
-        await db.flush()
+        voice = LOCUTOR_VOICES.get("mx", LOCUTOR_VOICES["default"])
+        audio_url = None
+        try:
+            mp3_bytes = await text_to_speech(body, voice)
+            key = f"tts/{campaign.id}/{contact.id}_{uuid.uuid4().hex[:8]}.mp3"
+            audio_url = await upload_bytes(mp3_bytes, key, "audio/mpeg")
+        except Exception as tts_err:
+            logger.error("[CAMPAIGN] TTS failed for contact %s: %s", contact.id, tts_err)
+
+        if audio_url:
+            msg = Message(
+                campaign_id=campaign.id,
+                contact_id=contact.id,
+                advertiser_id=campaign.advertiser_id,
+                direction="outbound",
+                content=f"[AUDIO] {audio_url}",
+                status="queued",
+                scheduled_for=datetime.now(timezone.utc),
+            )
+            db.add(msg)
+            await db.flush()
+
+            send_whatsapp_voice_note.apply_async(
+                args=[str(msg.id), contact.phone, audio_url, body],
+                countdown=ban_delay,
+                queue="whatsapp",
+            )
+        else:
+            from app.workers.tasks import send_whatsapp_message
+            msg = Message(
+                campaign_id=campaign.id,
+                contact_id=contact.id,
+                advertiser_id=campaign.advertiser_id,
+                direction="outbound",
+                content=body,
+                status="queued",
+                scheduled_for=datetime.now(timezone.utc),
+            )
+            db.add(msg)
+            await db.flush()
+
+            send_whatsapp_message.apply_async(
+                args=[str(msg.id), contact.phone, body],
+                countdown=ban_delay,
+                queue="whatsapp",
+            )
 
         if ab_enabled and ab_variant == "b":
             ab_stats_b["sent"] = ab_stats_b.get("sent", 0) + 1
         else:
             ab_stats_a["sent"] = ab_stats_a.get("sent", 0) + 1
 
-        send_whatsapp_message.apply_async(
-            args=[str(msg.id), contact.phone, body],
-            countdown=ban_delay,
-            queue="whatsapp",
-        )
         advertiser.messages_remaining -= 1
         ban_delay += anti_ban_delay()
 
