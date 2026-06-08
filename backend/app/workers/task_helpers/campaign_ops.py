@@ -10,6 +10,23 @@ from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
+_ACTIVE_CUTOFF_DAYS = 90
+_MIN_ENGAGEMENT_SCORE = 10
+
+
+def _is_contact_active(contact) -> bool:
+    """Skip inactive contacts to reduce ban risk."""
+    if contact.status != "active":
+        return False
+    if (contact.engagement_score or 0) < _MIN_ENGAGEMENT_SCORE:
+        return False
+    if contact.last_interaction is None:
+        return False
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_ACTIVE_CUTOFF_DAYS)
+    if contact.last_interaction < cutoff:
+        return False
+    return True
+
 
 async def _ensure_conversation_window(
     db,
@@ -96,6 +113,10 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         if advertiser.messages_remaining <= 0:
             break
 
+        if not _is_contact_active(contact):
+            logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
+            continue
+
         if idx_b > 0 and idx_b % MAX_PER_HOUR == 0:
             ban_delay = int(idx_b / MAX_PER_HOUR) * 3600
 
@@ -162,6 +183,10 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         if advertiser.messages_remaining <= 0:
             break
 
+        if not _is_contact_active(contact):
+            logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
+            continue
+
         if idx_r > 0 and idx_r % MAX_PER_HOUR == 0:
             ban_delay = int(idx_r / MAX_PER_HOUR) * 3600
 
@@ -224,6 +249,10 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     for i, contact in enumerate(contacts):
         if advertiser.messages_remaining <= 0:
             break
+
+        if not _is_contact_active(contact):
+            logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
+            continue
 
         if i > 0 and i % MAX_PER_HOUR == 0:
             ban_delay = int(i / MAX_PER_HOUR) * 3600
@@ -376,6 +405,10 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
     for contact in contacts:
         if advertiser.messages_remaining <= 0:
             break
+
+        if not _is_contact_active(contact):
+            logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
+            continue
 
         extra = await _ensure_conversation_window(
             db, advertiser.id, contact, from_number,
