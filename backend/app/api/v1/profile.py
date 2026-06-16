@@ -23,7 +23,14 @@ from app.models.order import Order
 from app.models.user import User
 from app.schemas.auth import UserOut
 from app.schemas.profile import ProfileUpdate
-from app.services.number_pool_service import assign_pool_number, release_pool_number, pool_status
+from app.services.number_pool_service import (
+    assign_pool_number,
+    assign_specific_pool_number,
+    release_pool_number,
+    add_pool_number,
+    remove_pool_number,
+    list_pool_numbers,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -262,15 +269,6 @@ async def update_white_label(
     return WhiteLabelOut(**current_user.white_label)
 
 
-@router.get("/admin/number-pool")
-async def list_number_pool(
-    db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
-):
-    """List all numbers in the pool and their assignment status."""
-    return await pool_status(db)
-
-
 @router.post("/admin/users/{user_id}/assign-number")
 async def assign_number_to_user(
     user_id: str,
@@ -280,8 +278,9 @@ async def assign_number_to_user(
 ):
     """
     Assign/release a WhatsApp number for a user.
-    body: { "auto": true }    → picks next free number from pool
-    body: { "release": true } → releases number back to pool
+    body: { "auto": true }             → picks next free number from pool
+    body: { "number": "+521234567890" } → assigns a specific number from pool
+    body: { "release": true }          → releases number back to pool
     """
     result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()
@@ -293,8 +292,63 @@ async def assign_number_to_user(
         await db.commit()
         return {"message": "Número liberado — usuario vuelve al número compartido"}
 
+    if body.get("number"):
+        assigned = await assign_specific_pool_number(user, db, body["number"])
+        if not assigned:
+            raise HTTPException(
+                status_code=409,
+                detail="Número no disponible — no está en el pool, ya está asignado a otro usuario, o no es válido",
+            )
+        await db.commit()
+        return {"message": f"Número {user.whatsapp_number} asignado a {user.email}", "number": user.whatsapp_number}
+
     assigned = await assign_pool_number(user, db)
     if not assigned:
         raise HTTPException(status_code=409, detail="Pool agotado o no configurado (TWILIO_NUMBER_POOL)")
     await db.commit()
     return {"message": f"Número {user.whatsapp_number} asignado a {user.email}", "number": user.whatsapp_number}
+
+
+@router.post("/admin/number-pool")
+async def add_number_to_pool(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Add a number to the pool. body: { "number": "+525511111111", "label": "Opcional" }"""
+    number = body.get("number", "").strip()
+    if not number:
+        raise HTTPException(status_code=400, detail="Número requerido")
+    try:
+        entry = await add_pool_number(db, number=number, label=body.get("label"))
+        await db.commit()
+        return {"message": f"Número {number} agregado al pool", "id": str(entry.id)}
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.delete("/admin/number-pool/{number:path}")
+async def remove_number_from_pool(
+    number: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Remove a number from the pool (soft-delete)."""
+    try:
+        removed = await remove_pool_number(db, number)
+        if not removed:
+            raise HTTPException(status_code=404, detail="Número no encontrado en el pool")
+        await db.commit()
+        return {"message": f"Número {number} eliminado del pool"}
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.get("/admin/number-pool")
+async def list_all_pool_numbers(
+    include_inactive: bool = False,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """List all numbers in the pool with their status."""
+    return await list_pool_numbers(db, include_inactive=include_inactive)

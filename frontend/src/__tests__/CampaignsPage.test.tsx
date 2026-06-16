@@ -34,6 +34,13 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }))
 
+vi.mock('@/contexts/ToastContext', () => ({
+  useToast: () => ({
+    toast: vi.fn(),
+  }),
+}))
+
+
 const mockCampaignsPage = {
   items: [
     { id: '1', name: 'Promo Junio', type: 'promo', message_text: 'Texto promo', status: 'running', stats: { sent: 100, delivered: 95, read: 50 }, ab_test: {}, created_at: '2025-01-01T00:00:00Z', schedule: null },

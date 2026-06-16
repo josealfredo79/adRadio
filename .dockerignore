@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+.pytest_cache/
+*.md
+test_audio.ogg
+demo_banner_*.png
+proyeccion_financiera.html
+celerybeat-schedule

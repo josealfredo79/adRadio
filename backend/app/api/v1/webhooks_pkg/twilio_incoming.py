@@ -52,7 +52,7 @@ async def twilio_incoming(
     signature = request.headers.get("X-Twilio-Signature", "")
     form_data = dict(await request.form())
 
-    if settings.TWILIO_AUTH_TOKEN and not settings.DEBUG:
+    if settings.TWILIO_AUTH_TOKEN:
         url = str(request.url)
         if signature:
             if not _validate_twilio_signature(url, form_data, signature):
@@ -61,6 +61,8 @@ async def twilio_incoming(
                 alt_url = re.sub(r"^https?://[^/]+", base_url, url)
                 if alt_url == url or not _validate_twilio_signature(alt_url, form_data, signature):
                     logger.warning("[WEBHOOK] Signature validation failed — url=%s alt_url=%s", url, alt_url)
+        elif not settings.DEBUG:
+            logger.warning("[WEBHOOK] Missing X-Twilio-Signature header — request from %s", request.client.host if request.client else "unknown")
 
     from_number = form_data.get("From", "").replace("whatsapp:", "")
     to_number = form_data.get("To", "").replace("whatsapp:", "")
@@ -536,7 +538,7 @@ async def twilio_incoming(
                 body=order_reply,
                 template_sid=button_sid,
                 variables={"1": contact_name},
-                from_number=from_number,
+                from_number=advertiser.whatsapp_number,
             )
             if not sid:
                 logger.warning("[ORDER] Button template failed, falling back to text: %s", err)

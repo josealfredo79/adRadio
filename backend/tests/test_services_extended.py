@@ -604,52 +604,57 @@ class TestNumberPoolService:
 
     @pytest.mark.asyncio
     async def test_assign_pool_number_empty_pool(self):
-        with patch("app.services.number_pool_service.settings") as mock_settings:
-            mock_settings.twilio_number_pool_list = []
+        from app.services.number_pool_service import assign_pool_number
 
-            from app.services.number_pool_service import assign_pool_number
+        user = MagicMock()
+        db = AsyncMock()
+        # Mock pool numbers query → empty
+        pool_result = MagicMock()
+        pool_result.fetchall.return_value = []
+        db.execute.return_value = pool_result
 
-            user = MagicMock()
-            db = AsyncMock()
-            result = await assign_pool_number(user, db)
-            assert result is False
+        result = await assign_pool_number(user, db)
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_assign_pool_number_success(self):
-        with patch("app.services.number_pool_service.settings") as mock_settings:
-            mock_settings.twilio_number_pool_list = ["+521111111111", "+522222222222"]
+        from app.services.number_pool_service import assign_pool_number
 
-            from app.services.number_pool_service import assign_pool_number
+        user = MagicMock()
+        user.whatsapp_number = None
+        user.whatsapp_number_source = "shared"
+        db = AsyncMock()
+        # Mock pool numbers → return 2 numbers
+        pool_result = MagicMock()
+        pool_result.fetchall.return_value = [("+521111111111",), ("+522222222222",)]
+        # Mock assigned numbers → return 1 already assigned
+        assigned_result = MagicMock()
+        assigned_result.fetchall.return_value = [("+521111111111",)]
+        # First call returns pool, second call returns assigned
+        db.execute.side_effect = [pool_result, assigned_result]
 
-            user = MagicMock()
-            user.whatsapp_number = None
-            user.whatsapp_number_source = "shared"
-            db = AsyncMock()
-            db_result = MagicMock()
-            db_result.fetchall.return_value = [("+521111111111",)]
-            db.execute.return_value = db_result
-
-            result = await assign_pool_number(user, db)
-            assert result is True
-            assert user.whatsapp_number == "+522222222222"
-            assert user.whatsapp_number_source == "pool"
-            db.flush.assert_awaited_once()
+        result = await assign_pool_number(user, db)
+        assert result is True
+        assert user.whatsapp_number == "+522222222222"
+        assert user.whatsapp_number_source == "pool"
+        db.flush.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_assign_pool_number_exhausted(self):
-        with patch("app.services.number_pool_service.settings") as mock_settings:
-            mock_settings.twilio_number_pool_list = ["+521111111111"]
+        from app.services.number_pool_service import assign_pool_number
 
-            from app.services.number_pool_service import assign_pool_number
+        db = AsyncMock()
+        # Mock pool numbers → return 1 number
+        pool_result = MagicMock()
+        pool_result.fetchall.return_value = [("+521111111111",)]
+        # Mock assigned numbers → return same number as taken
+        assigned_result = MagicMock()
+        assigned_result.fetchall.return_value = [("+521111111111",)]
+        db.execute.side_effect = [pool_result, assigned_result]
 
-            db = AsyncMock()
-            db_result = MagicMock()
-            db_result.fetchall.return_value = [("+521111111111",)]
-            db.execute.return_value = db_result
-
-            user = MagicMock()
-            result = await assign_pool_number(user, db)
-            assert result is False
+        user = MagicMock()
+        result = await assign_pool_number(user, db)
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_release_pool_number(self):
@@ -679,33 +684,39 @@ class TestNumberPoolService:
 
     @pytest.mark.asyncio
     async def test_pool_status(self):
-        with patch("app.services.number_pool_service.settings") as mock_settings:
-            mock_settings.twilio_number_pool_list = ["+521111111111", "+522222222222", "+523333333333"]
+        from app.services.number_pool_service import pool_status
 
-            from app.services.number_pool_service import pool_status
+        db = AsyncMock()
+        # Mock pool numbers → return 3 numbers
+        pool_result = MagicMock()
+        pool_result.fetchall.return_value = [
+            ("+521111111111",), ("+522222222222",), ("+523333333333",)
+        ]
+        # Mock assigned users → return 2 assigned
+        assigned_result = MagicMock()
+        assigned_result.fetchall.return_value = [
+            ("+521111111111", "a@b.com", "Negocio A"),
+            ("+522222222222", "c@d.com", "Negocio C"),
+        ]
+        db.execute.side_effect = [pool_result, assigned_result]
 
-            db = AsyncMock()
-            db_result = MagicMock()
-            db_result.fetchall.return_value = [
-                ("+521111111111", "a@b.com", "Negocio A"),
-                ("+522222222222", "c@d.com", "Negocio C"),
-            ]
-            db.execute.return_value = db_result
-
-            status = await pool_status(db)
-            assert status["total"] == 3
-            assert status["assigned"] == 2
-            assert status["free"] == 1
-            assert len(status["numbers"]) == 3
+        status = await pool_status(db)
+        assert status["total"] == 3
+        assert status["assigned"] == 2
+        assert status["free"] == 1
+        assert len(status["numbers"]) == 3
 
     @pytest.mark.asyncio
     async def test_pool_status_empty(self):
-        with patch("app.services.number_pool_service.settings") as mock_settings:
-            mock_settings.twilio_number_pool_list = []
+        from app.services.number_pool_service import pool_status
 
-            from app.services.number_pool_service import pool_status
-            status = await pool_status(AsyncMock())
-            assert status == {"total": 0, "assigned": 0, "free": 0, "numbers": []}
+        db = AsyncMock()
+        pool_result = MagicMock()
+        pool_result.fetchall.return_value = []
+        db.execute.return_value = pool_result
+
+        status = await pool_status(db)
+        assert status == {"total": 0, "assigned": 0, "free": 0, "numbers": []}
 
 
 class TestRadioScripts:

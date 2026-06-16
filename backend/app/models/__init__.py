@@ -15,6 +15,7 @@ from app.models.automation import AutomationFlow, AutomationStep, AutomationEnro
 from app.models.customer_story import CustomerStory
 from app.models.user_webhook import UserWebhook
 from app.models.api_key import ApiKey
+from app.models.pool_number import PoolNumber
 
 __all__ = [
     "User",
@@ -36,4 +37,5 @@ __all__ = [
     "CustomerStory",
     "UserWebhook",
     "ApiKey",
+    "PoolNumber",
 ]

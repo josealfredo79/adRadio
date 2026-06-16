@@ -26,6 +26,13 @@ logger = logging.getLogger(__name__)
 if settings.SENTRY_DSN:
     sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=0.1)
 
+if settings.DEBUG and (settings.TWILIO_AUTH_TOKEN or settings.STRIPE_SECRET_KEY):
+    logger.warning("=" * 60)
+    logger.warning("⚠️  DEBUG MODE ACTIVADO CON CREDENCIALES REALES")
+    logger.warning("   Twilio signature validation está DESHABILITADA")
+    logger.warning("   NO uses DEBUG=true en producción")
+    logger.warning("=" * 60)
+
 # Rate limiter — intenta usar Redis para que el límite sea GLOBAL entre todos los workers.
 # Si Redis no está disponible al arrancar (ej. primer deploy), cae a memoria local como fallback.
 # Esto evita que cada proceso Uvicorn tenga un contador independiente en producción.
