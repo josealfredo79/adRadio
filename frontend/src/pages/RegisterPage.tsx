@@ -91,9 +91,9 @@ export default function RegisterPage() {
 
             <p className="text-xs text-gray-400 dark:text-gray-500">
               Al registrarte aceptas nuestros{' '}
-              <a href="#" className="text-brand-600 hover:underline dark:text-brand-400">Términos de uso</a>{' '}
+              <Link to="/terms" className="text-brand-600 hover:underline dark:text-brand-400">Términos de uso</Link>{' '}
               y{' '}
-              <a href="#" className="text-brand-600 hover:underline dark:text-brand-400">Política de privacidad</a>.
+              <Link to="/privacy" className="text-brand-600 hover:underline dark:text-brand-400">Política de privacidad</Link>.
             </p>
 
             <button
