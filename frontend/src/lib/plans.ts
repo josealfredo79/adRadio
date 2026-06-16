@@ -112,7 +112,6 @@ export const PLANS_CONFIG: PlanDefinition[] = [
       'Todo lo de Pro',
       'Campañas saga (4 episodios semanales)',
       'A/B testing de mensajes',
-      'Multi-agente IA',
       'Analytics avanzados',
       'API de integración',
       'Gerente de cuenta dedicado',
