@@ -64,39 +64,61 @@ async def create_checkout_session(
 
     plan = PLANS[plan_key]
 
-    # Ensure Stripe customer
-    if not current_user.stripe_customer_id:
-        customer = stripe_lib.Customer.create(
-            email=current_user.email,
-            metadata={"user_id": str(current_user.id)},
+    try:
+        customer_id = await _resolve_stripe_customer(current_user, db)
+        session = stripe_lib.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=["card"],
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {"name": f"IaRadio {plan['name']}"},
+                        "unit_amount": plan["price_usd"] * 100,
+                        "recurring": {"interval": "month"},
+                    },
+                    "quantity": 1,
+                }
+            ],
+            mode="subscription",
+            success_url=f"{settings.FRONTEND_URL}/app/dashboard?success=1",
+            cancel_url=f"{settings.FRONTEND_URL}/app/plans",
+            metadata={"plan": plan_key, "user_id": str(current_user.id)},
         )
-        current_user.stripe_customer_id = customer.id
-        await db.commit()
-
-    session = stripe_lib.checkout.Session.create(
-        customer=current_user.stripe_customer_id,
-        payment_method_types=["card"],
-        line_items=[
-            {
-                "price_data": {
-                    "currency": "usd",
-                    "product_data": {"name": f"IaRadio {plan['name']}"},
-                    "unit_amount": plan["price_usd"] * 100,
-                    "recurring": {"interval": "month"},
-                },
-                "quantity": 1,
-            }
-        ],
-        mode="subscription",
-        success_url=f"{settings.FRONTEND_URL}/app/dashboard?success=1",
-        cancel_url=f"{settings.FRONTEND_URL}/app/plans",
-        metadata={"plan": plan_key, "user_id": str(current_user.id)},
-    )
+    except stripe_lib.error.InvalidRequestError as e:
+        if "No such customer" in str(e):
+            current_user.stripe_customer_id = None
+            await db.commit()
+            return await create_checkout_session(
+                request, body, current_user, db, _, redis
+            )
+        logger.exception("Stripe InvalidRequestError: %s", e)
+        raise HTTPException(status_code=502, detail="Error de comunicación con Stripe")
+    except stripe_lib.error.AuthenticationError:
+        logger.exception("Stripe AuthenticationError — revisa STRIPE_SECRET_KEY")
+        raise HTTPException(status_code=502, detail="Error de autenticación con Stripe")
+    except stripe_lib.error.StripeError as e:
+        logger.exception("Stripe error inesperado: %s", e)
+        raise HTTPException(status_code=502, detail="Error al procesar el pago. Stripe puede no estar activado para cobros en vivo.")
 
     logger.info("Checkout session created for user %s, plan %s", current_user.id, plan_key)
     out = {"checkout_url": session.url}
     await store_idempotency_response(request, redis, out)
     return out
+
+
+async def _resolve_stripe_customer(user: User, db: AsyncSession) -> str:
+    """Return a valid Stripe customer ID, creating one if needed or if the
+    existing one is stale (e.g. from a previous test/live key switch)."""
+    if user.stripe_customer_id:
+        return user.stripe_customer_id
+    customer = stripe_lib.Customer.create(
+        email=user.email,
+        metadata={"user_id": str(user.id)},
+    )
+    user.stripe_customer_id = customer.id
+    await db.commit()
+    return customer.id
 
 
 @router.post("/cancel-subscription")
