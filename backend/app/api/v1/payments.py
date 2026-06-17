@@ -55,16 +55,16 @@ async def create_checkout_session(
     _: None = Depends(idempotent_post),
     redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> dict:
-    plan_key = body.plan
-    if plan_key not in PLANS:
-        raise HTTPException(status_code=400, detail="Plan inválido")
-
-    if not settings.STRIPE_SECRET_KEY:
-        raise HTTPException(status_code=503, detail="Pagos no configurados")
-
-    plan = PLANS[plan_key]
-
     try:
+        plan_key = body.plan
+        if plan_key not in PLANS:
+            raise HTTPException(status_code=400, detail="Plan inválido")
+
+        if not settings.STRIPE_SECRET_KEY:
+            raise HTTPException(status_code=503, detail="Pagos no configurados")
+
+        plan = PLANS[plan_key]
+
         customer_id = await _resolve_stripe_customer(current_user, db)
         session = stripe_lib.checkout.Session.create(
             customer=customer_id,
@@ -85,6 +85,14 @@ async def create_checkout_session(
             cancel_url=f"{settings.FRONTEND_URL}/app/plans",
             metadata={"plan": plan_key, "user_id": str(current_user.id)},
         )
+
+        logger.info("Checkout session created for user %s, plan %s", current_user.id, plan_key)
+        out = {"checkout_url": session.url}
+        await store_idempotency_response(request, redis, out)
+        return out
+
+    except HTTPException:
+        raise
     except stripe_lib.error.InvalidRequestError as e:
         if "No such customer" in str(e):
             current_user.stripe_customer_id = None
@@ -100,18 +108,20 @@ async def create_checkout_session(
     except stripe_lib.error.StripeError as e:
         logger.exception("Stripe error inesperado: %s", e)
         raise HTTPException(status_code=502, detail="Error al procesar el pago. Stripe puede no estar activado para cobros en vivo.")
-
-    logger.info("Checkout session created for user %s, plan %s", current_user.id, plan_key)
-    out = {"checkout_url": session.url}
-    await store_idempotency_response(request, redis, out)
-    return out
+    except Exception as e:
+        logger.exception("Error inesperado en create_checkout_session (tipo=%s): %s", type(e).__name__, e)
+        raise HTTPException(status_code=500, detail=f"Error interno al crear sesión de pago: {type(e).__name__}")
 
 
 async def _resolve_stripe_customer(user: User, db: AsyncSession) -> str:
-    """Return a valid Stripe customer ID, creating one if needed or if the
-    existing one is stale (e.g. from a previous test/live key switch)."""
     if user.stripe_customer_id:
-        return user.stripe_customer_id
+        try:
+            stripe_lib.Customer.retrieve(user.stripe_customer_id)
+            return user.stripe_customer_id
+        except stripe_lib.error.InvalidRequestError:
+            logger.warning("Stripe customer %s no existe (test→live?), creando uno nuevo", user.stripe_customer_id)
+            user.stripe_customer_id = None
+            await db.commit()
     customer = stripe_lib.Customer.create(
         email=user.email,
         metadata={"user_id": str(user.id)},
