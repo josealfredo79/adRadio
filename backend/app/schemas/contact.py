@@ -34,6 +34,7 @@ class ContactUpdate(BaseModel):
     language: str | None = None
     notes: str | None = None
     status: str | None = None
+    engagement_score: int | None = None
 
     @field_validator("status")
     @classmethod
