@@ -23,8 +23,8 @@ def _is_contact_active(contact) -> bool:
     # New contact: no interaction history yet, allow through
     if contact.last_interaction is None and (contact.engagement_score or 0) == 0:
         return True
-    if (contact.engagement_score or 0) < _MIN_ENGAGEMENT_SCORE:
-        return False
+    if (contact.engagement_score or 0) >= _MIN_ENGAGEMENT_SCORE:
+        return True
     if contact.last_interaction is None:
         return False
     cutoff = datetime.now(timezone.utc) - timedelta(days=_ACTIVE_CUTOFF_DAYS)
