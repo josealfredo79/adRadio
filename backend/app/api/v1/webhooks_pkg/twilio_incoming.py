@@ -4,6 +4,7 @@ Twilio incoming webhook — handle inbound WhatsApp messages.
 import hashlib
 import hmac
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, func
@@ -623,46 +624,76 @@ async def twilio_incoming(
     await db.commit()
 
     from app.workers.tasks import send_whatsapp_message, send_welcome_cuna, update_contact_engagement_score
-    send_whatsapp_message.apply_async(
-        args=[str(out_msg.id), from_number, reply],
-        queue="whatsapp",
-    )
-    update_contact_engagement_score.apply_async(
-        args=[str(contact.id)],
-        queue="whatsapp",
-        countdown=10,
-    )
+    from app.services.twilio_service import send_whatsapp as _send_wa_direct
 
-    if _is_new_contact and advertiser.business_name:
-        send_welcome_cuna.apply_async(
-            kwargs={
-                "advertiser_id": str(advertiser.id),
-                "to": from_number,
-                "business_name": advertiser.business_name,
-                "from_number": advertiser.whatsapp_number,
-            },
+    try:
+        send_whatsapp_message.apply_async(
+            args=[str(out_msg.id), from_number, reply],
+            queue="whatsapp",
+        )
+    except Exception as celery_err:
+        logger.error("[WEBHOOK] Celery unavailable, sending direct: %s", celery_err)
+        sid_direct, err_direct = await _send_wa_direct(
+            from_number, reply,
+            from_number=advertiser.whatsapp_number,
+        )
+        if sid_direct:
+            out_msg.status = "sent"
+            out_msg.twilio_sid = sid_direct
+            out_msg.sent_at = datetime.now(timezone.utc)
+        else:
+            out_msg.status = "failed"
+            out_msg.error_code = err_direct
+        await db.commit()
+
+    try:
+        update_contact_engagement_score.apply_async(
+            args=[str(contact.id)],
             queue="whatsapp",
             countdown=10,
         )
-        from app.workers.tasks import trigger_automation_for_contact
-        trigger_automation_for_contact.apply_async(
-            args=[str(contact.id), str(advertiser.id), "new_contact"],
-            queue="whatsapp",
-            countdown=15,
-        )
-    else:
-        from app.workers.tasks import trigger_automation_for_contact
-        trigger_automation_for_contact.apply_async(
-            args=[str(contact.id), str(advertiser.id), "keyword", body_text],
-            queue="whatsapp",
-            countdown=5,
-        )
+    except Exception:
+        logger.warning("[WEBHOOK] Failed to queue engagement score update")
 
-    from app.workers.tasks import auto_tag_contact_from_conversation
-    auto_tag_contact_from_conversation.apply_async(
-        args=[str(contact.id)],
-        queue="whatsapp",
-        countdown=30,
-    )
+    if _is_new_contact and advertiser.business_name:
+        try:
+            send_welcome_cuna.apply_async(
+                kwargs={
+                    "advertiser_id": str(advertiser.id),
+                    "to": from_number,
+                    "business_name": advertiser.business_name,
+                    "from_number": advertiser.whatsapp_number,
+                },
+                queue="whatsapp",
+                countdown=10,
+            )
+        except Exception:
+            logger.warning("[WEBHOOK] Failed to queue welcome cuna")
+        try:
+            trigger_automation_for_contact.apply_async(
+                args=[str(contact.id), str(advertiser.id), "new_contact"],
+                queue="whatsapp",
+                countdown=15,
+            )
+        except Exception:
+            logger.warning("[WEBHOOK] Failed to queue automation")
+    else:
+        try:
+            trigger_automation_for_contact.apply_async(
+                args=[str(contact.id), str(advertiser.id), "keyword", body_text],
+                queue="whatsapp",
+                countdown=5,
+            )
+        except Exception:
+            logger.warning("[WEBHOOK] Failed to queue automation")
+
+    try:
+        auto_tag_contact_from_conversation.apply_async(
+            args=[str(contact.id)],
+            queue="whatsapp",
+            countdown=30,
+        )
+    except Exception:
+        logger.warning("[WEBHOOK] Failed to queue auto-tag")
 
     return {"message": "ok"}
