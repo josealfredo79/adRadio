@@ -68,6 +68,10 @@ async def twilio_incoming(
     from_number = form_data.get("From", "").replace("whatsapp:", "")
     to_number = form_data.get("To", "").replace("whatsapp:", "")
     body_text = form_data.get("Body", "").strip()
+    logger.info(
+        "[WEBHOOK] Incoming — From=%s To=%s Body=%s MessageSid=%s",
+        from_number, to_number, body_text[:50], form_data.get("MessageSid", ""),
+    )
 
     # Idempotency — skip if this message was already processed
     message_sid = form_data.get("MessageSid", "")
@@ -110,6 +114,9 @@ async def twilio_incoming(
     existing_contact = contact_from_result.scalars().first()
     if existing_contact:
         advertiser = await db.get(User, existing_contact.advertiser_id)
+        logger.info("[WEBHOOK] Step1: contact found — advertiser=%s biz=%s", advertiser.id if advertiser else None, advertiser.business_name if advertiser else None)
+    else:
+        logger.info("[WEBHOOK] Step1: no contact for From=%s", from_number)
 
     # 2. Fallback: look up advertiser by To number (dedicated/pool numbers, or shared number default)
     if not advertiser:
@@ -119,17 +126,22 @@ async def twilio_incoming(
             without1 = "+52" + to_number_clean[2:]
             with1 = "+521" + to_number_clean[2:]
             candidates.extend([without1, with1])
+        logger.info("[WEBHOOK] Step2: trying candidates=%s", candidates)
         for candidate in candidates:
             result = await db.execute(
                 select(User).where(User.whatsapp_number == candidate)
             )
             advertiser = result.scalar_one_or_none()
             if advertiser:
+                logger.info("[WEBHOOK] Step2: found by whatsapp_number=%s advertiser=%s", candidate, advertiser.id)
                 break
+        if not advertiser:
+            logger.info("[WEBHOOK] Step2: no advertiser by To number")
 
     # 3. Fallback for shared Twilio number: look up most recent outbound message
     #    to this From number — the last advertiser who messaged them is the owner.
     if not advertiser and to_number in (settings.TWILIO_WHATSAPP_NUMBER, settings.TWILIO_WHATSAPP_NUMBER.replace("whatsapp:", "")):
+        logger.info("[WEBHOOK] Step3: shared number fallback — looking for outbound to From=%s", from_number)
         recent = await db.execute(
             select(Message)
             .join(Contact, Message.contact_id == Contact.id)
@@ -144,6 +156,9 @@ async def twilio_incoming(
         recent_msg = recent.scalars().first()
         if recent_msg:
             advertiser = await db.get(User, recent_msg.advertiser_id)
+            logger.info("[WEBHOOK] Step3: found outbound msg %s — advertiser=%s", recent_msg.id, advertiser.id if advertiser else None)
+        else:
+            logger.info("[WEBHOOK] Step3: no outbound msgs found")
 
     if not advertiser:
         logger.warning("[WEBHOOK] No advertiser found for number %s", to_number)
