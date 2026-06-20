@@ -108,15 +108,21 @@ async def twilio_incoming(
     advertiser = None
 
     # 1. Try to find existing contact by their phone → get their advertiser
+    from_clean = from_number.lstrip("+").replace(" ", "")
+    from_candidates = [from_number]
+    if from_clean.startswith("521"):
+        from_candidates.append("+52" + from_clean[3:])
+    elif from_clean.startswith("52"):
+        from_candidates.append("+521" + from_clean[2:])
     contact_from_result = await db.execute(
-        select(Contact).where(Contact.phone == from_number).order_by(Contact.created_at.desc())
+        select(Contact).where(Contact.phone.in_(from_candidates)).order_by(Contact.created_at.desc())
     )
     existing_contact = contact_from_result.scalars().first()
     if existing_contact:
         advertiser = await db.get(User, existing_contact.advertiser_id)
-        logger.warning("[WEBHOOK] Step1: contact found — advertiser=%s biz=%s", advertiser.id if advertiser else None, advertiser.business_name if advertiser else None)
+        logger.warning("[WEBHOOK] Step1: contact found — phone=%s advertiser=%s biz=%s", existing_contact.phone, advertiser.id if advertiser else None, advertiser.business_name if advertiser else None)
     else:
-        logger.warning("[WEBHOOK] Step1: NO contact for From=%s", from_number)
+        logger.warning("[WEBHOOK] Step1: NO contact for From=%s candidates=%s", from_number, from_candidates)
 
     # 2. Fallback: look up advertiser by To number (dedicated/pool numbers, or shared number default)
     if not advertiser:
@@ -148,7 +154,7 @@ async def twilio_incoming(
             .where(
                 Message.direction == "outbound",
                 Message.twilio_sid.isnot(None),
-                Contact.phone == from_number,
+                Contact.phone.in_(from_candidates),
             )
             .order_by(Message.created_at.desc())
             .limit(1)
