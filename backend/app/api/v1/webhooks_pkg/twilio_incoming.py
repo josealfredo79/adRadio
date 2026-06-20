@@ -126,6 +126,24 @@ async def twilio_incoming(
             if advertiser:
                 break
 
+    # 3. Fallback for shared Twilio number: look up most recent outbound message
+    #    to this From number — the last advertiser who messaged them is the owner.
+    if not advertiser and to_number in (settings.TWILIO_WHATSAPP_NUMBER, settings.TWILIO_WHATSAPP_NUMBER.replace("whatsapp:", "")):
+        recent = await db.execute(
+            select(Message)
+            .join(Contact, Message.contact_id == Contact.id)
+            .where(
+                Message.direction == "outbound",
+                Message.twilio_sid.isnot(None),
+                Contact.phone == from_number,
+            )
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        recent_msg = recent.scalars().first()
+        if recent_msg:
+            advertiser = await db.get(User, recent_msg.advertiser_id)
+
     if not advertiser:
         logger.warning("[WEBHOOK] No advertiser found for number %s", to_number)
         return {"message": "advertiser_not_found"}
@@ -567,15 +585,25 @@ async def twilio_incoming(
     if audio_transcription:
         rag_query = f"[El cliente envió un mensaje de voz. Transcripción: {audio_transcription}]"
 
-    reply = await answer_with_rag(
-        advertiser_id=str(advertiser.id),
-        query=rag_query,
-        conversation_history=history,
-        db=db,
-        business_name=advertiser.business_name or "el negocio",
-        bot_name=advertiser.bot_name or "Asistente",
-        bot_personality=advertiser.bot_personality or "amigable y profesional",
-    )
+    try:
+        reply = await answer_with_rag(
+            advertiser_id=str(advertiser.id),
+            query=rag_query,
+            conversation_history=history,
+            db=db,
+            business_name=advertiser.business_name or "el negocio",
+            bot_name=advertiser.bot_name or "Asistente",
+            bot_personality=advertiser.bot_personality or "amigable y profesional",
+        )
+    except Exception as e:
+        logger.error("[WEBHOOK] RAG/Claude error: %s", e, exc_info=True)
+        biz = advertiser.business_name or "el negocio"
+        name = advertiser.bot_name or "Asistente"
+        reply = (
+            f"Hola! Soy {name} de {biz}. "
+            "En este momento tengo problemas para consultar mi base de conocimiento. "
+            "¿Puedes intentarlo de nuevo en unos minutos? 😊"
+        )
 
     updated_msgs = conv.messages + [
         {"role": "user", "content": body_text},

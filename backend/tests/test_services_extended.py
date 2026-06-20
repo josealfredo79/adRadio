@@ -266,6 +266,7 @@ class TestRagService:
             user.business_name = "Taquería El Tío"
             user.bot_name = "Tito"
             user.bot_personality = "alegre y servicial"
+            user.bot_instructions = None
 
             class FakeScalarResult:
                 def scalar_one_or_none(self):
@@ -308,8 +309,10 @@ class TestRagService:
 
     @pytest.mark.asyncio
     async def test_answer_with_rag_low_similarity(self):
-        with patch("app.services.rag_service.get_embedding", new_callable=AsyncMock) as mock_embed:
+        with patch("app.services.rag_service.get_embedding", new_callable=AsyncMock) as mock_embed, \
+             patch("app.services.rag_service.generate_bot_response", new_callable=AsyncMock) as mock_bot:
             mock_embed.return_value = [0.1] * 1024
+            mock_bot.return_value = "No tengo esa información, ¿en qué más puedo ayudarte?"
 
             db = AsyncMock()
             db_result = MagicMock()

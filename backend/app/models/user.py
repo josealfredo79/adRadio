@@ -47,7 +47,7 @@ class User(Base):
         String(20), default="trial", nullable=False
     )
     current_plan: Mapped[str] = mapped_column(String(20), default="trial")
-    messages_remaining: Mapped[int] = mapped_column(Integer, default=0)
+    messages_remaining: Mapped[int] = mapped_column(Integer, default=50)
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
