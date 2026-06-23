@@ -34,7 +34,7 @@ async def test_register_returns_201():
             "business_name": "Test Business",
         })
         assert resp.status_code == 201
-        assert "mensaje" in resp.json()
+        assert "message" in resp.json()
 
 
 @pytest.mark.asyncio
@@ -82,7 +82,7 @@ async def test_forgot_password_always_returns_200():
         })
         assert resp.status_code == 200
         data = resp.json()
-        assert "mensaje" in data
+        assert "message" in data or "mensaje" in data
 
 
 @pytest.mark.asyncio

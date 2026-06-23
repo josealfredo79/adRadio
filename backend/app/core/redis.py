@@ -62,5 +62,8 @@ async def get_redis_optional() -> aioredis.Redis | None:
 async def close_redis():
     global _redis_pool
     if _redis_pool:
-        await _redis_pool.aclose()
+        try:
+            await _redis_pool.aclose()
+        except (RuntimeError, ConnectionError, OSError):
+            pass
         _redis_pool = None

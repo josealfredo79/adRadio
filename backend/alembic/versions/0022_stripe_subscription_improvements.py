@@ -7,7 +7,7 @@ Create Date: 2026-06-04 11:00:00.000000
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0022_stripe_subscription_improvements"
+revision = "0022"
 down_revision = "0021_add_missing_indexes"
 branch_labels = None
 depends_on = None

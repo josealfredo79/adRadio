@@ -7,9 +7,9 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
     pool_pre_ping=True,
-    pool_size=5,       # 3 servicios × 5 = 15 conexiones — seguro en Neon free tier
-    max_overflow=10,   # burst máximo de 15 conexiones extra en picos
-    pool_recycle=300,  # recicla conexiones antes del timeout idle de Neon (~5 min)
+    pool_size=5,
+    max_overflow=10,
+    pool_recycle=300,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -18,7 +18,6 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,
 )
 
-# Engine sin pool para Celery workers (cada tarea crea su propia conexión en su event loop)
 _celery_engine = None
 
 

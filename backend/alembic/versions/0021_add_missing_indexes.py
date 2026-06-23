@@ -15,50 +15,28 @@ depends_on = None
 
 def upgrade():
     # messages - commonly filtered by advertiser, direction, and scheduled_for
-    op.create_index(op.f("ix_messages_advertiser_id"), "messages", ["advertiser_id"])
-    op.create_index(op.f("ix_messages_direction"), "messages", ["direction"])
-    op.create_index(op.f("ix_messages_scheduled_for"), "messages", ["scheduled_for"])
+    op.execute('CREATE INDEX IF NOT EXISTS ix_messages_advertiser_id ON messages (advertiser_id)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_messages_direction ON messages (direction)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_messages_scheduled_for ON messages (scheduled_for)')
 
     # transactions - commonly filtered by advertiser and sorted by created_at
-    op.create_index(
-        op.f("ix_transactions_advertiser_id"), "transactions", ["advertiser_id"]
-    )
+    op.execute('CREATE INDEX IF NOT EXISTS ix_transactions_advertiser_id ON transactions (advertiser_id)')
 
     # automation_enrollments - commonly filtered by advertiser and status
-    op.create_index(
-        op.f("ix_automation_enrollments_advertiser_id"),
-        "automation_enrollments",
-        ["advertiser_id"],
-    )
-    op.create_index(
-        op.f("ix_automation_enrollments_status"),
-        "automation_enrollments",
-        ["status"],
-    )
+    op.execute('CREATE INDEX IF NOT EXISTS ix_automation_enrollments_advertiser_id ON automation_enrollments (advertiser_id)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_automation_enrollments_status ON automation_enrollments (status)')
 
     # coupons - commonly filtered by advertiser
-    op.create_index(
-        op.f("ix_coupons_advertiser_id"), "coupons", ["advertiser_id"]
-    )
+    op.execute('CREATE INDEX IF NOT EXISTS ix_coupons_advertiser_id ON coupons (advertiser_id)')
 
     # conversations - commonly sorted by last_activity
-    op.create_index(
-        op.f("ix_conversations_last_activity"),
-        "conversations",
-        ["last_activity"],
-    )
+    op.execute('CREATE INDEX IF NOT EXISTS ix_conversations_last_activity ON conversations (last_activity)')
 
     # api_keys - commonly filtered by user_id
-    op.create_index(
-        op.f("ix_api_keys_user_id"), "api_keys", ["user_id"]
-    )
+    op.execute('CREATE INDEX IF NOT EXISTS ix_api_keys_user_id ON api_keys (user_id)')
 
     # customer_stories - commonly filtered by advertiser
-    op.create_index(
-        op.f("ix_customer_stories_advertiser_id"),
-        "customer_stories",
-        ["advertiser_id"],
-    )
+    op.execute('CREATE INDEX IF NOT EXISTS ix_customer_stories_advertiser_id ON customer_stories (advertiser_id)')
 
 
 def downgrade():

@@ -5,7 +5,7 @@ WORKDIR /frontend
 
 COPY frontend/package.json ./
 COPY frontend/package-lock.json* ./
-RUN npm install --ignore-scripts
+RUN npm ci --ignore-scripts
 
 COPY frontend/ ./
 RUN npm run build

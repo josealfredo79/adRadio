@@ -2,7 +2,8 @@ import { render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
+import { ToastProvider } from '@/contexts/ToastContext'
 import PlansPage from '@/pages/PlansPage'
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -17,7 +18,7 @@ function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>{children}</BrowserRouter>
+        <BrowserRouter><ToastProvider>{children}</ToastProvider></BrowserRouter>
       </QueryClientProvider>
     </HelmetProvider>
   )

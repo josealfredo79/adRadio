@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { ToastProvider } from '@/contexts/ToastContext'
 import ContactsPage from '@/pages/ContactsPage'
 
 const mockContactsPage = {
@@ -27,7 +28,7 @@ function renderPage() {
     ...render(
       <HelmetProvider>
         <QueryClientProvider client={queryClient}>
-          <BrowserRouter><ContactsPage /></BrowserRouter>
+          <BrowserRouter><ToastProvider><ContactsPage /></ToastProvider></BrowserRouter>
         </QueryClientProvider>
       </HelmetProvider>
     ),

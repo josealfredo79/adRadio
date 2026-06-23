@@ -7,8 +7,8 @@ Create Date: 2026-06-05 13:00:00.000000
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0023_add_bot_instructions"
-down_revision = "0022_stripe_subscription_improvements"
+revision = "0023"
+down_revision = "0022"
 branch_labels = None
 depends_on = None
 

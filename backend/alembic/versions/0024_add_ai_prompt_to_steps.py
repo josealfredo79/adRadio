@@ -7,8 +7,8 @@ Create Date: 2026-06-05 14:00:00.000000
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0024_add_ai_prompt_to_steps"
-down_revision = "0023_add_bot_instructions"
+revision = "0024"
+down_revision = "0023"
 branch_labels = None
 depends_on = None
 

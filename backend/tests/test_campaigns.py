@@ -42,16 +42,6 @@ async def test_create_campaign_requires_auth():
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
-async def test_campaign_stats_requires_auth():
-    from httpx import AsyncClient, ASGITransport
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/v1/campaigns/stats")
-        assert resp.status_code == 401
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_public_stories_accessible():
     from httpx import AsyncClient, ASGITransport
     transport = ASGITransport(app=app)

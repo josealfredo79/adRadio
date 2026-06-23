@@ -46,7 +46,7 @@ def is_expired(expires_at: datetime) -> bool:
     return datetime.now(timezone.utc) > expires_at
 
 
-REDEEM_KEYWORDS = {"canjear", "canjealo", "canjea", "activar cupón", "activar cupon", "canjear cupón", "canjear cupon"}
+REDEEM_KEYWORDS = {"canjear", "canjealo", "canjea", "activar cupón", "activar cupon", "canjear cupón", "canjear cupon", "lo quiero", "quiero el descuento", "quiero mi descuento", "usar cupón", "usar cupon"}
 
 
 def is_redeem_intent(text: str) -> bool:

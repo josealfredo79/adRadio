@@ -15,46 +15,32 @@ depends_on = None
 
 def upgrade():
     # messages - commonly filtered by contact, campaign, and date range
-    op.create_index(op.f("ix_messages_contact_id"), "messages", ["contact_id"])
-    op.create_index(op.f("ix_messages_campaign_id"), "messages", ["campaign_id"])
-    op.create_index(op.f("ix_messages_created_at"), "messages", ["created_at"])
+    op.execute('CREATE INDEX IF NOT EXISTS ix_messages_contact_id ON messages (contact_id)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_messages_campaign_id ON messages (campaign_id)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_messages_created_at ON messages (created_at)')
 
     # contacts - commonly filtered by advertiser, status, tags, and date range
-    op.create_index(op.f("ix_contacts_advertiser_id"), "contacts", ["advertiser_id"])
-    op.create_index(op.f("ix_contacts_status"), "contacts", ["status"])
-    op.create_index(
-        op.f("ix_contacts_tags"), "contacts", ["tags"], postgresql_using="gin"
-    )
-    op.create_index(op.f("ix_contacts_created_at"), "contacts", ["created_at"])
+    op.execute('CREATE INDEX IF NOT EXISTS ix_contacts_advertiser_id ON contacts (advertiser_id)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_contacts_status ON contacts (status)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_contacts_tags ON contacts USING gin (tags)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_contacts_created_at ON contacts (created_at)')
 
     # campaigns - commonly filtered by advertiser, status, and date range
-    op.create_index(op.f("ix_campaigns_advertiser_id"), "campaigns", ["advertiser_id"])
-    op.create_index(op.f("ix_campaigns_status"), "campaigns", ["status"])
-    op.create_index(op.f("ix_campaigns_created_at"), "campaigns", ["created_at"])
+    op.execute('CREATE INDEX IF NOT EXISTS ix_campaigns_advertiser_id ON campaigns (advertiser_id)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_campaigns_status ON campaigns (status)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_campaigns_created_at ON campaigns (created_at)')
 
     # conversations - commonly filtered by contact, advertiser, and status
-    op.create_index(
-        op.f("ix_conversations_contact_id"), "conversations", ["contact_id"]
-    )
-    op.create_index(
-        op.f("ix_conversations_advertiser_id"), "conversations", ["advertiser_id"]
-    )
-    op.create_index(op.f("ix_conversations_status"), "conversations", ["status"])
+    op.execute('CREATE INDEX IF NOT EXISTS ix_conversations_contact_id ON conversations (contact_id)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_conversations_advertiser_id ON conversations (advertiser_id)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_conversations_status ON conversations (status)')
 
     # knowledge_base - commonly filtered by advertiser and processing status
-    op.create_index(
-        op.f("ix_knowledge_base_advertiser_id"), "knowledge_base", ["advertiser_id"]
-    )
-    op.create_index(
-        op.f("ix_knowledge_base_processing_status"),
-        "knowledge_base",
-        ["processing_status"],
-    )
+    op.execute('CREATE INDEX IF NOT EXISTS ix_knowledge_base_advertiser_id ON knowledge_base (advertiser_id)')
+    op.execute('CREATE INDEX IF NOT EXISTS ix_knowledge_base_processing_status ON knowledge_base (processing_status)')
 
     # team_members - commonly looked up by email
-    op.create_index(
-        op.f("ix_team_members_member_email"), "team_members", ["member_email"]
-    )
+    op.execute('CREATE INDEX IF NOT EXISTS ix_team_members_member_email ON team_members (member_email)')
 
 
 def downgrade():
