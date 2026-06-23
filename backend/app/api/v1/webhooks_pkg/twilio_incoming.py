@@ -621,10 +621,11 @@ async def twilio_incoming(
         logger.error("[WEBHOOK] RAG/Claude error: %s", e, exc_info=True)
         biz = advertiser.business_name or "el negocio"
         name = advertiser.bot_name or "Asistente"
+        personality = advertiser.bot_personality or "Estoy aquí para ayudarte con información sobre nuestros servicios y productos."
         reply = (
             f"Hola! Soy {name} de {biz}. "
-            "En este momento tengo problemas para consultar mi base de conocimiento. "
-            "¿Puedes intentarlo de nuevo en unos minutos? 😊"
+            f"{personality} "
+            "¿En qué puedo ayudarte hoy? 😊"
         )
 
     updated_msgs = conv.messages + [

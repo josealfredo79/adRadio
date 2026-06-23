@@ -133,15 +133,22 @@ Tu personalidad es: {bot_personality}.
         {"role": "user", "content": user_message}
     ]
 
-    response = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=500,
-        temperature=0.3,
-        system=system,
-        messages=messages,
-    )
-
-    return response.content[0].text.strip()
+    try:
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=500,
+            temperature=0.3,
+            system=system,
+            messages=messages,
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        logger.warning("[CLAUDE] generate_bot_response failed: %s", e, exc_info=True)
+        return (
+            f"Hola! Soy {bot_name} de {business_name}. "
+            f"{bot_personality}. "
+            "¿En qué puedo ayudarte hoy?"
+        )
 
 
 # ─── Personalización de mensajes ─────────────────────────────────────────────
