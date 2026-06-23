@@ -60,7 +60,7 @@ pydub==0.25.1
 fish-audio-sdk>=1.0.0
 
 # Rate limiting
-slowapi==0.1.9
+slowapi==0.1.10
 
 # Dev
 pytest==8.3.4
