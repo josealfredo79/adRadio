@@ -300,6 +300,39 @@ async def detect_order_intent_async(message: str) -> bool:
     return detect_order_intent(message)
 
 
+# ─── Detección de intención de compra de plan/suscripción ───────
+
+def detect_plan_purchase_intent(message: str) -> str | None:
+    """
+    Detecta si el mensaje indica intención de comprar un plan/suscripción.
+    Returns el nombre del plan (starter, growth, pro) o None si no se detecta.
+    Función síncrona — costo $0.
+    """
+    text = message.lower().strip()
+
+    patterns = [
+        "quiero el starter", "quiero el growth", "quiero el pro",
+        "quiero el plan starter", "quiero el plan growth", "quiero el plan pro",
+        "me interesa el starter", "me interesa el growth", "me interesa el pro",
+        "me interesa el plan", "comprar el starter", "comprar el growth",
+        "contratar el starter", "contratar el growth",
+        "dame el starter", "dame el growth",
+        "me voy con el starter", "me voy con el growth", "me voy con el pro",
+        "quiero suscribirme", "quiero contratar",
+        "quiero comprar el plan", "quiero contratar el plan",
+        "comprar plan", "contratar plan", "suscribirme",
+        "contratar", "suscribir",
+    ]
+
+    for pattern in patterns:
+        if pattern in text:
+            for plan in ("starter", "growth", "pro"):
+                if plan in text:
+                    return plan
+            return "starter"
+    return None
+
+
 INTENT_TAGS = {
     "interesado": "interesado",
     "compra": "compra",

@@ -25,7 +25,7 @@ from app.models.user import User
 from app.services.coupon_service import is_redeem_intent, is_expired
 from app.services.number_pool_service import assign_pool_number, release_pool_number
 from app.services.rag_service import answer_with_rag
-from app.services.claude_service import detect_order_intent
+from app.services.claude_service import detect_order_intent, detect_plan_purchase_intent
 from app.api.v1.webhooks_pkg.lead_score import calculate_lead_score
 
 logger = logging.getLogger(__name__)
@@ -525,9 +525,70 @@ async def twilio_incoming(
                 )
             )
 
+    elif pending_order.state.startswith("plan_"):
+        if pending_order.state == "plan_pending_confirmation":
+            normalized_msg = body_text.lower().strip()
+            affirm_words = {"sí", "si", "s", "yes", "y", "ok", "dale", "claro", "adelante", "por supuesto"}
+            is_affirmative = (
+                normalized_msg in affirm_words
+                or any(normalized_msg.startswith(f"{w} ") for w in ["sí", "si", "yes", "ok", "dale"])
+            )
+            if is_affirmative:
+                pending_order.state = "plan_collecting_name"
+                order_reply = (
+                    "¡Excelente! 🎉 ¿A qué nombre te registramos?"
+                )
+            else:
+                pending_order.state = "cancelled"
+                await db.flush()
+
+        elif pending_order.state == "plan_collecting_name":
+            pending_order.customer_name = body_text.strip()
+            pending_order.state = "plan_collecting_datetime"
+            first_name = pending_order.customer_name.split()[0]
+            order_reply = (
+                f"Perfecto, {first_name} 👍\n"
+                "¿Qué día y hora prefieres para tu cita de activación?\n"
+                "Por ejemplo: *Mañana a las 10 am* o *Viernes a las 4 pm* 📅"
+            )
+
+        elif pending_order.state == "plan_collecting_datetime":
+            from datetime import datetime, timezone as tz
+            pending_order.notes = body_text.strip()
+            pending_order.state = "plan_confirmed"
+            pending_order.confirmed_at = datetime.now(tz.utc)
+            await db.flush()
+
+            plan_name = pending_order.items_raw or "Plan"
+            first_name = pending_order.customer_name.split()[0] if pending_order.customer_name else "Cliente"
+            order_reply = (
+                f"✅ *{plan_name} registrado*\n\n"
+                f"👤 {pending_order.customer_name}\n"
+                f"📅 Preferencia: {pending_order.notes}\n\n"
+                "Te contactaremos pronto para confirmar los detalles y activar tu plan. ¡Gracias! 🚀"
+            )
+
+            wa_notify = (
+                f"🆕 *NUEVA VENTA DE PLAN*\n"
+                f"────────────────\n"
+                f"📋 {plan_name}\n"
+                f"👤 Cliente: {pending_order.customer_name}\n"
+                f"📱 WhatsApp: {from_number}\n"
+                f"📅 Cita preferida: {pending_order.notes}\n"
+                f"────────────────\n"
+                f"Contacta al cliente para activar su plan."
+            )
+            if advertiser.phone or advertiser.whatsapp_number:
+                from app.services.twilio_service import send_whatsapp
+                owner_number = advertiser.whatsapp_number or advertiser.phone
+                await send_whatsapp(
+                    to=owner_number,
+                    body=wa_notify,
+                )
+
     elif not pending_order:
-        is_order = detect_order_intent(body_text)
-        if is_order:
+        detected_plan = detect_plan_purchase_intent(body_text)
+        if detected_plan:
             count_result = await db.execute(
                 select(func.count()).select_from(Order).where(
                     Order.advertiser_id == advertiser.id
@@ -538,17 +599,44 @@ async def twilio_incoming(
             new_order = Order(
                 advertiser_id=advertiser.id,
                 contact_id=contact.id,
-                items_raw=body_text,
-                state="pending_confirmation",
+                items_raw=f"Plan {detected_plan.capitalize()}",
+                state="plan_pending_confirmation",
                 order_number=order_count + 1,
             )
             db.add(new_order)
             await db.flush()
+            pending_order = new_order
 
             order_reply = (
-                "¡Gracias por tu interés! 🛒\n"
-                "¿Te gustaría hacer un pedido? Responde *Sí* o *No* 😊"
+                f"¡Excelente elección! 💪\n"
+                f"¿Confirmas que quieres el *Plan {detected_plan.capitalize()}*?\n"
+                "Responde *Sí* o *No* 😊"
             )
+        else:
+            is_order = detect_order_intent(body_text)
+            if is_order:
+                count_result = await db.execute(
+                    select(func.count()).select_from(Order).where(
+                        Order.advertiser_id == advertiser.id
+                    )
+                )
+                order_count = count_result.scalar() or 0
+
+                new_order = Order(
+                    advertiser_id=advertiser.id,
+                    contact_id=contact.id,
+                    items_raw=body_text,
+                    state="pending_confirmation",
+                    order_number=order_count + 1,
+                )
+                db.add(new_order)
+                await db.flush()
+                pending_order = new_order
+
+                order_reply = (
+                    "¡Gracias por tu interés! 🛒\n"
+                    "¿Te gustaría hacer un pedido? Responde *Sí* o *No* 😊"
+                )
 
     if order_reply is not None:
         updated_msgs = conv.messages + [
@@ -571,8 +659,9 @@ async def twilio_incoming(
         from app.services.twilio_service import send_whatsapp_buttons
         from app.workers.tasks import send_whatsapp_message, update_contact_engagement_score
 
+        use_buttons = pending_order and pending_order.state in ("pending_confirmation", "plan_pending_confirmation")
         button_sid = settings.TWILIO_ORDER_CONFIRM_BUTTONS_SID
-        if button_sid:
+        if use_buttons and button_sid:
             sid, err = await send_whatsapp_buttons(
                 to=contact.phone,
                 body=order_reply,
