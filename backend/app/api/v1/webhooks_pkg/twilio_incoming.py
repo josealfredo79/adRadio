@@ -349,7 +349,7 @@ async def twilio_incoming(
     contact_result = await db.execute(
         select(Contact).where(
             Contact.advertiser_id == advertiser.id,
-            Contact.phone == from_number,
+            Contact.phone.in_(from_candidates),
         )
     )
     contact = contact_result.scalar_one_or_none()
