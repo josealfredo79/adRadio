@@ -5,12 +5,20 @@ Uses Redis to store and check Idempotency-Key headers.
 import hashlib
 import json
 import logging
+import uuid
 from typing import Any, Callable
 
 from fastapi import Depends, HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis
 
 from app.core.redis import get_redis_optional
+
+
+class _JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, uuid.UUID):
+            return str(o)
+        return super().default(o)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +63,7 @@ async def store_idempotency_response(
     safe_key = hashlib.sha256(f"{path}:{idem_key}".encode()).hexdigest()
     ns_key = f"idempotency:{safe_key}"
 
-    await redis.setex(ns_key, IDEMPOTENCY_TTL, json.dumps(response_data))
+    await redis.setex(ns_key, IDEMPOTENCY_TTL, json.dumps(response_data, cls=_JSONEncoder))
 
 
 async def idempotent_post(
