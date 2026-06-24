@@ -734,7 +734,7 @@ async def twilio_incoming(
     db.add(out_msg)
     await db.commit()
 
-    from app.workers.tasks import send_whatsapp_message, send_welcome_cuna, update_contact_engagement_score
+    from app.workers.tasks import send_whatsapp_message, send_welcome_cuna, update_contact_engagement_score, trigger_automation_for_contact, auto_tag_contact_from_conversation
     from app.services.twilio_service import send_whatsapp as _send_wa_direct
 
     try:

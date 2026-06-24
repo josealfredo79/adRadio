@@ -703,10 +703,13 @@ def process_automation_enrollments():
 def trigger_automation_for_contact(contact_id: str, advertiser_id: str, trigger: str, trigger_value: str = ""):
     """Enroll a contact in all matching active flows."""
     async def _run():
+        from datetime import datetime, timezone, timedelta
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.automation import AutomationFlow, AutomationEnrollment
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
+
+        now = datetime.now(timezone.utc)
 
         async with AsyncSessionLocal() as db:
             flows = (await db.execute(
@@ -745,5 +748,4 @@ def trigger_automation_for_contact(contact_id: str, advertiser_id: str, trigger:
 
             await db.commit()
 
-    now = datetime.now(timezone.utc)
     run_async(_run())
