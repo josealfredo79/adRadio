@@ -142,7 +142,7 @@ class TestConfigSettings:
         
         s = Settings(FRONTEND_URL="")
         assert "http://localhost:5173" in s.cors_origins
-        assert "https://app.iaradio.app" in s.cors_origins
+        assert len(s.cors_origins) == 1
 
     def test_cors_origins_adds_frontend_url(self):
         from app.config import Settings
