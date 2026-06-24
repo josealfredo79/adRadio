@@ -524,66 +524,66 @@ async def twilio_incoming(
                 )
             )
 
-    elif pending_order.state.startswith("plan_"):
-        if pending_order.state == "plan_pending_confirmation":
-            normalized_msg = body_text.lower().strip()
-            affirm_words = {"sí", "si", "s", "yes", "y", "ok", "dale", "claro", "adelante", "por supuesto"}
-            is_affirmative = (
-                normalized_msg in affirm_words
-                or any(normalized_msg.startswith(f"{w} ") for w in ["sí", "si", "yes", "ok", "dale"])
-            )
-            if is_affirmative:
-                pending_order.state = "plan_collecting_name"
-                order_reply = (
-                    "¡Excelente! 🎉 ¿A qué nombre te registramos?"
+        elif pending_order.state.startswith("plan_"):
+            if pending_order.state == "plan_pending_confirmation":
+                normalized_msg = body_text.lower().strip()
+                affirm_words = {"sí", "si", "s", "yes", "y", "ok", "dale", "claro", "adelante", "por supuesto"}
+                is_affirmative = (
+                    normalized_msg in affirm_words
+                    or any(normalized_msg.startswith(f"{w} ") for w in ["sí", "si", "yes", "ok", "dale"])
                 )
-            else:
-                pending_order.state = "cancelled"
+                if is_affirmative:
+                    pending_order.state = "plan_collecting_name"
+                    order_reply = (
+                        "¡Excelente! 🎉 ¿A qué nombre te registramos?"
+                    )
+                else:
+                    pending_order.state = "cancelled"
+                    await db.flush()
+
+            elif pending_order.state == "plan_collecting_name":
+                pending_order.customer_name = body_text.strip()
+                pending_order.state = "plan_collecting_datetime"
+                first_name = pending_order.customer_name.split()[0]
+                order_reply = (
+                    f"Perfecto, {first_name} 👍\n"
+                    "¿Qué día y hora prefieres para tu cita de activación?\n"
+                    "Por ejemplo: *Mañana a las 10 am* o *Viernes a las 4 pm* 📅"
+                )
+
+            elif pending_order.state == "plan_collecting_datetime":
+                from datetime import datetime, timezone as tz
+                pending_order.notes = body_text.strip()
+                pending_order.state = "plan_confirmed"
+                pending_order.confirmed_at = datetime.now(tz.utc)
                 await db.flush()
 
-        elif pending_order.state == "plan_collecting_name":
-            pending_order.customer_name = body_text.strip()
-            pending_order.state = "plan_collecting_datetime"
-            first_name = pending_order.customer_name.split()[0]
-            order_reply = (
-                f"Perfecto, {first_name} 👍\n"
-                "¿Qué día y hora prefieres para tu cita de activación?\n"
-                "Por ejemplo: *Mañana a las 10 am* o *Viernes a las 4 pm* 📅"
-            )
-
-        elif pending_order.state == "plan_collecting_datetime":
-            from datetime import datetime, timezone as tz
-            pending_order.notes = body_text.strip()
-            pending_order.state = "plan_confirmed"
-            pending_order.confirmed_at = datetime.now(tz.utc)
-            await db.flush()
-
-            plan_name = pending_order.items_raw or "Plan"
-            first_name = pending_order.customer_name.split()[0] if pending_order.customer_name else "Cliente"
-            order_reply = (
-                f"✅ *{plan_name} registrado*\n\n"
-                f"👤 {pending_order.customer_name}\n"
-                f"📅 Preferencia: {pending_order.notes}\n\n"
-                "Te contactaremos pronto para confirmar los detalles y activar tu plan. ¡Gracias! 🚀"
-            )
-
-            wa_notify = (
-                f"🆕 *NUEVA VENTA DE PLAN*\n"
-                f"────────────────\n"
-                f"📋 {plan_name}\n"
-                f"👤 Cliente: {pending_order.customer_name}\n"
-                f"📱 WhatsApp: {from_number}\n"
-                f"📅 Cita preferida: {pending_order.notes}\n"
-                f"────────────────\n"
-                f"Contacta al cliente para activar su plan."
-            )
-            if advertiser.phone or advertiser.whatsapp_number:
-                from app.services.twilio_service import send_whatsapp
-                owner_number = advertiser.whatsapp_number or advertiser.phone
-                await send_whatsapp(
-                    to=owner_number,
-                    body=wa_notify,
+                plan_name = pending_order.items_raw or "Plan"
+                first_name = pending_order.customer_name.split()[0] if pending_order.customer_name else "Cliente"
+                order_reply = (
+                    f"✅ *{plan_name} registrado*\n\n"
+                    f"👤 {pending_order.customer_name}\n"
+                    f"📅 Preferencia: {pending_order.notes}\n\n"
+                    "Te contactaremos pronto para confirmar los detalles y activar tu plan. ¡Gracias! 🚀"
                 )
+
+                wa_notify = (
+                    f"🆕 *NUEVA VENTA DE PLAN*\n"
+                    f"────────────────\n"
+                    f"📋 {plan_name}\n"
+                    f"👤 Cliente: {pending_order.customer_name}\n"
+                    f"📱 WhatsApp: {from_number}\n"
+                    f"📅 Cita preferida: {pending_order.notes}\n"
+                    f"────────────────\n"
+                    f"Contacta al cliente para activar su plan."
+                )
+                if advertiser.phone or advertiser.whatsapp_number:
+                    from app.services.twilio_service import send_whatsapp
+                    owner_number = advertiser.whatsapp_number or advertiser.phone
+                    await send_whatsapp(
+                        to=owner_number,
+                        body=wa_notify,
+                    )
 
     elif not pending_order:
         detected_plan = detect_plan_purchase_intent(body_text)
