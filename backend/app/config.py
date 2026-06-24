@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
 
     # CORS — auto-includes FRONTEND_URL when set via env var
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "https://app.iaradio.app"]
+    CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
     @property
     def cors_origins(self) -> list[str]:
