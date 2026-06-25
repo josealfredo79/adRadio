@@ -180,6 +180,7 @@ async def generate_radio_script(
 ) -> str:
     """Claude genera el guión de la cuña según el modo seleccionado."""
     from datetime import datetime, timezone
+    from app.config import settings
     from app.services.claude_service import _get_client
 
     client = _get_client()
@@ -240,7 +241,7 @@ de forma que el oyente sienta que el mensaje llegó justo cuando lo necesitaba."
         prompt = base + f"Mensaje: {message_or_intent}\n\nDevuelve SOLO el texto del locutor."
 
     response = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model=settings.ANTHROPIC_MODEL,
         max_tokens=600,
         temperature=0.85,
         system=system,

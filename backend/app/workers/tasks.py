@@ -428,6 +428,7 @@ def send_trial_expiry_reminders():
     async def _remind():
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.user import User
+        from app.config import settings
         from app.core.email import send_trial_expiring_email
         from app.services.twilio_service import send_whatsapp
         from sqlalchemy import select
@@ -454,7 +455,7 @@ def send_trial_expiry_reminders():
                     try:
                         msg = (
                             f"⏰ Hola {biz_name}, tu prueba gratuita termina en {days_left} día{'s' if days_left != 1 else ''}. "
-                            f"👉 https://app.iaradio.app/app/plans"
+                            f"👉 {settings.FRONTEND_PUBLIC_URL or 'https://app.iaradio.app'}/app/plans"
                         )
                         await send_whatsapp(to=user.whatsapp_number, body=msg)
                     except Exception as e:
@@ -518,6 +519,7 @@ def update_contact_engagement_score(contact_id: str):
         from app.models.contact import Contact
         from app.models.conversation import Conversation
         from app.models.message import Message
+        from app.config import settings
         from app.services.claude_service import _get_client
         from sqlalchemy import select
 
@@ -551,7 +553,7 @@ def update_contact_engagement_score(contact_id: str):
             client = _get_client()
             try:
                 response = await client.messages.create(
-                    model="claude-sonnet-4-6", max_tokens=150, temperature=0.0,
+                    model=settings.ANTHROPIC_MODEL, max_tokens=150, temperature=0.0,
                     system=system_prompt,
                     messages=[{"role": "user", "content": f"Conversación:\n{chat_str}"}],
                 )

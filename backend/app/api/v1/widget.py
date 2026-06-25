@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
 from app.api.deps import get_current_user, get_db
+from app.config import settings
 from app.models.user import User
 
 router = APIRouter(prefix="/widget", tags=["widget"])
@@ -30,8 +31,9 @@ async def get_widget_snippet(
     greeting = (current_user.widget_greeting or "¡Hola! ¿En qué puedo ayudarte?").replace("'", "\\'")
     color = current_user.widget_color or "#25D366"
 
+    widget_base = (settings.WIDGET_URL or "https://www.iaradio.online").rstrip("/")
     snippet = f"""<!-- IaRadio WhatsApp Widget -->
-<link rel="stylesheet" href="https://www.iaradio.online/widget/widget.css">
+<link rel="stylesheet" href="{widget_base}/widget/widget.css">
 <script>
   window.IaRadioWidget = {{
     phone: '{wa_number}',
@@ -41,7 +43,7 @@ async def get_widget_snippet(
     color: '{color}',
   }};
 </script>
-<script src="https://www.iaradio.online/widget/widget.js" defer></script>
+<script src="{widget_base}/widget/widget.js" defer></script>
 <!-- Fin IaRadio Widget -->"""
 
     return {"snippet": snippet}

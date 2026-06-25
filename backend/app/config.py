@@ -54,6 +54,8 @@ class Settings(BaseSettings):
 
     # Anthropic
     ANTHROPIC_API_KEY: str = ""
+    # Modelo de Claude a usar — configurable para migrar cuando Anthropic deprecate el actual
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-6"
 
     # OpenAI (embeddings + Whisper)
     OPENAI_API_KEY: str = ""
@@ -103,6 +105,13 @@ class Settings(BaseSettings):
 
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
+    # Public frontend URL for external links (plans URL, SEO, etc.)
+    # e.g. "https://app.iaradio.app"
+    FRONTEND_PUBLIC_URL: str = ""
+
+    # Widget static files base URL (CSS/JS served from this domain)
+    # e.g. "https://www.iaradio.online"
+    WIDGET_URL: str = ""
 
     # CORS — si no se setea via env var, permite FRONTEND_URL y localhost solo en DEBUG
     CORS_ORIGINS: list[str] = []

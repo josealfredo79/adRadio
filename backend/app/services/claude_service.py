@@ -49,7 +49,7 @@ Intención del anunciante: {intent}
 Devuelve solo las 3 variantes, separadas por "---", sin numeración ni explicaciones adicionales."""
 
     message = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model=settings.ANTHROPIC_MODEL,
         max_tokens=600,
         temperature=0.7,
         system=CAMPAIGN_SYSTEM_PROMPT,
@@ -212,7 +212,7 @@ Usa {{{{nombre}}}} para personalizar con el nombre del cliente cuando sea natura
 Devuelve solo los 3 mensajes separados por "---"."""
 
     message = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model=settings.ANTHROPIC_MODEL,
         max_tokens=800,
         temperature=0.7,
         system=SEQUENCE_SYSTEM_PROMPT,
@@ -262,7 +262,7 @@ Usa {{{{nombre}}}} al final del episodio 4 para personalizar la oferta final.
 Devuelve solo los 4 episodios separados por "---"."""
 
     message = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model=settings.ANTHROPIC_MODEL,
         max_tokens=1200,
         temperature=0.8,
         system=SAGA_SYSTEM_PROMPT,
@@ -426,7 +426,7 @@ Genera solo la cápsula narrativa, sin introducciones ni explicaciones adicional
 Debe sonar como un segmento de radio del barrio, no como un anuncio."""
 
     message = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model=settings.ANTHROPIC_MODEL,
         max_tokens=600,
         temperature=0.7,
         system=VOCES_SYSTEM_PROMPT,

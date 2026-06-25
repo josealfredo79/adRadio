@@ -69,6 +69,16 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 
+class HTTPSRedirectMiddleware(BaseHTTPMiddleware):
+    """Redirect HTTP to HTTPS in production."""
+    async def dispatch(self, request: Request, call_next):
+        if not request.app.debug and request.headers.get("x-forwarded-proto", "") == "http":
+            url = str(request.url).replace("http://", "https://", 1)
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url, status_code=status.HTTP_301_MOVED_PERMANENTLY)
+        return await call_next(request)
+
+
 class AllowedHostsMiddleware(BaseHTTPMiddleware):
     """Validate Host header against ALLOWED_HOSTS in production."""
     async def dispatch(self, request: Request, call_next):
@@ -90,12 +100,23 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' https://www.iaradio.online https://js.stripe.com; style-src 'self' 'unsafe-inline' https://www.iaradio.online; img-src 'self' data: https:; frame-src 'self' https://js.stripe.com; connect-src 'self' https://api.iaradio.online;"
+        widget_url = (settings.WIDGET_URL or "https://www.iaradio.online").rstrip("/")
+        api_url = (settings.FRONTEND_PUBLIC_URL or "https://api.iaradio.online").rstrip("/")
+        csp = (
+            f"default-src 'self'; "
+            f"script-src 'self' {widget_url} https://js.stripe.com; "
+            f"style-src 'self' 'unsafe-inline' {widget_url}; "
+            f"img-src 'self' data: https:; "
+            f"frame-src 'self' https://js.stripe.com; "
+            f"connect-src 'self' {api_url};"
+        )
+        response.headers["Content-Security-Policy"] = csp
         if request.app.debug:
             response.headers["X-Debug"] = "1"
         return response
 
 
+app.add_middleware(HTTPSRedirectMiddleware)
 app.add_middleware(AllowedHostsMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 

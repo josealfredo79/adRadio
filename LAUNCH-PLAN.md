@@ -12,6 +12,11 @@
 - Número `+525599631448` activo en Twilio
 - Número `+525671254039` pendiente de verificación Meta
 
+### 🟡 Monitoreo y operaciones
+- [ ] Configurar monitoreo de uptime (Better Uptime, Railway Health Check pings)
+- [ ] Documentar procedimiento de rollback (git revert + Railway redeploy)
+- [ ] Reemplazar `og-image.png` con diseño real (1200×630px)
+
 ### 🔴 Pendiente técnico (mañana)
 - [x] Stripe live keys (`sk_live_...`, `pk_live_...`)
 - [x] Stripe webhook en modo producción (Verificado: `STRIPE_WEBHOOK_SECRET` configurado)

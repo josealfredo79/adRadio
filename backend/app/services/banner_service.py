@@ -520,7 +520,7 @@ Responde ÚNICAMENTE con un JSON con estas claves (sin texto extra):
 
     try:
         response = await client.messages.create(
-            model="claude-sonnet-4-6",
+            model=settings.ANTHROPIC_MODEL,
             max_tokens=120,
             temperature=0.7,
             messages=[{"role": "user", "content": prompt}],

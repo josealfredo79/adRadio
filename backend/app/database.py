@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import NullPool
+
 from app.config import settings
 
 engine = create_async_engine(
@@ -27,7 +27,10 @@ def _get_celery_engine():
         _celery_engine = create_async_engine(
             settings.DATABASE_URL,
             echo=settings.DEBUG,
-            poolclass=NullPool,
+            pool_pre_ping=True,
+            pool_size=3,
+            max_overflow=5,
+            pool_recycle=300,
         )
     return _celery_engine
 
