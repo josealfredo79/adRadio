@@ -68,7 +68,8 @@ async def list_subscriptions(
     if status_filter:
         query = query.where(User.subscription_status == status_filter)
     query = query.order_by(desc(User.created_at))
-    total = len((await db.execute(select(func.count(User.id)).select_from(User.subquery()))).scalar() or [])
+    total_result = await db.execute(select(func.count(User.id)))
+    total = total_result.scalar() or 0
     offset = (page - 1) * per_page
     query = query.offset(offset).limit(per_page)
     result = await db.execute(query)

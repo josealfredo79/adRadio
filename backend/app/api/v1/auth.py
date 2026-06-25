@@ -74,7 +74,9 @@ async def register(
 
 
 @router.post("/verify-email")
+@limiter.limit("10/minute")
 async def verify_email(
+    request: Request,
     body: VerifyEmailRequest,
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
@@ -158,6 +160,7 @@ async def login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
+@limiter.limit("20/minute")
 async def refresh(
     request: Request,
     response: Response,
@@ -209,6 +212,7 @@ async def refresh(
 
 
 @router.post("/logout")
+@limiter.limit("10/minute")
 async def logout(
     request: Request,
     response: Response,

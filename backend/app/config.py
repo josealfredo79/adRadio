@@ -119,6 +119,14 @@ class Settings(BaseSettings):
     # Email verification
     EMAIL_VERIFICATION_TTL: int = 600  # 10 minutos
 
+    # Allowed Hosts — validate Host header against this list in production.
+    # Comma-separated, e.g. "api.iaradio.online,iaradio.online"
+    ALLOWED_HOSTS: str = ""
+
+    @property
+    def allowed_hosts_list(self) -> list[str]:
+        return [h.strip() for h in self.ALLOWED_HOSTS.split(",") if h.strip()]
+
     # Rate limiting
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_WINDOW: int = 60  # segundos

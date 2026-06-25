@@ -18,6 +18,8 @@
 - [ ] Meta verifica `+525671254039`
 - [ ] Agregar `TWILIO_NUMBER_POOL=+525671254039,+525599631448` en Railway
 - [x] SSL bare domain se activa solo (Verificado: HTTPS funcional)
+- [ ] Configurar respaldo automático de BD (Neon → S3) — `pg_dump` diario vía cron o Railway cron job
+- [ ] Configurar monitoreo de uptime (p. ej. Better Uptime, ping de Railway Health Check)
 
 ---
 

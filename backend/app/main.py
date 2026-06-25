@@ -69,6 +69,19 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 
+class AllowedHostsMiddleware(BaseHTTPMiddleware):
+    """Validate Host header against ALLOWED_HOSTS in production."""
+    async def dispatch(self, request: Request, call_next):
+        if not request.app.debug and settings.allowed_hosts_list:
+            host = request.headers.get("host", "").split(":")[0]
+            if host not in settings.allowed_hosts_list and host != "localhost":
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"detail": "Host no permitido"},
+                )
+        return await call_next(request)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -83,6 +96,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+app.add_middleware(AllowedHostsMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS
