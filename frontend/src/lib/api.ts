@@ -15,6 +15,9 @@ export function setAccessToken(token: string | null) {
   _accessToken = token
 }
 
+// Stable idempotency keys per (url + body) to prevent duplicate processing on retries
+const _idempotencyMap = new Map<string, string>()
+
 const api = axios.create({
   // In production (Railway) VITE_API_URL is set to the backend service URL.
   // In local dev the Vite proxy handles /api → http://backend:8000, so baseURL stays relative.
@@ -30,7 +33,13 @@ api.interceptors.request.use((config) => {
   }
   // Idempotency-Key for mutating requests to prevent duplicate processing
   if (config.method && ['post', 'put', 'patch'].includes(config.method)) {
-    config.headers['Idempotency-Key'] = crypto.randomUUID()
+    const bodyKey = config.data ? JSON.stringify(config.data) : ''
+    const urlKey = config.url || ''
+    const idemKey = `${urlKey}::${bodyKey}`
+    if (!_idempotencyMap.has(idemKey)) {
+      _idempotencyMap.set(idemKey, crypto.randomUUID())
+    }
+    config.headers['Idempotency-Key'] = _idempotencyMap.get(idemKey)
   }
   return config
 })

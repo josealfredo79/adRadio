@@ -60,3 +60,10 @@ media/
 
 # AI Agent context files (internal use only, not for versioning)
 PROJECT_CONTEXT.md
+
+# Celery beat schedule (runtime binary, changes every run)
+celerybeat-schedule
+backend/celerybeat-schedule
+
+# Cloudflare tunnel credentials
+cloudflared/credentials.json

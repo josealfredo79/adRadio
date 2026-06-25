@@ -9,35 +9,34 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def send_email(to: str, subject: str, html_body: str) -> bool:
+async def send_email(to: str, subject: str, html_body: str, _retries: int = 3) -> bool:
     """Send email via SMTP. Non-blocking — runs smtplib in a thread executor."""
     if not settings.SMTP_HOST:
         logger.debug("[EMAIL DEV] To: %s | Subject: %s", to, subject)
         return True
 
     def _send() -> bool:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = settings.FROM_EMAIL
+        msg["To"] = to
+        msg.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.FROM_EMAIL, to, msg.as_string())
+        return True
+
+    for attempt in range(_retries):
         try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = settings.FROM_EMAIL
-            msg["To"] = to
-            msg.attach(MIMEText(html_body, "html"))
-
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-                server.starttls()
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.sendmail(settings.FROM_EMAIL, to, msg.as_string())
-            return True
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, _send)
         except Exception as e:
-            logger.error("[EMAIL ERROR] %s", e)
-            return False
-
-    try:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, _send)
-    except Exception as e:
-        logger.error("[EMAIL EXECUTOR ERROR] %s", e)
-        return False
+            logger.error("[EMAIL ERROR] Attempt %d/%d: %s", attempt + 1, _retries, e)
+            if attempt < _retries - 1:
+                await asyncio.sleep(2 ** attempt)
+    return False
 
 
 async def send_verification_email(to: str, code: str) -> bool:

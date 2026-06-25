@@ -7,11 +7,23 @@ import { cn } from '@/lib/utils'
 import SEO from '@/components/SEO'
 
 // Detect and render WhatsApp media stored as [media:type]url
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return ['https:', 'http:'].includes(parsed.protocol)
+  } catch {
+    return false
+  }
+}
+
 function MediaMessage({ content }: { content: string }) {
   const match = content.match(/^\[media:([^\]]+)\](.+)$/)
   if (!match) return <span>{content}</span>
 
   const [, mimeType, url] = match
+  if (!isSafeUrl(url)) {
+    return <span className="text-xs text-red-500">[Enlace no seguro oculto]</span>
+  }
   if (mimeType.startsWith('image/')) {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer">

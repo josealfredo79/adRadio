@@ -76,6 +76,7 @@ export default function App() {
               <Route path="settings" element={<SettingsPage />} />
               <Route path="team" element={<TeamPage />} />
               <Route path="widget" element={<WidgetPage />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
 
             <Route path="*" element={<NotFoundPage />} />

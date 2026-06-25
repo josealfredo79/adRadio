@@ -22,7 +22,11 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_acks_late=True,
+    task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,  # prevent duplicate processing
+    task_soft_time_limit=300,    # 5 min soft limit
+    task_time_limit=600,         # 10 min hard limit
+    worker_max_tasks_per_child=1000,  # prevent memory leak
     task_routes={
         "app.workers.tasks.send_whatsapp_message": {"queue": "whatsapp"},
         "app.workers.tasks.process_knowledge_base_file": {"queue": "processing"},

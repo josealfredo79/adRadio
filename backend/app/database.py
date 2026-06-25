@@ -7,8 +7,8 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
     pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
     pool_recycle=300,
 )
 
@@ -28,8 +28,8 @@ def _get_celery_engine():
             settings.DATABASE_URL,
             echo=settings.DEBUG,
             pool_pre_ping=True,
-            pool_size=3,
-            max_overflow=5,
+            pool_size=max(3, settings.DB_POOL_SIZE // 4),
+            max_overflow=max(5, settings.DB_MAX_OVERFLOW // 2),
             pool_recycle=300,
         )
     return _celery_engine

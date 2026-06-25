@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Settings, Save, Copy, Check, ExternalLink, Lock, CreditCard, AlertTriangle, Trash2, Plus, X, Globe, Palette, Key, Webhook } from 'lucide-react'
 import SEO from '@/components/SEO'
 
-const WEBHOOK_URL = `${import.meta.env.VITE_API_URL ?? 'https://api.iaradio.app'}/api/v1/webhooks/twilio`
+const WEBHOOK_URL = `${import.meta.env.VITE_API_URL ?? ''}/api/v1/webhooks/twilio`
 
 const CATEGORIES = [
   { value: 'restaurante', label: 'Restaurante / Bar / Taquería' },

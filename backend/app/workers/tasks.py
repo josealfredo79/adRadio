@@ -112,7 +112,7 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
         raise self.retry(exc=exc, countdown=120 * (2 ** self.request.retries))
 
 
-@celery_app.task(bind=True, max_retries=2)
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str, from_number: str | None = None):
     """Generate a radio cuña and send it as a WhatsApp voice note to a new lead."""
     async def _run():
@@ -135,12 +135,13 @@ def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str, fro
 
     try:
         run_async(_run())
-    except Exception:
-        logger.warning("[WELCOME-CUÑA] Failed to send welcome cuña for contact", exc_info=True)
+    except Exception as exc:
+        logger.warning("[WELCOME-CUÑA] Failed for %s, retrying: %s", to, exc)
+        raise self.retry(exc=exc)
 
 
-@celery_app.task
-def auto_tag_contact_from_conversation(contact_id: str):
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
+def auto_tag_contact_from_conversation(self, contact_id: str):
     """Use Claude Haiku to detect intent from last 10 messages and add auto-tags."""
     async def _run():
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
@@ -180,8 +181,9 @@ def auto_tag_contact_from_conversation(contact_id: str):
 
     try:
         run_async(_run())
-    except Exception:
-        logger.warning("[AUTO-TAG] Failed to auto-tag contact %s", contact_id, exc_info=True)
+    except Exception as exc:
+        logger.warning("[AUTO-TAG] Failed for contact %s, retrying: %s", contact_id, exc)
+        raise self.retry(exc=exc)
 
 
 @celery_app.task(bind=True, max_retries=2)
@@ -338,8 +340,8 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
         raise self.retry(exc=exc)
 
 
-@celery_app.task
-def import_contacts_csv(advertiser_id: str, rows: list[dict]):
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
+def import_contacts_csv(self, advertiser_id: str, rows: list[dict]):
     """Bulk import contacts from CSV rows."""
     async def _import():
         import re
@@ -348,30 +350,44 @@ def import_contacts_csv(advertiser_id: str, rows: list[dict]):
         from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
+            imported = 0
+            skipped = 0
             for row in rows:
-                phone = str(row.get("phone", row.get("telefono", ""))).strip()
-                name = str(row.get("name", row.get("nombre", ""))).strip()
-                if not phone or not re.match(r"^\+\d{7,15}$", phone):
-                    continue
-                existing = await db.execute(
-                    select(Contact).where(
-                        Contact.advertiser_id == uuid.UUID(advertiser_id),
-                        Contact.phone == phone,
+                try:
+                    phone = str(row.get("phone", row.get("telefono", ""))).strip()
+                    name = str(row.get("name", row.get("nombre", ""))).strip()
+                    if not phone or not re.match(r"^\+\d{7,15}$", phone):
+                        skipped += 1
+                        continue
+                    existing = await db.execute(
+                        select(Contact).where(
+                            Contact.advertiser_id == uuid.UUID(advertiser_id),
+                            Contact.phone == phone,
+                        )
                     )
-                )
-                if existing.scalar_one_or_none():
-                    continue
-                contact = Contact(
-                    advertiser_id=uuid.UUID(advertiser_id),
-                    name=name or phone, phone=phone,
-                    email=str(row.get("email", "")).strip() or None,
-                    city=str(row.get("city", row.get("ciudad", ""))).strip() or None,
-                    source="csv",
-                )
-                db.add(contact)
+                    if existing.scalar_one_or_none():
+                        skipped += 1
+                        continue
+                    contact = Contact(
+                        advertiser_id=uuid.UUID(advertiser_id),
+                        name=name or phone, phone=phone,
+                        email=str(row.get("email", "")).strip() or None,
+                        city=str(row.get("city", row.get("ciudad", ""))).strip() or None,
+                        source="csv",
+                    )
+                    db.add(contact)
+                    imported += 1
+                except Exception as row_err:
+                    logger.warning("[CSV-IMPORT] Skipping row: %s", row_err)
+                    skipped += 1
             await db.commit()
+            logger.info("[CSV-IMPORT] %s: %d imported, %d skipped", advertiser_id, imported, skipped)
 
-    run_async(_import())
+    try:
+        run_async(_import())
+    except Exception as exc:
+        logger.warning("[CSV-IMPORT] Failed, retrying: %s", exc)
+        raise self.retry(exc=exc)
 
 
 @celery_app.task

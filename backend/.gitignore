@@ -1,3 +1,12 @@
 
 # Generated audio files
 app/static/audio/
+
+# Celery beat schedule (runtime binary, changes every run)
+celerybeat-schedule
+
+# Test files with live DB credentials
+test_db.py
+test_db_error.py
+test_flow.py
+test_redis_public.py

@@ -121,11 +121,28 @@ async def login(
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ) -> TokenResponse:
+    # Account lockout check — 5 failed attempts = 15 min lock
+    lock_key = f"login_lock:{body.email.lower()}"
+    attempts_key = f"login_attempts:{body.email.lower()}"
+    locked = await redis.get(lock_key)
+    if locked:
+        raise HTTPException(status_code=429, detail="Demasiados intentos. Intenta de nuevo en 15 minutos.")
+
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(body.password, user.password_hash):
+        attempts = await redis.incr(attempts_key)
+        if attempts == 1:
+            await redis.expire(attempts_key, 900)  # 15 min window
+        if attempts >= 5:
+            await redis.setex(lock_key, 900, "1")
+            await redis.delete(attempts_key)
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+
+    # Clear lockout counters on successful login
+    await redis.delete(lock_key)
+    await redis.delete(attempts_key)
 
     if not user.email_verified:
         raise HTTPException(status_code=403, detail="Debes verificar tu email primero")

@@ -136,6 +136,10 @@ class Settings(BaseSettings):
     def allowed_hosts_list(self) -> list[str]:
         return [h.strip() for h in self.ALLOWED_HOSTS.split(",") if h.strip()]
 
+    # Connection pool sizes
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 10
+
     # Rate limiting
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_WINDOW: int = 60  # segundos

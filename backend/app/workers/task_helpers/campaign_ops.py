@@ -37,23 +37,28 @@ async def _ensure_conversation_window(
     contact,
     from_number: str | None = None,
     business_name: str | None = None,
+    _convs: dict[str, object] | None = None,
 ) -> int:
     """Send the invitacion_radio template if the 24h window is closed.
     Returns extra delay (seconds) to add before sending the campaign message.
+    Accepts optional preloaded conversations dict {contact_id: conv} to avoid N+1.
     """
     from app.models.conversation import Conversation
     from app.services.twilio_service import send_whatsapp_template
     from app.config import settings
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    result = await db.execute(
-        select(Conversation).where(
-            Conversation.advertiser_id == advertiser_id,
-            Conversation.contact_id == contact.id,
-            Conversation.status == "active",
+    if _convs is not None:
+        conv = _convs.get(str(contact.id))
+    else:
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.advertiser_id == advertiser_id,
+                Conversation.contact_id == contact.id,
+                Conversation.status == "active",
+            )
         )
-    )
-    conv = result.scalar_one_or_none()
+        conv = result.scalar_one_or_none()
     if conv and conv.last_activity and conv.last_activity > cutoff:
         return 0
 
@@ -98,6 +103,23 @@ async def _ensure_conversation_window(
     return random.randint(10, 20)
 
 
+async def _preload_conversations(db, advertiser_id: uuid.UUID, contacts) -> dict[str, object]:
+    """Preload conversations for all contacts to avoid N+1 queries."""
+    from app.models.conversation import Conversation
+    contact_ids = [c.id for c in contacts]
+    if not contact_ids:
+        return {}
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.advertiser_id == advertiser_id,
+            Conversation.contact_id.in_(contact_ids),
+            Conversation.status == "active",
+        )
+    )
+    convs = result.scalars().all()
+    return {str(c.contact_id): c for c in convs}
+
+
 async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay):
     """Send banner-style campaign messages."""
     from app.services.banner_service import (
@@ -114,6 +136,9 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     layout_override = ab.get("banner_layout", "")
     MAX_PER_HOUR = 60
     from_number = getattr(advertiser, "whatsapp_number", None)
+
+    # Preload conversations to avoid N+1
+    _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
 
     # Selección de diseño según negocio y tipo de campaña
     design = select_design(advertiser.business_category, campaign.type)
@@ -134,6 +159,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         extra = await _ensure_conversation_window(
             db, campaign.advertiser_id, contact, from_number,
             business_name=advertiser.business_name,
+            _convs=_convs,
         )
         ban_delay += extra
 
@@ -192,6 +218,8 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
     MAX_PER_HOUR = 60
     from_number = getattr(advertiser, "whatsapp_number", None)
 
+    _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
+
     for idx_r, contact in enumerate(contacts):
         if advertiser.messages_remaining <= 0:
             break
@@ -206,6 +234,7 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         extra = await _ensure_conversation_window(
             db, campaign.advertiser_id, contact, from_number,
             business_name=advertiser.business_name,
+            _convs=_convs,
         )
         ban_delay += extra
 
@@ -247,6 +276,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
 
     MAX_PER_HOUR = 60
     from_number = getattr(advertiser, "whatsapp_number", None)
+    _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
 
     ab_enabled = ab.get("enabled", False)
     ab_variant_b = ab.get("variant_b", "")
@@ -275,6 +305,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         extra = await _ensure_conversation_window(
             db, campaign.advertiser_id, contact, from_number,
             business_name=advertiser.business_name,
+            _convs=_convs,
         )
         ban_delay += extra
 
@@ -446,6 +477,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
     ban_delay = 0
     sent = 0
     from_number = getattr(advertiser, "whatsapp_number", None)
+    _convs = await _preload_conversations(db, advertiser.id, contacts)
 
     for contact in contacts:
         if advertiser.messages_remaining <= 0:
@@ -458,6 +490,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
         extra = await _ensure_conversation_window(
             db, advertiser.id, contact, from_number,
             business_name=advertiser.business_name,
+            _convs=_convs,
         )
         ban_delay += extra
 

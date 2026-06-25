@@ -2,6 +2,7 @@
 IaRadio — FastAPI application entry point.
 """
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -23,6 +24,16 @@ from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base,
 from app.api.v1 import user_webhooks, public_api, public_api_routes
 
 logger = logging.getLogger(__name__)
+
+
+class RequestIdFilter(logging.Filter):
+    """Add request_id to log records when available."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = getattr(record, "request_id", "-")
+        return True
+
+
+logging.getLogger().addFilter(RequestIdFilter())
 
 if settings.SENTRY_DSN:
     sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=0.1)
@@ -92,6 +103,18 @@ class AllowedHostsMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class CorrelationIdMiddleware(BaseHTTPMiddleware):
+    """Inject X-Request-ID for tracing requests across services."""
+    async def dispatch(self, request: Request, call_next):
+        req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())[:8]
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = req_id
+        logger = logging.getLogger("app")
+        # Make the request ID available to handlers via request.state
+        request.state.request_id = req_id
+        return response
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -116,6 +139,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(HTTPSRedirectMiddleware)
 app.add_middleware(AllowedHostsMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
