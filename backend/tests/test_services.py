@@ -137,19 +137,25 @@ class TestConfigSettings:
         s = Settings(TWILIO_NUMBER_POOL=" +525511111111 , +525522222222 ")
         assert s.twilio_number_pool_list == ["+525511111111", "+525522222222"]
 
-    def test_cors_origins_default(self):
+    def test_cors_origins_default_debug(self):
+        from app.config import Settings
+        
+        s = Settings(FRONTEND_URL="", DEBUG=True)
+        assert "http://localhost:5173" in s.cors_origins
+        assert len(s.cors_origins) == 1
+
+    def test_cors_origins_empty_in_production(self):
         from app.config import Settings
         
         s = Settings(FRONTEND_URL="")
-        assert "http://localhost:5173" in s.cors_origins
-        assert len(s.cors_origins) == 1
+        assert len(s.cors_origins) == 0
 
     def test_cors_origins_adds_frontend_url(self):
         from app.config import Settings
         
         s = Settings(FRONTEND_URL="https://mi-dominio.com")
         assert "https://mi-dominio.com" in s.cors_origins
-        assert "http://localhost:5173" in s.cors_origins
+        assert len(s.cors_origins) == 1
 
     def test_cors_origins_no_duplicates(self):
         from app.config import Settings

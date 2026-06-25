@@ -1,5 +1,15 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { Bot, PhoneCall, TrendingUp } from 'lucide-react'
+
+function renderBold(text: string): ReactNode {
+  const parts = text.split(/(\*[^*]+\*)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return <strong key={i}>{part.slice(1, -1)}</strong>
+    }
+    return part
+  })
+}
 
 const INITIAL_CHAT_MESSAGES = [
   { from: 'bot', text: '👋 Hola! Soy el asistente de *Pizzería El Fogón*. ¿En qué te puedo ayudar?' },
@@ -76,10 +86,7 @@ export default function WhatsAppMockup() {
                       ? 'rounded-tr-none bg-[#DCF8C6] text-gray-800'
                       : 'rounded-tl-none bg-white text-gray-800'
                   }`}
-                  dangerouslySetInnerHTML={{
-                    __html: msg.text.replace(/\*(.*?)\*/g, '<strong>$1</strong>')
-                  }}
-                />
+                  >{renderBold(msg.text)}</div>
               </div>
             ))}
 

@@ -27,6 +27,7 @@ from app.services.number_pool_service import assign_pool_number, release_pool_nu
 from app.services.rag_service import answer_with_rag
 from app.services.claude_service import detect_order_intent, detect_plan_purchase_intent
 from app.api.v1.webhooks_pkg.lead_score import calculate_lead_score
+from app.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ def _validate_twilio_signature(request_url: str, params: dict, signature: str) -
     return hmac.compare_digest(expected, signature)
 
 
+@limiter.limit("20/minute")
 async def twilio_incoming(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -61,8 +63,11 @@ async def twilio_incoming(
                 alt_url = re.sub(r"^https?://[^/]+", settings.BASE_URL, url)
                 if alt_url == url or not _validate_twilio_signature(alt_url, form_data, signature):
                     logger.warning("[WEBHOOK] Signature validation failed — url=%s alt_url=%s", url, alt_url)
+                    if not settings.DEBUG:
+                        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid signature")
         elif not settings.DEBUG:
             logger.warning("[WEBHOOK] Missing X-Twilio-Signature header — request from %s", request.client.host if request.client else "unknown")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing signature")
 
     from_number = form_data.get("From", "").replace("whatsapp:", "")
     to_number = form_data.get("To", "").replace("whatsapp:", "")

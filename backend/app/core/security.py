@@ -60,3 +60,20 @@ def generate_verification_code(length: int = 6) -> str:
 
 def generate_secure_token(length: int = 32) -> str:
     return secrets.token_urlsafe(length)
+
+
+def hash_api_key(key: str) -> str:
+    """Hash an API key with bcrypt for storage."""
+    salt = bcrypt.gensalt(rounds=10)
+    return bcrypt.hashpw(key.encode("utf-8"), salt).decode("utf-8")
+
+
+def verify_api_key(plain_key: str, stored_key: str) -> bool:
+    """Verify an API key against its stored hash.
+
+    Supports both bcrypt (new) and SHA-256 (legacy) formats.
+    """
+    if stored_key.startswith("$2"):
+        return bcrypt.checkpw(plain_key.encode("utf-8"), stored_key.encode("utf-8"))
+    import hashlib
+    return hashlib.sha256(plain_key.encode()).hexdigest() == hashlib.sha256(stored_key.encode()).hexdigest()

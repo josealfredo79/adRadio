@@ -26,6 +26,7 @@ const WidgetPage = lazy(() => import('@/pages/WidgetPage'))
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
 const AutomationsPage = lazy(() => import('@/pages/AutomationsPage'))
 const TemplatesPage = lazy(() => import('@/pages/TemplatesPage'))
+const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -77,7 +78,7 @@ export default function App() {
               <Route path="widget" element={<WidgetPage />} />
             </Route>
 
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>
       </BrowserRouter>

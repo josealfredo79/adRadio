@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.core.redis import get_redis_optional
+from app.core.security import hash_api_key
 from app.database import get_db
 from app.models.api_key import ApiKey
 from app.models.user import User
@@ -70,7 +71,7 @@ async def create_api_key(
     api_key = ApiKey(
         user_id=current_user.id,
         name=body.name,
-        key=raw_key,
+        key=hash_api_key(raw_key),
         prefix=prefix,
         scopes=body.scopes,
     )

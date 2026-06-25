@@ -6,6 +6,7 @@ from redis.asyncio import Redis as AsyncRedis
 
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.core.redis import get_redis_optional
+from app.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 from sqlalchemy import select
@@ -47,7 +48,8 @@ async def get_widget_snippet(
 
 
 @router.get("/preview/{advertiser_id}", include_in_schema=False)
-async def widget_preview(advertiser_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
+@limiter.limit("10/minute")
+async def widget_preview(request: Request, advertiser_id: UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """Public endpoint to load widget config for a given advertiser (used by widget.js)."""
     result = await db.execute(select(User).where(User.id == advertiser_id))
     user = result.scalar_one_or_none()

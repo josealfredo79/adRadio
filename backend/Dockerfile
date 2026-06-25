@@ -19,6 +19,11 @@ COPY . .
 # Ensure audio directory exists for local file storage
 RUN mkdir -p app/static/audio
 
+RUN adduser --disabled-password --no-create-home appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
 EXPOSE 8000
 
 # railway.toml startCommand overrides this; fallback uses $PORT or 8000

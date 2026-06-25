@@ -18,6 +18,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ .
 
 ENV PYTHONPATH=/app
-ENV C_FORCE_ROOT=true
+
+RUN adduser --disabled-password --no-create-home appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
 
 CMD ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "-Q", "whatsapp,campaigns,processing", "--pool", "threads", "-c", "4"]

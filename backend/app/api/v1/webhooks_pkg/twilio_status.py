@@ -10,10 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.campaign import Campaign
 from app.models.message import Message
+from app.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
 
+@limiter.limit("60/minute")
 async def twilio_status(
     request: Request,
     db: AsyncSession = Depends(get_db),

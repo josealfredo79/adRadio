@@ -104,14 +104,16 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
 
-    # CORS — auto-includes FRONTEND_URL when set via env var
-    CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+    # CORS — si no se setea via env var, permite FRONTEND_URL y localhost solo en DEBUG
+    CORS_ORIGINS: list[str] = []
 
     @property
     def cors_origins(self) -> list[str]:
         origins = list(self.CORS_ORIGINS)
         if self.FRONTEND_URL and self.FRONTEND_URL not in origins:
             origins.append(self.FRONTEND_URL)
+        if self.DEBUG and "http://localhost:5173" not in origins:
+            origins.append("http://localhost:5173")
         return origins
 
     # Email verification

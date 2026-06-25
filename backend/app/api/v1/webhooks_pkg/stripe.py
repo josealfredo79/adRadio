@@ -14,6 +14,7 @@ from app.models.user import User
 from app.services.number_pool_service import assign_pool_number, release_pool_number
 from app.services.analytics_service import capture_event
 from app.api.v1.payments import PLAN_MESSAGES, PLANS
+from app.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -276,3 +277,13 @@ async def stripe_webhook(
                 logger.info("[WEBHOOK] Transaction %s updated to refunded", payment_intent)
 
     return {"received": True}
+
+
+# Rate-limited route wrapper (tests call stripe_webhook directly)
+@limiter.limit("20/minute")
+async def stripe_webhook_route(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    """Rate-limited wrapper for stripe_webhook."""
+    return await stripe_webhook(request, db)

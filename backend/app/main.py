@@ -11,13 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.redis import close_redis
+from app.core.rate_limiter import limiter
 from app.services.analytics_service import flush as analytics_flush
 from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, template_seeds, team, automations, widget, analytics, admin
 from app.api.v1 import user_webhooks, public_api, public_api_routes
@@ -34,33 +34,23 @@ if settings.DEBUG and (settings.TWILIO_AUTH_TOKEN or settings.STRIPE_SECRET_KEY)
     logger.warning("   NO uses DEBUG=true en producción")
     logger.warning("=" * 60)
 
-# Rate limiter — intenta usar Redis para que el límite sea GLOBAL entre todos los workers.
-# Si Redis no está disponible al arrancar (ej. primer deploy), cae a memoria local como fallback.
-# Esto evita que cada proceso Uvicorn tenga un contador independiente en producción.
-def _build_limiter() -> Limiter:
-    try:
-        import redis as sync_redis
-        r = sync_redis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
-        r.ping()
-        storage_uri = settings.REDIS_URL
-        logger.info("[RateLimit] Backend: Redis (%s)", settings.REDIS_URL)
-    except Exception:
-        storage_uri = "memory://"
-        logger.warning(
-            "[RateLimit] Redis no disponible al arrancar — usando memoria local. "
-            "El límite NO será global entre múltiples workers."
-        )
-    return Limiter(
-        key_func=get_remote_address,
-        storage_uri=storage_uri,
-        default_limits=["200/minute"],
-    )
+# Rate limiter (imported from app.core.rate_limiter; built with Redis fallback)
 
-limiter = _build_limiter()
+
+def _warn_insecure_env() -> None:
+    """Warn if .env has live secrets and is world-readable."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        perms = env_path.stat().st_mode
+        if perms & 0o004:
+            logger.warning("=" * 60)
+            logger.warning("SECURITY: .env is world-readable (chmod 600 recommended)")
+            logger.warning("=" * 60)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _warn_insecure_env()
     yield
     analytics_flush()
     await close_redis()
@@ -86,6 +76,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' https://www.iaradio.online https://js.stripe.com; style-src 'self' 'unsafe-inline' https://www.iaradio.online; img-src 'self' data: https:; frame-src 'self' https://js.stripe.com; connect-src 'self' https://api.iaradio.online;"
         if request.app.debug:
             response.headers["X-Debug"] = "1"
         return response

@@ -1,7 +1,6 @@
 """
 API Key authentication dependency.
 """
-import hashlib
 from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, status
@@ -9,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import verify_api_key
 from app.database import get_db
 from app.models.api_key import ApiKey
 from app.models.user import User
@@ -37,10 +37,7 @@ async def get_user_from_api_key(
             detail="API key inválida",
         )
 
-    key_hash = hashlib.sha256(key.encode()).hexdigest()
-    stored_hash = hashlib.sha256(api_key.key.encode()).hexdigest()
-
-    if key_hash != stored_hash:
+    if not verify_api_key(key, api_key.key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key inválida",
@@ -79,9 +76,7 @@ def require_api_key_scope(required_scope: str):
         if not api_key:
             raise HTTPException(status_code=401, detail="API key inválida")
 
-        key_hash = hashlib.sha256(key.encode()).hexdigest()
-        stored_hash = hashlib.sha256(api_key.key.encode()).hexdigest()
-        if key_hash != stored_hash:
+        if not verify_api_key(key, api_key.key):
             raise HTTPException(status_code=401, detail="API key inválida")
 
         if required_scope not in (api_key.scopes or []):
