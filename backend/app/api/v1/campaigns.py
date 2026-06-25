@@ -48,6 +48,7 @@ from app.services.claude_service import (
     generate_voces_capsule,
 )
 from app.services.imagen_service import generate_flyer
+from app.services.analytics_service import capture_event
 from app.services.radio_service import generate_radio_ad, generate_radio_script
 from app.workers.tasks import schedule_campaign
 
@@ -130,6 +131,11 @@ async def create_campaign(
             countdown = 0
         schedule_campaign.apply_async(args=[str(campaign.id)], countdown=countdown)
 
+    capture_event("campaign_created", user_id=current_user.id, properties={
+        "campaign_id": str(campaign.id),
+        "type": campaign.type,
+        "mode": (campaign.ab_test or {}).get("campaign_mode", "regular"),
+    })
     out = CampaignOut.model_validate(campaign)
     await store_idempotency_response(request, redis, out.model_dump())
     return out
@@ -214,6 +220,11 @@ async def resume_campaign(
     campaign.status = "running"
     await db.commit()
     schedule_campaign.delay(str(campaign.id))
+    capture_event("campaign_sent", user_id=current_user.id, properties={
+        "campaign_id": str(campaign.id),
+        "type": campaign.type,
+        "mode": mode,
+    })
     out = {"message": "Campaña reanudada"}
     await store_idempotency_response(request, redis, out)
     return out
@@ -416,6 +427,10 @@ async def generate_content(
         business_name=body.business_name,
         intent=body.intent,
     )
+    capture_event("content_generated", user_id=current_user.id, properties={
+        "campaign_type": body.campaign_type,
+        "variants_count": len(variants),
+    })
     return GenerateContentResponse(variants=variants)
 
 
@@ -509,6 +524,10 @@ async def generate_radio_ad_endpoint(
         business_category=body.business_category,
         voice_id=body.voice_id,
     )
+    capture_event("radio_ad_generated", user_id=current_user.id, properties={
+        "mode": body.mode,
+        "country": body.country,
+    })
     return {"audio_url": audio_url, "script": script}
 
 
@@ -814,6 +833,11 @@ async def generate_parrilla(
                     countdown=countdown,
                 )
 
+    capture_event("parrilla_generated", user_id=current_user.id, properties={
+        "plan": plan,
+        "days_count": len(days_out),
+        "auto_scheduled": auto_scheduled,
+    })
     return ParrillaOut(
         days=days_out,
         plan=plan,

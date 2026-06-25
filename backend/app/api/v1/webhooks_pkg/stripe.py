@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.number_pool_service import assign_pool_number, release_pool_number
+from app.services.analytics_service import capture_event
 from app.api.v1.payments import PLAN_MESSAGES, PLANS
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,7 @@ async def stripe_webhook(
             db.add(txn)
             await db.commit()
             logger.info("[WEBHOOK] Checkout completed for user %s, plan %s", user.id, plan)
+            capture_event("subscription_started", user_id=user.id, properties={"plan": plan, "amount": amount_total / 100})
 
     elif event_type == "invoice.payment_succeeded":
 
@@ -145,6 +147,7 @@ async def stripe_webhook(
             db.add(txn)
             await db.commit()
             logger.info("[WEBHOOK] Invoice paid for user %s, plan %s", user.id, user.current_plan)
+            capture_event("invoice_paid", user_id=user.id, properties={"plan": user.current_plan})
 
     elif event_type == "invoice.payment_failed":
 
@@ -238,6 +241,7 @@ async def stripe_webhook(
             await release_pool_number(user, db)
             await db.commit()
             logger.info("[WEBHOOK] Subscription canceled for user %s", user.id)
+            capture_event("subscription_cancelled", user_id=user.id)
 
         if changed and status == "active":
             await db.commit()

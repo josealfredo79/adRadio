@@ -19,6 +19,7 @@ from app.models.contact import Contact
 from app.models.user import User
 from app.schemas.contact import ContactCreate, ContactListResponse, ContactOut, ContactUpdate
 from app.workers.tasks import import_contacts_csv
+from app.services.analytics_service import capture_event
 
 class BulkTagRequest(BaseModel):
     contact_ids: list[str]
@@ -101,6 +102,7 @@ async def create_contact(
     await db.refresh(contact)
 
     logger.info("Contact created: %s (%s) by user %s", contact.name, contact.phone, current_user.id)
+    capture_event("contact_created", user_id=current_user.id)
 
     from app.services.webhook_dispatcher import dispatch_webhook_event
     await dispatch_webhook_event(

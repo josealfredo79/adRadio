@@ -50,6 +50,7 @@ boto3==1.35.80
 
 # Monitoring
 sentry-sdk[fastapi]==2.19.2
+posthog==3.5.0
 
 # Email
 # (uses stdlib smtplib — no extra dep needed)

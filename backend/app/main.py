@@ -18,6 +18,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.redis import close_redis
+from app.services.analytics_service import flush as analytics_flush
 from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, template_seeds, team, automations, widget, analytics, admin
 from app.api.v1 import user_webhooks, public_api, public_api_routes
 
@@ -61,6 +62,7 @@ limiter = _build_limiter()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
+    analytics_flush()
     await close_redis()
 
 

@@ -2,12 +2,49 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
   pull_request:
-    branches: [master]
+    branches: [master, main]
 
 jobs:
-  test-backend:
+  test-backend-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-mock httpx
+
+      - name: Run unit tests (no DB required)
+        working-directory: ./backend
+        env:
+          SECRET_KEY: test-secret-key-for-ci
+          ENCRYPTION_KEY: test-encryption-key-32chars-long!!
+          DATABASE_URL: postgresql+asyncpg://localhost:5432/ci_test
+          REDIS_URL: redis://localhost:6379/0
+          TWILIO_ACCOUNT_SID: test
+          TWILIO_AUTH_TOKEN: test
+          TWILIO_WHATSAPP_NUMBER: test
+          STRIPE_SECRET_KEY: test
+          STRIPE_WEBHOOK_SECRET: test
+          OPENAI_API_KEY: test
+          ANTHROPIC_API_KEY: test
+          FRONTEND_URL: http://localhost:5173
+          BASE_URL: http://localhost:8000
+          APP_VERSION: ci-test
+        run: |
+          pytest tests/test_services.py tests/test_webhooks.py -v --timeout=30
+
+  test-backend-integration:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -47,14 +84,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-mock httpx
+          alembic upgrade head
 
-      - name: Run tests
+      - name: Run integration tests
         working-directory: ./backend
         env:
           DATABASE_URL: postgresql+asyncpg://iaradio:iaradio_test@localhost:5432/iaradio_test
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: test-secret-key-for-ci
-          ENCRYPTION_KEY: test-encryption-key-for-ci
+          ENCRYPTION_KEY: test-encryption-key-32chars-long!!
           TWILIO_ACCOUNT_SID: test
           TWILIO_AUTH_TOKEN: test
           TWILIO_WHATSAPP_NUMBER: test
@@ -66,7 +104,8 @@ jobs:
           BASE_URL: http://localhost:8000
           APP_VERSION: ci-test
         run: |
-          pytest tests/ -v --timeout=30
+          alembic upgrade head
+          pytest tests/test_api.py tests/test_modules.py -v --timeout=30
 
   lint-frontend:
     runs-on: ubuntu-latest

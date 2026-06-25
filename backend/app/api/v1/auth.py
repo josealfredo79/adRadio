@@ -24,6 +24,7 @@ from app.database import get_db
 from app.models.user import User
 from app.services.number_pool_service import assign_pool_number
 from app.services.demo_data_service import seed_demo_data
+from app.services.analytics_service import capture_event, identify_user
 from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -68,6 +69,7 @@ async def register(
     await send_verification_email(user.email, code)
 
     logger.info("New user registered: %s", user.email)
+    capture_event("user_registered", properties={"email": user.email, "business_name": body.business_name})
     return {"message": "Registro exitoso. Revisa tu email para verificar tu cuenta."}
 
 
@@ -102,6 +104,8 @@ async def verify_email(
 
     await redis.delete(f"email_verify:{body.email}")
 
+    identify_user(user.id, {"email": user.email, "business_name": user.business_name, "plan": user.current_plan})
+    capture_event("email_verified", user_id=user.id)
     logger.info("Email verified: %s", body.email)
     return {"message": "Email verificado correctamente"}
 
@@ -148,6 +152,7 @@ async def login(
         path="/api/v1/auth",
     )
 
+    capture_event("user_login", user_id=user.id)
     logger.info("User logged in: %s", user.email)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 

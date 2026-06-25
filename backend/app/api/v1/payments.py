@@ -17,6 +17,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.services.analytics_service import capture_event
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ async def create_checkout_session(
         )
 
         logger.info("Checkout session created for user %s, plan %s", current_user.id, plan_key)
+        capture_event("checkout_created", user_id=current_user.id, properties={"plan": plan_key})
         out = {"checkout_url": session.url}
         await store_idempotency_response(request, redis, out)
         return out
