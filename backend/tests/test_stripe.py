@@ -297,10 +297,10 @@ class TestRateLimitModule:
     """Prueba que el rate limiter compartido existe y tiene la config correcta."""
 
     def test_limiter_exists(self):
-        from app.api.rate_limit import limiter
+        from app.core.rate_limiter import limiter
         assert limiter is not None
 
     def test_auth_uses_shared_limiter(self):
         from app.api.v1.auth import limiter as auth_limiter
-        from app.api.rate_limit import limiter as shared_limiter
+        from app.core.rate_limiter import limiter as shared_limiter
         assert auth_limiter is shared_limiter

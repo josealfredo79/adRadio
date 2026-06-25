@@ -23,7 +23,6 @@ from app.models.appointment import Appointment
 from app.models.customer_story import CustomerStory
 from app.models.user import User
 from app.services.coupon_service import is_redeem_intent, is_expired
-from app.services.number_pool_service import assign_pool_number, release_pool_number
 from app.services.rag_service import answer_with_rag
 from app.services.claude_service import detect_order_intent, detect_plan_purchase_intent
 from app.api.v1.webhooks_pkg.lead_score import calculate_lead_score

@@ -11,14 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from redis.asyncio import Redis as AsyncRedis
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
-from slowapi.util import get_remote_address
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, check_feature_access, get_radio_limit
 from app.api.idempotency import idempotent_post, store_idempotency_response
-from app.api.rate_limit import limiter
+from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.campaign import Campaign

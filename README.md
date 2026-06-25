@@ -68,7 +68,7 @@ iaradio/
 ├── Dockerfile                  # Multi-stage: Node 20 build → Python 3.12 serve
 ├── docker-entrypoint.sh        # Detecta SERVICE_ROLE (api / worker / beat)
 ├── docker-compose.yml          # Stack local completo
-├── railway.toml                # Configuración Railway
+├── railway.json                # Configuración Railway
 │
 ├── backend/
 │   ├── app/

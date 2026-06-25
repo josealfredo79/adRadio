@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.rate_limit import limiter
+from app.core.rate_limiter import limiter
 from app.config import settings
 from app.core.email import send_verification_email, send_password_reset_email
 from app.core.redis import get_redis
