@@ -86,14 +86,14 @@ export default function HeroSection() {
         {/* Stats row */}
         <div className="mt-10 sm:mt-20 max-w-4xl mx-auto">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <AnimatedStat n={2840} suffix="+" label="Negocios activos en México" />
             <AnimatedStat n={10} suffix=" min" label="Para lanzar tu primera campaña" />
-            <AnimatedStat n={60} suffix="%" label="Cupones canjeados en promedio" />
-            <AnimatedStat n={1200000} suffix="" label="Mensajes enviados este mes" />
+            <AnimatedStat n={60} suffix="%" label="Tasa de canje de cupones" />
+            <AnimatedStat n={95} suffix="%" label="Tasa de entrega WhatsApp" />
+            <AnimatedStat n={15} suffix=" días" label="Prueba gratuita sin tarjeta" />
           </div>
           <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-600">
-            <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            <span><strong className="text-green-400">24</strong> negocios se registraron hoy · Actualizado en vivo</span>
+            <span className="inline-block h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+            <span>Impulsado por <strong className="text-indigo-400">Claude IA · Twilio · pgvector</strong></span>
           </div>
         </div>
       </div>

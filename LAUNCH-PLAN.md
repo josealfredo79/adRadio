@@ -13,11 +13,11 @@
 - Número `+525671254039` pendiente de verificación Meta
 
 ### 🔴 Pendiente técnico (mañana)
-- [ ] Stripe live keys (`sk_live_...`, `pk_live_...`)
-- [ ] Stripe webhook en modo producción
+- [x] Stripe live keys (`sk_live_...`, `pk_live_...`)
+- [x] Stripe webhook en modo producción (Verificado: `STRIPE_WEBHOOK_SECRET` configurado)
 - [ ] Meta verifica `+525671254039`
 - [ ] Agregar `TWILIO_NUMBER_POOL=+525671254039,+525599631448` en Railway
-- [ ] SSL bare domain se activa solo
+- [x] SSL bare domain se activa solo (Verificado: HTTPS funcional)
 
 ---
 

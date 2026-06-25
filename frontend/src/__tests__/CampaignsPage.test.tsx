@@ -98,7 +98,7 @@ describe('CampaignsPage', () => {
 
   it('shows campaign count in description', () => {
     renderPage()
-    expect(screen.getByText(/3/)).toBeDefined()
+    expect(screen.getByText('3 campañas creadas')).toBeDefined()
   })
 
   it('renders create campaign button', () => {
@@ -108,7 +108,7 @@ describe('CampaignsPage', () => {
 
   it('renders messages remaining info', () => {
     renderPage()
-    expect(screen.getByText(/100/)).toBeDefined()
+    expect(screen.getAllByText(/100/).length).toBeGreaterThan(0)
   })
 
   it('renders SEO component', () => {
