@@ -515,10 +515,10 @@ async def generate_radio_ad_endpoint(
     Claude escribe el guión → edge-tts pone voz de locutor → sube a R2.
     Retorna URL del audio .ogg listo para enviar como nota de voz por WhatsApp.
     """
-    if not check_feature_access(current_user, "radio_cuna"):
-        raise HTTPException(status_code=402, detail="Tu plan no incluye cuñas de radio. Actualiza a Growth o superior.")
     limit = get_radio_limit(current_user)
-    if limit != -1:
+    if limit == 0:
+        raise HTTPException(status_code=402, detail="Tu plan no incluye cuñas de radio. Actualiza a Growth o superior.")
+    if limit > 0:
         from app.models.campaign import Campaign
         from datetime import datetime, timezone, timedelta
         period_start = datetime.now(timezone.utc) - timedelta(days=30)
@@ -531,7 +531,11 @@ async def generate_radio_ad_endpoint(
         )
         used = count_result.scalar() or 0
         if used >= limit:
-            raise HTTPException(status_code=402, detail=f"Has alcanzado el límite de {limit} cuñas de radio de tu plan. Actualiza a Pro para cuñas ilimitadas.")
+            if limit == 1:
+                msg = "Ya usaste tu única cuña de radio disponible en tu plan. Actualiza a Growth para más."
+            else:
+                msg = f"Has alcanzado el límite de {limit} cuñas de radio de tu plan. Actualiza a Pro para cuñas ilimitadas."
+            raise HTTPException(status_code=402, detail=msg)
     script = await generate_radio_script(
         business_name=body.business_name,
         message_or_intent=body.intent,

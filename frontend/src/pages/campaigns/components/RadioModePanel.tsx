@@ -42,7 +42,7 @@ export function RadioModePanel({
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-2">
           <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">🔒 Cuñas de radio no disponibles</p>
           <p className="text-xs text-amber-700 dark:text-amber-300">
-            Tu plan actual no incluye cuñas de radio con voz de locutor.
+            Tu plan no incluye cuñas de radio.
             <a href="/app/plans" className="ml-1 font-medium underline hover:text-amber-800 dark:hover:text-amber-200">
               Actualiza a Growth o superior
             </a>
