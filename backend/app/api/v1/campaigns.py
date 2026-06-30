@@ -467,6 +467,7 @@ async def generate_image(
         campaign_name=body.campaign_name,
         message_text=body.message_text,
         business_name=body.business_name,
+        business_category=body.business_category,
     )
     return {"image_url": image_url}
 

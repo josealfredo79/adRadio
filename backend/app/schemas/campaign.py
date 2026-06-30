@@ -64,6 +64,7 @@ class GenerateImageRequest(BaseModel):
     campaign_name: str
     message_text: str
     business_name: str
+    business_category: str | None = None
 
 
 class GenerateSequenceRequest(BaseModel):
