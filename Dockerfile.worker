@@ -24,4 +24,4 @@ RUN adduser --disabled-password --no-create-home appuser && \
 
 USER appuser
 
-CMD ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "-Q", "whatsapp,campaigns,processing", "--pool", "threads", "-c", "4"]
+CMD ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "-Q", "whatsapp,campaigns,processing", "--pool", "threads", "-c", "1"]

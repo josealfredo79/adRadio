@@ -25,7 +25,7 @@
         "dockerfilePath": "Dockerfile.worker"
       },
       "deploy": {
-        "command": "celery -A app.workers.celery_app worker --loglevel=info -Q whatsapp,campaigns,processing --pool threads -c 4",
+        "command": "celery -A app.workers.celery_app worker --loglevel=info -Q whatsapp,campaigns,processing --pool threads -c 1",
         "numReplicas": 1
       }
     },
