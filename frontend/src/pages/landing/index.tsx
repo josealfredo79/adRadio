@@ -11,6 +11,7 @@ import IntegrationsSection from './components/IntegrationsSection'
 import FaqSection from './components/FaqSection'
 import CtaSection from './components/CtaSection'
 import LandingFooter from './components/LandingFooter'
+import ChatWidget from './components/ChatWidget'
 
 export default function LandingPage() {
   return (
@@ -70,6 +71,7 @@ export default function LandingPage() {
         <FaqSection />
         <CtaSection />
         <LandingFooter />
+        <ChatWidget />
       </div>
     </>
   )
