@@ -10,8 +10,8 @@ interface CampaignCardProps {
   onPause: (id: string) => void
   onResume: (id: string) => void
   onDelete: (id: string) => void
-  isPausePending: boolean
-  isResumePending: boolean
+  resumingId: string | null
+  pausingId: string | null
 }
 
 function DeleteConfirmPopover({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
@@ -58,8 +58,8 @@ export function CampaignCard({
   onPause,
   onResume,
   onDelete,
-  isPausePending,
-  isResumePending,
+  resumingId,
+  pausingId,
 }: CampaignCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const hasSentMessages = (campaign.stats.sent ?? 0) > 0
@@ -254,22 +254,22 @@ export function CampaignCard({
           {campaign.status === 'running' && (
             <button
               onClick={() => onPause(campaign.id)}
-              disabled={isPausePending}
+              disabled={pausingId === campaign.id}
               title="Pausar campaña"
               className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30 p-1.5 text-yellow-600 dark:text-yellow-300 hover:bg-yellow-100 shrink-0 disabled:opacity-50 transition-colors"
             >
-              {isPausePending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pause className="h-3.5 w-3.5" />}
+              {pausingId === campaign.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pause className="h-3.5 w-3.5" />}
             </button>
           )}
 
           {(campaign.status === 'paused' || campaign.status === 'draft' || campaign.status === 'scheduled') && (
             <button
               onClick={() => onResume(campaign.id)}
-              disabled={isResumePending}
+              disabled={resumingId === campaign.id}
               title={campaign.status === 'draft' ? 'Enviar campaña ahora' : campaign.status === 'scheduled' ? 'Forzar envío ahora' : 'Reanudar campaña'}
               className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-1.5 text-green-600 dark:text-green-300 hover:bg-green-100 transition-colors shrink-0 disabled:opacity-50"
             >
-              {isResumePending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+              {resumingId === campaign.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
             </button>
           )}
 

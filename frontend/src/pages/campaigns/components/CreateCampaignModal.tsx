@@ -540,6 +540,12 @@ export function CreateCampaignModal({
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
+
+          {!scheduledAt && (
+            <p className="text-xs text-muted-foreground">
+              La campaña se guardará como borrador. Después podrás enviarla desde el listado.
+            </p>
+          )}
         </div>
 
         <div className="mt-5 flex gap-3">

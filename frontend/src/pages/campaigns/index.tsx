@@ -27,6 +27,8 @@ export default function CampaignsPage() {
   const [analyticsId, setAnalyticsId] = useState<string | null>(null)
   const [vocesDetailId, setVocesDetailId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
+  const [resumingId, setResumingId] = useState<string | null>(null)
+  const [pausingId, setPausingId] = useState<string | null>(null)
 
   const formState = useCampaignForm()
   const { setError, resetForm } = formState
@@ -139,11 +141,21 @@ export default function CampaignsPage() {
                   campaign={campaign}
                   onViewAnalytics={(id) => setAnalyticsId(id)}
                   onViewVocesDetail={(id) => setVocesDetailId(id)}
-                  onPause={(id) => mutations.pauseMutation.mutate(id)}
-                  onResume={(id) => mutations.resumeMutation.mutate(id)}
+                  onPause={(id) => {
+                    setPausingId(id)
+                    mutations.pauseMutation.mutate(id, {
+                      onSettled: () => setPausingId(null),
+                    })
+                  }}
+                  onResume={(id) => {
+                    setResumingId(id)
+                    mutations.resumeMutation.mutate(id, {
+                      onSettled: () => setResumingId(null),
+                    })
+                  }}
                   onDelete={(id) => mutations.deleteMutation.mutate(id)}
-                  isPausePending={mutations.pauseMutation.isPending}
-                  isResumePending={mutations.resumeMutation.isPending}
+                  resumingId={resumingId}
+                  pausingId={pausingId}
                 />
               ))
             )}

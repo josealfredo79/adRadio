@@ -17,6 +17,11 @@ export function useCampaignMutations(callbacks?: MutationCallbacks) {
       qc.invalidateQueries({ queryKey: ['campaigns'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       callbacks?.onSuccessCreate?.()
+      toast({
+        title: 'Campaña creada',
+        description: 'Se guardó como borrador. Haz clic en el botón verde para enviarla.',
+        variant: 'success',
+      })
     },
     onError: (err: unknown) => {
       const errorMsg = getApiError(err)
@@ -29,6 +34,11 @@ export function useCampaignMutations(callbacks?: MutationCallbacks) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['campaigns'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
+      toast({
+        title: 'Campaña pausada',
+        description: 'Los envíos se han detenido.',
+        variant: 'info',
+      })
     },
     onError: (err: unknown) => {
       toast({
@@ -44,6 +54,11 @@ export function useCampaignMutations(callbacks?: MutationCallbacks) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['campaigns'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
+      toast({
+        title: 'Campaña iniciada',
+        description: 'El envío ha comenzado. Puede tomar varios minutos en completarse.',
+        variant: 'success',
+      })
     },
     onError: (err: unknown) => {
       toast({
