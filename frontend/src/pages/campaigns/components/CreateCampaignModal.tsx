@@ -15,7 +15,7 @@ interface CreateCampaignModalProps {
   noCredits: boolean
   onCreate: (campaignData: any) => void
   isCreatePending: boolean
-  currentUser?: { business_category?: string | null } | null
+  currentUser?: { business_category?: string | null; current_plan?: string } | null
 }
 
 export function CreateCampaignModal({
@@ -96,6 +96,7 @@ export function CreateCampaignModal({
   const isRadioMode = AUDIO_MODES.includes(mode)
   const isBannerMode = mode === 'banner'
   const isVocesMode = mode === 'voces'
+  const planSupportsRadio = ['growth', 'pro', 'business', 'enterprise'].includes(currentUser?.current_plan ?? '')
 
   const readyToCreate =
     form.name &&
@@ -298,6 +299,7 @@ export function CreateCampaignModal({
               voicesData={voicesData}
               radioAudioUrl={radioAudioUrl}
               radioScript={radioScript}
+              planSupportsRadio={planSupportsRadio}
             />
           )}
 
@@ -327,8 +329,9 @@ export function CreateCampaignModal({
             <button
               type="button"
               onClick={generateContent}
-              disabled={generating || !form.name || !intent}
+              disabled={generating || !form.name || !intent || !planSupportsRadio}
               className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60 transition-colors"
+              title={!planSupportsRadio ? 'Actualiza a Growth o superior para usar cuñas de radio' : ''}
             >
               <Radio className="h-3.5 w-3.5" />
               {generating ? 'Generando cuña...' : radioAudioUrl ? `Regenerar ${MODE_BADGE[mode] || 'cuña'}` : `Generar ${MODE_BADGE[mode] || 'cuña de radio'}`}
