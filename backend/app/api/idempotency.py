@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import uuid
+from datetime import datetime
 from typing import Any, Callable
 
 from fastapi import Depends, HTTPException, Request
@@ -18,6 +19,8 @@ class _JSONEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, uuid.UUID):
             return str(o)
+        if isinstance(o, datetime):
+            return o.isoformat()
         return super().default(o)
 
 logger = logging.getLogger(__name__)

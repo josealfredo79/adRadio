@@ -113,10 +113,28 @@ async def create_campaign(
     if current_user.subscription_status not in ("active", "trial"):
         raise HTTPException(status_code=402, detail="Necesitas un plan activo para crear campañas")
 
-    campaign = Campaign(advertiser_id=current_user.id, **body.model_dump())
-    db.add(campaign)
-    await db.commit()
-    await db.refresh(campaign)
+    if not body.name or not body.name.strip():
+        raise HTTPException(status_code=422, detail="El nombre de la campaña es obligatorio")
+
+    if not body.message_text or not body.message_text.strip():
+        raise HTTPException(status_code=422, detail="El mensaje de la campaña es obligatorio")
+
+    valid_types = {"promo", "reminder", "launch", "event", "voces"}
+    if body.type not in valid_types:
+        raise HTTPException(status_code=422, detail=f"Tipo de campaña inválido. Debe ser uno de: {', '.join(sorted(valid_types))}")
+
+    if body.status not in ("draft", "scheduled"):
+        raise HTTPException(status_code=422, detail="El estado debe ser 'draft' o 'scheduled'")
+
+    try:
+        campaign = Campaign(advertiser_id=current_user.id, **body.model_dump())
+        db.add(campaign)
+        await db.commit()
+        await db.refresh(campaign)
+    except Exception as e:
+        await db.rollback()
+        logger.error("Error al crear campaña: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Error al guardar la campaña. Intenta de nuevo.")
 
     # If scheduled, dispatch to Celery respecting the start_date
     if campaign.schedule.get("start_date") and campaign.status == "scheduled":
@@ -136,7 +154,7 @@ async def create_campaign(
         "mode": (campaign.ab_test or {}).get("campaign_mode", "regular"),
     })
     out = CampaignOut.model_validate(campaign)
-    await store_idempotency_response(request, redis, out.model_dump())
+    await store_idempotency_response(request, redis, out.model_dump(mode="json"))
     return out
 
 
@@ -216,8 +234,15 @@ async def resume_campaign(
             raise HTTPException(status_code=400, detail="Completa la generación del banner antes de enviar la campaña")
         if not campaign.message_text and mode == "regular":
             raise HTTPException(status_code=400, detail="Agrega un mensaje a la campaña antes de enviarla")
+    if campaign.status not in ("draft", "scheduled", "paused"):
+        raise HTTPException(status_code=400, detail="La campaña no puede ser reanudada desde su estado actual")
     campaign.status = "running"
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error("Error al reanudar campaña %s: %s", campaign_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Error al iniciar la campaña. Intenta de nuevo.")
     schedule_campaign.delay(str(campaign.id))
     capture_event("campaign_sent", user_id=current_user.id, properties={
         "campaign_id": str(campaign.id),

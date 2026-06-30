@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class CampaignCreate(BaseModel):
@@ -13,6 +13,14 @@ class CampaignCreate(BaseModel):
     schedule: dict = {}
     ab_test: dict = {"enabled": False}
     status: str = "draft"
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, v: str) -> str:
+        allowed = {"promo", "reminder", "launch", "event", "voces"}
+        if v not in allowed:
+            raise ValueError(f"Tipo inválido: {v}. Debe ser uno de {', '.join(sorted(allowed))}")
+        return v
 
 
 class CampaignUpdate(BaseModel):
