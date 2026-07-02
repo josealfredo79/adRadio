@@ -103,6 +103,9 @@ class ParrillaRequest(BaseModel):
     auto_schedule: bool = False
     # Hora local preferida de envío (formato "HH:MM"), default 10:00
     send_time: str = "10:00"
+    # Preferencias de banner (opcional)
+    banner_palette: str | None = None   # paleta de colores (promo, verde, oscuro, etc.)
+    banner_layout: str | None = None    # diseño (clasico, centrado, split, minimal)
 
 
 class ParrillaDayOut(BaseModel):
@@ -110,8 +113,10 @@ class ParrillaDayOut(BaseModel):
     day_name: str
     mode: str
     mode_emoji: str
+    format: str = "audio"  # "audio" | "banner"
     script: str
     audio_url: str | None = None  # None si la generación de audio falló
+    banner_url: str | None = None  # URL del banner si format="banner"
 
 
 class ParrillaOut(BaseModel):

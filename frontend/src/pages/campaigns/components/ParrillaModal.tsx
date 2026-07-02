@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarRange, X, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react'
+import { CalendarRange, X, Sparkles, CheckCircle2, AlertCircle, Image as ImageIcon, Headphones } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
 import PrintButton from '@/components/PrintButton'
 import { MODE_BADGE } from '../types'
@@ -8,18 +8,40 @@ interface ParrillaModalProps {
   onClose: () => void
 }
 
+interface ParrillaDay {
+  day: number
+  day_name: string
+  mode: string
+  mode_emoji: string
+  format: string
+  script: string
+  audio_url: string | null
+  banner_url: string | null
+}
+
 interface ParrillaResult {
-  days: {
-    day: number
-    day_name: string
-    mode: string
-    mode_emoji: string
-    script: string
-    audio_url: string | null
-  }[]
+  days: ParrillaDay[]
   plan: string
   auto_scheduled: boolean
 }
+
+const PALETTES = [
+  { key: 'promo', label: 'Azul/Rojo', colors: ['#1d3557', '#e63946'] },
+  { key: 'verde', label: 'Verde', colors: ['#1b5e20', '#388e3c'] },
+  { key: 'oscuro', label: 'Negro/Neón', colors: ['#121212', '#00e676'] },
+  { key: 'elegante', label: 'Dorado', colors: ['#1a1a2e', '#e8c547'] },
+  { key: 'naranja', label: 'Naranja', colors: ['#e65100', '#ff8f00'] },
+  { key: 'morado', label: 'Morado', colors: ['#4a148c', '#7b1fa2'] },
+  { key: 'azul', label: 'Azul vivo', colors: ['#0d47a1', '#1565c0'] },
+  { key: 'rojo', label: 'Rojo', colors: ['#b71c1c', '#e53935'] },
+]
+
+const LAYOUTS = [
+  { key: 'clasico', label: 'Clásico' },
+  { key: 'centrado', label: 'Centrado' },
+  { key: 'split', label: 'Split' },
+  { key: 'minimal', label: 'Minimal' },
+]
 
 export function ParrillaModal({ onClose }: ParrillaModalProps) {
   const [parrillaBusinessName, setParrillaBusinessName] = useState('')
@@ -29,6 +51,8 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
   const [parrillaCountry, setParrillaCountry] = useState('mx')
   const [parrillaSendTime, setParrillaSendTime] = useState('10:00')
   const [parrillaAutoSchedule, setParrillaAutoSchedule] = useState(false)
+  const [parrillaBannerPalette, setParrillaBannerPalette] = useState('promo')
+  const [parrillaBannerLayout, setParrillaBannerLayout] = useState('clasico')
   const [parrillaGenerating, setParrillaGenerating] = useState(false)
   const [parrillaResult, setParrillaResult] = useState<ParrillaResult | null>(null)
   const [parrillaError, setParrillaError] = useState('')
@@ -48,8 +72,10 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
           extra_context: parrillaContext || undefined,
           auto_schedule: parrillaAutoSchedule,
           send_time: parrillaSendTime,
+          banner_palette: parrillaBannerPalette,
+          banner_layout: parrillaBannerLayout,
         },
-        { timeout: 120000 }
+        { timeout: 180000 }
       )
       setParrillaResult(data)
     } catch (err: unknown) {
@@ -120,6 +146,55 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
                 className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
+            {/* Preferencias de banner */}
+            <div className="rounded-xl border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 p-4 space-y-3">
+              <p className="text-sm font-medium text-violet-900 dark:text-violet-100">🖼️ Preferencias de banner</p>
+              <p className="text-xs text-violet-700 dark:text-violet-300">Los días con banner mostrarán una imagen promocional con el nombre de cada contacto.</p>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-violet-800 dark:text-violet-200">Paleta de colores</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {PALETTES.map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => setParrillaBannerPalette(p.key)}
+                      className={`flex items-center gap-1 rounded border-2 px-1.5 py-1 text-[10px] font-medium transition ${
+                        parrillaBannerPalette === p.key
+                          ? 'border-violet-500 bg-violet-100 dark:bg-violet-900/40'
+                          : 'border-transparent hover:border-violet-300'
+                      }`}
+                    >
+                      <span className="flex gap-0.5">
+                        {p.colors.map((c, i) => (
+                          <span key={i} className="w-2 h-2 rounded-full inline-block" style={{ background: c }} />
+                        ))}
+                      </span>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-violet-800 dark:text-violet-200">Diseño</label>
+                <div className="flex gap-1.5">
+                  {LAYOUTS.map((l) => (
+                    <button
+                      key={l.key}
+                      type="button"
+                      onClick={() => setParrillaBannerLayout(l.key)}
+                      className={`rounded border-2 px-2 py-1 text-xs font-medium transition ${
+                        parrillaBannerLayout === l.key
+                          ? 'border-violet-500 bg-violet-100 dark:bg-violet-900/40'
+                          : 'border-transparent hover:border-violet-300'
+                      }`}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-xl border border-blue-100 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-4 space-y-3">
               <label className="flex cursor-pointer items-start gap-2">
                 <input
@@ -164,14 +239,14 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
               <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted py-12 text-center dark:bg-gray-800">
                 <CalendarRange className="h-12 w-12 text-gray-300 mb-3" />
                 <p className="text-sm font-medium text-muted-foreground">Llena los datos y haz clic en Generar</p>
-                <p className="mt-1 text-xs text-muted-foreground">Crearemos 7 cuñas distintas optimizadas para cada día.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Audios y banners visuales optimizados para cada día de la semana.</p>
               </div>
             )}
             {parrillaGenerating && (
               <div className="flex h-full flex-col items-center justify-center rounded-xl bg-muted py-12 text-center dark:bg-gray-800">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-200 border-t-brand-500 mb-4" />
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Escribiendo y grabando 7 cuñas...</p>
-                <p className="mt-1 text-xs text-muted-foreground">Esto puede tardar un poco (Claude + Text-to-Speech)</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Generando 7 días con audio y banners...</p>
+                <p className="mt-1 text-xs text-muted-foreground">Claude escribe guiones, genera banners y sintetiza voz</p>
               </div>
             )}
             {parrillaResult && (
@@ -206,16 +281,37 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
                     <div key={d.day} className="rounded-xl border border-border bg-card p-3 shadow-sm flex flex-col print-keep-together">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-semibold text-gray-800 dark:text-gray-200">{d.day_name}</span>
-                        <span className="text-xs font-medium text-muted-foreground flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full dark:bg-gray-800 dark:text-gray-300">
-                          {d.mode_emoji} {MODE_BADGE[d.mode]?.replace(/[^a-zA-Z\s]/g, '').trim()}
-                        </span>
-                      </div>
-                      {d.audio_url ? (
-                        <audio controls src={d.audio_url} className="w-full h-8 mb-2" />
-                      ) : (
-                        <div className="flex items-center gap-1 text-xs text-red-500 mb-2 bg-red-50 dark:bg-red-950/30 p-1 rounded">
-                          <AlertCircle className="h-3 w-3" /> Error al generar audio
+                        <div className="flex items-center gap-1.5">
+                          {d.format === 'banner' ? (
+                            <span className="text-xs font-medium text-violet-600 dark:text-violet-400 flex items-center gap-1 bg-violet-50 dark:bg-violet-950/30 px-2 py-0.5 rounded-full">
+                              <ImageIcon className="h-3 w-3" /> Banner
+                            </span>
+                          ) : (
+                            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-full">
+                              <Headphones className="h-3 w-3" /> Audio
+                            </span>
+                          )}
+                          <span className="text-xs font-medium text-muted-foreground flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full dark:bg-gray-800 dark:text-gray-300">
+                            {d.mode_emoji} {MODE_BADGE[d.mode]?.replace(/[^a-zA-Z\s]/g, '').trim()}
+                          </span>
                         </div>
+                      </div>
+                      {d.format === 'banner' ? (
+                        d.banner_url ? (
+                          <img src={d.banner_url} alt={`Banner ${d.day_name}`} className="w-full rounded-lg mb-2 border border-border" />
+                        ) : (
+                          <div className="flex items-center gap-1 text-xs text-red-500 mb-2 bg-red-50 dark:bg-red-950/30 p-2 rounded">
+                            <AlertCircle className="h-3 w-3" /> Error al generar banner
+                          </div>
+                        )
+                      ) : (
+                        d.audio_url ? (
+                          <audio controls src={d.audio_url} className="w-full h-8 mb-2" />
+                        ) : (
+                          <div className="flex items-center gap-1 text-xs text-red-500 mb-2 bg-red-50 dark:bg-red-950/30 p-1 rounded">
+                            <AlertCircle className="h-3 w-3" /> Error al generar audio
+                          </div>
+                        )
                       )}
                       <div className="text-xs text-gray-600 dark:text-gray-400 bg-muted p-2 rounded border border-border flex-1 overflow-y-auto max-h-24 print-no-overflow dark:bg-gray-800">
                         {d.script}
