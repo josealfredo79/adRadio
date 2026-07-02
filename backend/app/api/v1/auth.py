@@ -97,9 +97,10 @@ async def verify_email(
         user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
     await db.commit()
 
-    # Assign a pool number if available (enables inbound bot for this user)
-    await assign_pool_number(user, db)
-    await db.commit()
+    # Assign a pool number if available (dedicated number for Pro+ plans)
+    if user.current_plan in ("pro", "business", "enterprise"):
+        await assign_pool_number(user, db)
+        await db.commit()
 
     # Seed demo data so dashboard is not empty
     await seed_demo_data(user.id, user.business_name or "Mi negocio", db)

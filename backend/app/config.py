@@ -11,6 +11,17 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://localhost/iaradio"
 
+    @property
+    def database_url_safe(self) -> str:
+        """Return DATABASE_URL ensuring SSL is used in production."""
+        url = self.DATABASE_URL
+        if not self.DEBUG and "ssl=" not in url:
+            if "?" in url:
+                url += "&ssl=require"
+            else:
+                url += "?ssl=require"
+        return url
+
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
 

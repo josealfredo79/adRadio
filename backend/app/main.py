@@ -62,6 +62,14 @@ def _warn_insecure_env() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _warn_insecure_env()
+    if not settings.DEBUG:
+        if not settings.allowed_hosts_list:
+            raise RuntimeError(
+                "ALLOWED_HOSTS must be configured in production. "
+                "Set it via environment variable, e.g. ALLOWED_HOSTS=api.iaradio.online,iaradio.online"
+            )
+        if settings.SECRET_KEY in ("", "change-me-in-production"):
+            raise RuntimeError("SECRET_KEY must be set in production")
     yield
     analytics_flush()
     await close_redis()
@@ -123,16 +131,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        widget_url = (settings.WIDGET_URL or "https://www.iaradio.online").rstrip("/")
-        api_url = (settings.FRONTEND_PUBLIC_URL or "https://api.iaradio.online").rstrip("/")
-        csp = (
-            f"default-src 'self'; "
-            f"script-src 'self' {widget_url} https://js.stripe.com; "
-            f"style-src 'self' 'unsafe-inline' {widget_url}; "
-            f"img-src 'self' data: https:; "
-            f"frame-src 'self' https://js.stripe.com; "
-            f"connect-src 'self' {api_url};"
-        )
+        widget_url = settings.WIDGET_URL or ""
+        api_url = settings.FRONTEND_PUBLIC_URL or ""
+        csp_parts = ["default-src 'self'"]
+        if widget_url:
+            csp_parts.append(f"script-src 'self' {widget_url} https://js.stripe.com")
+            csp_parts.append(f"style-src 'self' 'unsafe-inline' {widget_url}")
+        else:
+            csp_parts.append("script-src 'self' https://js.stripe.com")
+            csp_parts.append("style-src 'self' 'unsafe-inline'")
+        csp_parts.append("img-src 'self' data: https:")
+        csp_parts.append("frame-src 'self' https://js.stripe.com")
+        if api_url:
+            csp_parts.append(f"connect-src 'self' {api_url}")
+        else:
+            csp_parts.append("connect-src 'self'")
+        csp = "; ".join(csp_parts)
         response.headers["Content-Security-Policy"] = csp
         if request.app.debug:
             response.headers["X-Debug"] = "1"

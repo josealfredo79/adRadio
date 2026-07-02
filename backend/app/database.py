@@ -4,7 +4,7 @@ from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.database_url_safe,
     echo=settings.DEBUG,
     pool_pre_ping=True,
     pool_size=settings.DB_POOL_SIZE,
@@ -25,7 +25,7 @@ def _get_celery_engine():
     global _celery_engine
     if _celery_engine is None:
         _celery_engine = create_async_engine(
-            settings.DATABASE_URL,
+            settings.database_url_safe,
             echo=settings.DEBUG,
             pool_pre_ping=True,
             pool_size=max(3, settings.DB_POOL_SIZE // 4),

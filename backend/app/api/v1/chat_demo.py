@@ -54,7 +54,7 @@ MAX_HISTORY = 20
 
 
 @router.post("/demo")
-@limiter.limit("10/minute")
+@limiter.limit("5/minute")
 async def demo_chat(
     request: Request,
     body: dict,

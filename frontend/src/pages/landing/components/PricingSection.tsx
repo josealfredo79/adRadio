@@ -1,8 +1,27 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Zap, CheckCircle, Sparkles } from 'lucide-react'
-import { LANDING_PLANS } from '@/lib/plans'
+import { LANDING_PLANS, type PlanDefinition } from '@/lib/plans'
+
+interface BackendPlan {
+  price_mxn: number
+  price_usd: number
+}
 
 export default function PricingSection() {
+  const [backendPrices, setBackendPrices] = useState<Record<string, BackendPlan> | null>(null)
+
+  useEffect(() => {
+    fetch('/api/v1/plans')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => data && setBackendPrices(data))
+      .catch(() => {})
+  }, [])
+
+  const planPrice = (plan: PlanDefinition, field: 'price_mxn' | 'price_usd') => {
+    return (backendPrices?.[plan.key]?.[field] ?? plan[field]) as number
+  }
+
   return (
     <section id="precios" className="px-5 py-24 relative overflow-hidden">
       <div className="pointer-events-none absolute inset-0 mesh-bg-light opacity-50" />
@@ -14,9 +33,10 @@ export default function PricingSection() {
         </div>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4 items-start">
           {LANDING_PLANS.map(plan => {
-            const savings = plan.referencePriceMxn
-              ? Math.round((1 - plan.price_mxn / plan.referencePriceMxn) * 100)
-              : null
+            const mxn = planPrice(plan, 'price_mxn')
+            const usd = planPrice(plan, 'price_usd')
+            const refPrice = plan.referencePriceMxn
+            const savings = refPrice ? Math.round((1 - mxn / refPrice) * 100) : null
             return (
               <div
                 key={plan.key}
@@ -27,7 +47,7 @@ export default function PricingSection() {
                 }`}
               >
                 {/* Discount badge */}
-                {savings && (
+                {savings && savings > 0 && (
                   <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-3 py-1 text-xs font-bold text-green-400 w-fit">
                     <Zap className="h-3 w-3" />
                     Ahorra {savings}%
@@ -38,15 +58,15 @@ export default function PricingSection() {
                 <div className="text-xs text-gray-500 mb-4">{plan.tagline}</div>
 
                 <div className="flex items-baseline gap-2 mb-1">
-                  {plan.referencePriceMxn && (
-                    <span className="text-sm text-gray-500 line-through">${plan.referencePriceMxn.toLocaleString()}</span>
+                  {refPrice && (
+                    <span className="text-sm text-gray-500 line-through">${refPrice.toLocaleString()}</span>
                   )}
-                  <span className="text-4xl font-black text-white">${plan.price_mxn.toLocaleString()}</span>
+                  <span className="text-4xl font-black text-white">${mxn.toLocaleString()}</span>
                   <span className="text-xs text-gray-500">MXN/mes</span>
                 </div>
 
                 <div className="flex items-center gap-3 mb-5">
-                  <span className="text-[10px] text-gray-600">≈ ${plan.price_usd} USD</span>
+                  <span className="text-[10px] text-gray-600">≈ ${usd} USD</span>
                   <span className="inline-flex items-center gap-1 rounded-full bg-[#674CC4]/15 px-2 py-0.5 text-[9px] font-bold text-[#674CC4]">
                     <Zap className="h-2.5 w-2.5" />
                     15 días gratis
