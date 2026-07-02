@@ -27,7 +27,7 @@ from app.config import settings
 
 config = context.config
 
-_sync_url = settings.DATABASE_URL
+_sync_url = settings.database_url_safe
 config.set_main_option("sqlalchemy.url", _sync_url)
 
 if config.config_file_name is not None:
