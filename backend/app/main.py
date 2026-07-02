@@ -101,7 +101,7 @@ class HTTPSRedirectMiddleware(BaseHTTPMiddleware):
 class AllowedHostsMiddleware(BaseHTTPMiddleware):
     """Validate Host header against ALLOWED_HOSTS in production."""
     async def dispatch(self, request: Request, call_next):
-        if not request.app.debug and settings.allowed_hosts_list:
+        if not settings.DEBUG and settings.allowed_hosts_list:
             host = request.headers.get("host", "").split(":")[0]
             if host not in settings.allowed_hosts_list and host != "localhost":
                 return JSONResponse(
