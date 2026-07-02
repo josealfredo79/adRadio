@@ -10,6 +10,11 @@ echo "======================="
 if [ "${SERVICE_ROLE:-api}" = "api" ]; then
     echo "Running database migrations..."
     alembic upgrade head
+    MIGRATION_EXIT=$?
+    if [ $MIGRATION_EXIT -ne 0 ]; then
+        echo "CRITICAL: Database migration failed (exit=$MIGRATION_EXIT). Aborting."
+        exit $MIGRATION_EXIT
+    fi
     echo "Migrations applied successfully"
 
     echo "Starting Celery worker (background)..."
