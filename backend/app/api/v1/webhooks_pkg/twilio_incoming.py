@@ -336,11 +336,19 @@ async def twilio_incoming(
             )
             db.add(out_msg)
             await db.commit()
-            from app.workers.tasks import send_whatsapp_message, update_contact_engagement_score
-            send_whatsapp_message.apply_async(
-                args=[str(out_msg.id), from_number, redeem_reply],
-                countdown=2,
+            from app.workers.tasks import update_contact_engagement_score
+            sid_c, err_c = await _send_wa(
+                from_number, redeem_reply,
+                from_number=advertiser.whatsapp_number,
             )
+            if sid_c:
+                out_msg.status = "sent"
+                out_msg.twilio_sid = sid_c
+                out_msg.sent_at = datetime.now(timezone.utc)
+            else:
+                out_msg.status = "failed"
+                out_msg.error_code = err_c
+            await db.commit()
             update_contact_engagement_score.apply_async(
                 args=[str(contact.id)],
                 queue="whatsapp",
@@ -675,32 +683,20 @@ async def twilio_incoming(
         db.add(out_msg)
         await db.commit()
 
-        from app.services.twilio_service import send_whatsapp_buttons
-        from app.workers.tasks import send_whatsapp_message, update_contact_engagement_score
+        from app.workers.tasks import update_contact_engagement_score
 
-        use_buttons = pending_order and pending_order.state in ("pending_confirmation", "plan_pending_confirmation")
-        button_sid = settings.TWILIO_ORDER_CONFIRM_BUTTONS_SID
-        if use_buttons and button_sid:
-            sid, err = await send_whatsapp_buttons(
-                to=contact.phone,
-                body=order_reply,
-                template_sid=button_sid,
-                variables={"1": contact_name},
-                from_number=advertiser.whatsapp_number,
-            )
-            if not sid:
-                logger.warning("[ORDER] Button template failed, falling back to text: %s", err)
-                send_whatsapp_message.apply_async(
-                    args=[str(out_msg.id), from_number, order_reply],
-                    queue="whatsapp",
-                    countdown=2,
-                )
+        sid_o, err_o = await _send_wa(
+            from_number, order_reply,
+            from_number=advertiser.whatsapp_number,
+        )
+        if sid_o:
+            out_msg.status = "sent"
+            out_msg.twilio_sid = sid_o
+            out_msg.sent_at = datetime.now(timezone.utc)
         else:
-            send_whatsapp_message.apply_async(
-                args=[str(out_msg.id), from_number, order_reply],
-                queue="whatsapp",
-                countdown=2,
-            )
+            out_msg.status = "failed"
+            out_msg.error_code = err_o
+        await db.commit()
         update_contact_engagement_score.apply_async(
             args=[str(contact.id)],
             queue="whatsapp",

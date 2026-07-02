@@ -91,7 +91,7 @@ app.add_middleware(SlowAPIMiddleware)
 class HTTPSRedirectMiddleware(BaseHTTPMiddleware):
     """Redirect HTTP to HTTPS in production."""
     async def dispatch(self, request: Request, call_next):
-        if not request.app.debug and request.headers.get("x-forwarded-proto", "") == "http":
+        if not settings.DEBUG and request.headers.get("x-forwarded-proto", "") == "http":
             url = str(request.url).replace("http://", "https://", 1)
             from fastapi.responses import RedirectResponse
             return RedirectResponse(url, status_code=status.HTTP_301_MOVED_PERMANENTLY)
