@@ -21,6 +21,7 @@ from app.database import get_db
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.message import Message
+from app.models.order import Order
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ async def list_conversations(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status_filter: str | None = Query(None, alias="status"),
+    has_plan_request: bool | None = Query(None, alias="has_plan_request"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
@@ -90,6 +92,17 @@ async def list_conversations(
     )
     if status_filter:
         q = q.where(Conversation.status == status_filter)
+
+    if has_plan_request:
+        orders_subq = (
+            select(Order.contact_id)
+            .where(
+                Order.advertiser_id == current_user.id,
+                Order.state == "plan_pending_confirmation",
+            )
+            .subquery()
+        )
+        q = q.where(Conversation.contact_id.in_(orders_subq))
 
     q = q.order_by(desc(Conversation.last_activity)).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(q)

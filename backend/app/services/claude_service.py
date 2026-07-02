@@ -322,6 +322,28 @@ def detect_plan_purchase_intent(message: str) -> str | None:
         "quiero comprar el plan", "quiero contratar el plan",
         "comprar plan", "contratar plan", "suscribirme",
         "contratar", "suscribir",
+        # Patrones adicionales para lenguaje más natural
+        "cuánto cuesta", "cuanto cuesta", "precios", "precio",
+        "qué planes", "que planes", "planes disponibles",
+        "me interesa anunciarme", "quiero anunciarme",
+        "quiero publicidad", "me interesa publicidad",
+        "cómo contrato", "como contrato", "cómo me registro",
+        "quiero registrarme", "quiero darme de alta",
+        "me interesa el servicio", "quiero el servicio",
+        "quiero promocionar", "quiero promocionar mi",
+        "necesito un plan", "necesito el plan",
+        "pasarme al", "cambiarme al", "actualizar a",
+        "upgrade", "mejorar mi plan",
+        "quiero ser parte", "me interesa ser parte",
+        "manda información", "manda precios",
+        "info de planes", "info planes",
+        "cotizar", "cotización", "quiero cotizar",
+        "actívenme", "activenme", "quiero activar",
+        "pagar", "pagar plan", "pagar el plan",
+        "comprar", "adquirir", "adquirir plan",
+        "starter", "growth", "pro",
+        "plan básico", "plan intermedio", "plan premium",
+        "más barato", "más caro", "recomiéndame",
     ]
 
     for pattern in patterns:

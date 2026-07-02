@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch } from 'lucide-react'
+import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
 import SEO from '@/components/SEO'
@@ -27,6 +27,9 @@ interface DashboardData {
   subscription_status: string
   orders_confirmed: number
   orders_pending: number
+  leads_from_bot: number
+  plan_requests: number
+  leads_unreplied: number
 }
 
 interface ChartPoint {
@@ -180,6 +183,49 @@ export default function DashboardPage() {
                 <p className="mt-3 text-3xl font-bold text-foreground">{formatNumber(value)}</p>
               </div>
             ))}
+          </div>
+
+          {/* Leads del bot — 3 cards */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Link
+              to="/app/inbox"
+              className="rounded-xl border border-cyan-100 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/30 p-5 hover:border-cyan-300 dark:hover:border-cyan-600 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-cyan-700 dark:text-cyan-300">Nuevos leads del bot</p>
+                <div className="rounded-lg bg-cyan-500 p-2">
+                  <Bot className="h-4 w-4 text-white" />
+                </div>
+              </div>
+              <p className="mt-2 text-2xl font-bold text-cyan-800 dark:text-cyan-200">{formatNumber(data?.leads_from_bot ?? 0)}</p>
+              <p className="mt-0.5 text-xs text-cyan-600 dark:text-cyan-400">Contactos vía WhatsApp este mes</p>
+            </Link>
+            <Link
+              to="/app/orders"
+              className="rounded-xl border border-rose-100 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 p-5 hover:border-rose-300 dark:hover:border-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-rose-700 dark:text-rose-300">Solicitudes de plan</p>
+                <div className="rounded-lg bg-rose-500 p-2">
+                  <CreditCard className="h-4 w-4 text-white" />
+                </div>
+              </div>
+              <p className="mt-2 text-2xl font-bold text-rose-800 dark:text-rose-200">{formatNumber(data?.plan_requests ?? 0)}</p>
+              <p className="mt-0.5 text-xs text-rose-600 dark:text-rose-400">Clientes que pidieron un plan</p>
+            </Link>
+            <Link
+              to="/app/inbox"
+              className="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-5 hover:border-amber-300 dark:hover:border-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Leads sin respuesta</p>
+                <div className="rounded-lg bg-amber-500 p-2">
+                  <PhoneOff className="h-4 w-4 text-white" />
+                </div>
+              </div>
+              <p className="mt-2 text-2xl font-bold text-amber-800 dark:text-amber-200">{formatNumber(data?.leads_unreplied ?? 0)}</p>
+              <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">Esperando tu primera respuesta</p>
+            </Link>
           </div>
 
           {/* Orders bot summary */}

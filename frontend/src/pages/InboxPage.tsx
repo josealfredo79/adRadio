@@ -92,14 +92,21 @@ export default function InboxPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('active')
   const [leadScoreFilter, setLeadScoreFilter] = useState<string>('')
+  const [planRequestFilter, setPlanRequestFilter] = useState(false)
   const [search, setSearch] = useState('')
   const [replyText, setReplyText] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const { data: conversations, isLoading } = useQuery<ConvSummary[]>({
-    queryKey: ['conversations', statusFilter],
+    queryKey: ['conversations', statusFilter, planRequestFilter],
     queryFn: () =>
-      api.get('/conversations', { params: { status: statusFilter || undefined, page_size: 50 } }).then((r) => r.data),
+      api.get('/conversations', {
+        params: {
+          status: statusFilter || undefined,
+          page_size: 50,
+          has_plan_request: planRequestFilter || undefined,
+        },
+      }).then((r) => r.data),
     refetchInterval: 30_000,
   })
 
@@ -208,6 +215,19 @@ export default function InboxPage() {
                 {opt.l}
               </button>
             ))}
+          </div>
+          <div className="mt-2">
+            <button
+              onClick={() => { setPlanRequestFilter(!planRequestFilter); setSelectedId(null) }}
+              className={cn(
+                'w-full rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                planRequestFilter
+                  ? 'bg-rose-100 text-rose-700 ring-1 ring-rose-300 dark:bg-rose-900/40 dark:text-rose-300 dark:ring-rose-700'
+                  : 'bg-gray-50 text-gray-500 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800'
+              )}
+            >
+              💳 {planRequestFilter ? 'Mostrando solicitudes de plan' : 'Mostrar solo solicitudes de plan'}
+            </button>
           </div>
         </div>
 

@@ -169,6 +169,45 @@ async def dashboard(
         )
     )
 
+    # Leads del bot — contactos creados vía WhatsApp este mes
+    leads_from_bot = await db.execute(
+        select(func.count()).where(
+            Contact.advertiser_id == current_user.id,
+            Contact.source == "landing",
+            Contact.created_at >= first_of_month,
+        )
+    )
+    # Solicitudes de plan (órdenes en plan_pending_confirmation)
+    plan_requests = await db.execute(
+        select(func.count()).where(
+            Order.advertiser_id == current_user.id,
+            Order.state == "plan_pending_confirmation",
+        )
+    )
+    # Leads sin respuesta — contactos cuya última interacción fue inbound sin reply
+    last_in = (
+        select(
+            Message.contact_id,
+            Message.direction,
+            func.row_number().over(
+                partition_by=Message.contact_id,
+                order_by=Message.created_at.desc(),
+            ).label("rn"),
+        )
+        .where(
+            Message.advertiser_id == current_user.id,
+            Message.created_at >= first_of_month,
+        )
+        .subquery()
+    )
+    unreplied = await db.execute(
+        select(func.count()).select_from(
+            select(last_in.c.contact_id)
+            .where(last_in.c.rn == 1, last_in.c.direction == "inbound")
+            .subquery()
+        )
+    )
+
     data = {
         "contacts_total": contacts_total.scalar_one(),
         "campaigns_active": campaigns_active.scalar_one(),
@@ -179,6 +218,9 @@ async def dashboard(
         "subscription_status": current_user.subscription_status,
         "orders_confirmed": orders_confirmed.scalar_one(),
         "orders_pending": orders_pending.scalar_one(),
+        "leads_from_bot": leads_from_bot.scalar_one(),
+        "plan_requests": plan_requests.scalar_one(),
+        "leads_unreplied": unreplied.scalar_one(),
     }
 
     if redis:

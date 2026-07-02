@@ -610,6 +610,23 @@ async def twilio_incoming(
             await db.flush()
             pending_order = new_order
 
+            req_notify = (
+                f"🎯 *NUEVA SOLICITUD DE PLAN*\n"
+                f"────────────────\n"
+                f"📋 Plan: {detected_plan.capitalize()}\n"
+                f"👤 Cliente: {contact_name}\n"
+                f"📱 WhatsApp: {from_number}\n"
+                f"────────────────\n"
+                f"Abre el inbox para dar seguimiento."
+            )
+            if advertiser.phone or advertiser.whatsapp_number:
+                from app.services.twilio_service import send_whatsapp
+                owner_number = advertiser.whatsapp_number or advertiser.phone
+                try:
+                    await send_whatsapp(to=owner_number, body=req_notify)
+                except Exception:
+                    logger.warning("[PLAN] Failed to send plan request notification", exc_info=True)
+
             order_reply = (
                 f"¡Excelente elección! 💪\n"
                 f"¿Confirmas que quieres el *Plan {detected_plan.capitalize()}*?\n"
