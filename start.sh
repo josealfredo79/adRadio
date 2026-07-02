@@ -9,7 +9,8 @@ echo "======================="
 
 if [ "${SERVICE_ROLE:-api}" = "api" ]; then
     echo "Running database migrations..."
-    alembic upgrade head || echo "Migrations skipped"
+    alembic upgrade head
+    echo "Migrations applied successfully"
 
     echo "Starting Celery worker (background)..."
     celery -A app.workers.celery_app worker \

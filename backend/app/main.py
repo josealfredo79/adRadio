@@ -142,10 +142,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             csp_parts.append("style-src 'self' 'unsafe-inline'")
         csp_parts.append("img-src 'self' data: https:")
         csp_parts.append("frame-src 'self' https://js.stripe.com")
+        connect_src = ["'self'"]
         if api_url:
-            csp_parts.append(f"connect-src 'self' {api_url}")
-        else:
-            csp_parts.append("connect-src 'self'")
+            connect_src.append(api_url)
+        connect_src.append("https://api.stripe.com")
+        csp_parts.append(f"connect-src {' '.join(connect_src)}")
         csp = "; ".join(csp_parts)
         response.headers["Content-Security-Policy"] = csp
         if request.app.debug:
@@ -199,13 +200,15 @@ if _WIDGET_DIR.is_dir():
 
 @app.get("/health")
 async def health():
+    if not settings.DEBUG:
+        return {"status": "ok"}
+
     import stripe as stripe_lib
     from sqlalchemy import text
     from app.database import engine
 
     checks = {}
 
-    # Database check
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
@@ -213,7 +216,6 @@ async def health():
     except Exception as e:
         checks["database"] = f"error: {e}"
 
-    # Redis check
     try:
         import redis as sync_redis
         r = sync_redis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
@@ -223,7 +225,6 @@ async def health():
     except Exception as e:
         checks["redis"] = f"error: {e}"
 
-    # Stripe check
     if settings.STRIPE_SECRET_KEY:
         try:
             stripe_lib.api_key = settings.STRIPE_SECRET_KEY

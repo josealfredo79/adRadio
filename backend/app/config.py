@@ -45,14 +45,13 @@ class Settings(BaseSettings):
     # Comma-separated list of pre-approved WhatsApp numbers for the Pro pool
     # e.g. "+525511111111,+525522222222,+525533333333"
     TWILIO_NUMBER_POOL: str = ""
-    # SID de la plantilla notificacion_informativa (MARKETING) para abrir ventana 24h
-    TWILIO_INVITACION_TEMPLATE_SID: str = "HX5dc3c07019d22ed5b128df45d2ed1b15"
-    # SID de la plantilla notificacion_audio_v2 (UTILITY) que sí puede enviarse fuera de ventana 24h
-    TWILIO_UTILITY_TEMPLATE_SID: str = "HXd5f54a4479517e056e3dc216f95d1067"
-    # SID de plantilla con botones interactivos Sí/No para confirmación de pedidos
-    TWILIO_ORDER_CONFIRM_BUTTONS_SID: str = "HXef5e2a5ea81bc899605ffd5b18010029"
-    # SID de plantilla con botones interactivos Sí/No para confirmación de citas
-    TWILIO_APPOINTMENT_CONFIRM_BUTTONS_SID: str = "HX9424a04e30e608f3359c77d23a383864"
+    # SID de plantillas aprobadas en Twilio Content API.
+    # Se configuran via environment variable.
+    # Formato: HX<32 caracteres hex>
+    TWILIO_INVITACION_TEMPLATE_SID: str = ""
+    TWILIO_UTILITY_TEMPLATE_SID: str = ""
+    TWILIO_ORDER_CONFIRM_BUTTONS_SID: str = ""
+    TWILIO_APPOINTMENT_CONFIRM_BUTTONS_SID: str = ""
 
     @property
     def twilio_number_pool_list(self) -> list[str]:
