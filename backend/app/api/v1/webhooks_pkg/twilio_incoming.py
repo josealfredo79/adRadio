@@ -25,6 +25,7 @@ from app.models.user import User
 from app.services.coupon_service import is_redeem_intent, is_expired
 from app.services.rag_service import answer_with_rag
 from app.services.claude_service import detect_order_intent, detect_plan_purchase_intent
+from app.services.twilio_service import send_whatsapp as _send_wa
 from app.api.v1.webhooks_pkg.lead_score import calculate_lead_score
 from app.core.rate_limiter import limiter
 
@@ -199,7 +200,6 @@ async def twilio_incoming(
         )
         reschedule_appt = reschedule_result.scalars().first()
         if reschedule_appt:
-            from app.services.twilio_service import send_whatsapp as _send_wa
             normalized = body_text.strip().lower()
             if normalized in ("1", "si", "sí", "s", "yes", "y", "claro", "por supuesto", "reagendar"):
                 reschedule_appt.awaiting_reschedule = False
@@ -236,7 +236,6 @@ async def twilio_incoming(
 
         if pending_appt:
             from datetime import datetime
-            from app.services.twilio_service import send_whatsapp as _send_wa
             hora = pending_appt.scheduled_at.strftime("%I:%M %p").lstrip("0")
             fecha = pending_appt.scheduled_at.strftime("%A %d de %B")
             biz_name = advertiser.business_name or "el negocio"
@@ -754,28 +753,20 @@ async def twilio_incoming(
     db.add(out_msg)
     await db.commit()
 
-    from app.workers.tasks import send_whatsapp_message, send_welcome_cuna, update_contact_engagement_score, trigger_automation_for_contact, auto_tag_contact_from_conversation
-    from app.services.twilio_service import send_whatsapp as _send_wa_direct
+    from app.workers.tasks import send_welcome_cuna, update_contact_engagement_score, trigger_automation_for_contact, auto_tag_contact_from_conversation
 
-    try:
-        send_whatsapp_message.apply_async(
-            args=[str(out_msg.id), from_number, reply],
-            queue="whatsapp",
-        )
-    except Exception as celery_err:
-        logger.error("[WEBHOOK] Celery unavailable, sending direct: %s", celery_err)
-        sid_direct, err_direct = await _send_wa_direct(
-            from_number, reply,
-            from_number=advertiser.whatsapp_number,
-        )
-        if sid_direct:
-            out_msg.status = "sent"
-            out_msg.twilio_sid = sid_direct
-            out_msg.sent_at = datetime.now(timezone.utc)
-        else:
-            out_msg.status = "failed"
-            out_msg.error_code = err_direct
-        await db.commit()
+    sid, err = await _send_wa(
+        from_number, reply,
+        from_number=advertiser.whatsapp_number,
+    )
+    if sid:
+        out_msg.status = "sent"
+        out_msg.twilio_sid = sid
+        out_msg.sent_at = datetime.now(timezone.utc)
+    else:
+        out_msg.status = "failed"
+        out_msg.error_code = err
+    await db.commit()
 
     try:
         update_contact_engagement_score.apply_async(
