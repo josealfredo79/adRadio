@@ -39,29 +39,57 @@ PALETTES = {
 
 # ── Mapeo categoría de negocio → diseño ───────────────────────────────────────
 BUSINESS_STYLE = {
-    "restaurante":   {"layout": "clasico",  "palette": "naranja",  "vibe": "calido"},
-    "comida":        {"layout": "ticker",   "palette": "naranja",  "vibe": "urgente"},
-    "bar":           {"layout": "neon",     "palette": "oscuro",   "vibe": "nocturno"},
-    "salon":         {"layout": "centrado", "palette": "elegante", "vibe": "elegante"},
-    "belleza":       {"layout": "centrado", "palette": "morado",   "vibe": "moderno"},
-    "spa":           {"layout": "arco",     "palette": "helado",   "vibe": "calma"},
-    "salud":         {"layout": "arco",     "palette": "azul",     "vibe": "confianza"},
-    "farmacia":      {"layout": "arco",     "palette": "verde",    "vibe": "confianza"},
-    "fitness":       {"layout": "split",    "palette": "naranja",  "vibe": "energico"},
-    "tienda":        {"layout": "ticker",   "palette": "promo",    "vibe": "urgente"},
-    "supermercado":  {"layout": "ticker",   "palette": "verde",    "vibe": "urgente"},
-    "ropa":          {"layout": "centrado", "palette": "elegante", "vibe": "moderno"},
-    "electronica":   {"layout": "split",    "palette": "azul",     "vibe": "tecnologico"},
-    "servicios":     {"layout": "clasico",  "palette": "azul",     "vibe": "profesional"},
-    "inmobiliaria":  {"layout": "minimal",  "palette": "elegante", "vibe": "exclusivo"},
-    "automotriz":    {"layout": "split",    "palette": "rojo",     "vibe": "potente"},
-    "educacion":     {"layout": "centrado", "palette": "azul",     "vibe": "confiable"},
-    "tecnologia":    {"layout": "split",    "palette": "azul",     "vibe": "innovador"},
-    "financiero":    {"layout": "minimal",  "palette": "elegante", "vibe": "serio"},
-    "eventos":       {"layout": "centrado", "palette": "morado",   "vibe": "festivo"},
-    "club":          {"layout": "neon",     "palette": "morado",   "vibe": "nocturno"},
-    "entretenimiento":{"layout": "neon",    "palette": "rojo",     "vibe": "emocionante"},
-    "viajes":        {"layout": "split",    "palette": "azul",     "vibe": "aventura"},
+    # ── Comida y bebida ────────────────────────────────────────────────────
+    "restaurante":    {"layout": "clasico",  "palette": "naranja",  "vibe": "calido"},
+    "comida":         {"layout": "ticker",   "palette": "naranja",  "vibe": "urgente"},
+    "panaderia":      {"layout": "clasico",  "palette": "calido",   "vibe": "calido"},
+    "cafeteria":      {"layout": "clasico",  "palette": "calido",   "vibe": "calido"},
+    "bar":            {"layout": "neon",     "palette": "oscuro",   "vibe": "nocturno"},
+    "club":           {"layout": "neon",     "palette": "morado",   "vibe": "nocturno"},
+    "entretenimiento":{"layout": "neon",     "palette": "rojo",     "vibe": "emocionante"},
+    # ── Belleza y bienestar ────────────────────────────────────────────────
+    "salon":          {"layout": "centrado", "palette": "elegante", "vibe": "elegante"},
+    "belleza":        {"layout": "centrado", "palette": "morado",   "vibe": "moderno"},
+    "barberia":       {"layout": "split",    "palette": "oscuro",   "vibe": "nocturno"},
+    "spa":            {"layout": "arco",     "palette": "helado",   "vibe": "calma"},
+    "yoga":           {"layout": "arco",     "palette": "helado",   "vibe": "calma"},
+    # ── Salud ─────────────────────────────────────────────────────────────
+    "salud":          {"layout": "arco",     "palette": "azul",     "vibe": "confianza"},
+    "farmacia":       {"layout": "arco",     "palette": "verde",    "vibe": "confianza"},
+    "dental":         {"layout": "arco",     "palette": "azul",     "vibe": "confianza"},
+    "veterinaria":    {"layout": "arco",     "palette": "verde",    "vibe": "amigable"},
+    "optica":         {"layout": "arco",     "palette": "azul",     "vibe": "confianza"},
+    "guarderia":      {"layout": "arco",     "palette": "verde",    "vibe": "amigable"},
+    # ── Deporte ───────────────────────────────────────────────────────────
+    "fitness":        {"layout": "split",    "palette": "naranja",  "vibe": "energico"},
+    # ── Retail y moda ─────────────────────────────────────────────────────
+    "tienda":         {"layout": "ticker",   "palette": "promo",    "vibe": "urgente"},
+    "supermercado":   {"layout": "ticker",   "palette": "verde",    "vibe": "urgente"},
+    "ferreteria":     {"layout": "ticker",   "palette": "naranja",  "vibe": "urgente"},
+    "ropa":           {"layout": "centrado", "palette": "elegante", "vibe": "moderno"},
+    "zapateria":      {"layout": "centrado", "palette": "elegante", "vibe": "moderno"},
+    "joyeria":        {"layout": "minimal",  "palette": "elegante", "vibe": "exclusivo"},
+    "muebleria":      {"layout": "minimal",  "palette": "elegante", "vibe": "exclusivo"},
+    "fotografia":     {"layout": "minimal",  "palette": "oscuro",   "vibe": "elegante"},
+    # ── Tecnología ────────────────────────────────────────────────────────
+    "electronica":    {"layout": "split",    "palette": "azul",     "vibe": "tecnologico"},
+    "tecnologia":     {"layout": "split",    "palette": "azul",     "vibe": "innovador"},
+    # ── Automotriz y construcción ──────────────────────────────────────────
+    "automotriz":     {"layout": "split",    "palette": "rojo",     "vibe": "potente"},
+    "construccion":   {"layout": "split",    "palette": "rojo",     "vibe": "potente"},
+    # ── Servicios generales ────────────────────────────────────────────────
+    "servicios":      {"layout": "clasico",  "palette": "azul",     "vibe": "profesional"},
+    "plomeria":       {"layout": "clasico",  "palette": "azul",     "vibe": "profesional"},
+    "lavanderia":     {"layout": "clasico",  "palette": "azul",     "vibe": "profesional"},
+    # ── Educación ─────────────────────────────────────────────────────────
+    "educacion":      {"layout": "centrado", "palette": "azul",     "vibe": "confiable"},
+    # ── Finanzas e inmobiliaria ────────────────────────────────────────────
+    "inmobiliaria":   {"layout": "minimal",  "palette": "elegante", "vibe": "exclusivo"},
+    "financiero":     {"layout": "minimal",  "palette": "elegante", "vibe": "serio"},
+    "seguros":        {"layout": "minimal",  "palette": "elegante", "vibe": "serio"},
+    # ── Ocio y viajes ─────────────────────────────────────────────────────
+    "eventos":        {"layout": "centrado", "palette": "morado",   "vibe": "festivo"},
+    "viajes":         {"layout": "split",    "palette": "azul",     "vibe": "aventura"},
 }
 
 # ── Mapeo tipo de campaña → diseño ────────────────────────────────────────────
