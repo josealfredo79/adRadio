@@ -39,25 +39,29 @@ PALETTES = {
 
 # ── Mapeo categoría de negocio → diseño ───────────────────────────────────────
 BUSINESS_STYLE = {
-    "restaurante":  {"layout": "clasico",  "palette": "naranja", "vibe": "calido"},
-    "comida":       {"layout": "clasico",  "palette": "naranja", "vibe": "calido"},
-    "bar":          {"layout": "clasico",  "palette": "oscuro",  "vibe": "nocturno"},
-    "salon":        {"layout": "centrado", "palette": "elegante","vibe": "elegante"},
-    "belleza":      {"layout": "centrado", "palette": "morado",  "vibe": "moderno"},
-    "spa":          {"layout": "minimal",  "palette": "helado",  "vibe": "calma"},
-    "salud":        {"layout": "minimal",  "palette": "azul",    "vibe": "confianza"},
-    "fitness":      {"layout": "split",    "palette": "naranja", "vibe": "energico"},
-    "tienda":       {"layout": "clasico",  "palette": "promo",   "vibe": "urgente"},
-    "ropa":         {"layout": "centrado", "palette": "elegante","vibe": "moderno"},
-    "electronica":  {"layout": "split",    "palette": "azul",    "vibe": "tecnologico"},
-    "servicios":    {"layout": "clasico",  "palette": "azul",    "vibe": "profesional"},
-    "inmobiliaria": {"layout": "minimal",  "palette": "elegante","vibe": "exclusivo"},
-    "automotriz":   {"layout": "split",    "palette": "rojo",    "vibe": "potente"},
-    "educacion":    {"layout": "centrado", "palette": "azul",    "vibe": "confiable"},
-    "tecnologia":   {"layout": "split",    "palette": "azul",    "vibe": "innovador"},
-    "financiero":   {"layout": "minimal",  "palette": "elegante","vibe": "serio"},
-    "eventos":      {"layout": "centrado", "palette": "morado",  "vibe": "festivo"},
-    "viajes":       {"layout": "split",    "palette": "azul",    "vibe": "aventura"},
+    "restaurante":   {"layout": "clasico",  "palette": "naranja",  "vibe": "calido"},
+    "comida":        {"layout": "ticker",   "palette": "naranja",  "vibe": "urgente"},
+    "bar":           {"layout": "neon",     "palette": "oscuro",   "vibe": "nocturno"},
+    "salon":         {"layout": "centrado", "palette": "elegante", "vibe": "elegante"},
+    "belleza":       {"layout": "centrado", "palette": "morado",   "vibe": "moderno"},
+    "spa":           {"layout": "arco",     "palette": "helado",   "vibe": "calma"},
+    "salud":         {"layout": "arco",     "palette": "azul",     "vibe": "confianza"},
+    "farmacia":      {"layout": "arco",     "palette": "verde",    "vibe": "confianza"},
+    "fitness":       {"layout": "split",    "palette": "naranja",  "vibe": "energico"},
+    "tienda":        {"layout": "ticker",   "palette": "promo",    "vibe": "urgente"},
+    "supermercado":  {"layout": "ticker",   "palette": "verde",    "vibe": "urgente"},
+    "ropa":          {"layout": "centrado", "palette": "elegante", "vibe": "moderno"},
+    "electronica":   {"layout": "split",    "palette": "azul",     "vibe": "tecnologico"},
+    "servicios":     {"layout": "clasico",  "palette": "azul",     "vibe": "profesional"},
+    "inmobiliaria":  {"layout": "minimal",  "palette": "elegante", "vibe": "exclusivo"},
+    "automotriz":    {"layout": "split",    "palette": "rojo",     "vibe": "potente"},
+    "educacion":     {"layout": "centrado", "palette": "azul",     "vibe": "confiable"},
+    "tecnologia":    {"layout": "split",    "palette": "azul",     "vibe": "innovador"},
+    "financiero":    {"layout": "minimal",  "palette": "elegante", "vibe": "serio"},
+    "eventos":       {"layout": "centrado", "palette": "morado",   "vibe": "festivo"},
+    "club":          {"layout": "neon",     "palette": "morado",   "vibe": "nocturno"},
+    "entretenimiento":{"layout": "neon",    "palette": "rojo",     "vibe": "emocionante"},
+    "viajes":        {"layout": "split",    "palette": "azul",     "vibe": "aventura"},
 }
 
 # ── Mapeo tipo de campaña → diseño ────────────────────────────────────────────
@@ -504,12 +508,235 @@ def _render_minimal(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: 
     draw.text((bx0 + bpx, by0 + bpy), copy.cta, font=font_cta, fill=accent)
 
 
+# ── Mapeo de layouts a renderizadores ───────────────────────────────────────────────
+
+def _render_ticker(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tuple, accent: tuple, rng: random.Random) -> None:
+    """
+    Layout TICKER: Barra gruesa de acento en la parte inferior (urgencia/promo).
+    Parte superior oscura con headline muy grande. Para tiendas y promos rápidas.
+    """
+    pad = 60
+    ticker_h = 138
+    ticker_y = BANNER_H - ticker_h
+
+    _gradient_background(draw, BANNER_W, BANNER_H, c1, c2)
+
+    # Líneas horizontales decorativas sutiles en zona oscura
+    line_hi = tuple(min(255, c + 18) for c in c1)
+    for y in range(0, ticker_y, 44):
+        draw.line([(0, y), (BANNER_W, y)], fill=line_hi, width=1)
+
+    # Ticker bar solida en color acento
+    for y in range(ticker_y, BANNER_H):
+        t = (y - ticker_y) / (BANNER_H - ticker_y)
+        r = int(accent[0] * (1 - t * 0.18))
+        g = int(accent[1] * (1 - t * 0.18))
+        b = int(accent[2] * (1 - t * 0.18))
+        draw.line([(0, y), (BANNER_W, y)], fill=(r, g, b))
+
+    # Divisor brillante entre zona oscura y ticker
+    bright = tuple(min(255, c + 50) for c in accent)
+    draw.rectangle([0, ticker_y - 4, BANNER_W, ticker_y + 4], fill=bright)
+
+    font_greeting = _load_font(_FONT_REGULAR, 26)
+    font_headline = _load_font(_FONT_BOLD, 90)
+    font_biz = _load_font(_FONT_BOLD, 24)
+    font_cta = _load_font(_FONT_BOLD, 36)
+
+    # Greeting
+    greet_col = accent if sum(accent) < 600 else (255, 255, 255)
+    draw.text((pad, 50), f"¡Hola, {copy.contact_name}!", font=font_greeting, fill=greet_col)
+
+    # Headline extra grande en zona oscura
+    shadow = tuple(max(0, c - 30) for c in c1)
+    lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
+    y_cur = 110
+    for line in lines[:2]:
+        draw.text((pad + 3, y_cur + 3), line, font=font_headline, fill=shadow)
+        draw.text((pad, y_cur), line, font=font_headline, fill=(255, 255, 255))
+        bbox = draw.textbbox((0, 0), line, font=font_headline)
+        y_cur += bbox[3] - bbox[1] + 8
+
+    # Ticker bar: nombre del negocio a la izquierda, CTA a la derecha
+    txt_tk = tuple(max(0, c - 70) for c in accent) if sum(accent) > 400 else (255, 255, 255)
+    draw.text((pad, ticker_y + 14), copy.business_name.upper(), font=font_biz, fill=txt_tk)
+
+    cta_bbox = draw.textbbox((0, 0), copy.cta, font=font_cta)
+    cta_w = cta_bbox[2] - cta_bbox[0]
+    cta_h = cta_bbox[3] - cta_bbox[1]
+    cx = BANNER_W - cta_w - pad
+    cy = ticker_y + (ticker_h - cta_h) // 2
+    draw.text((cx - 46, cy), ">>", font=font_cta, fill=txt_tk)
+    draw.text((cx, cy), copy.cta, font=font_cta, fill=txt_tk)
+
+
+def _render_neon(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tuple, accent: tuple, rng: random.Random) -> None:
+    """
+    Layout NEON: Efecto de texto brillante sobre fondo muy oscuro.
+    Marco doble de neón. Para bares nocturnos y negocios de entretenimiento.
+    """
+    pad = 56
+
+    # Fondo muy oscuro (más oscuro que c1)
+    dark = tuple(max(0, c - 25) for c in c1)
+    for y in range(BANNER_H):
+        draw.line([(0, y), (BANNER_W, y)], fill=dark)
+
+    # Marco doble neon
+    draw.rectangle([8, 8, BANNER_W - 8, BANNER_H - 8], outline=accent, width=3)
+    bright_border = tuple(min(255, c + 70) for c in accent)
+    draw.rectangle([16, 16, BANNER_W - 16, BANNER_H - 16], outline=bright_border, width=1)
+
+    font_greeting = _load_font(_FONT_REGULAR, 28)
+    font_headline = _load_font(_FONT_BOLD, 72)
+    font_sub = _load_font(_FONT_REGULAR, 30)
+    font_biz = _load_font(_FONT_BOLD, 24)
+    font_cta = _load_font(_FONT_BOLD, 32)
+
+    glow = tuple(min(255, c + 90) for c in accent)
+
+    # Greeting
+    draw.text((pad, 48), f"¡Hola, {copy.contact_name}!", font=font_greeting, fill=accent)
+
+    # Headline con efecto glow: 8 trazos desplazados en color brillante + texto blanco encima
+    lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
+    y_cur = 106
+    for line in lines[:2]:
+        for dx, dy in [(-2, 0), (2, 0), (0, -2), (0, 2), (-2, -2), (2, 2), (-2, 2), (2, -2)]:
+            draw.text((pad + dx, y_cur + dy), line, font=font_headline, fill=glow)
+        draw.text((pad, y_cur), line, font=font_headline, fill=(255, 255, 255))
+        bbox = draw.textbbox((0, 0), line, font=font_headline)
+        y_cur += bbox[3] - bbox[1] + 10
+
+    # Línea neón separadora
+    y_cur += 18
+    draw.rectangle([pad, y_cur, pad + 70, y_cur + 3], fill=accent)
+    y_cur += 22
+
+    # Subheadline
+    sub_lines = _wrap_text(copy.subheadline, font_sub, BANNER_W - pad * 2)
+    for line in sub_lines[:2]:
+        draw.text((pad, y_cur), line, font=font_sub, fill=(165, 165, 165))
+        bbox = draw.textbbox((0, 0), line, font=font_sub)
+        y_cur += bbox[3] - bbox[1] + 6
+
+    # Business name
+    draw.text((pad, BANNER_H - 110), copy.business_name.upper(), font=font_biz, fill=accent)
+
+    # CTA botón sólido en acento
+    cta_bbox = draw.textbbox((0, 0), copy.cta, font=font_cta)
+    cta_w = cta_bbox[2] - cta_bbox[0]
+    cta_h = cta_bbox[3] - cta_bbox[1]
+    bpx, bpy = 28, 14
+    bx0 = BANNER_W - cta_w - bpx * 2 - pad
+    by0 = BANNER_H - 80
+    bx1 = BANNER_W - pad
+    by1 = by0 + cta_h + bpy * 2
+    _draw_rounded_rect(draw, (bx0, by0, bx1, by1), 12, accent)
+    txt_cta = dark if sum(accent) > 400 else (255, 255, 255)
+    draw.text((bx0 + bpx, by0 + bpy), copy.cta, font=font_cta, fill=txt_cta)
+
+
+def _render_arco(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tuple, accent: tuple, rng: random.Random) -> None:
+    """
+    Layout ARCO: Portal/arco en la parte superior con anillo de acento.
+    Contenido centrado debajo. Para spas, salud, bienestar y farmacias.
+    """
+    pad = 60
+
+    _gradient_background(draw, BANNER_W, BANNER_H, c1, c2)
+
+    # Arco: círculo grande centrado con su parte superior visible
+    arch_r = 320
+    arch_cx = BANNER_W // 2
+    arch_cy = -arch_r + 210  # centro sobre el canvas: solo la parte inferior del círculo es visible
+
+    # Arco exterior (acento)
+    draw.ellipse(
+        [arch_cx - arch_r, arch_cy, arch_cx + arch_r, arch_cy + arch_r * 2],
+        fill=accent,
+    )
+    # Círculo interior (fondo) crea el anillo
+    inner_r = arch_r - 48
+    draw.ellipse(
+        [arch_cx - inner_r, arch_cy + 8, arch_cx + inner_r, arch_cy + inner_r * 2 + 8],
+        fill=c1,
+    )
+    # Segundo gradiente encima del círculo interior para suavizar la transición
+    for y in range(0, min(210, BANNER_H)):
+        t = y / BANNER_H
+        r2 = int(c1[0] + (c2[0] - c1[0]) * t)
+        g2 = int(c1[1] + (c2[1] - c1[1]) * t)
+        b2 = int(c1[2] + (c2[2] - c1[2]) * t)
+        # Solo pinta dentro del círculo interior
+        half_chord = int((inner_r ** 2 - max(0, (y - (arch_cy + inner_r))) ** 2) ** 0.5) if abs(y - (arch_cy + inner_r)) <= inner_r else 0
+        if half_chord > 0:
+            x0 = max(0, arch_cx - half_chord)
+            x1 = min(BANNER_W, arch_cx + half_chord)
+            draw.line([(x0, y), (x1, y)], fill=(r2, g2, b2))
+
+    font_greeting = _load_font(_FONT_REGULAR, 26)
+    font_headline = _load_font(_FONT_BOLD, 68)
+    font_sub = _load_font(_FONT_REGULAR, 28)
+    font_biz = _load_font(_FONT_BOLD, 22)
+    font_cta = _load_font(_FONT_BOLD, 30)
+
+    # Greeting dentro del arco (zona acento visible)
+    txt_arch = tuple(max(0, c - 70) for c in accent) if sum(accent) > 400 else (255, 255, 255)
+    greeting = f"Hola, {copy.contact_name}."
+    g_bbox = draw.textbbox((0, 0), greeting, font=font_greeting)
+    g_x = (BANNER_W - (g_bbox[2] - g_bbox[0])) // 2
+    draw.text((g_x, 36), greeting, font=font_greeting, fill=txt_arch)
+
+    # Headline centrado debajo del arco
+    shadow = tuple(max(0, c - 40) for c in c1)
+    lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
+    y_cur = 228
+    for line in lines[:2]:
+        l_bbox = draw.textbbox((0, 0), line, font=font_headline)
+        lx = (BANNER_W - (l_bbox[2] - l_bbox[0])) // 2
+        draw.text((lx + 2, y_cur + 2), line, font=font_headline, fill=shadow)
+        draw.text((lx, y_cur), line, font=font_headline, fill=(255, 255, 255))
+        bbox = draw.textbbox((0, 0), line, font=font_headline)
+        y_cur += bbox[3] - bbox[1] + 10
+
+    y_cur += 18
+    sub_lines = _wrap_text(copy.subheadline, font_sub, BANNER_W - pad * 2)
+    for line in sub_lines[:2]:
+        s_bbox = draw.textbbox((0, 0), line, font=font_sub)
+        sx = (BANNER_W - (s_bbox[2] - s_bbox[0])) // 2
+        draw.text((sx, y_cur), line, font=font_sub, fill=(175, 175, 175))
+        bbox = draw.textbbox((0, 0), line, font=font_sub)
+        y_cur += bbox[3] - bbox[1] + 6
+
+    # Business name centrado
+    biz_bbox = draw.textbbox((0, 0), copy.business_name.upper(), font=font_biz)
+    biz_x = (BANNER_W - (biz_bbox[2] - biz_bbox[0])) // 2
+    draw.text((biz_x, BANNER_H - 110), copy.business_name.upper(), font=font_biz, fill=accent)
+
+    # CTA centrado sólido
+    cta_bbox = draw.textbbox((0, 0), copy.cta, font=font_cta)
+    cta_w = cta_bbox[2] - cta_bbox[0]
+    cta_h = cta_bbox[3] - cta_bbox[1]
+    bpx, bpy = 30, 14
+    bx0 = (BANNER_W - cta_w - bpx * 2) // 2
+    by0 = BANNER_H - 78
+    bx1 = bx0 + cta_w + bpx * 2
+    by1 = by0 + cta_h + bpy * 2
+    _draw_rounded_rect(draw, (bx0, by0, bx1, by1), 16, accent)
+    txt_cta = c1 if sum(accent) > 400 else (255, 255, 255)
+    draw.text((bx0 + bpx, by0 + bpy), copy.cta, font=font_cta, fill=txt_cta)
+
+
 # ── Mapeo de layouts a renderizadores ─────────────────────────────────────────
 _RENDERERS = {
     "clasico":  _render_clasico,
     "centrado": _render_centrado,
     "split":    _render_split,
     "minimal":  _render_minimal,
+    "ticker":   _render_ticker,
+    "neon":     _render_neon,
+    "arco":     _render_arco,
 }
 
 
