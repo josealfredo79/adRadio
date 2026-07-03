@@ -147,13 +147,13 @@ class TestConfigSettings:
     def test_cors_origins_empty_in_production(self):
         from app.config import Settings
         
-        s = Settings(FRONTEND_URL="")
+        s = Settings(FRONTEND_URL="", DEBUG=False)
         assert len(s.cors_origins) == 0
 
     def test_cors_origins_adds_frontend_url(self):
         from app.config import Settings
         
-        s = Settings(FRONTEND_URL="https://mi-dominio.com")
+        s = Settings(FRONTEND_URL="https://mi-dominio.com", DEBUG=False)
         assert "https://mi-dominio.com" in s.cors_origins
         assert len(s.cors_origins) == 1
 

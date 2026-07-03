@@ -89,6 +89,7 @@ def mock_redis():
 @pytest.fixture(autouse=True)
 def no_posthog():
     """Disable PostHog during tests by clearing the API key."""
+    import app.services.analytics_service  # ensure module is imported before patch (Python 3.12)
     with patch("app.services.analytics_service.settings") as mock:
         mock.POSTHOG_API_KEY = ""
         yield
