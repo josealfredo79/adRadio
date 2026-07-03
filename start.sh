@@ -17,19 +17,9 @@ if [ "${SERVICE_ROLE:-api}" = "api" ]; then
     fi
     echo "Migrations applied successfully"
 
-    echo "Starting Celery worker (background)..."
-    celery -A app.workers.celery_app worker \
-        --loglevel=info \
-        -Q whatsapp,campaigns,processing \
-        --pool threads -c 1 &
-    CELERY_WORKER_PID=$!
-    echo "Celery worker started (PID: $CELERY_WORKER_PID)"
-
-    echo "Starting Celery beat (background)..."
-    celery -A app.workers.celery_app beat \
-        --loglevel=info &
-    CELERY_BEAT_PID=$!
-    echo "Celery beat started (PID: $CELERY_BEAT_PID)"
+    # NOTE: Celery worker and beat are managed as dedicated Railway services
+    # (Dockerfile.worker). Do NOT start them inline here to avoid duplicate
+    # Beat schedulers sending double messages to customers.
 
     echo "Starting Uvicorn..."
     exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
