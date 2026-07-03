@@ -2,23 +2,87 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { CheckCircle2, Upload, Users, Megaphone, X, ChevronRight, Loader2 } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import { CheckCircle2, Upload, Users, Megaphone, X, ChevronRight, Loader2, Building2, Bot } from 'lucide-react'
 
 interface Props {
   onClose: () => void
 }
 
 const STEPS = [
-  { id: 1, icon: Upload, label: 'Base de conocimiento', desc: 'Sube un documento para que tu bot responda preguntas' },
-  { id: 2, icon: Users, label: 'Primer contacto', desc: 'Agrega un número de WhatsApp a tu lista' },
-  { id: 3, icon: Megaphone, label: 'Primera campaña', desc: 'Envía tu primer mensaje masivo' },
+  { id: 0, icon: Building2, label: 'Tu negocio',           desc: 'Categoría, ciudad y nombre del bot' },
+  { id: 1, icon: Upload,    label: 'Base de conocimiento', desc: 'Sube un documento para que tu bot responda preguntas' },
+  { id: 2, icon: Users,     label: 'Primer contacto',      desc: 'Agrega un número de WhatsApp a tu lista' },
+  { id: 3, icon: Megaphone, label: 'Primera campaña',      desc: 'Envía tu primer mensaje masivo' },
+]
+
+const CATEGORIES = [
+  { value: 'restaurante',     label: '🍽️  Restaurante' },
+  { value: 'comida',          label: '🍔  Comida rápida' },
+  { value: 'panaderia',       label: '🥐  Panadería / Pastelería' },
+  { value: 'cafeteria',       label: '☕  Cafetería' },
+  { value: 'bar',             label: '🍺  Bar' },
+  { value: 'club',            label: '🎵  Club nocturno' },
+  { value: 'entretenimiento', label: '🎭  Entretenimiento' },
+  { value: 'salon',           label: '💇  Salón de belleza' },
+  { value: 'belleza',         label: '💅  Belleza / Estética' },
+  { value: 'barberia',        label: '✂️  Barbería' },
+  { value: 'spa',             label: '🧖  Spa' },
+  { value: 'yoga',            label: '🧘  Yoga / Pilates' },
+  { value: 'fitness',         label: '💪  Gym / Fitness' },
+  { value: 'salud',           label: '🏥  Salud / Clínica' },
+  { value: 'farmacia',        label: '💊  Farmacia' },
+  { value: 'dental',          label: '🦷  Dentista' },
+  { value: 'veterinaria',     label: '🐾  Veterinaria' },
+  { value: 'optica',          label: '👓  Óptica' },
+  { value: 'guarderia',       label: '👶  Guardería / Jardín de niños' },
+  { value: 'tienda',          label: '🛒  Tienda / Retail' },
+  { value: 'supermercado',    label: '🏪  Supermercado / Abarrotes' },
+  { value: 'ferreteria',      label: '🔧  Ferretería' },
+  { value: 'ropa',            label: '👗  Ropa / Moda' },
+  { value: 'zapateria',       label: '👟  Zapatería' },
+  { value: 'joyeria',         label: '💍  Joyería' },
+  { value: 'muebleria',       label: '🛋️  Mueblería' },
+  { value: 'fotografia',      label: '📸  Fotografía' },
+  { value: 'electronica',     label: '📱  Electrónica' },
+  { value: 'tecnologia',      label: '💻  Tecnología' },
+  { value: 'automotriz',      label: '🚗  Automotriz / Taller' },
+  { value: 'construccion',    label: '🏗️  Construcción' },
+  { value: 'servicios',       label: '🔨  Servicios generales' },
+  { value: 'plomeria',        label: '🪠  Plomería / Electricidad' },
+  { value: 'lavanderia',      label: '🧺  Lavandería' },
+  { value: 'educacion',       label: '📚  Educación / Academia' },
+  { value: 'inmobiliaria',    label: '🏠  Inmobiliaria' },
+  { value: 'financiero',      label: '💰  Financiero / Banco' },
+  { value: 'seguros',         label: '🛡️  Seguros' },
+  { value: 'eventos',         label: '🎉  Eventos' },
+  { value: 'viajes',          label: '✈️  Viajes / Turismo' },
 ]
 
 export default function OnboardingWizard({ onClose }: Props) {
-  const [step, setStep] = useState(1)
+  const { user, refreshUser } = useAuth() as { user: { business_category?: string | null; city?: string | null; bot_name?: string | null } | null; refreshUser?: () => Promise<void> }
+  const [step, setStep] = useState(0)
   const [completed, setCompleted] = useState<number[]>([])
   const navigate = useNavigate()
   const qc = useQueryClient()
+
+  // Step 0 — Perfil del negocio
+  const [category, setCategory] = useState(user?.business_category ?? '')
+  const [city, setCity] = useState(user?.city ?? '')
+  const [botName, setBotName] = useState(user?.bot_name ?? '')
+
+  const profileMutation = useMutation({
+    mutationFn: () => api.patch('/profile/me', {
+      business_category: category || null,
+      city: city || null,
+      bot_name: botName || null,
+    }),
+    onSuccess: async () => {
+      if (refreshUser) await refreshUser()
+      setCompleted((p) => [...p, 0])
+      setStep(1)
+    },
+  })
 
   // Step 1 — KB upload
   const [kbFile, setKbFile] = useState<File | null>(null)
@@ -64,7 +128,10 @@ export default function OnboardingWizard({ onClose }: Props) {
     navigate('/app/campaigns')
   }
 
-  const stepError = (uploadKbMutation.error && 'response' in uploadKbMutation.error
+  const stepError = (profileMutation.error && 'response' in profileMutation.error
+    ? (profileMutation.error as { response: { data: { detail: string } } }).response.data.detail
+    : undefined)
+    || (uploadKbMutation.error && 'response' in uploadKbMutation.error
     ? (uploadKbMutation.error as { response: { data: { detail: string } } }).response.data.detail
     : undefined)
     || (addContactMutation.error && 'response' in addContactMutation.error
@@ -105,6 +172,66 @@ export default function OnboardingWizard({ onClose }: Props) {
         <div className="p-6">
           {stepError && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">{stepError}</p>}
 
+          {/* Step 0: Perfil del negocio */}
+          {step === 0 && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Cuéntanos sobre tu negocio</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Esto permite que los banners y el bot se adapten automáticamente a tu giro.</p>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Categoría del negocio</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                >
+                  <option value="">Selecciona una categoría...</option>
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Ciudad</label>
+                <input
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Ej: Ciudad de México"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <Bot className="inline h-3.5 w-3.5 mr-1 mb-0.5" />
+                  Nombre del bot <span className="font-normal text-gray-400">(opcional)</span>
+                </label>
+                <input
+                  value={botName}
+                  onChange={(e) => setBotName(e.target.value)}
+                  placeholder="Ej: Sofía, Carlos, Asistente..."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400">Omitir por ahora</button>
+                <button
+                  onClick={() => profileMutation.mutate()}
+                  disabled={profileMutation.isPending}
+                  className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 dark:bg-brand-500 dark:hover:bg-brand-600"
+                >
+                  {profileMutation.isPending
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</>
+                    : <>Continuar <ChevronRight className="h-4 w-4" /></>}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Step 1: Knowledge Base */}
           {step === 1 && (
             <div className="space-y-4">
@@ -130,7 +257,7 @@ export default function OnboardingWizard({ onClose }: Props) {
                 </div>
               )}
               <div className="flex items-center justify-between pt-1">
-                <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400">Omitir por ahora</button>
+                <button onClick={() => setStep(0)} className="text-sm text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400">← Atrás</button>
                 <div className="flex gap-2">
                   {!kbFile && (
                     <button onClick={() => { setCompleted((p) => [...p, 1]); setStep(2) }}
