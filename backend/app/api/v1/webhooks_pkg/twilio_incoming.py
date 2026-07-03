@@ -172,6 +172,17 @@ async def twilio_incoming(
 
     if not advertiser:
         logger.warning("[WEBHOOK] No advertiser found for number %s", to_number)
+        shared_numbers = {
+            settings.TWILIO_WHATSAPP_NUMBER,
+            settings.TWILIO_WHATSAPP_NUMBER.replace("whatsapp:", ""),
+        }
+        if to_number in shared_numbers:
+            reply = (
+                "¡Hola! 👋 Bienvenido a IaRadio.\n\n"
+                "Soy el asistente virtual. ¿En qué puedo ayudarte?\n"
+                "Escríbeme y con gusto te atenderé."
+            )
+            await _send_wa(from_number, reply)
         return {"message": "advertiser_not_found"}
 
     stop_words = {"baja", "stop", "no quiero", "cancelar", "salir"}
