@@ -202,212 +202,306 @@ def _draw_particles(draw: ImageDraw.ImageDraw, w: int, h: int, accent: tuple, se
 # ── Renderizadores de layout ──────────────────────────────────────────────────
 
 def _render_clasico(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tuple, accent: tuple, rng: random.Random) -> None:
-    """Layout clásico: greeting + headline a la izquierda, CTA inferior."""
+    """
+    Layout BLOQUES: Split horizontal al 55%.
+    Bloque superior oscuro con headline grande.
+    Bloque inferior en color acento con subheadline y CTA.
+    """
     pad = 60
-    font_greeting = _load_font(_FONT_BOLD, 38)
-    font_headline = _load_font(_FONT_BOLD, 68)
-    font_sub = _load_font(_FONT_REGULAR, 34)
-    font_biz = _load_font(_FONT_BOLD, 28)
-    font_cta = _load_font(_FONT_BOLD, 30)
+    split_y = int(BANNER_H * 0.56)
 
-    draw.rectangle([0, 0, BANNER_W, 8], fill=accent)
-
-    greeting = f"¡Hola, {copy.contact_name}!"
-    draw.text((42, 62), greeting, font=font_greeting, fill=(0, 0, 0, 80))
-    draw.text((40, 60), greeting, font=font_greeting, fill=(*accent, 255))
-
-    draw.rectangle([40, 108, 200, 112], fill=(*accent, 200))
-
-    lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
-    y_cursor = 140
-    for line in lines[:3]:
-        draw.text((pad + 2, y_cursor + 2), line, font=font_headline, fill=(0, 0, 0, 60))
-        draw.text((pad, y_cursor), line, font=font_headline, fill=(255, 255, 255))
-        bbox = draw.textbbox((0, 0), line, font=font_headline)
-        y_cursor += bbox[3] - bbox[1] + 12
-
-    y_cursor += 16
-    sub_lines = _wrap_text(copy.subheadline, font_sub, BANNER_W - pad * 2)
-    for line in sub_lines[:3]:
-        draw.text((pad, y_cursor), line, font=font_sub, fill=(220, 220, 220))
-        bbox = draw.textbbox((0, 0), line, font=font_sub)
-        y_cursor += bbox[3] - bbox[1] + 8
-
-    draw.text((pad, BANNER_H - 120), copy.business_name.upper(), font=font_biz, fill=(*accent, 255))
-
-    cta_bbox = draw.textbbox((0, 0), copy.cta, font=font_cta)
-    cta_w = cta_bbox[2] - cta_bbox[0]
-    cta_h = cta_bbox[3] - cta_bbox[1]
-    btn_pad_x, btn_pad_y = 28, 14
-    btn_x0 = pad
-    btn_y0 = BANNER_H - 80
-    btn_x1 = btn_x0 + cta_w + btn_pad_x * 2
-    btn_y1 = btn_y0 + cta_h + btn_pad_y * 2
-    _draw_rounded_rect(draw, (btn_x0, btn_y0, btn_x1, btn_y1), 12, accent)
-    txt_color = c1 if sum(accent) > 380 else (255, 255, 255)
-    draw.text((btn_x0 + btn_pad_x, btn_y0 + btn_pad_y), copy.cta, font=font_cta, fill=txt_color)
-
-    draw.rectangle([0, BANNER_H - 6, BANNER_W, BANNER_H], fill=accent)
-
-
-def _render_centrado(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tuple, accent: tuple, rng: random.Random) -> None:
-    """Layout centrado: todo centrado horizontalmente, moderno y limpio."""
-    font_greeting = _load_font(_FONT_REGULAR, 32)
-    font_headline = _load_font(_FONT_BOLD, 72)
+    font_greeting = _load_font(_FONT_REGULAR, 30)
+    font_headline = _load_font(_FONT_BOLD, 78)
     font_sub = _load_font(_FONT_REGULAR, 32)
-    font_biz = _load_font(_FONT_BOLD, 26)
-    font_cta = _load_font(_FONT_BOLD, 32)
-    pad = 60
-
-    draw.rectangle([0, 0, BANNER_W, 6], fill=accent)
-    draw.rectangle([0, BANNER_H - 6, BANNER_W, BANNER_H], fill=accent)
-
-    greeting = f"¡Hola, {copy.contact_name}!"
-    g_bbox = draw.textbbox((0, 0), greeting, font=font_greeting)
-    g_x = (BANNER_W - (g_bbox[2] - g_bbox[0])) // 2
-    draw.text((g_x + 1, 41), greeting, font=font_greeting, fill=(0, 0, 0, 60))
-    draw.text((g_x, 40), greeting, font=font_greeting, fill=(255, 255, 255))
-
-    lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 4)
-    y_cursor = 140
-    for line in lines[:2]:
-        l_bbox = draw.textbbox((0, 0), line, font=font_headline)
-        l_x = (BANNER_W - (l_bbox[2] - l_bbox[0])) // 2
-        draw.text((l_x + 2, y_cursor + 2), line, font=font_headline, fill=(0, 0, 0, 60))
-        draw.text((l_x, y_cursor), line, font=font_headline, fill=(255, 255, 255))
-        bbox = draw.textbbox((0, 0), line, font=font_headline)
-        y_cursor += bbox[3] - bbox[1] + 14
-
-    y_cursor += 20
-    sub_lines = _wrap_text(copy.subheadline, font_sub, BANNER_W - pad * 3)
-    for line in sub_lines[:2]:
-        s_bbox = draw.textbbox((0, 0), line, font=font_sub)
-        s_x = (BANNER_W - (s_bbox[2] - s_bbox[0])) // 2
-        draw.text((s_x, y_cursor), line, font=font_sub, fill=(200, 200, 200))
-        bbox = draw.textbbox((0, 0), line, font=font_sub)
-        y_cursor += bbox[3] - bbox[1] + 8
-
-    cta_bbox = draw.textbbox((0, 0), copy.cta, font=font_cta)
-    cta_w = cta_bbox[2] - cta_bbox[0]
-    cta_h = cta_bbox[3] - cta_bbox[1]
-    btn_pad_x, btn_pad_y = 32, 16
-    btn_w = cta_w + btn_pad_x * 2
-    btn_h = cta_h + btn_pad_y * 2
-    btn_x0 = (BANNER_W - btn_w) // 2
-    btn_y0 = BANNER_H - 160
-    _draw_rounded_rect(draw, (btn_x0, btn_y0, btn_x0 + btn_w, btn_y0 + btn_h), 16, accent)
-    txt_color = c1 if sum(accent) > 380 else (255, 255, 255)
-    draw.text((btn_x0 + btn_pad_x, btn_y0 + btn_pad_y), copy.cta, font=font_cta, fill=txt_color)
-
-    biz_bbox = draw.textbbox((0, 0), copy.business_name.upper(), font=font_biz)
-    biz_x = (BANNER_W - (biz_bbox[2] - biz_bbox[0])) // 2
-    draw.text((biz_x, BANNER_H - 80), copy.business_name.upper(), font=font_biz, fill=(*accent, 200))
-
-
-def _render_split(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tuple, accent: tuple, rng: random.Random) -> None:
-    """Layout split: mitad superior e inferior con colores distintos."""
-    font_greeting = _load_font(_FONT_BOLD, 34)
-    font_headline = _load_font(_FONT_BOLD, 74)
-    font_sub = _load_font(_FONT_REGULAR, 30)
     font_biz = _load_font(_FONT_BOLD, 24)
-    font_cta = _load_font(_FONT_BOLD, 30)
-    pad = 60
+    font_cta = _load_font(_FONT_BOLD, 32)
 
-    mid_y = BANNER_H // 2
-    for y in range(mid_y):
-        t = y / mid_y
-        r = int(c1[0] + (accent[0] - c1[0]) * t)
-        g = int(c1[1] + (accent[1] - c1[1]) * t)
-        b = int(c1[2] + (accent[2] - c1[2]) * t)
-        draw.line([(0, y), (BANNER_W, y)], fill=(r, g, b))
-    for y in range(mid_y, BANNER_H):
-        t = (y - mid_y) / mid_y
-        r = int(accent[0] + (c2[0] - accent[0]) * t)
-        g = int(accent[1] + (c2[1] - accent[1]) * t)
-        b = int(accent[2] + (c2[2] - accent[2]) * t)
+    # Fondo: bloque superior con gradiente
+    _gradient_background(draw, BANNER_W, split_y, c1, c2)
+    # Bloque inferior en c2 sólido (color secundario del palette, siempre propio)
+    for y in range(split_y, BANNER_H):
+        t = (y - split_y) / (BANNER_H - split_y)
+        r = int(c2[0] * (1 - t * 0.3))
+        g = int(c2[1] * (1 - t * 0.3))
+        b = int(c2[2] * (1 - t * 0.3))
         draw.line([(0, y), (BANNER_W, y)], fill=(r, g, b))
 
-    draw.rectangle([0, mid_y - 3, BANNER_W, mid_y + 3], fill=(255, 255, 255, 60))
+    # Línea divisora blanca
+    draw.rectangle([0, split_y - 4, BANNER_W, split_y + 4], fill=(255, 255, 255))
 
+    # BLOQUE SUPERIOR: Greeting + Headline
     greeting = f"¡Hola, {copy.contact_name}!"
-    draw.text((42, 52), greeting, font=font_greeting, fill=(0, 0, 0, 60))
-    draw.text((40, 50), greeting, font=font_greeting, fill=(255, 255, 255))
+    # greeting en accent; si accent es muy claro usar blanco
+    greet_color = accent if sum(accent) < 600 else (255, 255, 255)
+    draw.text((pad, 46), greeting, font=font_greeting, fill=greet_color)
 
+    shadow_color = tuple(max(0, c - 40) for c in c1)  # sombra: tono más oscuro del fondo
     lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
-    y_cursor = 130
+    y_cur = 100
     for line in lines[:2]:
-        draw.text((pad + 2, y_cursor + 2), line, font=font_headline, fill=(0, 0, 0, 60))
-        draw.text((pad, y_cursor), line, font=font_headline, fill=(255, 255, 255))
+        draw.text((pad + 3, y_cur + 3), line, font=font_headline, fill=shadow_color)
+        draw.text((pad, y_cur), line, font=font_headline, fill=(255, 255, 255))
         bbox = draw.textbbox((0, 0), line, font=font_headline)
-        y_cursor += bbox[3] - bbox[1] + 10
+        y_cur += bbox[3] - bbox[1] + 10
 
-    biz_y = mid_y + 50
-    draw.text((pad, biz_y), copy.business_name.upper(), font=font_biz, fill=(255, 255, 255, 200))
-
-    sub_y = biz_y + 50
+    # BLOQUE INFERIOR: Sub + CTA a la derecha
+    # texto oscuro si c2 es claro, blanco si c2 es oscuro
+    txt_dark = tuple(max(0, c - 60) for c in c2) if sum(c2) > 400 else (255, 255, 255)
+    sub_y = split_y + 30
     sub_lines = _wrap_text(copy.subheadline, font_sub, BANNER_W - pad * 2)
     for line in sub_lines[:2]:
-        draw.text((pad, sub_y), line, font=font_sub, fill=(220, 220, 220))
+        draw.text((pad, sub_y), line, font=font_sub, fill=txt_dark)
         bbox = draw.textbbox((0, 0), line, font=font_sub)
         sub_y += bbox[3] - bbox[1] + 6
 
+    # Nombre del negocio
+    biz_color = tuple(max(0, c - 80) for c in c2) if sum(c2) > 400 else (255, 255, 255)
+    draw.text((pad, BANNER_H - 110), copy.business_name.upper(), font=font_biz, fill=biz_color)
+
+    # CTA alineado a la derecha
     cta_bbox = draw.textbbox((0, 0), copy.cta, font=font_cta)
     cta_w = cta_bbox[2] - cta_bbox[0]
     cta_h = cta_bbox[3] - cta_bbox[1]
-    btn_pad_x, btn_pad_y = 28, 14
-    btn_x0 = pad
-    btn_y0 = BANNER_H - 90
-    btn_x1 = btn_x0 + cta_w + btn_pad_x * 2
-    btn_y1 = btn_y0 + cta_h + btn_pad_y * 2
-    _draw_rounded_rect(draw, (btn_x0, btn_y0, btn_x1, btn_y1), 12, accent)
-    txt_color = c1 if sum(accent) > 380 else (255, 255, 255)
-    draw.text((btn_x0 + btn_pad_x, btn_y0 + btn_pad_y), copy.cta, font=font_cta, fill=txt_color)
+    bpx, bpy = 28, 14
+    bx0 = BANNER_W - cta_w - bpx * 2 - pad
+    by0 = BANNER_H - 84
+    bx1 = BANNER_W - pad
+    by1 = by0 + cta_h + bpy * 2
+    _draw_rounded_rect(draw, (bx0, by0, bx1, by1), 14, c1)
+    draw.text((bx0 + bpx, by0 + bpy), copy.cta, font=font_cta, fill=accent)
+
+
+def _render_centrado(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tuple, accent: tuple, rng: random.Random) -> None:
+    """
+    Layout DIAGONAL: Polígono diagonal en acento cubre la esquina inferior-izquierda.
+    Texto del headline en zona oscura (arriba-derecha).
+    CTA y negocio en la zona acento.
+    """
+    pad = 60
+
+    # Fondo base oscuro
+    _gradient_background(draw, BANNER_W, BANNER_H, c1, c2)
+
+    # Polígono diagonal: triángulo grande esquina inferior-izquierda
+    diag_pts = [
+        (0, int(BANNER_H * 0.38)),
+        (int(BANNER_W * 0.72), BANNER_H),
+        (0, BANNER_H),
+    ]
+    draw.polygon(diag_pts, fill=accent)
+
+    # Línea diagonal decorativa (borde del polígono) ligeramente más brillante
+    bright = tuple(min(255, c + 40) for c in accent)
+    draw.line([(0, int(BANNER_H * 0.38)), (int(BANNER_W * 0.72), BANNER_H)], fill=bright, width=4)
+
+    font_greeting = _load_font(_FONT_REGULAR, 28)
+    font_headline = _load_font(_FONT_BOLD, 76)
+    font_sub = _load_font(_FONT_REGULAR, 30)
+    font_biz = _load_font(_FONT_BOLD, 26)
+    font_cta = _load_font(_FONT_BOLD, 32)
+
+    # Greeting — zona oscura (arriba)
+    greeting = f"¡Hola, {copy.contact_name}!"
+    draw.text((pad, 46), greeting, font=font_greeting, fill=(*accent, 200))
+
+    # Headline grande — zona oscura (arriba-derecha)
+    shadow_diag = tuple(max(0, c - 40) for c in c1)
+    lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
+    y_cur = 100
+    for line in lines[:2]:
+        draw.text((pad + 2, y_cur + 2), line, font=font_headline, fill=shadow_diag)
+        draw.text((pad, y_cur), line, font=font_headline, fill=(255, 255, 255))
+        bbox = draw.textbbox((0, 0), line, font=font_headline)
+        y_cur += bbox[3] - bbox[1] + 10
+
+    # Subheadline — zona de transición
+    txt_on_accent = c1 if sum(accent) > 400 else (255, 255, 255)
+    sub_y = int(BANNER_H * 0.60)
+    sub_lines = _wrap_text(copy.subheadline, font_sub, int(BANNER_W * 0.55) - pad)
+    for line in sub_lines[:2]:
+        draw.text((pad, sub_y), line, font=font_sub, fill=txt_on_accent)
+        bbox = draw.textbbox((0, 0), line, font=font_sub)
+        sub_y += bbox[3] - bbox[1] + 6
+
+    # Business name
+    draw.text((pad, BANNER_H - 110), copy.business_name.upper(), font=font_biz,
+              fill=(*c1, 180) if sum(accent) > 400 else (255, 255, 255, 180))
+
+    # CTA — zona acento (abajo izquierda)
+    cta_bbox = draw.textbbox((0, 0), copy.cta, font=font_cta)
+    cta_w = cta_bbox[2] - cta_bbox[0]
+    cta_h = cta_bbox[3] - cta_bbox[1]
+    bpx, bpy = 28, 14
+    bx0, by0 = pad, BANNER_H - 80
+    bx1 = bx0 + cta_w + bpx * 2
+    by1 = by0 + cta_h + bpy * 2
+    _draw_rounded_rect(draw, (bx0, by0, bx1, by1), 14, c1)
+    draw.text((bx0 + bpx, by0 + bpy), copy.cta, font=font_cta, fill=accent)
+
+
+def _render_split(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tuple, accent: tuple, rng: random.Random) -> None:
+    """
+    Layout VERTICAL: División izquierda-derecha con separador ligeramente inclinado.
+    Columna izquierda = acento (nombre + CTA).
+    Columna derecha = oscuro (headline + subheadline).
+    """
+    divider_x_top = int(BANNER_W * 0.38)
+    divider_x_bot = int(BANNER_W * 0.42)
+    pad_l = 32
+    pad_r = 56
+
+    font_greeting = _load_font(_FONT_REGULAR, 26)
+    font_headline = _load_font(_FONT_BOLD, 66)
+    font_sub = _load_font(_FONT_REGULAR, 28)
+    font_biz = _load_font(_FONT_BOLD, 22)
+    font_cta = _load_font(_FONT_BOLD, 30)
+
+    # Columna derecha — fondo oscuro
+    _gradient_background(draw, BANNER_W, BANNER_H, c1, c2)
+
+    # Columna izquierda — acento sólido (polígono ligeramente inclinado)
+    left_pts = [
+        (0, 0),
+        (divider_x_top, 0),
+        (divider_x_bot, BANNER_H),
+        (0, BANNER_H),
+    ]
+    draw.polygon(left_pts, fill=accent)
+
+    # Línea de borde del separador
+    bright = tuple(min(255, c + 50) for c in accent)
+    draw.line([(divider_x_top, 0), (divider_x_bot, BANNER_H)], fill=bright, width=5)
+
+    # COLUMNA IZQUIERDA: nombre del negocio y CTA
+    txt_l = c1 if sum(accent) > 400 else (255, 255, 255)
+
+    # Nombre del negocio — texto pequeño arriba
+    biz_font = _load_font(_FONT_BOLD, 20)
+    biz_lines = _wrap_text(copy.business_name.upper(), biz_font, divider_x_top - pad_l * 2)
+    biz_y = 40
+    biz_color = tuple(max(0, c - 60) for c in accent) if sum(accent) > 400 else (255, 255, 255)
+    for bl in biz_lines[:3]:
+        draw.text((pad_l, biz_y), bl, font=biz_font, fill=biz_color)
+        bb = draw.textbbox((0, 0), bl, font=biz_font)
+        biz_y += bb[3] - bb[1] + 4
+
+    # CTA centrado verticalmente en columna izquierda
+    cta_font = _load_font(_FONT_BOLD, 28)
+    cta_lines = _wrap_text(copy.cta, cta_font, divider_x_top - pad_l * 2)
+    total_h = sum(draw.textbbox((0, 0), l, font=cta_font)[3] - draw.textbbox((0, 0), l, font=cta_font)[1] + 8 for l in cta_lines)
+    cy = (BANNER_H - total_h) // 2
+    for line in cta_lines:
+        lb = draw.textbbox((0, 0), line, font=cta_font)
+        lx = (divider_x_top - (lb[2] - lb[0])) // 2
+        draw.text((lx, cy), line, font=cta_font, fill=txt_l)
+        cy += lb[3] - lb[1] + 8
+
+    # COLUMNA DERECHA: greeting + headline + subheadline
+    rx = divider_x_bot + pad_r
+    max_w = BANNER_W - rx - 30
+
+    greeting = f"¡Hola, {copy.contact_name}!"
+    draw.text((rx, 50), greeting, font=font_greeting, fill=(*accent, 190))
+
+    shadow_sp = tuple(max(0, c - 40) for c in c1)
+    lines = _wrap_text(copy.headline.upper(), font_headline, max_w)
+    y_cur = 98
+    for line in lines[:3]:
+        draw.text((rx + 2, y_cur + 2), line, font=font_headline, fill=shadow_sp)
+        draw.text((rx, y_cur), line, font=font_headline, fill=(255, 255, 255))
+        bbox = draw.textbbox((0, 0), line, font=font_headline)
+        y_cur += bbox[3] - bbox[1] + 8
+
+    y_cur += 16
+    sub_lines = _wrap_text(copy.subheadline, font_sub, max_w)
+    for line in sub_lines[:3]:
+        draw.text((rx, y_cur), line, font=font_sub, fill=(200, 200, 200))
+        bbox = draw.textbbox((0, 0), line, font=font_sub)
+        y_cur += bbox[3] - bbox[1] + 6
+
+    # Línea decorativa inferior derecha
+    draw.rectangle([rx, BANNER_H - 12, BANNER_W - 20, BANNER_H - 8], fill=accent)
 
 
 def _render_minimal(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tuple, accent: tuple, rng: random.Random) -> None:
-    """Layout minimal: mucho espacio, borde sutil, diseño premium."""
+    """
+    Layout EDITORIAL: Banda de acento en la parte superior (30%).
+    Zona oscura con headline grande y subheadline debajo.
+    CTA con botón outlined premium.
+    Como portada de revista.
+    """
+    pad = 60
+    band_h = int(BANNER_H * 0.30)
+
     font_greeting = _load_font(_FONT_REGULAR, 28)
-    font_headline = _load_font(_FONT_BOLD, 56)
-    font_sub = _load_font(_FONT_REGULAR, 28)
+    font_headline = _load_font(_FONT_BOLD, 72)
+    font_sub = _load_font(_FONT_REGULAR, 30)
     font_biz = _load_font(_FONT_BOLD, 22)
-    font_cta = _load_font(_FONT_BOLD, 26)
-    pad = 80
+    font_cta = _load_font(_FONT_BOLD, 28)
 
-    draw.rectangle([15, 15, BANNER_W - 15, BANNER_H - 15], outline=(*accent, 180), width=2)
-    draw.rectangle([0, 0, BANNER_W, 4], fill=accent)
-    draw.rectangle([0, BANNER_H - 4, BANNER_W, BANNER_H], fill=accent)
+    # Banda superior en acento
+    for y in range(band_h):
+        t = y / band_h
+        r = int(accent[0] * (1 - t * 0.15))
+        g = int(accent[1] * (1 - t * 0.15))
+        b = int(accent[2] * (1 - t * 0.15))
+        draw.line([(0, y), (BANNER_W, y)], fill=(r, g, b))
 
+    # Cuerpo inferior oscuro
+    _gradient_background(draw, BANNER_W, BANNER_H - band_h, c1, c2)
+    # (el gradiente se dibuja en (0,0) del canvas pero está desplazado)
+    for y in range(band_h, BANNER_H):
+        t = (y - band_h) / (BANNER_H - band_h)
+        r = int(c1[0] + (c2[0] - c1[0]) * t)
+        g = int(c1[1] + (c2[1] - c1[1]) * t)
+        b = int(c1[2] + (c2[2] - c1[2]) * t)
+        draw.line([(0, y), (BANNER_W, y)], fill=(r, g, b))
+
+    # Línea divisora nítida
+    draw.rectangle([0, band_h - 4, BANNER_W, band_h + 4], fill=(255, 255, 255))
+
+    # BANDA SUPERIOR: greeting + nombre del negocio
+    txt_band = c1 if sum(accent) > 400 else (255, 255, 255)
     greeting = f"Hola, {copy.contact_name}."
-    draw.text((pad, 50), greeting, font=font_greeting, fill=(*accent, 180))
+    draw.text((pad, band_h // 2 - 40), greeting, font=font_greeting, fill=txt_band)
+    draw.text((pad, band_h // 2 + 4), copy.business_name.upper(), font=font_biz, fill=(*c1, 180) if sum(accent) > 400 else (255, 255, 255, 200))
 
+    # Año / badge decorativo en la esquina derecha de la banda
+    badge_font = _load_font(_FONT_BOLD, 26)
+    draw.text((BANNER_W - 90, band_h // 2 - 14), ">>>", font=badge_font, fill=txt_band)
+
+    # CUERPO: headline grande
+    shadow_ed = tuple(max(0, c - 50) for c in c1)
     lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
-    y_cursor = 140
+    y_cur = band_h + 40
     for line in lines[:2]:
-        draw.text((pad, y_cursor), line, font=font_headline, fill=(255, 255, 255))
+        draw.text((pad + 2, y_cur + 2), line, font=font_headline, fill=shadow_ed)
+        draw.text((pad, y_cur), line, font=font_headline, fill=(255, 255, 255))
         bbox = draw.textbbox((0, 0), line, font=font_headline)
-        y_cursor += bbox[3] - bbox[1] + 10
+        y_cur += bbox[3] - bbox[1] + 10
 
-    draw.rectangle([pad, y_cursor + 10, pad + 60, y_cursor + 12], fill=(*accent, 150))
+    # Separator line
+    draw.rectangle([pad, y_cur + 14, pad + 80, y_cur + 18], fill=accent)
+    y_cur += 44
 
-    y_cursor += 40
+    # Subheadline
     sub_lines = _wrap_text(copy.subheadline, font_sub, BANNER_W - pad * 2)
     for line in sub_lines[:2]:
-        draw.text((pad, y_cursor), line, font=font_sub, fill=(180, 180, 180))
+        draw.text((pad, y_cur), line, font=font_sub, fill=(185, 185, 185))
         bbox = draw.textbbox((0, 0), line, font=font_sub)
-        y_cursor += bbox[3] - bbox[1] + 6
+        y_cur += bbox[3] - bbox[1] + 6
 
-    draw.text((pad, BANNER_H - 120), copy.business_name.upper(), font=font_biz, fill=(*accent, 150))
-
+    # CTA outlined — esquina inferior derecha
     cta_bbox = draw.textbbox((0, 0), copy.cta, font=font_cta)
     cta_w = cta_bbox[2] - cta_bbox[0]
-    cta_h = cta_bbox[3] - cta_bbox[1]
-    btn_pad_x, btn_pad_y = 24, 10
-    btn_x0 = pad
-    btn_y0 = BANNER_H - 80
-    btn_x1 = btn_x0 + cta_w + btn_pad_x * 2
-    btn_y1 = btn_y0 + cta_h + btn_pad_y * 2
-    draw.rounded_rectangle([btn_x0, btn_y0, btn_x1, btn_y1], radius=20, outline=(*accent, 200), width=2)
-    draw.text((btn_x0 + btn_pad_x, btn_y0 + btn_pad_y), copy.cta, font=font_cta, fill=(*accent, 200))
+    cta_h_px = cta_bbox[3] - cta_bbox[1]
+    bpx, bpy = 26, 14
+    bx0 = BANNER_W - cta_w - bpx * 2 - pad
+    by0 = BANNER_H - 90
+    bx1 = BANNER_W - pad
+    by1 = by0 + cta_h_px + bpy * 2
+    draw.rounded_rectangle([bx0, by0, bx1, by1], radius=8, outline=accent, width=2)
+    draw.text((bx0 + bpx, by0 + bpy), copy.cta, font=font_cta, fill=accent)
 
 
 # ── Mapeo de layouts a renderizadores ─────────────────────────────────────────
@@ -469,14 +563,7 @@ def generate_banner_png(
     seed = abs(hash(str(contact_id))) % 10000 if contact_id else 42
     rng = random.Random(seed)
 
-    if layout != "split":
-        _gradient_background(draw, BANNER_W, BANNER_H, c1, c2)
-
-    if layout in ("clasico",):
-        _draw_deco_circles(draw, BANNER_W, BANNER_H, accent, seed)
-        if rng.random() < 0.5:
-            _draw_particles(draw, BANNER_W, BANNER_H, accent, seed + 1)
-
+    # Cada renderer maneja su propio fondo — no aplicar fondo global aquí
     renderer(draw, copy, c1, c2, accent, rng)
 
     buf = io.BytesIO()
