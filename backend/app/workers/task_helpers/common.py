@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 def run_async(coro):
     """Helper to run async code in sync Celery task."""
-    return asyncio.run(coro)
+    async def _wrapped():
+        try:
+            return await coro
+        finally:
+            from app.database import _get_celery_engine
+            await _get_celery_engine().dispose()
+    return asyncio.run(_wrapped())
 
 
 async def _get_advertiser_whatsapp_number(db: AsyncSession, advertiser_id: uuid.UUID) -> str | None:
