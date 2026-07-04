@@ -9,6 +9,7 @@ from redis.asyncio import Redis as AsyncRedis
 from app.core.redis import get_redis_optional
 from app.core.rate_limiter import limiter
 from app.services.claude_service import generate_bot_response
+from app.api.v1.payments import PLANS
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +24,23 @@ DEMO_BOT_PERSONALITY = (
     "IaRadio puede transformar la forma en que atienden clientes."
 )
 
-DEMO_CONTEXT = """
+
+def _format_plans() -> str:
+    """PLANS (app.api.v1.payments) es la fuente única de verdad de precios."""
+    lines = []
+    for plan in PLANS.values():
+        lines.append(
+            f"- {plan['name']}: ${plan['price_mxn']} MXN / ${plan['price_usd']} USD "
+            f"por mes, {plan['messages']} mensajes"
+        )
+    return "\n".join(lines)
+
+
+DEMO_CONTEXT = f"""
 IaRadio es una plataforma SaaS para pequeños negocios y anunciantes.
 
 PLANES:
-- Starter: $299/mes, 500 mensajes, chatbot IA, panel básico
-- Growth: $599/mes, 2000 mensajes, chatbot + RAG + cuñas de radio
-- Pro: $999/mes, 5000 mensajes, secuencias, API WhatsApp Business
-- Business: $1,999/mes, mensajes ilimitados, todo incluido + white-label
+{_format_plans()}
 
 CARACTERÍSTICAS PRINCIPALES:
 - Chatbot IA con Claude que atiende clientes 24/7
