@@ -3,6 +3,7 @@ Twilio incoming webhook — handle inbound WhatsApp messages.
 """
 import hashlib
 import hmac
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -24,12 +25,23 @@ from app.models.customer_story import CustomerStory
 from app.models.user import User
 from app.services.coupon_service import is_redeem_intent, is_expired
 from app.services.rag_service import answer_with_rag
-from app.services.claude_service import detect_order_intent, detect_plan_purchase_intent
+from app.services.claude_service import detect_order_intent, detect_plan_purchase_intent, generate_bot_response
 from app.services.twilio_service import send_whatsapp as _send_wa
 from app.api.v1.webhooks_pkg.lead_score import calculate_lead_score
+from app.api.v1.chat_demo import (
+    DEMO_CONTEXT,
+    DEMO_BUSINESS_NAME,
+    DEMO_BOT_NAME,
+    DEMO_BOT_PERSONALITY,
+    REDIS_TTL as DEMO_REDIS_TTL,
+    MAX_HISTORY as DEMO_MAX_HISTORY,
+)
+from app.core.redis import get_redis_optional
 from app.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
+
+SHARED_NUMBER_REDIS_PREFIX = "whatsapp_shared_chat:"
 
 
 def _validate_twilio_signature(request_url: str, params: dict, signature: str) -> bool:
@@ -177,11 +189,40 @@ async def twilio_incoming(
             settings.TWILIO_WHATSAPP_NUMBER.replace("whatsapp:", ""),
         }
         if to_number in shared_numbers:
-            reply = (
-                "¡Hola! 👋 Bienvenido a IaRadio.\n\n"
-                "Soy el asistente virtual. ¿En qué puedo ayudarte?\n"
-                "Escríbeme y con gusto te atenderé."
-            )
+            redis = await get_redis_optional()
+            redis_key = f"{SHARED_NUMBER_REDIS_PREFIX}{from_number}"
+            history: list[dict] = []
+            if redis:
+                raw = await redis.get(redis_key)
+                if raw:
+                    try:
+                        history = json.loads(raw)
+                    except json.JSONDecodeError:
+                        history = []
+
+            try:
+                reply = await generate_bot_response(
+                    advertiser_context=DEMO_CONTEXT,
+                    conversation_history=history,
+                    user_message=body_text,
+                    business_name=DEMO_BUSINESS_NAME,
+                    bot_name=DEMO_BOT_NAME,
+                    bot_personality=DEMO_BOT_PERSONALITY,
+                )
+            except Exception as e:
+                logger.error("[WEBHOOK] Shared-number Claude error: %s", e, exc_info=True)
+                reply = (
+                    "¡Hola! 👋 Bienvenido a IaRadio.\n\n"
+                    "Soy el asistente virtual. ¿En qué puedo ayudarte?\n"
+                    "Escríbeme y con gusto te atenderé."
+                )
+
+            if redis:
+                history.append({"role": "user", "content": body_text})
+                history.append({"role": "assistant", "content": reply})
+                history = history[-DEMO_MAX_HISTORY:]
+                await redis.setex(redis_key, DEMO_REDIS_TTL, json.dumps(history))
+
             await _send_wa(from_number, reply)
         return {"message": "advertiser_not_found"}
 
