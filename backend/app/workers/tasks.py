@@ -9,7 +9,7 @@ from app.workers.celery_app import celery_app
 from app.workers.task_helpers import (
     run_async, _get_advertiser_whatsapp_number, _extract_text,
     send_regular_messages, send_banner_messages, send_radio_messages,
-    send_parrilla_messages, notify_campaign_failed,
+    send_parrilla_messages, notify_campaign_failed, run_parrilla_generation,
     send_24h_reminders, send_1h_reminders,
 )
 
@@ -524,6 +524,24 @@ def send_parrilla_day(self, advertiser_id: str, audio_url: str, script: str, day
         run_async(_send())
     except Exception as exc:
         raise self.retry(exc=exc)
+
+
+@celery_app.task(bind=True, soft_time_limit=600, time_limit=900)
+def generate_parrilla_task(self, job_id: str, advertiser_id: str, body_dict: dict):
+    """
+    Genera la parrilla semanal completa (7 días de guiones + audio/banners)
+    en background. Límite de tiempo más alto que el default (5/10 min) porque
+    son 7 pasos secuenciales de LLM+TTS/banner que pueden acercarse a eso.
+
+    No se reintenta automáticamente ante fallo: repetir todo el job
+    duplicaría llamadas pagadas a Claude/TTS por los días que ya salieron
+    bien; el estado queda marcado "error" en Redis para que el usuario
+    decida si reintentar desde la UI.
+    """
+    try:
+        run_async(run_parrilla_generation(job_id, advertiser_id, body_dict))
+    except Exception:
+        logger.exception("[PARRILLA] job %s crashed", job_id)
 
 
 @celery_app.task

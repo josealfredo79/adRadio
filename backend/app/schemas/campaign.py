@@ -119,10 +119,18 @@ class ParrillaDayOut(BaseModel):
     banner_url: str | None = None  # URL del banner si format="banner"
 
 
-class ParrillaOut(BaseModel):
-    days: list[ParrillaDayOut]
-    plan: str          # plan del usuario que generó esto
+class ParrillaJobOut(BaseModel):
+    job_id: str
+
+
+class ParrillaStatusOut(BaseModel):
+    status: str  # "pending" | "running" | "done" | "error"
+    total_days: int
+    current_day: int  # días completados hasta ahora
+    days: list[ParrillaDayOut] = []  # se va llenando conforme cada día termina
+    plan: str
     auto_scheduled: bool
+    error: str | None = None
 
 
 class CustomerStoryOut(BaseModel):

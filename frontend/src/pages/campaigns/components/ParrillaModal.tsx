@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CalendarRange, X, Sparkles, CheckCircle2, AlertCircle, Image as ImageIcon, Headphones } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
 import PrintButton from '@/components/PrintButton'
@@ -24,6 +24,18 @@ interface ParrillaResult {
   plan: string
   auto_scheduled: boolean
 }
+
+interface ParrillaStatus extends ParrillaResult {
+  status: 'pending' | 'running' | 'done' | 'error'
+  total_days: number
+  current_day: number
+  error: string | null
+}
+
+const POLL_INTERVAL_MS = 2500
+// El worker tiene soft_time_limit=600s; si a los 11 min seguimos sin "done"
+// algo se atoró (worker caído, cola saturada) — dejar de esperar y decírselo.
+const MAX_POLL_MS = 11 * 60 * 1000
 
 const PALETTES = [
   { key: 'promo', label: 'Azul/Rojo', colors: ['#1d3557', '#e63946'] },
@@ -56,13 +68,64 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
   const [parrillaGenerating, setParrillaGenerating] = useState(false)
   const [parrillaResult, setParrillaResult] = useState<ParrillaResult | null>(null)
   const [parrillaError, setParrillaError] = useState('')
+  const [parrillaJobId, setParrillaJobId] = useState<string | null>(null)
+  const [parrillaProgress, setParrillaProgress] = useState<{ current: number; total: number } | null>(null)
+
+  // Hace polling del job mientras esté pendiente/corriendo. Se limpia solo al
+  // terminar, fallar, agotar el tiempo máximo, o si el modal se desmonta —
+  // así el usuario nunca se queda sin saber qué pasó, ni el polling sigue
+  // corriendo de fondo después de cerrar.
+  useEffect(() => {
+    if (!parrillaJobId) return
+
+    const startedAt = Date.now()
+    let cancelled = false
+
+    const poll = async () => {
+      if (cancelled) return
+      try {
+        const { data } = await api.get<ParrillaStatus>(`/campaigns/generate-parrilla/${parrillaJobId}`)
+        if (cancelled) return
+
+        setParrillaProgress({ current: data.current_day, total: data.total_days })
+        setParrillaResult({ days: data.days, plan: data.plan, auto_scheduled: data.auto_scheduled })
+
+        if (data.status === 'done') {
+          setParrillaGenerating(false)
+          setParrillaJobId(null)
+        } else if (data.status === 'error') {
+          setParrillaError(data.error || 'Error al generar la parrilla')
+          setParrillaGenerating(false)
+          setParrillaJobId(null)
+        } else if (Date.now() - startedAt > MAX_POLL_MS) {
+          setParrillaError('La generación está tardando más de lo normal. Revisa la sección Campañas en unos minutos — es posible que haya terminado igual.')
+          setParrillaGenerating(false)
+          setParrillaJobId(null)
+        }
+      } catch (err: unknown) {
+        if (cancelled) return
+        setParrillaError(getApiError(err, 'Error al consultar el progreso'))
+        setParrillaGenerating(false)
+        setParrillaJobId(null)
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, POLL_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [parrillaJobId])
 
   const generateParrilla = async () => {
     if (!parrillaBusinessName || !parrillaIntent) return
     setParrillaGenerating(true)
     setParrillaError('')
+    setParrillaResult(null)
+    setParrillaProgress(null)
     try {
-      const { data } = await api.post(
+      const { data } = await api.post<{ job_id: string }>(
         '/campaigns/generate-parrilla',
         {
           business_name: parrillaBusinessName,
@@ -74,13 +137,11 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
           send_time: parrillaSendTime,
           banner_palette: parrillaBannerPalette,
           banner_layout: parrillaBannerLayout,
-        },
-        { timeout: 180000 }
+        }
       )
-      setParrillaResult(data)
+      setParrillaJobId(data.job_id)
     } catch (err: unknown) {
       setParrillaError(getApiError(err, 'Error al generar parrilla'))
-    } finally {
       setParrillaGenerating(false)
     }
   }
@@ -229,7 +290,11 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
               className="w-full flex items-center justify-center gap-2 rounded-lg bg-brand-500 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60 transition-colors"
             >
               <Sparkles className="h-4 w-4" />
-              {parrillaGenerating ? 'Generando 7 días...' : 'Generar Parrilla'}
+              {parrillaGenerating
+                ? parrillaProgress
+                  ? `Generando día ${Math.min(parrillaProgress.current + 1, parrillaProgress.total)}/${parrillaProgress.total}...`
+                  : 'Encolando...'
+                : 'Generar Parrilla'}
             </button>
           </div>
 
@@ -242,15 +307,30 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
                 <p className="mt-1 text-xs text-muted-foreground">Audios y banners visuales optimizados para cada día de la semana.</p>
               </div>
             )}
-            {parrillaGenerating && (
+            {!parrillaResult?.days.length && parrillaGenerating && (
               <div className="flex h-full flex-col items-center justify-center rounded-xl bg-muted py-12 text-center dark:bg-gray-800">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-200 border-t-brand-500 mb-4" />
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Generando 7 días con audio y banners...</p>
-                <p className="mt-1 text-xs text-muted-foreground">Claude escribe guiones, genera banners y sintetiza voz</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Preparando la parrilla...</p>
+                <p className="mt-1 text-xs text-muted-foreground">Claude escribe guiones, genera banners y sintetiza voz — cada día va apareciendo aquí conforme termina.</p>
               </div>
             )}
-            {parrillaResult && (
+            {!!parrillaResult?.days.length && (
               <div className="space-y-4">
+                {parrillaGenerating && (
+                  <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+                    <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                      Generando día {Math.min((parrillaProgress?.current ?? 0) + 1, parrillaProgress?.total ?? 7)}/{parrillaProgress?.total ?? 7}...
+                    </span>
+                  </div>
+                )}
+                {parrillaError && !parrillaGenerating && (
+                  <div className="flex items-center gap-2 bg-red-50 dark:bg-red-950/30 px-4 py-3 rounded-lg border border-red-200 dark:border-red-800">
+                    <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                    <span className="text-sm font-medium text-red-800 dark:text-red-200">{parrillaError}</span>
+                  </div>
+                )}
+                {!parrillaGenerating && !parrillaError && (
                 <div className="flex items-center justify-between bg-green-50 dark:bg-green-950/30 px-4 py-3 rounded-lg border border-green-200 dark:border-green-800">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -262,6 +342,7 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
                     Plan {parrillaResult.plan}
                   </span>
                 </div>
+                )}
 
                 {/* Print header — visible only in @media print */}
                 <div className="print-only">

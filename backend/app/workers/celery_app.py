@@ -33,6 +33,7 @@ celery_app.conf.update(
         "app.workers.tasks.process_knowledge_base_file": {"queue": "processing"},
         "app.workers.tasks.import_contacts_csv": {"queue": "processing"},
         "app.workers.tasks.schedule_campaign": {"queue": "campaigns"},
+        "app.workers.tasks.generate_parrilla_task": {"queue": "campaigns"},
     },
 )
 

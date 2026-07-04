@@ -1,6 +1,7 @@
 """
 Campaign operations helpers — extracted from schedule_campaign.
 """
+import json
 import logging
 import random
 import uuid
@@ -515,3 +516,240 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
         sent += 1
 
     return sent
+
+
+# ─── Generación de parrilla semanal (job asíncrono) ───────────────────────────
+# Orden estratégico: valor primero, oferta al final de semana
+# Cada tupla: (day_num, day_name, mode, emoji, format)
+# format = "audio" | "banner"
+_PARRILLA_ALL = [
+    (0, "Lunes",     "comunitaria", "🌿", "audio"),
+    (1, "Martes",    "capsula",     "💡", "banner"),
+    (2, "Miércoles", "trivia",      "🧠", "audio"),
+    (3, "Jueves",    "historia",    "📖", "banner"),
+    (4, "Viernes",   "classic",     "🎙️", "audio"),
+    (5, "Sábado",    "alerta",      "🚨", "banner"),
+    (6, "Domingo",   "estacional",  "🗓️", "audio"),
+]
+
+# Starter: solo audio (sin banner)
+_PARRILLA_STARTER = [
+    (0, "Lunes",     "classic", "🎙️", "audio"),
+    (1, "Martes",    "classic", "🎙️", "audio"),
+    (2, "Miércoles", "classic", "🎙️", "audio"),
+    (3, "Jueves",    "classic", "🎙️", "audio"),
+    (4, "Viernes",   "classic", "🎙️", "audio"),
+    (5, "Sábado",    "classic", "🎙️", "audio"),
+    (6, "Domingo",   "classic", "🎙️", "audio"),
+]
+
+# Growth: mezcla audio + banner (sin alerta ni estacional)
+_PARRILLA_GROWTH = [
+    (0, "Lunes",     "comunitaria", "🌿", "audio"),
+    (1, "Martes",    "capsula",     "💡", "banner"),
+    (2, "Miércoles", "trivia",      "🧠", "audio"),
+    (3, "Jueves",    "historia",    "📖", "banner"),
+    (4, "Viernes",   "classic",     "🎙️", "audio"),
+    (5, "Sábado",    "classic",     "🎙️", "banner"),
+    (6, "Domingo",   "classic",     "🎙️", "audio"),
+]
+
+
+async def run_parrilla_generation(job_id: str, advertiser_id: str, body_dict: dict) -> None:
+    """
+    Genera la parrilla semanal de radio (7 cuñas/banners) en background y
+    reporta progreso en Redis (`parrilla_job:{job_id}`) después de cada día,
+    para que el frontend pueda hacer polling en vez de sostener un solo
+    request HTTP de varios minutos.
+
+    Se ejecuta dentro de un task de Celery — a diferencia del request HTTP
+    original, si el cliente se desconecta el job sigue corriendo y el
+    resultado queda disponible al consultar el estado.
+    """
+    import asyncio
+    import redis.asyncio as aioredis
+    from app.config import settings
+    from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+    from app.models.user import User
+    from app.models.campaign import Campaign
+    from app.schemas.campaign import ParrillaDayOut
+    from app.services.analytics_service import capture_event
+    from app.services.banner_service import generate_banner_png, generate_banner_copy_with_claude, select_design
+    from app.services.radio_service import generate_radio_ad, generate_radio_script
+    from app.services.storage_service import upload_bytes
+    from app.workers.tasks import schedule_campaign
+
+    key = f"parrilla_job:{job_id}"
+    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+
+    async def _update_state(**kwargs):
+        raw = await redis_client.get(key)
+        state = json.loads(raw) if raw else {"advertiser_id": advertiser_id}
+        state.update(kwargs)
+        await redis_client.set(key, json.dumps(state), ex=3600)
+
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(User).where(User.id == uuid.UUID(advertiser_id)))
+            advertiser = result.scalar_one_or_none()
+            if not advertiser:
+                await _update_state(status="error", error="Usuario no encontrado")
+                return
+
+            plan = advertiser.current_plan or "starter"
+            if plan in ("pro", "business", "enterprise"):
+                schedule_table = _PARRILLA_ALL
+            elif plan == "growth":
+                schedule_table = _PARRILLA_GROWTH
+            else:  # starter / trial
+                schedule_table = _PARRILLA_STARTER
+
+            can_auto = plan in ("growth", "pro", "business", "enterprise")
+            auto_scheduled = bool(body_dict.get("auto_schedule")) and can_auto
+
+            try:
+                hour, minute = (int(x) for x in body_dict.get("send_time", "10:00").split(":"))
+            except Exception:
+                hour, minute = 10, 0
+
+            now = datetime.now(timezone.utc)
+            days_out: list[dict] = []
+
+            await _update_state(status="running", total_days=len(schedule_table), plan=plan, auto_scheduled=auto_scheduled)
+
+            for day_num, day_name, mode, emoji, fmt in schedule_table:
+                try:
+                    day_context = f"Haz este mensaje específico para el día {day_name}, dale un ángulo único."
+                    extra_context = body_dict.get("extra_context")
+                    combined_context = f"{extra_context} - {day_context}" if extra_context else day_context
+
+                    script = await generate_radio_script(
+                        business_name=body_dict["business_name"],
+                        message_or_intent=body_dict["intent"],
+                        country=body_dict.get("country", "mx"),
+                        mode=mode,
+                        business_category=body_dict.get("business_category"),
+                        extra_context=combined_context,
+                    )
+
+                    audio_url = None
+                    banner_url = None
+                    banner_ab = {}
+
+                    if fmt == "banner":
+                        design = select_design(body_dict.get("business_category"), "promo")
+                        palette = body_dict.get("banner_palette") or design.palette
+                        layout = body_dict.get("banner_layout") or design.layout
+
+                        copy = await generate_banner_copy_with_claude(
+                            business_name=body_dict["business_name"],
+                            contact_name="Cliente",
+                            promo_description=body_dict["intent"],
+                            business_category=body_dict.get("business_category"),
+                            campaign_type="promo",
+                        )
+                        png_bytes = generate_banner_png(copy, palette, layout, contact_id=None)
+                        storage_key = f"parrilla/{advertiser_id}/{day_num}_{uuid.uuid4().hex[:8]}.png"
+                        banner_url = await upload_bytes(png_bytes, storage_key, "image/png")
+
+                        banner_ab = {
+                            "banner_promo": body_dict["intent"],
+                            "banner_palette": palette,
+                            "banner_layout": layout,
+                            "banner_headline": copy.headline,
+                            "banner_subheadline": copy.subheadline,
+                            "banner_cta": copy.cta,
+                        }
+                    else:
+                        try:
+                            audio_url = await generate_radio_ad(
+                                business_name=body_dict["business_name"],
+                                message_or_intent=body_dict["intent"],
+                                country=body_dict.get("country", "mx"),
+                                _script=script,
+                                mode=mode,
+                                business_category=body_dict.get("business_category"),
+                                day_variant=day_num,
+                            )
+                        except Exception as audio_err:
+                            logger.warning("[PARRILLA] Audio day %d failed: %s", day_num, audio_err)
+                            audio_url = None
+
+                    days_out.append(ParrillaDayOut(
+                        day=day_num,
+                        day_name=day_name,
+                        mode=mode,
+                        mode_emoji=emoji,
+                        format=fmt,
+                        script=script,
+                        audio_url=audio_url,
+                        banner_url=banner_url,
+                    ).model_dump())
+
+                    # Guardar campaña en DB
+                    has_content = bool(audio_url or banner_url)
+                    if has_content:
+                        days_ahead = (day_num - now.weekday()) % 7
+                        send_dt_today = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                        if days_ahead == 0 and now > send_dt_today:
+                            days_ahead += 7
+                        send_dt = (now + timedelta(days=days_ahead)).replace(
+                            hour=hour, minute=minute, second=0, microsecond=0
+                        )
+
+                        ab_payload = {
+                            "campaign_mode": "banner" if fmt == "banner" else "radio",
+                            "radio_script": script,
+                        }
+                        if fmt == "banner":
+                            ab_payload["audio_url"] = ""  # no audio
+                            ab_payload.update(banner_ab)
+                        else:
+                            ab_payload["audio_url"] = audio_url or ""
+
+                        campaign = Campaign(
+                            advertiser_id=advertiser.id,
+                            name=f"Parrilla: {day_name}",
+                            type="promo",
+                            message_text=script,
+                            status="scheduled" if auto_scheduled else "draft",
+                            ab_test=ab_payload,
+                            schedule={"start_date": send_dt.isoformat().replace("+00:00", "Z")},
+                        )
+                        db.add(campaign)
+                        await db.commit()
+                        await db.refresh(campaign)
+
+                        if auto_scheduled:
+                            countdown = max(60, int((send_dt - now).total_seconds()))
+                            schedule_campaign.apply_async(args=[str(campaign.id)], countdown=countdown)
+
+                    await asyncio.sleep(0.5)
+
+                except Exception as e:
+                    logger.error("[PARRILLA] Day %d failed: %s", day_num, e)
+                    days_out.append(ParrillaDayOut(
+                        day=day_num,
+                        day_name=day_name,
+                        mode=mode,
+                        mode_emoji=emoji,
+                        format=fmt,
+                        script=f"[Error generando: {e}]",
+                        audio_url=None,
+                        banner_url=None,
+                    ).model_dump())
+
+                await _update_state(current_day=day_num + 1, days=days_out)
+
+            capture_event("parrilla_generated", user_id=advertiser.id, properties={
+                "plan": plan,
+                "days_count": len(days_out),
+                "auto_scheduled": auto_scheduled,
+            })
+            await _update_state(status="done", days=days_out)
+
+    except Exception as exc:
+        logger.exception("[PARRILLA] job %s failed: %s", job_id, exc)
+        await _update_state(status="error", error=str(exc))
+    finally:
+        await redis_client.aclose()
