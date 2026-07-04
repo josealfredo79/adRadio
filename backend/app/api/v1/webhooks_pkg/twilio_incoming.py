@@ -224,6 +224,16 @@ async def twilio_incoming(
                 await redis.setex(redis_key, DEMO_REDIS_TTL, json.dumps(history))
 
             await _send_wa(from_number, reply)
+        else:
+            try:
+                fallback_reply = (
+                    "¡Hola! 👋 Gracias por escribirnos.\n\n"
+                    "Este número aún no está configurado para atenderte. "
+                    "Si crees que es un error, por favor contacta al soporte de IaRadio."
+                )
+                await _send_wa(from_number, fallback_reply)
+            except Exception as e:
+                logger.warning("[WEBHOOK] Fallback reply failed: %s", e)
         return {"message": "advertiser_not_found"}
 
     stop_words = {"baja", "stop", "no quiero", "cancelar", "salir"}

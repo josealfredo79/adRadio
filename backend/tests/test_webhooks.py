@@ -87,6 +87,52 @@ class TestTextExtraction:
         assert result == ""
 
 
+class TestFallbackReplyNoAdvertiser:
+    """When a message arrives at a number that doesn't belong to any advertiser
+    and is NOT the shared IaRadio number, the user must still get a response
+    (zero-friction policy)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
+    async def test_sends_fallback_reply_for_unknown_number(self):
+        from httpx import AsyncClient, ASGITransport
+        from app.config import settings
+
+        # Use a number that is NOT the shared Twilio number and NOT in any advertiser's whatsapp_number
+        fake_dedicated_number = "+5255999999999"
+        shared_number = settings.TWILIO_WHATSAPP_NUMBER.replace("whatsapp:", "")
+        assert fake_dedicated_number != shared_number
+
+        transport = ASGITransport(app=app)
+        with patch(
+            "app.api.v1.webhooks_pkg.twilio_incoming._send_wa",
+            AsyncMock(return_value=("SID_FALLBACK", None)),
+        ) as send_mock, patch(
+            "app.api.v1.webhooks_pkg.twilio_incoming.get_redis_optional",
+            AsyncMock(return_value=None),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as c:
+                resp = await c.post(
+                    "/api/v1/webhooks/twilio/incoming",
+                    data={
+                        "From": "whatsapp:+5219513334444",
+                        "To": f"whatsapp:{fake_dedicated_number}",
+                        "Body": "Hola, quiero info",
+                        "MessageSid": "SMtest-fallback-1",
+                        "NumMedia": "0",
+                    },
+                )
+                assert resp.status_code == 200
+
+        # Must have called _send_wa exactly once (the fallback message)
+        assert send_mock.call_count == 1
+        sent_to = send_mock.call_args_list[0].args[0]
+        sent_body = send_mock.call_args_list[0].args[1]
+        assert sent_to == "+5219513334444"
+        assert "Gracias por escribirnos" in sent_body
+        assert "soporte" in sent_body.lower()
+
+
 class TestSharedNumberBotReply:
     """Regression tests: messages to IaRadio's shared WhatsApp number (no
     advertiser owns the contact) must be answered by Claude using the real
