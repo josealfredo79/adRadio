@@ -25,6 +25,10 @@ import {
   Bot,
   Moon,
   Sun,
+  Shield,
+  User,
+  CreditCard as CreditCardIcon,
+  Phone,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -43,6 +47,13 @@ const navItems = [
   { to: '/app/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/app/plans', icon: CreditCard, label: 'Planes' },
   { to: '/app/settings', icon: Settings, label: 'Configuración' },
+]
+
+const adminNavItems = [
+  { to: '/app/admin', icon: LayoutDashboard, label: 'Panel Admin' },
+  { to: '/app/admin/users', icon: User, label: 'Usuarios' },
+  { to: '/app/admin/subscriptions', icon: CreditCardIcon, label: 'Suscripciones' },
+  { to: '/app/admin/numbers', icon: Phone, label: 'Pool de Números' },
 ]
 
 export default function Layout() {
@@ -121,6 +132,38 @@ export default function Layout() {
           )
         })}
       </nav>
+
+      {/* Admin section (visible only to admins) */}
+      {user?.role === 'admin' && (
+        <>
+          <div className="px-6 pt-4 pb-1">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Shield className="h-3 w-3" />
+              Administración
+            </div>
+          </div>
+          <nav className="px-3 pb-2 space-y-1">
+            {adminNavItems.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )
+                }
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="flex-1">{label}</span>
+              </NavLink>
+            ))}
+          </nav>
+        </>
+      )}
 
       {/* User + logout */}
       <div className="border-t border-border p-4">

@@ -27,6 +27,11 @@ const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
 const AutomationsPage = lazy(() => import('@/pages/AutomationsPage'))
 const TemplatesPage = lazy(() => import('@/pages/TemplatesPage'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
+const AdminRoute = lazy(() => import('@/components/AdminRoute'))
+const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'))
+const AdminUsersPage = lazy(() => import('@/pages/admin/AdminUsersPage'))
+const AdminSubscriptionsPage = lazy(() => import('@/pages/admin/AdminSubscriptionsPage'))
+const AdminNumbersPage = lazy(() => import('@/pages/admin/AdminNumbersPage'))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -76,6 +81,13 @@ export default function App() {
               <Route path="settings" element={<SettingsPage />} />
               <Route path="team" element={<TeamPage />} />
               <Route path="widget" element={<WidgetPage />} />
+
+              {/* Admin routes */}
+              <Route path="admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
+              <Route path="admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
+              <Route path="admin/subscriptions" element={<AdminRoute><AdminSubscriptionsPage /></AdminRoute>} />
+              <Route path="admin/numbers" element={<AdminRoute><AdminNumbersPage /></AdminRoute>} />
+
               <Route path="*" element={<NotFoundPage />} />
             </Route>
 
