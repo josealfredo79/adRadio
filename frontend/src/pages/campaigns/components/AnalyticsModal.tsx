@@ -24,7 +24,13 @@ function BenchmarkBadge({ value, benchmark }: { value: number; benchmark: number
   return <span className="flex items-center gap-0.5 text-[10px] text-gray-400"><Minus className="h-2.5 w-2.5" />Promedio</span>
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface CustomTooltipProps {
+  active?: boolean
+  payload?: { value: number }[]
+  label?: string
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-lg text-xs">

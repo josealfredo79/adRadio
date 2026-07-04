@@ -87,7 +87,7 @@ jobs:
 
       - name: Lint
         working-directory: frontend
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Build
         working-directory: frontend

@@ -20,7 +20,9 @@ function getSessionId(): string {
 function saveSessionId(id: string) {
   try {
     localStorage.setItem(STORAGE_KEY, id)
-  } catch {}
+  } catch {
+    // localStorage no disponible (modo privado, cuota llena, etc.) — ignorar
+  }
 }
 
 export default function ChatWidget() {

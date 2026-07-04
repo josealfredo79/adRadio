@@ -1,5 +1,26 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export interface CampaignAbTest {
+  campaign_mode?: string
+  has_coupon?: boolean
+  coupon_description?: string
+  coupon_hours?: number
+  messages?: unknown[]
+  enabled?: boolean
+  variants?: string[]
+  split?: string
+  metric?: string
+  audio_url?: string
+  radio_script?: string
+  promo_description?: string
+  banner_palette?: string
+  banner_layout?: string
+  banner_caption?: string
+  stats_a?: { sent: number; replied: number }
+  stats_b?: { sent: number; replied: number }
+  stats_c?: { sent: number; replied: number }
+}
+
 export interface Campaign {
   id: string
   name: string
@@ -8,7 +29,7 @@ export interface Campaign {
   status: string
   stats: Record<string, number>
   message_counts: Record<string, number>
-  ab_test: Record<string, any>
+  ab_test: CampaignAbTest
   created_at: string
   schedule?: { start_date?: string; end_date?: string } | null
 }

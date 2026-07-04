@@ -56,7 +56,7 @@ export default function TemplatesPage() {
     },
   })
 
-  const useSeed = (t: SeedTemplate) => {
+  const applySeedTemplate = (t: SeedTemplate) => {
     setTab('mine')
     setShowForm(true)
     setForm({ name: t.name, content: t.content, category: t.category || '' })
@@ -216,7 +216,7 @@ export default function TemplatesPage() {
                     <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{t.content}</p>
                   </div>
                   <button
-                    onClick={() => useSeed(t)}
+                    onClick={() => applySeedTemplate(t)}
                     className="ml-3 flex items-center gap-1.5 rounded-lg border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/30 px-3 py-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-950 transition-colors"
                   >
                     <Check size={13} />

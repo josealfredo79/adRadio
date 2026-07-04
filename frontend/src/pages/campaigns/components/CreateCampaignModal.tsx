@@ -1,5 +1,5 @@
 import { Sparkles, Radio, CalendarClock } from 'lucide-react'
-import { CampaignMode, CAMPAIGN_TYPES, AUDIO_MODES, MODE_BADGE, Template, Voice } from '../types'
+import { CampaignMode, CampaignAbTest, CAMPAIGN_TYPES, AUDIO_MODES, MODE_BADGE, Template, Voice } from '../types'
 import { ModeSelector } from './ModeSelector'
 import { BannerModePanel } from './BannerModePanel'
 import { RadioModePanel } from './RadioModePanel'
@@ -13,7 +13,7 @@ interface CreateCampaignModalProps {
   voicesData?: Voice[]
   optimalTime?: { best_window: string; best_hour: number }
   noCredits: boolean
-  onCreate: (campaignData: any) => void
+  onCreate: (campaignData: Record<string, unknown>) => void
   isCreatePending: boolean
   currentUser?: { business_category?: string | null; current_plan?: string } | null
 }
@@ -107,7 +107,7 @@ export function CreateCampaignModal({
       (isVocesMode && !!vocesCollectionPrompt))
 
   const handleCreate = () => {
-    const ab_test: Record<string, any> = {
+    const ab_test: CampaignAbTest = {
       campaign_mode: mode,
       has_coupon: hasCoupon,
       coupon_description: couponDesc,
