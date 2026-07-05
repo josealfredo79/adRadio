@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { FileText, Plus, Trash2, Download, Check } from 'lucide-react'
+import { FileText, Plus, Trash2, Download, Check, ShoppingBag, CalendarDays, Megaphone } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
 interface Template {
@@ -9,6 +9,7 @@ interface Template {
   name: string
   content: string
   category: string | null
+  step: string | null
   created_at?: string
 }
 
@@ -16,13 +17,40 @@ interface SeedTemplate {
   name: string
   content: string
   category: string | null
+  step: string | null
 }
+
+const STEP_LABELS: Record<string, string> = {
+  order_confirm: 'Confirmar pedido',
+  order_name: 'Pedir nombre',
+  order_address: 'Pedir dirección',
+  order_payment: 'Pedir pago',
+  order_confirmed: 'Pedido confirmado',
+  order_owner_notify: 'Notificar dueño',
+  plan_confirm: 'Confirmar plan',
+  plan_name: 'Nombre para plan',
+  plan_datetime: 'Fecha activación',
+  plan_confirmed: 'Plan confirmado',
+  appt_confirm: 'Confirmar cita',
+  appt_cancel: 'Cancelar cita',
+  appt_reschedule_yes: 'Reagendar (sí)',
+  appt_reschedule_no: 'Reagendar (no)',
+  appt_reminder_24h: 'Recordatorio 24h',
+}
+
+const CATEGORY_TABS = [
+  { key: 'all', label: 'Todas', icon: FileText },
+  { key: 'Pedido', label: 'Pedido', icon: ShoppingBag },
+  { key: 'Cita', label: 'Cita', icon: CalendarDays },
+  { key: 'Campaña', label: 'Campaña', icon: Megaphone },
+] as const
 
 export default function TemplatesPage() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', content: '', category: '' })
+  const [form, setForm] = useState({ name: '', content: '', category: '', step: '' })
   const [tab, setTab] = useState<'mine' | 'seeds'>('mine')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
   const { data: templates, isLoading } = useQuery<Template[]>({
     queryKey: ['templates'],
@@ -36,11 +64,11 @@ export default function TemplatesPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; content: string; category?: string }) => api.post('/templates', data),
+    mutationFn: (data: { name: string; content: string; category?: string; step?: string }) => api.post('/templates', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['templates'] })
       setShowForm(false)
-      setForm({ name: '', content: '', category: '' })
+      setForm({ name: '', content: '', category: '', step: '' })
     },
   })
 
@@ -59,8 +87,20 @@ export default function TemplatesPage() {
   const applySeedTemplate = (t: SeedTemplate) => {
     setTab('mine')
     setShowForm(true)
-    setForm({ name: t.name, content: t.content, category: t.category || '' })
+    setForm({ name: t.name, content: t.content, category: t.category || '', step: t.step || '' })
   }
+
+  const filteredTemplates = templates?.filter(t => {
+    if (categoryFilter === 'all') return true
+    if (categoryFilter === 'Campaña') return !t.step
+    return t.category === categoryFilter
+  })
+
+  const filteredSeeds = seedTemplates?.filter(t => {
+    if (categoryFilter === 'all') return true
+    if (categoryFilter === 'Campaña') return !t.step
+    return t.category === categoryFilter
+  })
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -71,7 +111,7 @@ export default function TemplatesPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Plantillas</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Reutiliza mensajes en tus campañas</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Personaliza mensajes de campañas, pedidos y citas</p>
           </div>
         </div>
         <button
@@ -81,6 +121,24 @@ export default function TemplatesPage() {
           <Plus size={16} />
           Nueva
         </button>
+      </div>
+
+      {/* Category filter */}
+      <div className="flex gap-2 flex-wrap">
+        {CATEGORY_TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setCategoryFilter(key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              categoryFilter === key
+                ? 'bg-brand-500 text-white'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+            }`}
+          >
+            <Icon size={13} />
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Tabs */}
@@ -106,37 +164,90 @@ export default function TemplatesPage() {
       {showForm && tab === 'mine' && (
         <div className="rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-5 space-y-4">
           <h2 className="font-semibold text-gray-800 dark:text-gray-200">Nueva plantilla</h2>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre</label>
-            <input
-              value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre</label>
+              <input
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoría</label>
+              <select
+                value={form.category}
+                onChange={e => setForm({ ...form, category: e.target.value, step: '' })}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              >
+                <option value="">Sin categoría</option>
+                <option value="Pedido">Pedido</option>
+                <option value="Cita">Cita</option>
+                <option value="Bienvenida">Bienvenida</option>
+                <option value="Promoción">Promoción</option>
+                <option value="Recordatorio">Recordatorio</option>
+                <option value="Seguimiento">Seguimiento</option>
+                <option value="Oferta">Oferta</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoría</label>
-            <input
-              value={form.category}
-              onChange={e => setForm({ ...form, category: e.target.value })}
-              placeholder="Ej: Promoción, Recordatorio, Seguimiento"
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-            />
-          </div>
+          {form.category === 'Pedido' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Paso del flujo</label>
+              <select
+                value={form.step}
+                onChange={e => setForm({ ...form, step: e.target.value })}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              >
+                <option value="">Seleccionar paso...</option>
+                <option value="order_confirm">Confirmar pedido</option>
+                <option value="order_name">Pedir nombre</option>
+                <option value="order_address">Pedir dirección</option>
+                <option value="order_payment">Pedir forma de pago</option>
+                <option value="order_confirmed">Pedido confirmado (al cliente)</option>
+                <option value="order_owner_notify">Notificar al dueño</option>
+              </select>
+            </div>
+          )}
+          {form.category === 'Cita' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Paso del flujo</label>
+              <select
+                value={form.step}
+                onChange={e => setForm({ ...form, step: e.target.value })}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              >
+                <option value="">Seleccionar paso...</option>
+                <option value="appt_confirm">Confirmar cita</option>
+                <option value="appt_cancel">Cancelar cita</option>
+                <option value="appt_reschedule_yes">Reagendar (sí)</option>
+                <option value="appt_reschedule_no">Reagendar (no)</option>
+                <option value="appt_reminder_24h">Recordatorio 24h</option>
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contenido</label>
             <textarea
               value={form.content}
               onChange={e => setForm({ ...form, content: e.target.value })}
               rows={4}
-              placeholder="Usa {name}, {city}, {business_name} como variables"
+              placeholder="Usa {{nombre}}, {{negocio}}, {{primer_nombre}}, {{ciudad}} como variables"
               className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none resize-none"
             />
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              Variables: {'{{nombre}}'} = nombre del contacto, {'{{negocio}}'} = nombre del negocio, {'{{primer_nombre}}'} = primera palabra del nombre
+            </p>
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowForm(false)} className="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900">Cancelar</button>
             <button
-              onClick={() => createMutation.mutate({ name: form.name, content: form.content, category: form.category || undefined })}
+              onClick={() => {
+                const payload: { name: string; content: string; category?: string; step?: string } = { name: form.name, content: form.content }
+                if (form.category) payload.category = form.category
+                if (form.step) payload.step = form.step
+                createMutation.mutate(payload)
+              }}
               disabled={!form.name || !form.content || createMutation.isPending}
               className="rounded-lg bg-brand-500 dark:bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-600 disabled:opacity-50"
             >
@@ -153,18 +264,19 @@ export default function TemplatesPage() {
             <div className="space-y-3">
               {[1, 2, 3].map(i => <div key={i} className="h-20 bg-gray-100 dark:bg-gray-800 animate-pulse rounded-xl" />)}
             </div>
-          ) : !templates?.length ? (
+          ) : !filteredTemplates?.length ? (
             <div className="rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-8 text-center text-sm text-gray-400 dark:text-gray-500">
-              No tienes plantillas aún.
+              No hay plantillas en esta categoría.
             </div>
           ) : (
             <div className="grid gap-3">
-              {templates.map(t => (
+              {filteredTemplates.map(t => (
                 <div key={t.id} className="rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-5 flex items-start justify-between">
                   <div className="space-y-1 flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-gray-900 dark:text-gray-100">{t.name}</h3>
                       {t.category && <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full">{t.category}</span>}
+                      {t.step && <span className="text-xs bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 px-2 py-0.5 rounded-full">{STEP_LABELS[t.step] || t.step}</span>}
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{t.content}</p>
                   </div>
@@ -200,18 +312,19 @@ export default function TemplatesPage() {
               {seedAllMutation.data.message}
             </div>
           )}
-          {!seedTemplates ? (
+          {!filteredSeeds ? (
             <div className="space-y-3">
               {[1, 2, 3].map(i => <div key={i} className="h-20 bg-gray-100 dark:bg-gray-800 animate-pulse rounded-xl" />)}
             </div>
           ) : (
             <div className="grid gap-3">
-              {seedTemplates.map((t, i) => (
+              {filteredSeeds.map((t, i) => (
                 <div key={i} className="rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-5 flex items-start justify-between">
                   <div className="space-y-1 flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-gray-900 dark:text-gray-100">{t.name}</h3>
                       {t.category && <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full">{t.category}</span>}
+                      {t.step && <span className="text-xs bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 px-2 py-0.5 rounded-full">{STEP_LABELS[t.step] || t.step}</span>}
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{t.content}</p>
                   </div>

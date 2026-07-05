@@ -25,7 +25,8 @@ from app.models.customer_story import CustomerStory
 from app.models.user import User
 from app.services.coupon_service import is_redeem_intent, is_expired
 from app.services.rag_service import answer_with_rag
-from app.services.claude_service import detect_order_intent, detect_plan_purchase_intent, generate_bot_response
+from app.services.claude_service import detect_order_intent, detect_plan_purchase_intent, generate_bot_response, personalize_message
+from app.services.template_lookup import get_template
 from app.services.twilio_service import send_whatsapp as _send_wa
 from app.api.v1.webhooks_pkg.lead_score import calculate_lead_score
 from app.api.v1.chat_demo import (
@@ -266,7 +267,8 @@ async def twilio_incoming(
             if normalized in ("1", "si", "sí", "s", "yes", "y", "claro", "por supuesto", "reagendar"):
                 reschedule_appt.awaiting_reschedule = False
                 await db.commit()
-                reply = (
+                _tpl = await get_template(db, str(advertiser.id), "Cita", "appt_reschedule_yes")
+                reply = personalize_message(_tpl, {"name": "", "city": ""}, {"business_name": advertiser.business_name or "", "city": ""}) if _tpl else (
                     "¡Genial! 📅\n"
                     "Por favor escríbeme qué día y hora prefieres esta semana "
                     "y revisaré la disponibilidad para agendarte."
@@ -276,7 +278,8 @@ async def twilio_incoming(
             elif normalized in ("2", "no", "n", "nop", "cancelar"):
                 reschedule_appt.awaiting_reschedule = False
                 await db.commit()
-                reply = "Entendido 👍. ¡Escríbenos cuando estés listo/a!"
+                _tpl = await get_template(db, str(advertiser.id), "Cita", "appt_reschedule_no")
+                reply = personalize_message(_tpl, {"name": "", "city": ""}, {"business_name": "", "city": ""}) if _tpl else "Entendido 👍. ¡Escríbenos cuando estés listo/a!"
                 await _send_wa(from_number, reply, from_number=advertiser.whatsapp_number)
                 return {"message": "ok"}
 
@@ -306,7 +309,16 @@ async def twilio_incoming(
             if normalized in confirm_keywords:
                 pending_appt.status = "confirmed"
                 pending_appt.awaiting_confirmation = False
-                _appt_reply = (
+                _tpl = await get_template(db, str(advertiser.id), "Cita", "appt_confirm")
+                _ac = {
+                    "nombre": pending_appt.customer_name or "Cliente",
+                    "primer_nombre": (pending_appt.customer_name or "Cliente").split()[0],
+                    "servicio": pending_appt.service or "",
+                    "fecha": fecha,
+                    "hora": hora,
+                    "city": "",
+                }
+                _appt_reply = personalize_message(_tpl, _ac, {"business_name": biz_name, "city": ""}) if _tpl else (
                     f"✅ *¡Cita confirmada!*\n\n"
                     f"📌 {pending_appt.service}\n"
                     f"🕐 {fecha} a las {hora}\n"
@@ -323,7 +335,16 @@ async def twilio_incoming(
                 pending_appt.status = "cancelled"
                 pending_appt.awaiting_confirmation = False
                 pending_appt.awaiting_reschedule = True
-                _appt_reply = (
+                _tpl = await get_template(db, str(advertiser.id), "Cita", "appt_cancel")
+                _acl = {
+                    "nombre": pending_appt.customer_name or "Cliente",
+                    "primer_nombre": (pending_appt.customer_name or "Cliente").split()[0],
+                    "servicio": pending_appt.service or "",
+                    "fecha": fecha,
+                    "hora": hora,
+                    "city": "",
+                }
+                _appt_reply = personalize_message(_tpl, _acl, {"business_name": biz_name, "city": ""}) if _tpl else (
                     f"❌ Cita cancelada.\n\n"
                     f"Sin problema, {pending_appt.customer_name.split()[0]}.\n"
                     f"¿Te gustaría que te muestre los horarios disponibles para reagendar tu cita? Responde *SÍ* o *NO* 📅"
@@ -525,7 +546,10 @@ async def twilio_incoming(
             )
             if is_affirmative:
                 pending_order.state = "collecting_name"
-                order_reply = (
+                _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_name")
+                contact_data = {"name": contact.name or "amigo", "city": ""}
+                adv_data = {"business_name": advertiser.business_name or "nuestro negocio", "city": ""}
+                order_reply = personalize_message(_tpl, contact_data, adv_data) if _tpl else (
                     "¡Excelente! 🎉\n"
                     "Para completarlo, ¿a qué nombre va el pedido?"
                 )
@@ -536,14 +560,19 @@ async def twilio_incoming(
         elif pending_order.state == "collecting_name":
             pending_order.customer_name = body_text.strip()
             pending_order.state = "collecting_address"
-            order_reply = (
-                f"Perfecto, {pending_order.customer_name.split()[0]} 👍\n"
+            _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_address")
+            _first = pending_order.customer_name.split()[0]
+            contact_data = {"name": _first, "city": ""}
+            adv_data = {"business_name": "", "city": ""}
+            order_reply = personalize_message(_tpl, contact_data, adv_data) if _tpl else (
+                f"Perfecto, {_first} 👍\n"
                 "¿Cuál es tu dirección de entrega? 📍"
             )
         elif pending_order.state == "collecting_address":
             pending_order.delivery_address = body_text.strip()
             pending_order.state = "collecting_payment"
-            order_reply = (
+            _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_payment")
+            order_reply = personalize_message(_tpl, {"name": "", "city": ""}, {"business_name": "", "city": ""}) if _tpl else (
                 "¡Anotado! 📝 ¿Cómo prefieres pagar?\n"
                 "Responde: *Efectivo*, *Tarjeta* o *Transferencia* 💳"
             )
@@ -554,7 +583,16 @@ async def twilio_incoming(
             pending_order.confirmed_at = datetime.now(tz.utc)
             await db.flush()
 
-            order_reply = (
+            _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_confirmed")
+            _oc = {
+                "nombre": pending_order.customer_name or "Cliente",
+                "order_number": f"{pending_order.order_number:04d}",
+                "items": pending_order.items_raw or "",
+                "direccion": pending_order.delivery_address or "",
+                "pago": pending_order.payment_method or "",
+                "city": "",
+            }
+            order_reply = personalize_message(_tpl, _oc, {"business_name": "", "city": ""}) if _tpl else (
                 f"✅ *Pedido #{pending_order.order_number:04d} confirmado*\n\n"
                 f"🛒 {pending_order.items_raw}\n"
                 f"👤 {pending_order.customer_name}\n"
@@ -563,7 +601,17 @@ async def twilio_incoming(
                 "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
             )
 
-            wa_notify = (
+            _tpl_owner = await get_template(db, str(advertiser.id), "Pedido", "order_owner_notify")
+            _on = {
+                "nombre": pending_order.customer_name or "Cliente",
+                "order_number": f"{pending_order.order_number:04d}",
+                "items": pending_order.items_raw or "",
+                "telefono": from_number,
+                "direccion": pending_order.delivery_address or "",
+                "pago": pending_order.payment_method or "",
+                "city": "",
+            }
+            wa_notify = personalize_message(_tpl_owner, _on, {"business_name": "", "city": ""}) if _tpl_owner else (
                 f"📦 *NUEVO PEDIDO #{pending_order.order_number:04d}*\n"
                 f"────────────────\n"
                 f"🛒 {pending_order.items_raw}\n"
@@ -607,7 +655,8 @@ async def twilio_incoming(
                 )
                 if is_affirmative:
                     pending_order.state = "plan_collecting_name"
-                    order_reply = (
+                    _tpl = await get_template(db, str(advertiser.id), "Plan", "plan_name")
+                    order_reply = personalize_message(_tpl, {"name": "", "city": ""}, {"business_name": "", "city": ""}) if _tpl else (
                         "¡Excelente! 🎉 ¿A qué nombre te registramos?"
                     )
                 else:
@@ -618,7 +667,9 @@ async def twilio_incoming(
                 pending_order.customer_name = body_text.strip()
                 pending_order.state = "plan_collecting_datetime"
                 first_name = pending_order.customer_name.split()[0]
-                order_reply = (
+                _tpl = await get_template(db, str(advertiser.id), "Plan", "plan_datetime")
+                _pd = {"nombre": first_name, "primer_nombre": first_name, "city": ""}
+                order_reply = personalize_message(_tpl, _pd, {"business_name": "", "city": ""}) if _tpl else (
                     f"Perfecto, {first_name} 👍\n"
                     "¿Qué día y hora prefieres para tu cita de activación?\n"
                     "Por ejemplo: *Mañana a las 10 am* o *Viernes a las 4 pm* 📅"
@@ -633,7 +684,10 @@ async def twilio_incoming(
 
                 plan_name = pending_order.items_raw or "Plan"
                 first_name = pending_order.customer_name.split()[0] if pending_order.customer_name else "Cliente"
-                order_reply = (
+
+                _tpl = await get_template(db, str(advertiser.id), "Plan", "plan_confirmed")
+                _pc = {"nombre": pending_order.customer_name or "Cliente", "primer_nombre": first_name, "plan": plan_name.replace("Plan ", ""), "fecha": pending_order.notes or "", "city": ""}
+                order_reply = personalize_message(_tpl, _pc, {"business_name": "", "city": ""}) if _tpl else (
                     f"✅ *{plan_name} registrado*\n\n"
                     f"👤 {pending_order.customer_name}\n"
                     f"📅 Preferencia: {pending_order.notes}\n\n"
@@ -696,7 +750,9 @@ async def twilio_incoming(
                 except Exception:
                     logger.warning("[PLAN] Failed to send plan request notification", exc_info=True)
 
-            order_reply = (
+            _tpl = await get_template(db, str(advertiser.id), "Plan", "plan_confirm")
+            _pi = {"nombre": contact_name, "plan": detected_plan.capitalize(), "city": ""}
+            order_reply = personalize_message(_tpl, _pi, {"business_name": "", "city": ""}) if _tpl else (
                 f"¡Excelente elección! 💪\n"
                 f"¿Confirmas que quieres el *Plan {detected_plan.capitalize()}*?\n"
                 "Responde *Sí* o *No* 😊"
@@ -722,7 +778,8 @@ async def twilio_incoming(
                 await db.flush()
                 pending_order = new_order
 
-                order_reply = (
+                _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_confirm")
+                order_reply = personalize_message(_tpl, {"name": "", "city": ""}, {"business_name": "", "city": ""}) if _tpl else (
                     "¡Gracias por tu interés! 🛒\n"
                     "¿Te gustaría hacer un pedido? Responde *Sí* o *No* 😊"
                 )

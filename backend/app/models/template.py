@@ -18,6 +18,7 @@ class MessageTemplate(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str | None] = mapped_column(String(100))
+    step: Mapped[str | None] = mapped_column(String(50))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
