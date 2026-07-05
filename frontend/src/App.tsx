@@ -42,7 +42,13 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   if (loading) return null
-  return user ? <Navigate to="/app/dashboard" replace /> : <>{children}</>
+  if (!user) return <>{children}</>
+  return <Navigate to={user.role === 'admin' ? '/app/admin' : '/app/dashboard'} replace />
+}
+
+function RoleRedirect() {
+  const { user } = useAuth()
+  return <Navigate to={user?.role === 'admin' ? '/app/admin' : '/app/dashboard'} replace />
 }
 
 export default function App() {
@@ -66,7 +72,7 @@ export default function App() {
 
             {/* Private */}
             <Route path="/app" element={<PrivateRoute><Layout /></PrivateRoute>}>
-              <Route index element={<Navigate to="/app/dashboard" replace />} />
+              <Route index element={<RoleRedirect />} />
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="contacts" element={<ContactsPage />} />
               <Route path="campaigns" element={<CampaignsPage />} />
