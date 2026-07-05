@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,6 +55,11 @@ class UserSubscriptionResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_uuid(cls, v):
+        return str(v)
 
 
 @router.get("/admin/subscriptions")
@@ -253,6 +258,11 @@ class AdminUserResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_uuid(cls, v):
+        return str(v)
 
 
 @router.get("/admin/users")
