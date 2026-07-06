@@ -214,7 +214,7 @@ export function useCampaignForm() {
           business_category: audio.businessCategory || undefined,
           extra_context: audio.extraContext || undefined,
           voice_id: audio.radioVoiceId || undefined,
-        })
+        }, { timeout: 90000 })
         dispatch({ type: 'SET_AUDIO', payload: { radioAudioUrl: data.audio_url, radioScript: data.script ?? '' } })
       }
     } catch (err: unknown) {

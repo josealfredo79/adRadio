@@ -272,8 +272,9 @@ async def google_callback(
 
         refresh_token = exchange_code(code, redirect_uri)
     except Exception as e:
-        logger.error("[GCAL] OAuth exchange failed: %s", e)
-        return RedirectResponse(f"{settings.FRONTEND_URL}/app/appointments?error=oauth_failed")
+        logger.error("[GCAL] OAuth exchange failed: %s", e, exc_info=True)
+        error_detail = str(e)[:200] if str(e) else "unknown"
+        return RedirectResponse(f"{settings.FRONTEND_URL}/app/appointments?error=oauth_failed&detail={error_detail}")
 
     result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()

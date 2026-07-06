@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { CalendarDays, Plus, Trash2, Check, X, Clock, ExternalLink, Unplug } from 'lucide-react'
@@ -53,6 +53,17 @@ export default function AppointmentsPage() {
     notes: '',
   })
   const [error, setError] = useState('')
+
+  // Read OAuth callback errors from URL query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const oauthError = params.get('error')
+    if (oauthError) {
+      const detail = params.get('detail')
+      setError(detail ? `Error de Google Calendar: ${decodeURIComponent(detail)}` : 'Error al conectar Google Calendar')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   const { data: stats } = useQuery<AppointmentStats>({
     queryKey: ['appointment-stats'],
