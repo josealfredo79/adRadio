@@ -64,7 +64,7 @@ FEATURE_PLAN = {
 
 # Maximum radio ads per billing period (-1 = unlimited)
 PLAN_RADIO_LIMITS = {
-    "trial": 1,
+    "trial": 3,
     "starter": 0,
     "growth": 3,
     "pro": -1,
