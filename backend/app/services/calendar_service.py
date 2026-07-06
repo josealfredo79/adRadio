@@ -43,6 +43,7 @@ def get_auth_url(redirect_uri: str, state: str) -> str:
         prompt="consent",
         state=state,
         include_granted_scopes="true",
+        code_challenge_method=None,
     )
     return url
 
