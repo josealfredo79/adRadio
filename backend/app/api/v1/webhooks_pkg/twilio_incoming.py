@@ -437,7 +437,7 @@ async def twilio_incoming(
             queue="whatsapp",
             countdown=30,
         )
-            return {"message": "ok"}
+        return {"message": "ok"}
 
     # Get or create contact
     contact_result = await db.execute(
