@@ -432,11 +432,11 @@ async def twilio_incoming(
                 out_msg.status = "failed"
                 out_msg.error_code = err_c
             await db.commit()
-            update_contact_engagement_score.apply_async(
-                args=[str(contact.id)],
-                queue="whatsapp",
-                countdown=10,
-            )
+        update_contact_engagement_score.apply_async(
+            args=[str(contact.id)],
+            queue="whatsapp",
+            countdown=30,
+        )
             return {"message": "ok"}
 
     # Get or create contact
@@ -902,7 +902,7 @@ async def twilio_incoming(
                     "from_number": advertiser.whatsapp_number,
                 },
                 queue="whatsapp",
-                countdown=10,
+                countdown=2,
             )
         except Exception:
             logger.warning("[WEBHOOK] Failed to queue welcome cuna")
