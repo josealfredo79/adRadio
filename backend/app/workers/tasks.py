@@ -12,6 +12,7 @@ from app.workers.task_helpers import (
     send_parrilla_messages, notify_campaign_failed, run_parrilla_generation,
     send_24h_reminders, send_1h_reminders,
 )
+from app.workers.task_helpers.common import suppress_contact_on_error
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,11 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
                 if sid and advertiser:
                     advertiser.messages_remaining -= 1
                 await db.commit()
+
+                # Auto-suppress contact on permanent Twilio errors
+                if not sid and msg.contact_id and error:
+                    await suppress_contact_on_error(db, msg.contact_id, error)
+                    await db.commit()
 
             if error and any(code in str(error) for code in ("63006", "63007", "63016", "rate")):
                 raise RuntimeError(f"Twilio rate limit: {error}")
@@ -102,6 +108,11 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
                 if sid and advertiser:
                     advertiser.messages_remaining -= 1
                 await db.commit()
+
+                # Auto-suppress contact on permanent Twilio errors
+                if not sid and msg.contact_id and error:
+                    await suppress_contact_on_error(db, msg.contact_id, error)
+                    await db.commit()
 
             if error and any(code in str(error) for code in ("63006", "63007", "63016", "rate")):
                 raise RuntimeError(f"Twilio rate limit: {error}")

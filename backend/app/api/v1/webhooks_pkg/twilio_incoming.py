@@ -522,6 +522,12 @@ async def twilio_incoming(
             conv.lead_score = new_score
     conv.last_activity = func.now()
 
+    # Reset anti-suppression when contact replies
+    if contact:
+        contact.last_interaction = func.now()
+        contact.failed_send_count = 0
+        contact.suppressed_until = None
+
     contact_name = (contact.name or "Cliente").split()[0] if contact else "Cliente"
 
     # Order state machine

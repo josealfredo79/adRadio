@@ -33,6 +33,9 @@ class Contact(Base):
     engagement_score: Mapped[int] = mapped_column(Integer, default=0)
     source: Mapped[str] = mapped_column(String(20), default="manual")
     last_interaction: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_campaign_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_send_count: Mapped[int] = mapped_column(Integer, default=0)
+    suppressed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

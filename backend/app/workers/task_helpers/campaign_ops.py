@@ -13,20 +13,41 @@ logger = logging.getLogger(__name__)
 
 _ACTIVE_CUTOFF_DAYS = 90
 _MIN_ENGAGEMENT_SCORE = 10
+_CAMPAIGN_COOLDOWN_HOURS = 48
+_MAX_FAILED_SENDS = 3
+_SUPPRESSION_DAYS = 30
+_AUTO_PAUSE_THRESHOLD = 0.5  # pause campaign if >50% contacts fail
 
 
 def _is_contact_active(contact) -> bool:
     """Skip inactive contacts to reduce ban risk.
     New contacts (never interacted) are always considered active.
     """
+    now = datetime.now(timezone.utc)
+
     if contact.status != "active":
         return False
+
+    # Suppressed due to repeated failures
+    if contact.suppressed_until and now < contact.suppressed_until:
+        return False
+    # Reset suppression after period expires
+    if contact.suppressed_until and now >= contact.suppressed_until:
+        contact.failed_send_count = 0
+        contact.suppressed_until = None
+
+    # Cooldown: no campaigns to same contact within 48h
+    if contact.last_campaign_sent_at:
+        hours_since = (now - contact.last_campaign_sent_at).total_seconds() / 3600
+        if hours_since < _CAMPAIGN_COOLDOWN_HOURS:
+            return False
+
     # New contact: no interaction history yet, allow through
     if contact.last_interaction is None:
         return True
     if (contact.engagement_score or 0) >= _MIN_ENGAGEMENT_SCORE:
         return True
-    cutoff = datetime.now(timezone.utc) - timedelta(days=_ACTIVE_CUTOFF_DAYS)
+    cutoff = now - timedelta(days=_ACTIVE_CUTOFF_DAYS)
     if contact.last_interaction < cutoff:
         return False
     return True
@@ -146,11 +167,15 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     palette = palette or design.palette
     layout = layout_override or design.layout
 
+    sent_count = 0
+    skipped_count = 0
+
     for idx_b, contact in enumerate(contacts):
         if advertiser.messages_remaining <= 0:
             break
 
         if not _is_contact_active(contact):
+            skipped_count += 1
             logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
             continue
 
@@ -202,8 +227,10 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             countdown=ban_delay,
             queue="whatsapp",
         )
+        contact.last_campaign_sent_at = datetime.now(timezone.utc)
         advertiser.messages_remaining -= 1
         ban_delay += anti_ban_delay()
+        sent_count += 1
 
     await db.commit()
 
@@ -221,11 +248,15 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
 
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
 
+    sent_count = 0
+    skipped_count = 0
+
     for idx_r, contact in enumerate(contacts):
         if advertiser.messages_remaining <= 0:
             break
 
         if not _is_contact_active(contact):
+            skipped_count += 1
             logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
             continue
 
@@ -256,8 +287,10 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
             countdown=ban_delay,
             queue="whatsapp",
         )
+        contact.last_campaign_sent_at = datetime.now(timezone.utc)
         advertiser.messages_remaining -= 1
         ban_delay += anti_ban_delay()
+        sent_count += 1
 
     await db.commit()
 
@@ -292,11 +325,16 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         "city": advertiser.city,
     }
 
+    sent_count = 0
+    failed_count = 0
+    skipped_count = 0
+
     for i, contact in enumerate(contacts):
         if advertiser.messages_remaining <= 0:
             break
 
         if not _is_contact_active(contact):
+            skipped_count += 1
             logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
             continue
 
@@ -391,8 +429,17 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         else:
             ab_stats_a["sent"] = ab_stats_a.get("sent", 0) + 1
 
+        contact.last_campaign_sent_at = datetime.now(timezone.utc)
         advertiser.messages_remaining -= 1
         ban_delay += anti_ban_delay()
+        sent_count += 1
+
+    # Auto-pause if failure rate is too high
+    total_attempted = sent_count + failed_count
+    if total_attempted > 10 and failed_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD:
+        campaign.status = "paused"
+        logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
+                       campaign.id, failed_count / total_attempted * 100, failed_count, total_attempted)
 
     if ab_enabled:
         new_ab = dict(campaign.ab_test)
@@ -475,18 +522,22 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
     from app.workers.tasks import send_whatsapp_voice_note
     from app.services.twilio_service import anti_ban_delay
 
+    MAX_PER_HOUR = 60
     ban_delay = 0
     sent = 0
     from_number = getattr(advertiser, "whatsapp_number", None)
     _convs = await _preload_conversations(db, advertiser.id, contacts)
 
-    for contact in contacts:
+    for idx, contact in enumerate(contacts):
         if advertiser.messages_remaining <= 0:
             break
 
         if not _is_contact_active(contact):
             logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
             continue
+
+        if idx > 0 and idx % MAX_PER_HOUR == 0:
+            ban_delay = int(idx / MAX_PER_HOUR) * 3600
 
         extra = await _ensure_conversation_window(
             db, advertiser.id, contact, from_number,
@@ -511,6 +562,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
             countdown=ban_delay,
             queue="whatsapp",
         )
+        contact.last_campaign_sent_at = datetime.now(timezone.utc)
         advertiser.messages_remaining -= 1
         ban_delay += anti_ban_delay()
         sent += 1

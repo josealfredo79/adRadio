@@ -1,7 +1,7 @@
 """
 Helper utilities for Celery tasks.
 """
-from app.workers.task_helpers.common import run_async, _get_advertiser_whatsapp_number
+from app.workers.task_helpers.common import run_async, _get_advertiser_whatsapp_number, suppress_contact_on_error
 from app.workers.task_helpers.extract import _extract_text
 from app.workers.task_helpers.campaign_ops import (
     send_regular_messages, send_banner_messages, send_radio_messages,
