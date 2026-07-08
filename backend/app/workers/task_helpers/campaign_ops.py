@@ -232,6 +232,13 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         ban_delay += anti_ban_delay()
         sent_count += 1
 
+    # Auto-pause if failure rate is too high
+    total_attempted = sent_count + skipped_count
+    if total_attempted > 10 and skipped_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD:
+        campaign.status = "paused"
+        logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
+                       campaign.id, skipped_count / total_attempted * 100, skipped_count, total_attempted)
+
     await db.commit()
 
 
@@ -292,6 +299,13 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         ban_delay += anti_ban_delay()
         sent_count += 1
 
+    # Auto-pause if failure rate is too high
+    total_attempted = sent_count + skipped_count
+    if total_attempted > 10 and skipped_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD:
+        campaign.status = "paused"
+        logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
+                       campaign.id, skipped_count / total_attempted * 100, skipped_count, total_attempted)
+
     await db.commit()
 
 
@@ -326,7 +340,6 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     }
 
     sent_count = 0
-    failed_count = 0
     skipped_count = 0
 
     for i, contact in enumerate(contacts):
@@ -435,11 +448,11 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         sent_count += 1
 
     # Auto-pause if failure rate is too high
-    total_attempted = sent_count + failed_count
-    if total_attempted > 10 and failed_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD:
+    total_attempted = sent_count + skipped_count
+    if total_attempted > 10 and skipped_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD:
         campaign.status = "paused"
         logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
-                       campaign.id, failed_count / total_attempted * 100, failed_count, total_attempted)
+                       campaign.id, skipped_count / total_attempted * 100, skipped_count, total_attempted)
 
     if ab_enabled:
         new_ab = dict(campaign.ab_test)
@@ -516,7 +529,7 @@ async def notify_campaign_failed(campaign_id, exc):
         logger.warning("[CAMPAIGN-EMAIL] Failed to send failure notification: %s", email_err)
 
 
-async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, day_name, mode):
+async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, day_name, mode, campaign=None):
     """Send parrilla day messages to all active contacts."""
     from app.models.message import Message
     from app.workers.tasks import send_whatsapp_voice_note
@@ -525,6 +538,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
     MAX_PER_HOUR = 60
     ban_delay = 0
     sent = 0
+    skipped_count = 0
     from_number = getattr(advertiser, "whatsapp_number", None)
     _convs = await _preload_conversations(db, advertiser.id, contacts)
 
@@ -533,6 +547,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
             break
 
         if not _is_contact_active(contact):
+            skipped_count += 1
             logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
             continue
 
@@ -566,6 +581,14 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
         advertiser.messages_remaining -= 1
         ban_delay += anti_ban_delay()
         sent += 1
+
+    # Auto-pause if failure rate is too high
+    total_attempted = sent + skipped_count
+    if total_attempted > 10 and skipped_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD:
+        if campaign:
+            campaign.status = "paused"
+            logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
+                           campaign.id, skipped_count / total_attempted * 100, skipped_count, total_attempted)
 
     return sent
 
