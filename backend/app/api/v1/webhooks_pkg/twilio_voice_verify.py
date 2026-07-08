@@ -1,5 +1,5 @@
 """
-Twilio voice verification webhook — answers incoming calls with TwiML.
+Twilio voice verification webhook — answers and records incoming calls.
 Used for Meta WhatsApp Business number verification.
 """
 from fastapi import APIRouter, Request
@@ -10,11 +10,19 @@ router = APIRouter()
 
 @router.post("/twilio/voice-verify", response_class=PlainTextResponse)
 async def twilio_voice_verify(request: Request):
-    """Answer voice call and play a silence tone — allows Meta to verify the number."""
+    """Answer voice call, record it (to capture Meta verification code), then hang up."""
     twiml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Miguel"></Say>
-  <Pause length="1"/>
+  <Record maxLength="30" playBeep="false" action="/api/v1/webhooks/twilio/voice-verify-status"/>
+</Response>"""
+    return PlainTextResponse(content=twiml, media_type="application/xml")
+
+
+@router.post("/twilio/voice-verify-status", response_class=PlainTextResponse)
+async def twilio_voice_verify_status(request: Request):
+    """Callback after recording completes — just hang up."""
+    twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
   <Hangup/>
 </Response>"""
     return PlainTextResponse(content=twiml, media_type="application/xml")
