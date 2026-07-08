@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     TWILIO_UTILITY_TEMPLATE_SID: str = ""
     TWILIO_ORDER_CONFIRM_BUTTONS_SID: str = ""
     TWILIO_APPOINTMENT_CONFIRM_BUTTONS_SID: str = ""
+    # Token secreto para la página de escucha de verificación de voz
+    # (/webhooks/twilio/voice-verify-listen?token=...)
+    VOICE_VERIFY_TOKEN: str = ""
 
     @property
     def twilio_number_pool_list(self) -> list[str]:
