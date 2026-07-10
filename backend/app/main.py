@@ -140,7 +140,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         else:
             csp_parts.append("script-src 'self' https://js.stripe.com")
             csp_parts.append("style-src 'self' 'unsafe-inline'")
-        csp_parts.append("img-src 'self' data: https:")
+        csp_parts.append("img-src 'self' data: blob: https:")
         csp_parts.append("frame-src 'self' https://js.stripe.com")
         connect_src = ["'self'"]
         if api_url:
