@@ -29,6 +29,7 @@ import {
   User,
   CreditCard as CreditCardIcon,
   Phone,
+  FlaskConical,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -41,6 +42,7 @@ const navItems = [
   { to: '/app/appointments', icon: CalendarDays, label: 'Citas' },
   { to: '/app/contacts', icon: Users, label: 'Contactos' },
   { to: '/app/knowledge-base', icon: BookOpen, label: 'Base de conocimiento' },
+  { to: '/app/lab', icon: FlaskConical, label: 'Laboratorio' },
   { to: '/app/team', icon: UserCog, label: 'Equipo' },
   { to: '/app/templates', icon: FileText, label: 'Plantillas' },
   { to: '/app/widget', icon: MessageCircle, label: 'Widget WA' },

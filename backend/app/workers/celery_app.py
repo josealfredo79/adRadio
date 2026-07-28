@@ -34,6 +34,7 @@ celery_app.conf.update(
         "app.workers.tasks.import_contacts_csv": {"queue": "processing"},
         "app.workers.tasks.schedule_campaign": {"queue": "campaigns"},
         "app.workers.tasks.generate_parrilla_task": {"queue": "campaigns"},
+        "app.workers.tasks.run_lab_task": {"queue": "processing"},
     },
 )
 

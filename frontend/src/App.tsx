@@ -26,6 +26,7 @@ const WidgetPage = lazy(() => import('@/pages/WidgetPage'))
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
 const AutomationsPage = lazy(() => import('@/pages/AutomationsPage'))
 const TemplatesPage = lazy(() => import('@/pages/TemplatesPage'))
+const LabPage = lazy(() => import('@/pages/LabPage'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
 const AdminRoute = lazy(() => import('@/components/AdminRoute'))
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'))
@@ -80,6 +81,7 @@ export default function App() {
               <Route path="orders" element={<OrdersPage />} />
               <Route path="appointments" element={<AppointmentsPage />} />
               <Route path="knowledge-base" element={<KnowledgeBasePage />} />
+              <Route path="lab" element={<LabPage />} />
               <Route path="plans" element={<PlansPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="automations" element={<AutomationsPage />} />

@@ -21,7 +21,7 @@ from app.core.redis import close_redis
 from app.core.rate_limiter import limiter
 from app.services.analytics_service import flush as analytics_flush
 from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, template_seeds, team, automations, widget, analytics, admin, chat_demo
-from app.api.v1 import user_webhooks, public_api, public_api_routes, meta_whatsapp
+from app.api.v1 import user_webhooks, public_api, public_api_routes, meta_whatsapp, lab
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +172,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix=settings.API_PREFIX)
 app.include_router(profile.router, prefix=settings.API_PREFIX)
 app.include_router(meta_whatsapp.router, prefix=settings.API_PREFIX)
+app.include_router(lab.router, prefix=settings.API_PREFIX)
 app.include_router(contacts.router, prefix=settings.API_PREFIX)
 app.include_router(campaigns.router, prefix=settings.API_PREFIX)
 app.include_router(conversations.router, prefix=settings.API_PREFIX)

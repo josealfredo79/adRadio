@@ -570,6 +570,31 @@ def generate_parrilla_task(self, job_id: str, advertiser_id: str, body_dict: dic
         logger.exception("[PARRILLA] job %s crashed", job_id)
 
 
+@celery_app.task(bind=True, soft_time_limit=1500, time_limit=1800)
+def run_lab_task(self, lab_run_id: str):
+    """
+    Corre el Laboratorio (6 personas simuladas + juez) en background. Límite
+    de tiempo alto (25/30 min) porque son hasta 6 personas x varios turnos
+    de LLM cada una, más el juez por persona — y cada turno de RAG puede
+    pegarle al rate limit gratuito de Voyage AI (VOYAGE_EMBEDDING_DELAY_S,
+    ~22-44s de reintento por llamada), medido en vivo durante el desarrollo.
+
+    No se reintenta automáticamente: el estado queda marcado "error" en la
+    fila lab_runs para que el usuario decida si reintenta desde la UI.
+    """
+    async def _run():
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.services.lab.runner import run_lab
+
+        async with AsyncSessionLocal() as db:
+            await run_lab(lab_run_id, db)
+
+    try:
+        run_async(_run())
+    except Exception:
+        logger.exception("[LAB] job %s crashed", lab_run_id)
+
+
 @celery_app.task
 def update_contact_engagement_score(contact_id: str):
     """Update contact engagement_score and lead_score using Claude."""
