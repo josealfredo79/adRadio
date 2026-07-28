@@ -55,68 +55,70 @@ def _is_contact_active(contact) -> bool:
 
 async def _ensure_conversation_window(
     db,
-    advertiser_id: uuid.UUID,
+    advertiser,
     contact,
-    from_number: str | None = None,
-    business_name: str | None = None,
     _convs: dict[str, object] | None = None,
-) -> int:
-    """Send the invitacion_radio template if the 24h window is closed.
-    Returns extra delay (seconds) to add before sending the campaign message.
+) -> int | None:
+    """Send the advertiser's approved utility template if the 24h window is closed.
+    Returns extra delay (seconds) if it's safe to send now (window open, or an
+    approved template just reopened it), or None if the send must be SKIPPED —
+    window closed and no approved template available. This is a hard block:
+    WhatsApp policy prohibits free-text outside the window, so unlike before
+    there is no silent fallback to plain text here.
     Accepts optional preloaded conversations dict {contact_id: conv} to avoid N+1.
     """
     from app.models.conversation import Conversation
-    from app.services.twilio_service import send_whatsapp_template
-    from app.config import settings
+    from app.services.meta_service import send_whatsapp_template
+    from app.services.whatsapp_window import is_window_open
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     if _convs is not None:
         conv = _convs.get(str(contact.id))
     else:
         result = await db.execute(
             select(Conversation).where(
-                Conversation.advertiser_id == advertiser_id,
+                Conversation.advertiser_id == advertiser.id,
                 Conversation.contact_id == contact.id,
                 Conversation.status == "active",
             )
         )
         conv = result.scalar_one_or_none()
-    if conv and conv.last_activity and conv.last_activity > cutoff:
+    if is_window_open(conv):
         return 0
+
+    template_name = advertiser.meta_utility_template_name
+    if not template_name:
+        # No approved utility template configured yet for this advertiser —
+        # can't reopen the window outside it. Known limitation until they
+        # set one in Configuración → WhatsApp.
+        logger.info("[TEMPLATE] No meta_utility_template_name for advertiser=%s — blocking send, window closed", advertiser.id)
+        return None
 
     contact_name = (contact.name or "Cliente").split()[0] if contact.name else "Cliente"
-    business_name = business_name or "IARadio"
+    business_name = advertiser.business_name or "IARadio"
 
-    # Try UTILITY (notificacion_audio_v2) first — can open window outside 24h, fall back to MARKETING (notificacion_informativa)
-    used_sid = ""
     sid, error = await send_whatsapp_template(
         to=contact.phone,
-        template_sid=settings.TWILIO_UTILITY_TEMPLATE_SID,
-        variables={"1": contact_name, "2": business_name, "3": "aqui"},
-        from_number=from_number,
+        template_name=template_name,
+        components=[{
+            "type": "body",
+            "parameters": [
+                {"type": "text", "text": contact_name},
+                {"type": "text", "text": business_name},
+            ],
+        }],
+        advertiser=advertiser,
     )
-    if sid:
-        used_sid = settings.TWILIO_UTILITY_TEMPLATE_SID
-    else:
-        sid, error = await send_whatsapp_template(
-            to=contact.phone,
-            template_sid=settings.TWILIO_INVITACION_TEMPLATE_SID,
-            variables={"1": contact_name},
-            from_number=from_number,
-        )
-        if sid:
-            used_sid = settings.TWILIO_INVITACION_TEMPLATE_SID
     if not sid:
-        logger.warning("[TEMPLATE] All templates failed for %s: %s", contact.phone, error)
-        return 0
+        logger.warning("[TEMPLATE] Utility template failed for %s: %s — blocking send", contact.phone, error)
+        return None
 
     if not conv:
-        conv = Conversation(advertiser_id=advertiser_id, contact_id=contact.id, messages=[], lead_score="cold")
+        conv = Conversation(advertiser_id=advertiser.id, contact_id=contact.id, messages=[], lead_score="cold")
         db.add(conv)
         await db.flush()
     entry = {
         "role": "assistant",
-        "content": f"[TEMPLATE:{used_sid}] Hola {contact_name}, …",
+        "content": f"[TEMPLATE:{template_name}] Hola {contact_name}, …",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     conv.messages = (conv.messages + [entry])[-40:]
@@ -150,14 +152,13 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     from app.services.storage_service import upload_bytes
     from app.models.message import Message
     from app.workers.tasks import send_whatsapp_voice_note
-    from app.services.twilio_service import anti_ban_delay
+    from app.services.messaging_throttle import anti_ban_delay
 
     promo_description = ab.get("promo_description", campaign.message_text)
     palette = ab.get("banner_palette", "")  # vacío = auto según negocio
     caption = ab.get("banner_caption", "")
     layout_override = ab.get("banner_layout", "")
     MAX_PER_HOUR = 60
-    from_number = getattr(advertiser, "whatsapp_number", None)
 
     # Preload conversations to avoid N+1
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
@@ -182,11 +183,11 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         if idx_b > 0 and idx_b % MAX_PER_HOUR == 0:
             ban_delay = int(idx_b / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(
-            db, campaign.advertiser_id, contact, from_number,
-            business_name=advertiser.business_name,
-            _convs=_convs,
-        )
+        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs)
+        if extra is None:
+            skipped_count += 1
+            logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
+            continue
         ban_delay += extra
 
         contact_name = (contact.name or "").split()[0] if contact.name else "Cliente"
@@ -246,12 +247,11 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
     """Send radio/comunitaria campaign messages."""
     from app.models.message import Message
     from app.workers.tasks import send_whatsapp_voice_note
-    from app.services.twilio_service import anti_ban_delay
+    from app.services.messaging_throttle import anti_ban_delay
 
     audio_url = ab.get("audio_url", "")
     radio_script = ab.get("radio_script", campaign.message_text)
     MAX_PER_HOUR = 60
-    from_number = getattr(advertiser, "whatsapp_number", None)
 
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
 
@@ -270,11 +270,11 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         if idx_r > 0 and idx_r % MAX_PER_HOUR == 0:
             ban_delay = int(idx_r / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(
-            db, campaign.advertiser_id, contact, from_number,
-            business_name=advertiser.business_name,
-            _convs=_convs,
-        )
+        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs)
+        if extra is None:
+            skipped_count += 1
+            logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
+            continue
         ban_delay += extra
 
         msg = Message(
@@ -320,10 +320,9 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     )
     from app.services.storage_service import upload_bytes
     from app.services.radio.tts import text_to_speech, LOCUTOR_VOICES
-    from app.services.twilio_service import anti_ban_delay
+    from app.services.messaging_throttle import anti_ban_delay
 
     MAX_PER_HOUR = 60
-    from_number = getattr(advertiser, "whatsapp_number", None)
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
 
     ab_enabled = ab.get("enabled", False)
@@ -354,11 +353,11 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         if i > 0 and i % MAX_PER_HOUR == 0:
             ban_delay = int(i / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(
-            db, campaign.advertiser_id, contact, from_number,
-            business_name=advertiser.business_name,
-            _convs=_convs,
-        )
+        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs)
+        if extra is None:
+            skipped_count += 1
+            logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
+            continue
         ban_delay += extra
 
         contact_data = {
@@ -533,13 +532,12 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
     """Send parrilla day messages to all active contacts."""
     from app.models.message import Message
     from app.workers.tasks import send_whatsapp_voice_note
-    from app.services.twilio_service import anti_ban_delay
+    from app.services.messaging_throttle import anti_ban_delay
 
     MAX_PER_HOUR = 60
     ban_delay = 0
     sent = 0
     skipped_count = 0
-    from_number = getattr(advertiser, "whatsapp_number", None)
     _convs = await _preload_conversations(db, advertiser.id, contacts)
 
     for idx, contact in enumerate(contacts):
@@ -554,11 +552,11 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
         if idx > 0 and idx % MAX_PER_HOUR == 0:
             ban_delay = int(idx / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(
-            db, advertiser.id, contact, from_number,
-            business_name=advertiser.business_name,
-            _convs=_convs,
-        )
+        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs)
+        if extra is None:
+            skipped_count += 1
+            logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
+            continue
         ban_delay += extra
 
         msg = Message(

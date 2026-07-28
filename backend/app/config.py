@@ -60,6 +60,19 @@ class Settings(BaseSettings):
     def twilio_number_pool_list(self) -> list[str]:
         return [n.strip() for n in self.TWILIO_NUMBER_POOL.split(",") if n.strip()]
 
+    # WhatsApp Cloud API de Meta — conexión directa (reemplaza a Twilio)
+    # Clave de cifrado en reposo para tokens de Meta (AES-256-GCM).
+    # Genera con: openssl rand -base64 32
+    ENCRYPTION_KEY: str = ""
+    META_GRAPH_BASE_URL: str = "https://graph.facebook.com"
+    META_GRAPH_API_VERSION: str = "v21.0"
+    # Token de verificación del webhook (handshake GET de Meta).
+    # Genera con: openssl rand -hex 32
+    META_WEBHOOK_VERIFY_TOKEN: str = ""
+    # Opcional: App Secret de la app de Meta, para validar la firma
+    # X-Hub-Signature-256 de cada evento del webhook.
+    META_APP_SECRET: str = ""
+
     # Stripe
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""

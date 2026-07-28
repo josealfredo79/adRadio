@@ -4,12 +4,22 @@ Common utilities for Celery tasks.
 import asyncio
 import logging
 import uuid
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-# Twilio error codes that indicate permanent failures — contact should be suppressed
-_PERMANENT_ERRORS = {"63004", "63007", "63016"}
+# WhatsApp Cloud API (Meta) error codes that indicate a permanent delivery
+# failure — contact should be suppressed. Source: Meta's official error code
+# reference (developers.facebook.com/.../whatsapp/support/error-codes).
+#
+# Meta deliberately does NOT distinguish "user blocked us" from "not on
+# WhatsApp" from "opted out" — all of these collapse into one generic
+# undeliverable code for privacy reasons, unlike Twilio's separate
+# 63004/63007/63016. So there's no way to pick a specific `status`/`reason`
+# the way the old Twilio-code mapping did; every hit here is just "stop
+# messaging this number."
+_PERMANENT_ERRORS = {"131026"}
 
 
 def run_async(coro):
@@ -23,20 +33,11 @@ def run_async(coro):
     return asyncio.run(_wrapped())
 
 
-async def _get_advertiser_whatsapp_number(db: AsyncSession, advertiser_id: uuid.UUID) -> str | None:
-    from app.models.user import User
-    from sqlalchemy import select
-    result = await db.execute(select(User).where(User.id == advertiser_id))
-    advertiser = result.scalar_one_or_none()
-    return advertiser.whatsapp_number if advertiser else None
-
-
 async def suppress_contact_on_error(db: AsyncSession, contact_id: uuid.UUID, error_code: str | None) -> None:
-    """Auto-suppress contact on permanent Twilio delivery errors.
+    """Auto-suppress contact on a permanent WhatsApp delivery error.
 
-    - 63004 (invalid number) → blocked
-    - 63007 (user opted out) → unsubscribed
-    - 63016 (blocked number) → blocked
+    131026 = Meta's "unable to deliver" — recipient not on WhatsApp, hasn't
+    accepted ToS, or has blocked the business. Meta doesn't disclose which.
     """
     if not error_code:
         return
@@ -52,16 +53,10 @@ async def suppress_contact_on_error(db: AsyncSession, contact_id: uuid.UUID, err
     if not contact:
         return
 
-    if code == "63007":
-        contact.status = "unsubscribed"
-        reason = "opted_out"
-    else:
-        contact.status = "blocked"
-        reason = "invalid_number" if code == "63004" else "blocked_by_user"
-
+    contact.status = "blocked"
     contact.failed_send_count = (contact.failed_send_count or 0) + 1
     if (contact.failed_send_count or 0) >= 3:
         contact.suppressed_until = datetime.now(timezone.utc) + timedelta(days=30)
 
-    logger.info("[ANTI-SPAM] Contact %s suppressed: status=%s reason=%s error=%s",
-                contact_id, contact.status, reason, code)
+    logger.info("[ANTI-SPAM] Contact %s suppressed: status=blocked error=%s",
+                contact_id, code)

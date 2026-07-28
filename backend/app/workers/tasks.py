@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 
 from app.workers.celery_app import celery_app
 from app.workers.task_helpers import (
-    run_async, _get_advertiser_whatsapp_number, _extract_text,
+    run_async, _extract_text,
     send_regular_messages, send_banner_messages, send_radio_messages,
     send_parrilla_messages, notify_campaign_failed, run_parrilla_generation,
     send_24h_reminders, send_1h_reminders,
@@ -16,25 +16,31 @@ from app.workers.task_helpers.common import suppress_contact_on_error
 
 logger = logging.getLogger(__name__)
 
+# Meta WhatsApp Cloud API codes for rate-limit/throughput errors — worth a
+# retry, unlike a permanent failure. Source: Meta's official error code
+# reference (developers.facebook.com/.../whatsapp/support/error-codes).
+# Meta formats error messages as "(#<code>) <description>" — match on that
+# parenthesized form, not the bare digits, since a bare "4" would false-match
+# almost any error string.
+_RATE_LIMIT_ERROR_CODES = ("(#4)", "80007", "130429", "131048", "131056", "131064", "rate")
+
 
 @celery_app.task(bind=True, max_retries=5, default_retry_delay=120)
 def send_whatsapp_message(self, message_id: str, to: str, body: str):
-    """Send a WhatsApp message via Twilio with retry logic."""
+    """Send a WhatsApp message via Meta Cloud API with retry logic."""
     async def _send():
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
         from app.models.user import User
-        from app.services.twilio_service import send_whatsapp
+        from app.services.meta_service import send_whatsapp
         from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
             msg = result.scalar_one_or_none()
 
-            from_number = None
+            advertiser = None
             if msg:
-                from_number = await _get_advertiser_whatsapp_number(db, msg.advertiser_id)
-
                 adv_res = await db.execute(select(User).where(User.id == msg.advertiser_id))
                 advertiser = adv_res.scalar_one_or_none()
                 if not advertiser or advertiser.messages_remaining <= 0:
@@ -45,24 +51,24 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
                     logger.warning("[QUOTA] %s — no messages remaining, message %s dropped", msg.advertiser_id, message_id)
                     return
 
-            sid, error = await send_whatsapp(to, body, from_number=from_number)
+            sid, error = await send_whatsapp(to, body, advertiser=advertiser)
 
             if msg:
                 msg.status = "sent" if sid else "failed"
-                msg.twilio_sid = sid
+                msg.wa_message_id = sid
                 msg.error_code = error
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
                 if sid and advertiser:
                     advertiser.messages_remaining -= 1
                 await db.commit()
 
-                # Auto-suppress contact on permanent Twilio errors
+                # Auto-suppress contact on permanent delivery errors
                 if not sid and msg.contact_id and error:
                     await suppress_contact_on_error(db, msg.contact_id, error)
                     await db.commit()
 
-            if error and any(code in str(error) for code in ("63006", "63007", "63016", "rate")):
-                raise RuntimeError(f"Twilio rate limit: {error}")
+            if error and any(code in str(error) for code in _RATE_LIMIT_ERROR_CODES):
+                raise RuntimeError(f"WhatsApp rate limit: {error}")
 
     try:
         run_async(_send())
@@ -72,22 +78,20 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
 
 @celery_app.task(bind=True, max_retries=5, default_retry_delay=120)
 def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, caption: str = ""):
-    """Send a WhatsApp voice note (audio cuña) via Twilio media message."""
+    """Send a WhatsApp voice note (audio cuña) via Meta Cloud API media message."""
     async def _send():
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
         from app.models.user import User
-        from app.services.twilio_service import send_whatsapp_media
+        from app.services.meta_service import send_whatsapp_media
         from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
             msg = result.scalar_one_or_none()
 
-            from_number = None
             advertiser = None
             if msg:
-                from_number = await _get_advertiser_whatsapp_number(db, msg.advertiser_id)
                 adv_res = await db.execute(select(User).where(User.id == msg.advertiser_id))
                 advertiser = adv_res.scalar_one_or_none()
                 if not advertiser or advertiser.messages_remaining <= 0:
@@ -98,24 +102,24 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
                     logger.warning("[QUOTA] %s — no messages remaining, voice note %s dropped", msg.advertiser_id, message_id)
                     return
 
-            sid, error = await send_whatsapp_media(to, audio_url, body=caption, from_number=from_number)
+            sid, error = await send_whatsapp_media(to, audio_url, body=caption, advertiser=advertiser)
 
             if msg:
                 msg.status = "sent" if sid else "failed"
-                msg.twilio_sid = sid
+                msg.wa_message_id = sid
                 msg.error_code = error
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
                 if sid and advertiser:
                     advertiser.messages_remaining -= 1
                 await db.commit()
 
-                # Auto-suppress contact on permanent Twilio errors
+                # Auto-suppress contact on permanent delivery errors
                 if not sid and msg.contact_id and error:
                     await suppress_contact_on_error(db, msg.contact_id, error)
                     await db.commit()
 
-            if error and any(code in str(error) for code in ("63006", "63007", "63016", "rate")):
-                raise RuntimeError(f"Twilio rate limit: {error}")
+            if error and any(code in str(error) for code in _RATE_LIMIT_ERROR_CODES):
+                raise RuntimeError(f"WhatsApp rate limit: {error}")
 
     try:
         run_async(_send())
@@ -124,12 +128,15 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
-def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str, from_number: str | None = None):
+def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str):
     """Generate a radio cuña and send it as a WhatsApp voice note to a new lead."""
     async def _run():
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.models.user import User
         from app.services.radio_service import generate_radio_ad
         from app.config import settings
-        from app.services.twilio_service import send_whatsapp_media
+        from app.services.meta_service import send_whatsapp_media
+        from sqlalchemy import select
 
         r2_url = await generate_radio_ad(
             business_name=business_name,
@@ -142,7 +149,14 @@ def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str, fro
 
         key = r2_url.split("/radio/", 1)[-1]
         audio_url = f"{settings.BASE_URL.rstrip('/')}/api/v1/radio/audio/{key}"
-        await send_whatsapp_media(to, audio_url, body="", from_number=from_number)
+
+        # ORM rows can't cross the Celery broker — re-fetch the advertiser here.
+        async with AsyncSessionLocal() as db:
+            adv_res = await db.execute(select(User).where(User.id == uuid.UUID(advertiser_id)))
+            advertiser = adv_res.scalar_one_or_none()
+            if not advertiser:
+                return
+            await send_whatsapp_media(to, audio_url, body="", advertiser=advertiser)
 
     try:
         run_async(_run())
@@ -205,7 +219,7 @@ def schedule_campaign(self, campaign_id: str):
         from app.models.campaign import Campaign
         from app.models.contact import Contact
         from app.models.user import User
-        from app.services.twilio_service import is_human_hour
+        from app.services.messaging_throttle import is_human_hour
         from sqlalchemy import select
 
         if not is_human_hour(timezone_offset=-6):
@@ -457,36 +471,37 @@ def send_trial_expiry_reminders():
         from app.models.user import User
         from app.config import settings
         from app.core.email import send_trial_expiring_email
-        from app.services.twilio_service import send_whatsapp
+        from app.services.meta_service import send_whatsapp
         from sqlalchemy import select
 
         now = datetime.now(timezone.utc)
-        for days_left in (1, 3):
-            window_start = now + timedelta(days=days_left)
-            result = await db.execute(
-                select(User).where(
-                    User.subscription_status.in_(["trial", "active"]),
-                    User.plan_expires_at >= window_start,
-                    User.plan_expires_at < window_start + timedelta(hours=2),
+        async with AsyncSessionLocal() as db:
+            for days_left in (1, 3):
+                window_start = now + timedelta(days=days_left)
+                result = await db.execute(
+                    select(User).where(
+                        User.subscription_status.in_(["trial", "active"]),
+                        User.plan_expires_at >= window_start,
+                        User.plan_expires_at < window_start + timedelta(hours=2),
+                    )
                 )
-            )
-            for user in result.scalars().all():
-                biz_name = user.business_name or user.email
-                try:
-                    await send_trial_expiring_email(to=user.email, business_name=biz_name, days_left=days_left)
-                    logger.info("[TRIAL REMINDER] Email sent to %s — %d day(s) left", user.email, days_left)
-                except Exception as e:
-                    logger.error("[TRIAL REMINDER] Email failed for %s: %s", user.email, e)
-
-                if user.whatsapp_number:
+                for user in result.scalars().all():
+                    biz_name = user.business_name or user.email
                     try:
-                        msg = (
-                            f"⏰ Hola {biz_name}, tu prueba gratuita termina en {days_left} día{'s' if days_left != 1 else ''}. "
-                            f"👉 {settings.FRONTEND_PUBLIC_URL or 'https://app.iaradio.app'}/app/plans"
-                        )
-                        await send_whatsapp(to=user.whatsapp_number, body=msg)
+                        await send_trial_expiring_email(to=user.email, business_name=biz_name, days_left=days_left)
+                        logger.info("[TRIAL REMINDER] Email sent to %s — %d day(s) left", user.email, days_left)
                     except Exception as e:
-                        logger.error("[TRIAL REMINDER] WhatsApp failed for %s: %s", user.email, e)
+                        logger.error("[TRIAL REMINDER] Email failed for %s: %s", user.email, e)
+
+                    if user.whatsapp_number:
+                        try:
+                            msg = (
+                                f"⏰ Hola {biz_name}, tu prueba gratuita termina en {days_left} día{'s' if days_left != 1 else ''}. "
+                                f"👉 {settings.FRONTEND_PUBLIC_URL or 'https://app.iaradio.app'}/app/plans"
+                            )
+                            await send_whatsapp(to=user.whatsapp_number, body=msg, advertiser=user)
+                        except Exception as e:
+                            logger.error("[TRIAL REMINDER] WhatsApp failed for %s: %s", user.email, e)
 
     run_async(_remind())
 
@@ -649,7 +664,7 @@ def process_automation_enrollments():
         from app.models.conversation import Conversation
         from app.models.message import Message
         from app.models.user import User
-        from app.services.twilio_service import send_whatsapp
+        from app.services.meta_service import send_whatsapp
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
 
@@ -721,8 +736,7 @@ def process_automation_enrollments():
                 else:
                     message_content = step.message
 
-                from_number = advertiser.whatsapp_number
-                sid, error = await send_whatsapp(contact.phone, message_content, from_number=from_number)
+                sid, error = await send_whatsapp(contact.phone, message_content, advertiser=advertiser)
 
                 if sid:
                     advertiser.messages_remaining -= 1
@@ -731,7 +745,7 @@ def process_automation_enrollments():
                     advertiser_id=enrollment.advertiser_id, contact_id=contact.id,
                     direction="outbound", content=message_content,
                     status="sent" if sid else "failed",
-                    twilio_sid=sid, error_code=error, sent_at=now if sid else None,
+                    wa_message_id=sid, error_code=error, sent_at=now if sid else None,
                 ))
 
                 enrollment.current_step += 1

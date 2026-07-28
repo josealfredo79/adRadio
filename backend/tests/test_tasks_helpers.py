@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone, timedelta
-from app.workers.task_helpers.common import run_async, _get_advertiser_whatsapp_number
+from app.workers.task_helpers.common import run_async
 
 
 class TestRunAsync:
@@ -17,32 +17,6 @@ class TestRunAsync:
             raise ValueError("test error")
         with pytest.raises(ValueError, match="test error"):
             run_async(failing())
-
-
-@pytest.mark.asyncio
-async def test_get_advertiser_whatsapp_number():
-    mock_db = AsyncMock()
-    mock_result = MagicMock()
-    mock_user = MagicMock()
-    mock_user.whatsapp_number = "+521234567890"
-    mock_result.scalar_one_or_none.return_value = mock_user
-    mock_db.execute.return_value = mock_result
-
-    import uuid
-    result = await _get_advertiser_whatsapp_number(mock_db, uuid.uuid4())
-    assert result == "+521234567890"
-
-
-@pytest.mark.asyncio
-async def test_get_advertiser_whatsapp_number_none():
-    mock_db = AsyncMock()
-    mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = None
-    mock_db.execute.return_value = mock_result
-
-    import uuid
-    result = await _get_advertiser_whatsapp_number(mock_db, uuid.uuid4())
-    assert result is None
 
 
 class TestCampaignOps:

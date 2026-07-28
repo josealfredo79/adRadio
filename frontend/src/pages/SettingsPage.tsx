@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Settings, Save, Copy, Check, ExternalLink, Lock, CreditCard, AlertTriangle, Trash2, Plus, X, Globe, Palette, Key, Webhook } from 'lucide-react'
+import { Settings, Save, Copy, Check, Lock, CreditCard, AlertTriangle, Trash2, Plus, X, Globe, Palette, Key, Webhook } from 'lucide-react'
 import SEO from '@/components/SEO'
-
-const WEBHOOK_URL = `${import.meta.env.VITE_API_URL ?? ''}/api/v1/webhooks/twilio`
+import WhatsappWizard from '@/components/WhatsappWizard'
 
 const CATEGORIES = [
   { value: 'restaurante', label: 'Restaurante / Bar / Taquería' },
@@ -489,15 +488,8 @@ export default function SettingsPage() {
   const { user, setUser } = useAuth()
   const qc = useQueryClient()
   const [saved, setSaved] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
   const [pwMsg, setPwMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
-
-  const copyWebhook = () => {
-    navigator.clipboard.writeText(WEBHOOK_URL)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   const [cancelConfirm, setCancelConfirm] = useState(false)
   const [cancelDone, setCancelDone] = useState(false)
@@ -523,17 +515,11 @@ export default function SettingsPage() {
     city: '',
     country: 'MX',
     phone: '',
-    whatsapp_number: '',
     language: 'es',
     bot_name: '',
     bot_personality: 'friendly',
     bot_instructions: '',
   })
-
-  const numberSource: string = user?.whatsapp_number_source ?? 'shared'
-  const currentPlan: string = user?.current_plan ?? 'trial'
-  const numberIsManaged = numberSource === 'pool'
-  const showTwilioSetup = numberSource === 'own' || currentPlan === 'enterprise'
 
   useEffect(() => {
     if (user) {
@@ -543,7 +529,6 @@ export default function SettingsPage() {
         city: user.city ?? '',
         country: user.country ?? 'MX',
         phone: user.phone ?? '',
-        whatsapp_number: user.whatsapp_number ?? '',
         language: user.language ?? 'es',
         bot_name: user.bot_name ?? '',
         bot_personality: user.bot_personality ?? 'friendly',
@@ -624,68 +609,9 @@ export default function SettingsPage() {
           {field('País (código)', 'country', 'text', 'Ej: MX')}
         </div>
         {field('Teléfono', 'phone', 'tel', 'Ej: +525512345678')}
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
-            Número WhatsApp Business
-            {numberIsManaged && (
-              <span className="ml-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Asignado por IaRadio</span>
-            )}
-          </label>
-          {numberIsManaged ? (
-            <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3.5 py-2.5">
-              <span className="flex-1 text-sm font-mono text-green-800">{form.whatsapp_number || '—'}</span>
-              <span className="text-xs text-green-600">Tu número dedicado ✅</span>
-            </div>
-          ) : (
-            <>
-              <input
-                type="tel"
-                value={form.whatsapp_number}
-                onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
-                placeholder="Ej: +525512345678 (solo si tienes WABA propio)"
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
-              />
-              {numberSource === 'shared' && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  En el plan actual usas el número compartido de IaRadio.
-                  Al subir al plan <strong>Pro</strong> se te asigna un número dedicado automáticamente.
-                </p>
-              )}
-            </>
-          )}
-        </div>
       </div>
 
-      {/* Twilio webhook setup — only for Enterprise / own WABA users */}
-      {showTwilioSetup && <div className="rounded-xl bg-amber-50 border border-amber-200 p-6 space-y-3">
-        <h2 className="text-base font-semibold text-amber-900">Configuración Twilio (WhatsApp Business)</h2>
-        <p className="text-sm text-amber-800">
-          Para que tu bot responda mensajes entrantes, configura esta URL en tu consola de Twilio:
-          <br />
-          <span className="font-medium">Messaging → Sender → Webhook URL (Incoming Message)</span>
-        </p>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 rounded-lg bg-card border border-amber-200 px-3 py-2 text-xs font-mono text-foreground break-all">
-            {WEBHOOK_URL}
-          </code>
-          <button
-            onClick={copyWebhook}
-            className="shrink-0 flex items-center gap-1.5 rounded-lg border border-amber-300 bg-card px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-50 transition-colors"
-          >
-            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? 'Copiado' : 'Copiar'}
-          </button>
-        </div>
-        <a
-          href="https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-amber-700 underline hover:text-amber-900"
-        >
-          <ExternalLink className="h-3 w-3" />
-          Ver guía en Twilio Console
-        </a>
-      </div>}
+      <WhatsappWizard />
 
       {/* Bot config */}
       <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">

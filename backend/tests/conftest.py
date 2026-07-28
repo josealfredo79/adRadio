@@ -56,6 +56,17 @@ def test_user():
     user.google_refresh_token = None
     user.google_calendar_connected = False
     user.plan_expires_at = None
+    user.meta_waba_id = None
+    user.meta_phone_number_id = None
+    user.meta_display_phone_number = None
+    user.meta_verified_name = None
+    user.meta_token_cipher = None
+    user.meta_token_iv = None
+    user.meta_token_tag = None
+    user.meta_connection_status = "not_connected"
+    user.meta_utility_template_status = "not_configured"
+    user.meta_utility_template_name = None
+    user.meta_appointment_template_name = None
     return user
 
 

@@ -41,6 +41,21 @@ class User(Base):
     # 'shared' = usa el número de IaRadio | 'pool' = asignado del pool | 'own' = WABA propio
     whatsapp_number_source: Mapped[str] = mapped_column(String(10), default="shared")
 
+    # WhatsApp Cloud API de Meta — conexión directa (reemplaza a Twilio)
+    meta_waba_id: Mapped[str | None] = mapped_column(String(50))
+    meta_phone_number_id: Mapped[str | None] = mapped_column(String(50))
+    meta_display_phone_number: Mapped[str | None] = mapped_column(String(20))
+    meta_verified_name: Mapped[str | None] = mapped_column(String(255))
+    meta_token_cipher: Mapped[str | None] = mapped_column(Text)
+    meta_token_iv: Mapped[str | None] = mapped_column(String(64))
+    meta_token_tag: Mapped[str | None] = mapped_column(String(64))
+    # 'not_connected' | 'connected' | 'reconnect_required'
+    meta_connection_status: Mapped[str] = mapped_column(String(20), default="not_connected", server_default="not_connected")
+    # 'not_configured' | 'pending_review' | 'approved' | 'rejected'
+    meta_utility_template_status: Mapped[str] = mapped_column(String(20), default="not_configured", server_default="not_configured")
+    meta_utility_template_name: Mapped[str | None] = mapped_column(String(255))
+    meta_appointment_template_name: Mapped[str | None] = mapped_column(String(255))
+
     # Subscription
     stripe_customer_id: Mapped[str | None] = mapped_column(String(50))
     subscription_status: Mapped[str] = mapped_column(

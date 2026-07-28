@@ -31,6 +31,7 @@ class Message(Base):
     direction: Mapped[str] = mapped_column(String(10))
     content: Mapped[str] = mapped_column(Text, nullable=False)
     twilio_sid: Mapped[str | None] = mapped_column(String(50))
+    wa_message_id: Mapped[str | None] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), default="queued")
     error_code: Mapped[str | None] = mapped_column(String(100))
     scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

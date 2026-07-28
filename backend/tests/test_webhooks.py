@@ -4,7 +4,7 @@ import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from app.api.v1.webhooks_pkg.lead_score import calculate_lead_score
+from app.services.lead_score import calculate_lead_score
 from app.api.v1.webhooks_pkg.twilio_incoming import _validate_twilio_signature
 from app.workers.task_helpers.extract import _extract_text
 
