@@ -30,6 +30,8 @@ class Contact(Base):
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     language: Mapped[str] = mapped_column(String(5), default="es")
     status: Mapped[str] = mapped_column(String(20), default="active")
+    # Kanban de ventas: nuevo -> conversacion -> interesado -> cliente | perdido
+    pipeline_stage: Mapped[str] = mapped_column(String(20), default="nuevo", server_default="nuevo")
     engagement_score: Mapped[int] = mapped_column(Integer, default=0)
     source: Mapped[str] = mapped_column(String(20), default="manual")
     last_interaction: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -50,4 +52,8 @@ class Contact(Base):
         CheckConstraint("status IN ('active','unsubscribed','blocked')", name="ck_contacts_status"),
         CheckConstraint("source IN ('manual','csv','landing','referral')", name="ck_contacts_source"),
         CheckConstraint("engagement_score BETWEEN 0 AND 100", name="ck_contacts_engagement"),
+        CheckConstraint(
+            "pipeline_stage IN ('nuevo','conversacion','interesado','cliente','perdido')",
+            name="ck_contacts_pipeline_stage",
+        ),
     )

@@ -30,6 +30,7 @@ import {
   CreditCard as CreditCardIcon,
   Phone,
   FlaskConical,
+  Kanban,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -41,6 +42,7 @@ const navItems = [
   { to: '/app/orders', icon: ShoppingBag, label: 'Pedidos', badge: 'orders_pending' as const },
   { to: '/app/appointments', icon: CalendarDays, label: 'Citas' },
   { to: '/app/contacts', icon: Users, label: 'Contactos' },
+  { to: '/app/pipeline', icon: Kanban, label: 'Pipeline' },
   { to: '/app/knowledge-base', icon: BookOpen, label: 'Base de conocimiento' },
   { to: '/app/lab', icon: FlaskConical, label: 'Laboratorio' },
   { to: '/app/team', icon: UserCog, label: 'Equipo' },

@@ -75,6 +75,22 @@ async def list_contacts(
     )
 
 
+@router.get("/pipeline", response_model=list[ContactOut])
+async def list_pipeline_contacts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ContactOut]:
+    """All active contacts for the kanban board — unpaginated (capped) since
+    the board wants every card, not a page."""
+    result = await db.execute(
+        select(Contact)
+        .where(Contact.advertiser_id == current_user.id, Contact.status == "active")
+        .order_by(Contact.created_at.desc())
+        .limit(500)
+    )
+    return [ContactOut.model_validate(c) for c in result.scalars().all()]
+
+
 @router.post("", response_model=ContactOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("30/minute")
 async def create_contact(

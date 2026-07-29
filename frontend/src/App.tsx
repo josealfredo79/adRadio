@@ -27,6 +27,7 @@ const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
 const AutomationsPage = lazy(() => import('@/pages/AutomationsPage'))
 const TemplatesPage = lazy(() => import('@/pages/TemplatesPage'))
 const LabPage = lazy(() => import('@/pages/LabPage'))
+const PipelinePage = lazy(() => import('@/pages/PipelinePage'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
 const AdminRoute = lazy(() => import('@/components/AdminRoute'))
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'))
@@ -76,6 +77,7 @@ export default function App() {
               <Route index element={<RoleRedirect />} />
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="contacts" element={<ContactsPage />} />
+              <Route path="pipeline" element={<PipelinePage />} />
               <Route path="campaigns" element={<CampaignsPage />} />
               <Route path="inbox" element={<InboxPage />} />
               <Route path="orders" element={<OrdersPage />} />

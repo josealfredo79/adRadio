@@ -26,6 +26,9 @@ class ContactCreate(BaseModel):
         return validate_phone_e164(v)
 
 
+PIPELINE_STAGES = ("nuevo", "conversacion", "interesado", "cliente", "perdido")
+
+
 class ContactUpdate(BaseModel):
     name: str | None = None
     email: str | None = None
@@ -35,12 +38,20 @@ class ContactUpdate(BaseModel):
     notes: str | None = None
     status: str | None = None
     engagement_score: int | None = None
+    pipeline_stage: str | None = None
 
     @field_validator("status")
     @classmethod
     def validate_status(cls, v: str | None) -> str | None:
         if v is not None and v not in ("active", "unsubscribed"):
             raise ValueError("Solo puedes cambiar a active o unsubscribed")
+        return v
+
+    @field_validator("pipeline_stage")
+    @classmethod
+    def validate_pipeline_stage(cls, v: str | None) -> str | None:
+        if v is not None and v not in PIPELINE_STAGES:
+            raise ValueError(f"Etapa inválida — debe ser una de: {', '.join(PIPELINE_STAGES)}")
         return v
 
 
@@ -55,6 +66,7 @@ class ContactOut(BaseModel):
     status: str
     engagement_score: int
     source: str
+    pipeline_stage: str
     last_interaction: datetime | None
     created_at: datetime
 
