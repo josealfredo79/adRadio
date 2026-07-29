@@ -151,7 +151,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     )
     from app.services.storage_service import upload_bytes
     from app.models.message import Message
-    from app.workers.tasks import send_whatsapp_voice_note
+    from app.workers.tasks import send_whatsapp_image_message
     from app.services.messaging_throttle import anti_ban_delay
 
     promo_description = ab.get("promo_description", campaign.message_text)
@@ -223,7 +223,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         db.add(msg)
         await db.flush()
 
-        send_whatsapp_voice_note.apply_async(
+        send_whatsapp_image_message.apply_async(
             args=[str(msg.id), contact.phone, banner_url, body_text],
             countdown=ban_delay,
             queue="whatsapp",

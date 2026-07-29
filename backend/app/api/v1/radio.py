@@ -5,6 +5,7 @@ Serves audio files from local storage (primary) or R2 (fallback).
 import asyncio
 import boto3
 import logging
+import mimetypes
 import os
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -27,6 +28,24 @@ AUDIO_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "static", "audio
 
 def _ensure_audio_dir():
     os.makedirs(AUDIO_DIR, exist_ok=True)
+
+
+# Meta's Cloud API validates the Content-Type header against the actual media
+# bytes when fetching a `link`-based message — a mismatch (e.g. MP3 bytes
+# served as "audio/ogg") can cause it to reject or mangle the media. Every
+# TTS provider in this app emits MP3, so the extension-based guess must cover
+# it explicitly rather than relying on a single hardcoded default.
+_AUDIO_CONTENT_TYPES = {
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".m4a": "audio/mp4",
+    ".png": "image/png",
+}
+
+
+def _guess_audio_content_type(filename: str) -> str:
+    ext = os.path.splitext(filename)[1].lower()
+    return _AUDIO_CONTENT_TYPES.get(ext) or mimetypes.guess_type(filename)[0] or "audio/mpeg"
 
 
 def _get_r2_client():
@@ -84,7 +103,7 @@ async def serve_audio(request: Request, filename: str) -> FileResponse:
 
     # Try local first
     if os.path.exists(local_path):
-        return FileResponse(local_path, media_type="audio/ogg")
+        return FileResponse(local_path, media_type=_guess_audio_content_type(filename))
 
     # Fallback: fetch from R2 and cache locally
     if not settings.CF_R2_ACCESS_KEY:

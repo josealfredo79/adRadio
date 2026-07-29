@@ -122,6 +122,45 @@ async def send_whatsapp_media(
     return wamid, None
 
 
+async def send_whatsapp_image(
+    to: str, image_url: str, caption: str = "", *, advertiser: User
+) -> tuple[str | None, str | None]:
+    """
+    Send a WhatsApp image message (banners). Unlike audio, Meta's image type
+    supports a caption field directly, so no follow-up text message is needed.
+    """
+    conn = _connection(advertiser)
+    if conn is None:
+        if settings.DEBUG:
+            logger.debug("[META DEV] To: %s | Image: %s | Caption: %s", to, image_url, caption)
+            return "DEV_WAMID", None
+        logger.warning("[META] advertiser=%s has no active WhatsApp connection", advertiser.id)
+        return None, "meta_not_connected"
+
+    phone_number_id, token = conn
+    image_payload: dict = {"link": image_url}
+    if caption:
+        image_payload["caption"] = caption
+
+    try:
+        data = await graph_request(
+            f"{phone_number_id}/messages",
+            token=token,
+            method="POST",
+            body={
+                "messaging_product": "whatsapp",
+                "to": normalize_recipient(to),
+                "type": "image",
+                "image": image_payload,
+            },
+        )
+        wamid = (data.get("messages") or [{}])[0].get("id")
+        return wamid, None
+    except MetaApiError as e:
+        logger.error("[META IMAGE ERROR] advertiser=%s to=%s: %s", advertiser.id, to, e)
+        return None, str(e)[:100]
+
+
 async def send_whatsapp_template(
     to: str,
     template_name: str,

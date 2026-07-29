@@ -127,6 +127,57 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
         raise self.retry(exc=exc, countdown=120 * (2 ** self.request.retries))
 
 
+@celery_app.task(bind=True, max_retries=5, default_retry_delay=120)
+def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, caption: str = ""):
+    """Send a WhatsApp image (banner) via Meta Cloud API media message."""
+    async def _send():
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.models.message import Message
+        from app.models.user import User
+        from app.services.meta_service import send_whatsapp_image
+        from sqlalchemy import select
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
+            msg = result.scalar_one_or_none()
+
+            advertiser = None
+            if msg:
+                adv_res = await db.execute(select(User).where(User.id == msg.advertiser_id))
+                advertiser = adv_res.scalar_one_or_none()
+                if not advertiser or advertiser.messages_remaining <= 0:
+                    msg.status = "failed"
+                    msg.error_code = "quota_exceeded"
+                    msg.sent_at = None
+                    await db.commit()
+                    logger.warning("[QUOTA] %s — no messages remaining, image %s dropped", msg.advertiser_id, message_id)
+                    return
+
+            sid, error = await send_whatsapp_image(to, image_url, caption=caption, advertiser=advertiser)
+
+            if msg:
+                msg.status = "sent" if sid else "failed"
+                msg.wa_message_id = sid
+                msg.error_code = error
+                msg.sent_at = datetime.now(timezone.utc) if sid else None
+                if sid and advertiser:
+                    advertiser.messages_remaining -= 1
+                await db.commit()
+
+                # Auto-suppress contact on permanent delivery errors
+                if not sid and msg.contact_id and error:
+                    await suppress_contact_on_error(db, msg.contact_id, error)
+                    await db.commit()
+
+            if error and any(code in str(error) for code in _RATE_LIMIT_ERROR_CODES):
+                raise RuntimeError(f"WhatsApp rate limit: {error}")
+
+    try:
+        run_async(_send())
+    except Exception as exc:
+        raise self.retry(exc=exc, countdown=120 * (2 ** self.request.retries))
+
+
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str):
     """Generate a radio cuña and send it as a WhatsApp voice note to a new lead."""
