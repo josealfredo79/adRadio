@@ -28,7 +28,6 @@ import {
   Shield,
   User,
   CreditCard as CreditCardIcon,
-  Phone,
   FlaskConical,
   Kanban,
 } from 'lucide-react'
@@ -57,7 +56,6 @@ const adminNavItems = [
   { to: '/app/admin', icon: LayoutDashboard, label: 'Panel Admin' },
   { to: '/app/admin/users', icon: User, label: 'Usuarios' },
   { to: '/app/admin/subscriptions', icon: CreditCardIcon, label: 'Suscripciones' },
-  { to: '/app/admin/numbers', icon: Phone, label: 'Pool de Números' },
 ]
 
 export default function Layout() {
