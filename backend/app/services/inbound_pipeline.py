@@ -35,6 +35,7 @@ from app.services.coupon_service import is_expired, is_redeem_intent
 from app.services.rag_service import answer_with_rag
 from app.services.template_lookup import get_template
 from app.services.lead_score import calculate_lead_score
+from app.services.realtime import publish_conversation_event
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +133,7 @@ async def process_inbound_message(
             else:
                 escalated_conv.last_activity = func.now()
                 await db.commit()
+                await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(existing_contact.id)})
             return {"message": "ok"}
 
     stop_words = {"baja", "stop", "no quiero", "cancelar", "salir"}
@@ -322,6 +324,7 @@ async def process_inbound_message(
                 out_msg.status = "failed"
                 out_msg.error_code = err_c
             await db.commit()
+            await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
             update_contact_engagement_score.apply_async(
                 args=[str(contact.id)],
                 queue="whatsapp",
@@ -685,6 +688,7 @@ async def process_inbound_message(
         )
         db.add(out_msg)
         await db.commit()
+        await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
 
         from app.workers.tasks import update_contact_engagement_score
 
@@ -697,6 +701,7 @@ async def process_inbound_message(
             out_msg.status = "failed"
             out_msg.error_code = err_o
         await db.commit()
+        await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
         update_contact_engagement_score.apply_async(
             args=[str(contact.id)],
             queue="whatsapp",
@@ -748,6 +753,7 @@ async def process_inbound_message(
     )
     db.add(out_msg)
     await db.commit()
+    await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
 
     from app.workers.tasks import (
         auto_tag_contact_from_conversation,
@@ -765,6 +771,7 @@ async def process_inbound_message(
         out_msg.status = "failed"
         out_msg.error_code = err
     await db.commit()
+    await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
 
     try:
         update_contact_engagement_score.apply_async(

@@ -14,7 +14,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_user_sse
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.core.redis import get_redis_optional
 from app.database import get_db
@@ -129,6 +129,55 @@ async def list_conversations(
     ]
 
 
+@router.get("/events")
+async def conversation_events(current_user: User = Depends(get_current_user_sse)):
+    """
+    SSE stream of real-time inbox events for the current advertiser (new
+    messages, status updates). Registered BEFORE /{conversation_id} so the
+    literal path "events" isn't swallowed by that route's UUID matcher.
+    """
+    from fastapi.responses import StreamingResponse
+
+    from app.services.realtime import conversation_channel
+
+    async def event_stream():
+        redis = await get_redis_optional()
+        if not redis:
+            yield ": redis unavailable\n\n"
+            return
+
+        pubsub = redis.pubsub()
+        channel = conversation_channel(current_user.id)
+        await pubsub.subscribe(channel)
+        try:
+            while True:
+                try:
+                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=25.0)
+                except Exception:
+                    logger.warning("[SSE] pubsub error for advertiser=%s, closing stream", current_user.id, exc_info=True)
+                    break
+                if message and message.get("type") == "message":
+                    yield f"data: {message['data']}\n\n"
+                else:
+                    yield ": ping\n\n"
+        finally:
+            try:
+                await pubsub.unsubscribe(channel)
+                await pubsub.aclose()
+            except Exception:
+                pass
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
 @router.get("/{conversation_id}")
 async def get_conversation(
     conversation_id: uuid.UUID,
@@ -185,6 +234,9 @@ async def update_conversation_status(
 
     conv.status = body.status
     await db.commit()
+    if conv.contact_id:
+        from app.services.realtime import publish_conversation_event
+        await publish_conversation_event(current_user.id, {"type": "status", "contact_id": str(conv.contact_id)})
     return {"message": f"Estado actualizado a {body.status}"}
 
 
@@ -264,7 +316,10 @@ async def reply_to_conversation(
     await db.commit()
     await db.refresh(msg)
 
-    # Queue Twilio send via Celery
+    from app.services.realtime import publish_conversation_event
+    await publish_conversation_event(current_user.id, {"type": "message", "contact_id": str(contact.id)})
+
+    # Queue WhatsApp send via Celery
     from app.workers.tasks import send_whatsapp_message
     send_whatsapp_message.apply_async(
         args=[str(msg.id), contact.phone, text],

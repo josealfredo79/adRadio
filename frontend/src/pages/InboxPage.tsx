@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
+import api, { getAccessToken } from '@/lib/api'
 import { MessageSquare, User, Clock, Flame, Thermometer, Snowflake, CheckCircle, X, FileText, Search, Send, Bot, BotOff } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -96,6 +96,8 @@ export default function InboxPage() {
   const [search, setSearch] = useState('')
   const [replyText, setReplyText] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const selectedIdRef = useRef<string | null>(null)
+  selectedIdRef.current = selectedId
 
   const { data: conversations, isLoading } = useQuery<ConvSummary[]>({
     queryKey: ['conversations', statusFilter, planRequestFilter],
@@ -114,8 +116,43 @@ export default function InboxPage() {
     queryKey: ['conversation', selectedId],
     queryFn: () => api.get(`/conversations/${selectedId}`).then((r) => r.data),
     enabled: !!selectedId,
+    // SSE below keeps this fresh in real time; polling is just the fallback
+    // if the stream drops (native EventSource auto-reconnects on its own).
     refetchInterval: selectedId ? 10_000 : false,
   })
+
+  // Real-time updates via SSE. EventSource can't set an Authorization header,
+  // so the access token travels as a query param (see get_current_user_sse
+  // on the backend — scoped to this one endpoint, never used for JSON APIs).
+  useEffect(() => {
+    const token = getAccessToken()
+    if (!token) return
+
+    const base = import.meta.env.VITE_API_URL ?? ''
+    const url = `${base}/api/v1/conversations/events?token=${encodeURIComponent(token)}`
+    const source = new EventSource(url)
+
+    source.onmessage = (event) => {
+      let payload: { type?: string; contact_id?: string } = {}
+      try {
+        payload = JSON.parse(event.data)
+      } catch {
+        return
+      }
+      if (payload.type !== 'message' && payload.type !== 'status') return
+
+      qc.invalidateQueries({ queryKey: ['conversations'] })
+      if (selectedIdRef.current) {
+        qc.invalidateQueries({ queryKey: ['conversation', selectedIdRef.current] })
+      }
+    }
+
+    return () => source.close()
+    // Intentionally NOT depending on selectedId — selectedIdRef keeps the
+    // handler current without tearing down/reopening the SSE connection
+    // every time the agent switches conversations.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qc])
 
   const filtered = conversations?.filter((c) => {
     if (leadScoreFilter && c.lead_score !== leadScoreFilter) return false

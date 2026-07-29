@@ -1,7 +1,7 @@
 """
 Dependency: current authenticated user + plan-based feature gating.
 """
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,14 +13,9 @@ from app.models.user import User
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-
-    if not credentials:
+async def _user_from_access_token(token: str | None, db: AsyncSession) -> User:
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    token = credentials.credentials
     payload = decode_token(token)
 
     if not payload or payload.get("type") != "access":
@@ -37,6 +32,30 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario no encontrado")
 
     return user
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    token = credentials.credentials if credentials else None
+    return await _user_from_access_token(token, db)
+
+
+async def get_current_user_sse(
+    token: str | None = Query(None),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Same as get_current_user, but also accepts the access token as a `token`
+    query param — the browser's native EventSource API can't attach a custom
+    Authorization header, so SSE endpoints need this. Only use this for SSE
+    routes, never for regular JSON endpoints (query strings end up in server
+    logs/browser history).
+    """
+    bearer_token = credentials.credentials if credentials else None
+    return await _user_from_access_token(token or bearer_token, db)
 
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:

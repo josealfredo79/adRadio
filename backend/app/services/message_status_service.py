@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.campaign import Campaign
 from app.models.message import Message
+from app.services.realtime import publish_conversation_event
 
 logger = logging.getLogger(__name__)
 
@@ -60,3 +61,5 @@ async def apply_status_update(
             campaign.stats = stats
 
     await db.commit()
+    if msg.contact_id:
+        await publish_conversation_event(msg.advertiser_id, {"type": "status", "contact_id": str(msg.contact_id)})

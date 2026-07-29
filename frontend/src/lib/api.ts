@@ -15,6 +15,10 @@ export function setAccessToken(token: string | null) {
   _accessToken = token
 }
 
+export function getAccessToken(): string | null {
+  return _accessToken
+}
+
 // Stable idempotency keys per (url + body) to prevent duplicate processing on retries
 const _idempotencyMap = new Map<string, string>()
 
