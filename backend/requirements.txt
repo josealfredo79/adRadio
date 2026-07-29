@@ -29,7 +29,7 @@ anthropic==0.40.0
 openai==1.57.0
 voyageai==0.3.7
 httpx==0.28.1
-google-auth==2.37.0
+google-auth==2.55.0
 google-auth-oauthlib==1.4.0
 google-api-python-client==2.196.0
 google-cloud-texttospeech==2.17.2
