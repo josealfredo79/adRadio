@@ -34,7 +34,7 @@ const FEATURES = [
   {
     icon: <Shield className="h-5 w-5 text-emerald-400" />,
     title: 'Seguro y confiable',
-    desc: 'Validación de firma Twilio, rate limiting, bcrypt cost 12, JWT con rotación automática.',
+    desc: 'Validación de firma Meta (X-Hub-Signature-256), rate limiting, bcrypt cost 12, JWT con rotación automática.',
     badge: null,
   },
 ]

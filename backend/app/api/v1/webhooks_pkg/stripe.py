@@ -11,18 +11,11 @@ from app.config import settings
 from app.database import get_db
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.services.number_pool_service import assign_pool_number, release_pool_number
 from app.services.analytics_service import capture_event
 from app.api.v1.payments import PLAN_MESSAGES, PLANS
 from app.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
-
-
-async def _ensure_pool_number(user: User, db: AsyncSession) -> None:
-    """Assign pool number if user is on shared."""
-    if user.whatsapp_number_source == "shared":
-        await assign_pool_number(user, db)
 
 
 async def _lookup_user(customer_id: str | None, db: AsyncSession) -> User | None:
@@ -94,8 +87,6 @@ async def stripe_webhook(
             user.messages_remaining = (user.messages_remaining or 0) + PLAN_MESSAGES.get(plan, 0)
             user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=plan_days)
 
-            await _ensure_pool_number(user, db)
-
             txn = Transaction(
                 advertiser_id=user.id,
                 stripe_payment_id=payment_intent,
@@ -133,8 +124,6 @@ async def stripe_webhook(
             user.subscription_status = "active"
             user.cancel_at_period_end = False
             user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=plan_days)
-
-            await _ensure_pool_number(user, db)
 
             txn = Transaction(
                 advertiser_id=user.id,
@@ -229,7 +218,6 @@ async def stripe_webhook(
         elif status in ("past_due", "incomplete", "unpaid"):
             user.subscription_status = "suspended"
             user.messages_remaining = 0
-            await release_pool_number(user, db)
             await db.commit()
             logger.warning(
                 "[WEBHOOK] Subscription adverse for user %s — status=%s",
@@ -239,7 +227,6 @@ async def stripe_webhook(
             user.subscription_status = "churned"
             user.messages_remaining = 0
             user.cancel_at_period_end = False
-            await release_pool_number(user, db)
             await db.commit()
             logger.info("[WEBHOOK] Subscription canceled for user %s", user.id)
             capture_event("subscription_cancelled", user_id=user.id)

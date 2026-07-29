@@ -12,7 +12,7 @@ interface User {
   country: string
   phone: string | null
   whatsapp_number: string | null
-  whatsapp_number_source: string
+  meta_connection_status: string
   language: string
   bot_name: string | null
   bot_personality: string | null

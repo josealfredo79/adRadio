@@ -14,7 +14,7 @@ interface AdminUser {
   city: string | null
   phone: string | null
   whatsapp_number: string | null
-  whatsapp_number_source: string
+  meta_connection_status: string
   subscription_status: string
   current_plan: string
   messages_remaining: number

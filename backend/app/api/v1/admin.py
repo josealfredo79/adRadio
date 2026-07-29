@@ -249,7 +249,7 @@ class AdminUserResponse(BaseModel):
     city: str | None
     phone: str | None
     whatsapp_number: str | None
-    whatsapp_number_source: str
+    meta_connection_status: str
     subscription_status: str
     current_plan: str
     messages_remaining: int

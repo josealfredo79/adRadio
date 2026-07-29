@@ -52,7 +52,7 @@ function TimeUnit({ value, label }: { value: number; label: string }) {
 
 const TRUST_BADGES = [
   { label: 'Pagos seguros', sublabel: 'Stripe', icon: '💳' },
-  { label: 'WhatsApp Business', sublabel: 'Twilio', icon: '💬' },
+  { label: 'WhatsApp Business', sublabel: 'Meta Cloud API', icon: '💬' },
   { label: 'IA generativa', sublabel: 'Anthropic Claude', icon: '🤖' },
   { label: 'Datos cifrados', sublabel: 'SSL + bcrypt', icon: '🔒' },
 ]

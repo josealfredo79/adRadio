@@ -2,7 +2,7 @@ export default function IntegrationsSection() {
   const INTEGRATIONS = [
     { label: 'WhatsApp Business', color: 'text-green-400', emoji: '🟢' },
     { label: 'Claude IA (Anthropic)', color: 'text-orange-400', emoji: '🤖' },
-    { label: 'Twilio', color: 'text-red-400', emoji: '📞' },
+    { label: 'Meta Cloud API', color: 'text-blue-500', emoji: '📞' },
     { label: 'Stripe', color: 'text-blue-400', emoji: '💳' },
     { label: 'Voyage AI', color: 'text-purple-400', emoji: '🧠' },
     { label: 'Cloudflare R2', color: 'text-orange-300', emoji: '☁️' },

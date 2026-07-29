@@ -37,11 +37,12 @@ class User(Base):
     country: Mapped[str] = mapped_column(String(10), default="MX", server_default="MX")
     logo_url: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(String(20))
+    # Número personal del dueño del negocio para notificaciones (pedido nuevo,
+    # cita agendada, etc.) — independiente del número de WhatsApp Business
+    # conectado vía Meta (ver meta_display_phone_number más abajo).
     whatsapp_number: Mapped[str | None] = mapped_column(String(20))
-    # 'shared' = usa el número de IaRadio | 'pool' = asignado del pool | 'own' = WABA propio
-    whatsapp_number_source: Mapped[str] = mapped_column(String(10), default="shared")
 
-    # WhatsApp Cloud API de Meta — conexión directa (reemplaza a Twilio)
+    # WhatsApp Cloud API de Meta — conexión directa
     meta_waba_id: Mapped[str | None] = mapped_column(String(50))
     meta_phone_number_id: Mapped[str | None] = mapped_column(String(50))
     meta_display_phone_number: Mapped[str | None] = mapped_column(String(20))

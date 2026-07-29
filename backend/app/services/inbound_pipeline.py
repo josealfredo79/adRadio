@@ -1,17 +1,15 @@
 """
-Channel-agnostic inbound message pipeline.
-
-Transport adapters (Twilio, Meta Cloud API, ...) parse their provider's
-payload, resolve the advertiser, and build an `InboundMessage` + a `send`
-closure bound to that provider's outbound API. Everything from there on
-(STOP-words, appointment state machine, coupon redemption, order/plan state
-machine, RAG fallback, message persistence, follow-up jobs) lives here so a
-new channel never has to reimplement the bot's business logic.
+Bot pipeline for an inbound WhatsApp message, decoupled from the transport
+that received it. The Meta webhook (meta_incoming.py) parses the Graph API
+payload, resolves the advertiser, and builds an `InboundMessage` + a `send`
+closure bound to meta_service. Everything from there on (STOP-words,
+appointment state machine, coupon redemption, order/plan state machine, RAG
+fallback, message persistence, follow-up jobs) lives here.
 """
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Awaitable, Callable, Literal
+from typing import Awaitable, Callable
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -39,7 +37,7 @@ from app.services.realtime import publish_conversation_event
 
 logger = logging.getLogger(__name__)
 
-# (external_id, error) — same shape twilio_service/meta_service already return.
+# (external_id, error) — same shape meta_service already returns.
 SendFn = Callable[[str, str], Awaitable[tuple[str | None, str | None]]]
 
 
@@ -51,7 +49,6 @@ class InboundMessage:
     audio_transcription: str | None = None
     media_url: str | None = None
     external_message_id: str | None = None
-    channel: Literal["twilio", "meta"] = "twilio"
 
 
 def _phone_candidates(from_number: str) -> list[str]:
@@ -74,10 +71,11 @@ async def process_inbound_message(
     """
     Run the full bot pipeline for an already-resolved advertiser + inbound text.
 
-    `send` sends as the advertiser's own WhatsApp number (customer-facing
-    replies). `send_owner` sends the advertiser's owner-notification messages
-    (kept as a separate callable because today it intentionally does NOT pass
-    a from_number — see twilio_incoming.py's adapter for why).
+    `send` sends customer-facing replies; `send_owner` sends the advertiser's
+    owner-notification messages. Kept as two separate callables even though
+    the Meta adapter currently binds both to the same underlying function —
+    a future channel could reasonably want owner notifications routed
+    differently from customer replies.
     """
     advertiser = msg.advertiser
     from_number = msg.from_number
@@ -86,12 +84,11 @@ async def process_inbound_message(
     media_url = msg.media_url
     external_message_id = msg.external_message_id
     from_candidates = _phone_candidates(from_number)
-    external_id_column = Message.wa_message_id if msg.channel == "meta" else Message.twilio_sid
 
     # Idempotency — skip if this message was already processed
     if external_message_id:
         existing = await db.execute(
-            select(Message).where(external_id_column == external_message_id).limit(1)
+            select(Message).where(Message.wa_message_id == external_message_id).limit(1)
         )
         if existing.scalar_one_or_none():
             return {"message": "ok"}
@@ -124,7 +121,7 @@ async def process_inbound_message(
                     direction="inbound",
                     content=body_text,
                     status="delivered",
-                    **{("wa_message_id" if msg.channel == "meta" else "twilio_sid"): external_message_id or None},
+                    wa_message_id=external_message_id or None,
                 )
                 db.add(handoff_msg)
                 await db.flush()
@@ -318,7 +315,7 @@ async def process_inbound_message(
             sid_c, err_c = await send(from_number, redeem_reply)
             if sid_c:
                 out_msg.status = "sent"
-                setattr(out_msg, "wa_message_id" if msg.channel == "meta" else "twilio_sid", sid_c)
+                out_msg.wa_message_id = sid_c
                 out_msg.sent_at = datetime.now(timezone.utc)
             else:
                 out_msg.status = "failed"
@@ -373,7 +370,7 @@ async def process_inbound_message(
             )
             db.add(story)
 
-    # Save inbound message (unique constraint on twilio_sid/wa_message_id for idempotency)
+    # Save inbound message (unique constraint on wa_message_id for idempotency)
     try:
         msg_row = Message(
             advertiser_id=advertiser.id,
@@ -381,7 +378,7 @@ async def process_inbound_message(
             direction="inbound",
             content=body_text,
             status="delivered",
-            **{("wa_message_id" if msg.channel == "meta" else "twilio_sid"): external_message_id or None},
+            wa_message_id=external_message_id or None,
         )
         db.add(msg_row)
         await db.flush()
@@ -695,7 +692,7 @@ async def process_inbound_message(
         sid_o, err_o = await send(from_number, order_reply)
         if sid_o:
             out_msg.status = "sent"
-            setattr(out_msg, "wa_message_id" if msg.channel == "meta" else "twilio_sid", sid_o)
+            out_msg.wa_message_id = sid_o
             out_msg.sent_at = datetime.now(timezone.utc)
         else:
             out_msg.status = "failed"
@@ -765,7 +762,7 @@ async def process_inbound_message(
     sid, err = await send(from_number, reply)
     if sid:
         out_msg.status = "sent"
-        setattr(out_msg, "wa_message_id" if msg.channel == "meta" else "twilio_sid", sid)
+        out_msg.wa_message_id = sid
         out_msg.sent_at = datetime.now(timezone.utc)
     else:
         out_msg.status = "failed"

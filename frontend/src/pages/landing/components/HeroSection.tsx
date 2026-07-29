@@ -34,7 +34,7 @@ export default function HeroSection() {
           <div>
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#674CC4]/30 bg-[#674CC4]/10 px-4 py-1.5 text-sm font-medium text-[#674CC4]">
               <Sparkles className="h-3.5 w-3.5" />
-              Impulsado por Claude IA · Twilio · pgvector
+              Impulsado por Claude IA · Meta · pgvector
             </div>
 
             <h1 className="mb-6 text-5xl font-black leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
@@ -93,7 +93,7 @@ export default function HeroSection() {
           </div>
           <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-600">
             <span className="inline-block h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
-            <span>Impulsado por <strong className="text-indigo-400">Claude IA · Twilio · pgvector</strong></span>
+            <span>Impulsado por <strong className="text-indigo-400">Claude IA · Meta · pgvector</strong></span>
           </div>
         </div>
       </div>

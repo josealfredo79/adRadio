@@ -22,7 +22,6 @@ from app.core.security import (
 )
 from app.database import get_db
 from app.models.user import User
-from app.services.number_pool_service import assign_pool_number
 from app.services.demo_data_service import seed_demo_data
 from app.services.analytics_service import capture_event, identify_user
 from app.schemas.auth import (
@@ -96,11 +95,6 @@ async def verify_email(
         user.messages_remaining = 50
         user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
     await db.commit()
-
-    # Assign a pool number if available (dedicated number for Pro+ plans)
-    if user.current_plan in ("pro", "business", "enterprise"):
-        await assign_pool_number(user, db)
-        await db.commit()
 
     # Seed demo data so dashboard is not empty
     await seed_demo_data(user.id, user.business_name or "Mi negocio", db)

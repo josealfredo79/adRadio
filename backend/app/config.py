@@ -38,29 +38,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     FROM_EMAIL: str = "noreply@iaradio.app"
 
-    # Twilio
-    TWILIO_ACCOUNT_SID: str = ""
-    TWILIO_AUTH_TOKEN: str = ""
-    TWILIO_WHATSAPP_NUMBER: str = ""
-    # Comma-separated list of pre-approved WhatsApp numbers for the Pro pool
-    # e.g. "+525511111111,+525522222222,+525533333333"
-    TWILIO_NUMBER_POOL: str = ""
-    # SID de plantillas aprobadas en Twilio Content API.
-    # Se configuran via environment variable.
-    # Formato: HX<32 caracteres hex>
-    TWILIO_INVITACION_TEMPLATE_SID: str = ""
-    TWILIO_UTILITY_TEMPLATE_SID: str = ""
-    TWILIO_ORDER_CONFIRM_BUTTONS_SID: str = ""
-    TWILIO_APPOINTMENT_CONFIRM_BUTTONS_SID: str = ""
-    # Token secreto para la página de escucha de verificación de voz
-    # (/webhooks/twilio/voice-verify-listen?token=...)
-    VOICE_VERIFY_TOKEN: str = ""
-
-    @property
-    def twilio_number_pool_list(self) -> list[str]:
-        return [n.strip() for n in self.TWILIO_NUMBER_POOL.split(",") if n.strip()]
-
-    # WhatsApp Cloud API de Meta — conexión directa (reemplaza a Twilio)
+    # WhatsApp Cloud API de Meta — conexión directa
     # Clave de cifrado en reposo para tokens de Meta (AES-256-GCM).
     # Genera con: openssl rand -base64 32
     ENCRYPTION_KEY: str = ""
@@ -125,7 +103,7 @@ class Settings(BaseSettings):
     # PostHog
     POSTHOG_API_KEY: str = ""
 
-    # Backend public base URL (used to generate audio URLs for WhatsApp/Twilio)
+    # Backend public base URL (used to generate audio URLs for WhatsApp)
     # Set to the tunnel or production URL, e.g. https://my-tunnel.loca.lt
     BASE_URL: str = "http://localhost:8000"
 

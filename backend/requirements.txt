@@ -34,9 +34,6 @@ google-auth-oauthlib==1.4.0
 google-api-python-client==2.196.0
 google-cloud-texttospeech==2.17.2
 
-# WhatsApp
-twilio==9.3.7
-
 # Payments
 stripe==11.3.0
 

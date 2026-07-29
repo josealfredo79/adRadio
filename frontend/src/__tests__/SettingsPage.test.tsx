@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import SettingsPage from '@/pages/SettingsPage'
 
 vi.mock('@/contexts/AuthContext', () => {
-  const u = { id: '1', email: 'admin@test.com', business_name: 'Mi Negocio', business_category: 'restaurante', city: 'CDMX', country: 'MX', phone: '+525511111111', whatsapp_number: '+525522222222', whatsapp_number_source: 'pool', language: 'es', bot_name: 'Sofia', bot_personality: 'friendly', current_plan: 'pro' }
+  const u = { id: '1', email: 'admin@test.com', business_name: 'Mi Negocio', business_category: 'restaurante', city: 'CDMX', country: 'MX', phone: '+525511111111', whatsapp_number: '+525522222222', meta_connection_status: 'not_connected', language: 'es', bot_name: 'Sofia', bot_personality: 'friendly', current_plan: 'pro' }
   return { useAuth: () => ({ user: u, setUser: vi.fn(), loading: false }) }
 })
 

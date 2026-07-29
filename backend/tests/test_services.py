@@ -101,16 +101,12 @@ class TestCouponService:
         assert is_redeem_intent("") is False
 
 
-class TestTwilioService:
-    """Tests para el servicio de Twilio."""
+class TestMessagingThrottle:
+    """Tests para el ritmo de envío (agnóstico de canal, usado por campañas)."""
 
-    @patch('app.services.twilio_service.settings')
-    def test_anti_ban_delay_range(self, mock_settings):
-        from app.services.twilio_service import anti_ban_delay
-        
-        mock_settings.TWILIO_ACCOUNT_SID = ""
-        
-        # Verificar que el delay está en el rango correcto
+    def test_anti_ban_delay_range(self):
+        from app.services.messaging_throttle import anti_ban_delay
+
         for _ in range(100):
             delay = anti_ban_delay()
             assert 45 <= delay <= 300
@@ -118,24 +114,6 @@ class TestTwilioService:
 
 class TestConfigSettings:
     """Tests para la configuración."""
-
-    def test_twilio_number_pool_list_empty(self):
-        from app.config import Settings
-        
-        s = Settings(TWILIO_NUMBER_POOL="")
-        assert s.twilio_number_pool_list == []
-
-    def test_twilio_number_pool_list_with_numbers(self):
-        from app.config import Settings
-        
-        s = Settings(TWILIO_NUMBER_POOL="+525511111111,+525522222222")
-        assert s.twilio_number_pool_list == ["+525511111111", "+525522222222"]
-
-    def test_twilio_number_pool_list_with_spaces(self):
-        from app.config import Settings
-        
-        s = Settings(TWILIO_NUMBER_POOL=" +525511111111 , +525522222222 ")
-        assert s.twilio_number_pool_list == ["+525511111111", "+525522222222"]
 
     def test_cors_origins_default_debug(self):
         from app.config import Settings
@@ -215,10 +193,7 @@ class TestStringUtils:
 class TestRateLimiterLogic:
     """Tests para la lógica del rate limiter."""
 
-    @patch('app.services.twilio_service.settings')
-    def test_rate_limit_key_generation(self, mock_settings):
-        mock_settings.TWILIO_ACCOUNT_SID = "test_sid"
-        
+    def test_rate_limit_key_generation(self):
         def generate_key(remote_addr: str, endpoint: str) -> str:
             return f"rate_limit:{remote_addr}:{endpoint}"
         

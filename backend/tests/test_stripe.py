@@ -56,35 +56,6 @@ class TestStripeWebhookLogic:
         assert PLANS.get("nonexistent", {}).get("days", 30) == 30
         assert PLANS.get("starter", {}).get("days", 30) == 30
 
-    def test_ensure_pool_number_only_shared(self):
-        from app.api.v1.webhooks_pkg.stripe import _ensure_pool_number
-
-        db = AsyncMock()
-        assign_mock = AsyncMock()
-
-        user_shared = MagicMock()
-        user_shared.whatsapp_number_source = "shared"
-
-        user_pool = MagicMock()
-        user_pool.whatsapp_number_source = "pool"
-
-        user_own = MagicMock()
-        user_own.whatsapp_number_source = "own"
-
-        with patch(
-            "app.api.v1.webhooks_pkg.stripe.assign_pool_number", assign_mock
-        ):
-            import asyncio
-            asyncio.run(_ensure_pool_number(user_shared, db))
-            assign_mock.assert_called_once_with(user_shared, db)
-
-            assign_mock.reset_mock()
-            asyncio.run(_ensure_pool_number(user_pool, db))
-            assign_mock.assert_not_called()
-
-            asyncio.run(_ensure_pool_number(user_own, db))
-            assign_mock.assert_not_called()
-
 
 class TestStripeWebhookIdempotency:
     """Prueba la idempotencia de los eventos del webhook de Stripe."""

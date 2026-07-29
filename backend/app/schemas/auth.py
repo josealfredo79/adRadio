@@ -64,7 +64,7 @@ class UserOut(BaseModel):
     logo_url: str | None
     phone: str | None
     whatsapp_number: str | None
-    whatsapp_number_source: str = "shared"
+    meta_connection_status: str = "not_connected"
     subscription_status: str
     current_plan: str
     messages_remaining: int

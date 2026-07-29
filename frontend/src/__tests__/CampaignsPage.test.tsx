@@ -17,7 +17,7 @@ vi.mock('@/contexts/AuthContext', () => ({
       country: 'MX',
       phone: null,
       whatsapp_number: null,
-      whatsapp_number_source: 'shared',
+      meta_connection_status: 'not_connected',
       language: 'es',
       bot_name: 'Asistente',
       bot_personality: 'professional',

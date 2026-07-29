@@ -602,126 +602,6 @@ class TestBannerService:
             assert copy.contact_name == "Luis"
 
 
-class TestNumberPoolService:
-    """Tests para el servicio de pool de números."""
-
-    @pytest.mark.asyncio
-    async def test_assign_pool_number_empty_pool(self):
-        from app.services.number_pool_service import assign_pool_number
-
-        user = MagicMock()
-        db = AsyncMock()
-        # Mock pool numbers query → empty
-        pool_result = MagicMock()
-        pool_result.fetchall.return_value = []
-        db.execute.return_value = pool_result
-
-        result = await assign_pool_number(user, db)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_assign_pool_number_success(self):
-        from app.services.number_pool_service import assign_pool_number
-
-        user = MagicMock()
-        user.whatsapp_number = None
-        user.whatsapp_number_source = "shared"
-        db = AsyncMock()
-        # Mock pool numbers → return 2 numbers
-        pool_result = MagicMock()
-        pool_result.fetchall.return_value = [("+521111111111",), ("+522222222222",)]
-        # Mock assigned numbers → return 1 already assigned
-        assigned_result = MagicMock()
-        assigned_result.fetchall.return_value = [("+521111111111",)]
-        # First call returns pool, second call returns assigned
-        db.execute.side_effect = [pool_result, assigned_result]
-
-        result = await assign_pool_number(user, db)
-        assert result is True
-        assert user.whatsapp_number == "+522222222222"
-        assert user.whatsapp_number_source == "pool"
-        db.flush.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_assign_pool_number_exhausted(self):
-        from app.services.number_pool_service import assign_pool_number
-
-        db = AsyncMock()
-        # Mock pool numbers → return 1 number
-        pool_result = MagicMock()
-        pool_result.fetchall.return_value = [("+521111111111",)]
-        # Mock assigned numbers → return same number as taken
-        assigned_result = MagicMock()
-        assigned_result.fetchall.return_value = [("+521111111111",)]
-        db.execute.side_effect = [pool_result, assigned_result]
-
-        user = MagicMock()
-        result = await assign_pool_number(user, db)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_release_pool_number(self):
-        from app.services.number_pool_service import release_pool_number
-
-        user = MagicMock()
-        user.whatsapp_number = "+521111111111"
-        user.whatsapp_number_source = "pool"
-        db = AsyncMock()
-
-        await release_pool_number(user, db)
-        assert user.whatsapp_number is None
-        assert user.whatsapp_number_source == "shared"
-        db.flush.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_release_pool_number_shared_ignored(self):
-        from app.services.number_pool_service import release_pool_number
-
-        user = MagicMock()
-        user.whatsapp_number = "+523333333333"
-        user.whatsapp_number_source = "shared"
-        db = AsyncMock()
-
-        await release_pool_number(user, db)
-        db.flush.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_pool_status(self):
-        from app.services.number_pool_service import pool_status
-
-        db = AsyncMock()
-        # Mock pool numbers → return 3 numbers
-        pool_result = MagicMock()
-        pool_result.fetchall.return_value = [
-            ("+521111111111",), ("+522222222222",), ("+523333333333",)
-        ]
-        # Mock assigned users → return 2 assigned
-        assigned_result = MagicMock()
-        assigned_result.fetchall.return_value = [
-            ("+521111111111", "a@b.com", "Negocio A"),
-            ("+522222222222", "c@d.com", "Negocio C"),
-        ]
-        db.execute.side_effect = [pool_result, assigned_result]
-
-        status = await pool_status(db)
-        assert status["total"] == 3
-        assert status["assigned"] == 2
-        assert status["free"] == 1
-        assert len(status["numbers"]) == 3
-
-    @pytest.mark.asyncio
-    async def test_pool_status_empty(self):
-        from app.services.number_pool_service import pool_status
-
-        db = AsyncMock()
-        pool_result = MagicMock()
-        pool_result.fetchall.return_value = []
-        db.execute.return_value = pool_result
-
-        status = await pool_status(db)
-        assert status == {"total": 0, "assigned": 0, "free": 0, "numbers": []}
-
-
 class TestRadioScripts:
     """Tests para generación de guiones de radio."""
 
@@ -1107,15 +987,17 @@ class TestImagenService:
 
 
 class TestWhisperService:
-    """Tests para el servicio de transcripción Whisper."""
+    """Tests para el servicio de transcripción Whisper (transcribe_audio_bytes —
+    la descarga del audio es responsabilidad de cada adaptador de canal, no
+    de este servicio)."""
 
     @patch("app.services.whisper_service.settings")
     @pytest.mark.asyncio
     async def test_transcribe_no_api_key(self, mock_settings):
         mock_settings.OPENAI_API_KEY = ""
 
-        from app.services.whisper_service import transcribe_audio_url
-        result = await transcribe_audio_url("https://example.com/audio.ogg")
+        from app.services.whisper_service import transcribe_audio_bytes
+        result = await transcribe_audio_bytes(b"fake_audio_data")
         assert result is None
 
     @patch("app.services.whisper_service.settings")
@@ -1123,49 +1005,36 @@ class TestWhisperService:
     async def test_transcribe_success(self, mock_settings):
         mock_settings.OPENAI_API_KEY = "sk-test"
 
-        from app.services.whisper_service import transcribe_audio_url
+        from app.services.whisper_service import transcribe_audio_bytes
 
         with patch("httpx.AsyncClient") as mock_httpx:
             mock_client = AsyncMock()
 
-            # First call: download audio
-            download_resp = MagicMock()
-            download_resp.status_code = 200
-            download_resp.content = b"fake_audio_data"
-            download_resp.headers = {"content-type": "audio/ogg"}
-
-            # Second call: Whisper API
             whisper_resp = MagicMock()
             whisper_resp.status_code = 200
             whisper_resp.text = "Hola, esto es una prueba de transcripción"
             whisper_resp.raise_for_status = MagicMock()
 
-            mock_client.get.return_value = download_resp
             mock_client.post.return_value = whisper_resp
             mock_httpx.return_value.__aenter__.return_value = mock_client
 
-            text = await transcribe_audio_url(
-                "https://api.twilio.com/audio.ogg",
-                twilio_account_sid="AC123",
-                twilio_auth_token="auth_token",
-            )
+            text = await transcribe_audio_bytes(b"fake_audio_data", "audio/ogg")
             assert text == "Hola, esto es una prueba de transcripción"
-            assert mock_client.get.call_count == 1
             assert mock_client.post.call_count == 1
 
     @patch("app.services.whisper_service.settings")
     @pytest.mark.asyncio
-    async def test_transcribe_download_failure(self, mock_settings):
+    async def test_transcribe_api_failure(self, mock_settings):
         mock_settings.OPENAI_API_KEY = "sk-test"
 
-        from app.services.whisper_service import transcribe_audio_url
+        from app.services.whisper_service import transcribe_audio_bytes
 
         with patch("httpx.AsyncClient") as mock_httpx:
             mock_client = AsyncMock()
-            mock_client.get.side_effect = Exception("Connection error")
+            mock_client.post.side_effect = Exception("Connection error")
             mock_httpx.return_value.__aenter__.return_value = mock_client
 
-            text = await transcribe_audio_url("https://example.com/audio.ogg")
+            text = await transcribe_audio_bytes(b"fake_audio_data")
             assert text is None
 
     @patch("app.services.whisper_service.settings")
@@ -1173,25 +1042,19 @@ class TestWhisperService:
     async def test_transcribe_empty_response(self, mock_settings):
         mock_settings.OPENAI_API_KEY = "sk-test"
 
-        from app.services.whisper_service import transcribe_audio_url
+        from app.services.whisper_service import transcribe_audio_bytes
 
         with patch("httpx.AsyncClient") as mock_httpx:
             mock_client = AsyncMock()
-            download_resp = MagicMock()
-            download_resp.status_code = 200
-            download_resp.content = b"audio_data"
-            download_resp.headers = {"content-type": "audio/mpeg"}
-
             whisper_resp = MagicMock()
             whisper_resp.status_code = 200
             whisper_resp.text = ""
             whisper_resp.raise_for_status = MagicMock()
 
-            mock_client.get.return_value = download_resp
             mock_client.post.return_value = whisper_resp
             mock_httpx.return_value.__aenter__.return_value = mock_client
 
-            text = await transcribe_audio_url("https://example.com/audio.mp3")
+            text = await transcribe_audio_bytes(b"audio_data", "audio/mpeg")
             assert text is None
 
 

@@ -174,7 +174,6 @@ async def meta_incoming(
                     audio_transcription=audio_transcription,
                     media_url=media_url,
                     external_message_id=wamid,
-                    channel="meta",
                 )
 
                 async def _send(to: str, body: str) -> tuple[str | None, str | None]:

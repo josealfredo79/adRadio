@@ -37,7 +37,6 @@ class TestHandoffGuardrail:
             from_number="+521234567890",
             body_text="¿siguen las promociones?",
             external_message_id="wamid.ESC1",
-            channel="meta",
         )
         send = AsyncMock()
 
@@ -66,7 +65,6 @@ class TestHandoffGuardrail:
             from_number="+521234567890",
             body_text="hola humano",
             external_message_id="wamid.ESC2",
-            channel="meta",
         )
         send = AsyncMock()
 
@@ -97,7 +95,6 @@ class TestHandoffGuardrail:
             from_number="+521234567890",
             body_text="hola",
             external_message_id="wamid.NEW1",
-            channel="meta",
         )
         send = AsyncMock()
 
