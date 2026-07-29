@@ -30,7 +30,7 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
 class StatusUpdateBody(BaseModel):
-    status: Literal["active", "closed"]
+    status: Literal["active", "escalated", "closed"]
 
 
 class LeadScoreUpdateBody(BaseModel):
