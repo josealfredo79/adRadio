@@ -134,6 +134,159 @@ class TestRouting:
         mock_apply.assert_called_once_with(mock_apply.call_args.args[0], "wamid.999", "delivered", None)
 
 
+async def _seed_advertiser_with_running_campaign(waba_id: str):
+    """Real DB session (same pattern as test_modules.py) — creates an
+    advertiser + a running campaign under the given WABA id.
+
+    Disposes the shared engine pool first: this file also has sync
+    TestClient-based tests, each spinning its own event loop, and asyncpg
+    connections are loop-bound — a pooled connection left over from one of
+    those would crash ("attached to a different loop") the moment this
+    async test's own loop tries to reuse it.
+    """
+    import uuid
+
+    from app.database import AsyncSessionLocal, engine
+    from app.models.campaign import Campaign
+    from app.models.user import User
+
+    await engine.dispose()
+
+    async with AsyncSessionLocal() as db:
+        advertiser = User(
+            email=f"{uuid.uuid4()}@test.com",
+            password_hash="x",
+            business_name="Test",
+            meta_waba_id=waba_id,
+        )
+        db.add(advertiser)
+        await db.flush()
+        campaign = Campaign(
+            advertiser_id=advertiser.id,
+            name="Promo",
+            type="promo",
+            message_text="hola",
+            status="running",
+        )
+        db.add(campaign)
+        await db.commit()
+        return advertiser.id, campaign.id
+
+
+class TestPhoneNumberQualityUpdate:
+    @pytest.mark.asyncio
+    async def test_flagged_event_pauses_active_campaigns(self):
+        """Uses the real DB session end-to-end (httpx AsyncClient over the
+        real ASGI app, same event loop as the DB session — not the sync
+        TestClient, which runs requests in a different loop and would break
+        the asyncpg connection pool): creates an advertiser + a running
+        campaign, sends a FLAGGED quality update for that WABA, and checks
+        the campaign actually got paused and the rating got stored — not
+        just that the handler was called."""
+        import uuid
+
+        from httpx import ASGITransport, AsyncClient
+
+        from app.database import AsyncSessionLocal
+        from app.models.campaign import Campaign
+        from app.models.user import User
+
+        waba_id = f"waba-{uuid.uuid4()}"
+        advertiser_id, campaign_id = await _seed_advertiser_with_running_campaign(waba_id)
+
+        payload = {
+            "entry": [{
+                "id": waba_id,
+                "changes": [{
+                    "field": "phone_number_quality_update",
+                    "value": {"event": "FLAGGED", "current_limit": "TIER_50", "display_phone_number": "5215599631448"},
+                }],
+            }],
+        }
+        with patch("app.api.v1.webhooks_pkg.meta_incoming.settings") as mock_settings:
+            mock_settings.META_APP_SECRET = ""
+            transport = ASGITransport(app=main_module.app)
+            async with AsyncClient(transport=transport, base_url="http://test") as c:
+                r = await c.post("/api/v1/webhooks/meta", json=payload)
+        assert r.status_code == 200
+
+        async with AsyncSessionLocal() as db:
+            advertiser = await db.get(User, advertiser_id)
+            campaign = await db.get(Campaign, campaign_id)
+            assert advertiser.meta_quality_rating == "RED"
+            assert advertiser.meta_messaging_tier == "TIER_50"
+            assert campaign.status == "paused"
+
+    @pytest.mark.asyncio
+    async def test_unflagged_event_updates_rating_without_pausing(self):
+        import uuid
+
+        from httpx import ASGITransport, AsyncClient
+
+        from app.database import AsyncSessionLocal
+        from app.models.campaign import Campaign
+        from app.models.user import User
+
+        waba_id = f"waba-{uuid.uuid4()}"
+        advertiser_id, campaign_id = await _seed_advertiser_with_running_campaign(waba_id)
+
+        payload = {
+            "entry": [{
+                "id": waba_id,
+                "changes": [{
+                    "field": "phone_number_quality_update",
+                    "value": {"event": "UNFLAGGED", "current_limit": "TIER_1K"},
+                }],
+            }],
+        }
+        with patch("app.api.v1.webhooks_pkg.meta_incoming.settings") as mock_settings:
+            mock_settings.META_APP_SECRET = ""
+            transport = ASGITransport(app=main_module.app)
+            async with AsyncClient(transport=transport, base_url="http://test") as c:
+                r = await c.post("/api/v1/webhooks/meta", json=payload)
+        assert r.status_code == 200
+
+        async with AsyncSessionLocal() as db:
+            advertiser = await db.get(User, advertiser_id)
+            campaign = await db.get(Campaign, campaign_id)
+            assert advertiser.meta_quality_rating == "GREEN"
+            assert campaign.status == "running"
+
+    def test_unknown_waba_does_not_crash(self, client):
+        payload = {
+            "entry": [{
+                "id": "does-not-exist",
+                "changes": [{
+                    "field": "phone_number_quality_update",
+                    "value": {"event": "FLAGGED", "current_limit": "TIER_50"},
+                }],
+            }],
+        }
+        with patch("app.api.v1.webhooks_pkg.meta_incoming.settings") as mock_settings:
+            mock_settings.META_APP_SECRET = ""
+            r = client.post("/api/v1/webhooks/meta", json=payload)
+        assert r.status_code == 200
+        assert r.json() == {"received": True}
+
+
+class TestAccountAlerts:
+    def test_account_alert_is_logged_and_acked(self, client):
+        payload = {
+            "entry": [{
+                "id": "waba-123",
+                "changes": [{
+                    "field": "account_alerts",
+                    "value": {"alert_type": "INCREASED_CAPABILITIES_ELIGIBILITY_FAILED", "alert_description": "x"},
+                }],
+            }],
+        }
+        with patch("app.api.v1.webhooks_pkg.meta_incoming.settings") as mock_settings:
+            mock_settings.META_APP_SECRET = ""
+            r = client.post("/api/v1/webhooks/meta", json=payload)
+        assert r.status_code == 200
+        assert r.json() == {"received": True}
+
+
 class TestExtractBodyText:
     def test_text_message(self):
         from app.api.v1.webhooks_pkg.meta_incoming import _extract_body_text

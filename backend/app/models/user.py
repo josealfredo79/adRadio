@@ -56,6 +56,10 @@ class User(Base):
     meta_utility_template_status: Mapped[str] = mapped_column(String(20), default="not_configured", server_default="not_configured")
     meta_utility_template_name: Mapped[str | None] = mapped_column(String(255))
     meta_appointment_template_name: Mapped[str | None] = mapped_column(String(255))
+    # Derivado del evento 'phone_number_quality_update' del webhook de Meta
+    # (no hay endpoint de polling todavía — ver Propuesta 2 pendiente).
+    meta_quality_rating: Mapped[str | None] = mapped_column(String(10))
+    meta_messaging_tier: Mapped[str | None] = mapped_column(String(20))
 
     # Subscription
     stripe_customer_id: Mapped[str | None] = mapped_column(String(50))
