@@ -11,6 +11,7 @@ from app.workers.task_helpers import (
     send_regular_messages, send_banner_messages, send_radio_messages,
     send_parrilla_messages, notify_campaign_failed, run_parrilla_generation,
     send_24h_reminders, send_1h_reminders,
+    segment_fingerprint, is_segment_on_cooldown, record_segment_send,
 )
 from app.workers.task_helpers.common import suppress_contact_on_error
 
@@ -296,6 +297,16 @@ def schedule_campaign(self, campaign_id: str):
                 await db.commit()
                 return
 
+            fingerprint = segment_fingerprint(campaign.segment or {})
+            if await is_segment_on_cooldown(db, campaign.advertiser_id, fingerprint):
+                campaign.status = "paused"
+                await db.commit()
+                logger.warning(
+                    "[CAMPAIGN] Auto-paused %s — same list relaunched within the cooldown window",
+                    campaign.id,
+                )
+                return
+
             ab = campaign.ab_test or {}
             mode = ab.get("campaign_mode", "regular")
             messages_list: list[str] = ab.get("messages", [campaign.message_text])
@@ -316,6 +327,7 @@ def schedule_campaign(self, campaign_id: str):
             contacts = contacts_result.scalars().all()
 
             campaign.status = "running"
+            await record_segment_send(db, campaign.advertiser_id, fingerprint)
             await db.commit()
 
             if mode == "banner":

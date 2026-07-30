@@ -1,6 +1,7 @@
 """
 Campaign operations helpers — extracted from schedule_campaign.
 """
+import hashlib
 import json
 import logging
 import random
@@ -17,6 +18,54 @@ _CAMPAIGN_COOLDOWN_HOURS = 48
 _MAX_FAILED_SENDS = 3
 _SUPPRESSION_DAYS = 30
 _AUTO_PAUSE_THRESHOLD = 0.5  # pause campaign if >50% contacts fail
+# The per-contact 48h cooldown above doesn't stop the *same list* from being
+# relaunched wholesale every couple of days (e.g. the same 138 businesses in
+# Tlaxiaco every 2 days indefinitely) — that pattern is what triggers mass
+# spam reports. This is the separate, list-level guard for that.
+_SEGMENT_RELAUNCH_COOLDOWN_DAYS = 7
+
+
+def segment_fingerprint(segment: dict) -> str:
+    """Canonicalize a campaign's segment definition (explicit contact ids or
+    tags) into a stable hash, so two campaigns targeting the exact same list
+    are recognized as "the same list" regardless of campaign identity."""
+    specific = sorted(segment.get("specific_contacts") or [])
+    tags = sorted(segment.get("tags") or [])
+    canonical = json.dumps({"specific_contacts": specific, "tags": tags}, sort_keys=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+async def is_segment_on_cooldown(db, advertiser_id, fingerprint: str) -> bool:
+    from app.models.campaign_segment_send import CampaignSegmentSend
+
+    result = await db.execute(
+        select(CampaignSegmentSend).where(
+            CampaignSegmentSend.advertiser_id == advertiser_id,
+            CampaignSegmentSend.segment_fingerprint == fingerprint,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        return False
+    days_since = (datetime.now(timezone.utc) - row.last_sent_at).total_seconds() / 86400
+    return days_since < _SEGMENT_RELAUNCH_COOLDOWN_DAYS
+
+
+async def record_segment_send(db, advertiser_id, fingerprint: str) -> None:
+    from app.models.campaign_segment_send import CampaignSegmentSend
+
+    result = await db.execute(
+        select(CampaignSegmentSend).where(
+            CampaignSegmentSend.advertiser_id == advertiser_id,
+            CampaignSegmentSend.segment_fingerprint == fingerprint,
+        )
+    )
+    row = result.scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+    if row:
+        row.last_sent_at = now
+    else:
+        db.add(CampaignSegmentSend(advertiser_id=advertiser_id, segment_fingerprint=fingerprint, last_sent_at=now))
 
 
 def _is_contact_active(contact) -> bool:
