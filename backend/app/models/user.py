@@ -56,10 +56,14 @@ class User(Base):
     meta_utility_template_status: Mapped[str] = mapped_column(String(20), default="not_configured", server_default="not_configured")
     meta_utility_template_name: Mapped[str | None] = mapped_column(String(255))
     meta_appointment_template_name: Mapped[str | None] = mapped_column(String(255))
-    # Derivado del evento 'phone_number_quality_update' del webhook de Meta
-    # (no hay endpoint de polling todavía — ver Propuesta 2 pendiente).
+    # meta_quality_rating/meta_messaging_tier: se actualizan tanto por el
+    # webhook (phone_number_quality_update, solo FLAGGED/UNFLAGGED) como por
+    # el polling periódico al Graph API (trae el rating real GREEN/YELLOW/RED).
     meta_quality_rating: Mapped[str | None] = mapped_column(String(10))
     meta_messaging_tier: Mapped[str | None] = mapped_column(String(20))
+    # Cap de envíos/hora efectivo — 60 normalmente, se reduce a la mitad
+    # automáticamente si el rating cae a YELLOW (ver meta_quality_service.py).
+    meta_send_throttle_per_hour: Mapped[int] = mapped_column(Integer, default=60, server_default="60")
 
     # Subscription
     stripe_customer_id: Mapped[str | None] = mapped_column(String(50))

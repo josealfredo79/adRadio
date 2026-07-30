@@ -22,11 +22,11 @@ from app.config import settings
 from app.core.crypto import EncryptedValue, decrypt_secret
 from app.core.rate_limiter import limiter
 from app.database import get_db
-from app.models.campaign import Campaign
 from app.models.user import User
 from app.services.inbound_pipeline import InboundMessage, process_inbound_message
 from app.services.message_status_service import apply_status_update
 from app.services.meta_client import download_media
+from app.services.meta_quality_service import apply_quality_signal
 from app.services.meta_service import send_whatsapp
 from app.services.storage_service import upload_bytes
 from app.services.whisper_service import transcribe_audio_bytes
@@ -83,26 +83,9 @@ def _extract_body_text(msg: dict) -> tuple[str, str | None]:
 
 
 # Meta no manda el color (GREEN/YELLOW/RED) en este webhook, solo el evento
-# que lo causó — YELLOW solo se puede saber vía polling del Graph API
-# (Propuesta 2, no implementada). FLAGGED es la señal de riesgo real.
+# que lo causó — YELLOW solo se puede saber vía polling del Graph API (ver
+# tasks.poll_meta_quality_ratings). FLAGGED es la señal de riesgo real.
 _QUALITY_EVENT_TO_RATING = {"FLAGGED": "RED", "UNFLAGGED": "GREEN"}
-
-
-async def _pause_active_campaigns(db: AsyncSession, advertiser_id) -> None:
-    result = await db.execute(
-        select(Campaign).where(
-            Campaign.advertiser_id == advertiser_id,
-            Campaign.status.in_(("scheduled", "running")),
-        )
-    )
-    campaigns = result.scalars().all()
-    for campaign in campaigns:
-        campaign.status = "paused"
-    if campaigns:
-        logger.warning(
-            "[META WEBHOOK] Auto-paused %d campaign(s) for advertiser=%s — number flagged by Meta",
-            len(campaigns), advertiser_id,
-        )
 
 
 async def _handle_quality_update(db: AsyncSession, waba_id: str | None, value: dict) -> None:
@@ -116,19 +99,11 @@ async def _handle_quality_update(db: AsyncSession, waba_id: str | None, value: d
 
     event = value.get("event", "")
     current_limit = value.get("current_limit")
-    rating = _QUALITY_EVENT_TO_RATING.get(event)
-    if rating:
-        advertiser.meta_quality_rating = rating
-    if current_limit:
-        advertiser.meta_messaging_tier = current_limit
     logger.warning(
         "[META WEBHOOK] Quality update advertiser=%s event=%s current_limit=%s",
         advertiser.id, event, current_limit,
     )
-
-    if event == "FLAGGED":
-        await _pause_active_campaigns(db, advertiser.id)
-    await db.commit()
+    await apply_quality_signal(db, advertiser, _QUALITY_EVENT_TO_RATING.get(event), current_limit)
 
 
 async def _handle_account_alert(db: AsyncSession, waba_id: str | None, value: dict) -> None:

@@ -67,6 +67,9 @@ def test_user():
     user.meta_utility_template_status = "not_configured"
     user.meta_utility_template_name = None
     user.meta_appointment_template_name = None
+    user.meta_quality_rating = None
+    user.meta_messaging_tier = None
+    user.meta_send_throttle_per_hour = 60
     return user
 
 

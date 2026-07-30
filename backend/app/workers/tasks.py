@@ -583,6 +583,43 @@ def send_appointment_reminders():
     run_async(_remind())
 
 
+@celery_app.task
+def poll_meta_quality_ratings():
+    """Celery Beat: refresh the real quality_rating (GREEN/YELLOW/RED) from
+    Meta's Graph API for every connected advertiser. The webhook
+    (meta_incoming.py, field phone_number_quality_update) only ever carries
+    FLAGGED/UNFLAGGED — this poll is the only way to catch a number cooling
+    into YELLOW before Meta fully flags it."""
+    async def _poll():
+        from sqlalchemy import select
+
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.models.user import User
+        from app.services.meta_client import MetaApiError, graph_request
+        from app.services.meta_quality_service import apply_quality_signal
+        from app.services.meta_service import _connection
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(User).where(User.meta_connection_status == "connected"))
+            for advertiser in result.scalars().all():
+                conn = _connection(advertiser)
+                if conn is None:
+                    continue
+                phone_number_id, token = conn
+                try:
+                    data = await graph_request(
+                        f"{phone_number_id}?fields=quality_rating,messaging_limit_tier", token=token
+                    )
+                except MetaApiError as e:
+                    logger.warning("[META QUALITY POLL] advertiser=%s failed: %s", advertiser.id, e)
+                    continue
+                rating = data.get("quality_rating")
+                if rating:
+                    await apply_quality_signal(db, advertiser, rating, data.get("messaging_limit_tier"))
+
+    run_async(_poll())
+
+
 @celery_app.task(bind=True, max_retries=2)
 def send_parrilla_day(self, advertiser_id: str, audio_url: str, script: str, day_name: str, mode: str):
     """Sends the daily cuña from the weekly parrilla to all active contacts."""

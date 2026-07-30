@@ -167,7 +167,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     palette = ab.get("banner_palette", "")  # vacío = auto según negocio
     caption = ab.get("banner_caption", "")
     layout_override = ab.get("banner_layout", "")
-    MAX_PER_HOUR = 60
+    MAX_PER_HOUR = advertiser.meta_send_throttle_per_hour or 60
 
     # Preload conversations to avoid N+1
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
@@ -260,7 +260,7 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
 
     audio_url = ab.get("audio_url", "")
     radio_script = ab.get("radio_script", campaign.message_text)
-    MAX_PER_HOUR = 60
+    MAX_PER_HOUR = advertiser.meta_send_throttle_per_hour or 60
 
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
 
@@ -331,7 +331,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     from app.services.radio.tts import text_to_speech, LOCUTOR_VOICES
     from app.services.messaging_throttle import anti_ban_delay
 
-    MAX_PER_HOUR = 60
+    MAX_PER_HOUR = advertiser.meta_send_throttle_per_hour or 60
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
 
     ab_enabled = ab.get("enabled", False)
@@ -543,7 +543,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
     from app.workers.tasks import send_whatsapp_voice_note
     from app.services.messaging_throttle import anti_ban_delay
 
-    MAX_PER_HOUR = 60
+    MAX_PER_HOUR = advertiser.meta_send_throttle_per_hour or 60
     ban_delay = 0
     sent = 0
     skipped_count = 0
