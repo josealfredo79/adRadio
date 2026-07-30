@@ -64,6 +64,7 @@ class ContactOut(BaseModel):
     tags: list[str]
     language: str
     status: str
+    consent_status: str
     engagement_score: int
     source: str
     pipeline_stage: str

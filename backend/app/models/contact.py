@@ -30,6 +30,9 @@ class Contact(Base):
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     language: Mapped[str] = mapped_column(String(5), default="es")
     status: Mapped[str] = mapped_column(String(20), default="active")
+    # 'confirmed': replied at least once, or advertiser vouched for consent at import time.
+    # 'unconfirmed': bulk-imported, never interacted — blocked from cold-window template sends.
+    consent_status: Mapped[str] = mapped_column(String(20), default="confirmed", server_default="confirmed")
     # Kanban de ventas: nuevo -> conversacion -> interesado -> cliente | perdido
     pipeline_stage: Mapped[str] = mapped_column(String(20), default="nuevo", server_default="nuevo")
     engagement_score: Mapped[int] = mapped_column(Integer, default=0)
@@ -50,6 +53,7 @@ class Contact(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('active','unsubscribed','blocked')", name="ck_contacts_status"),
+        CheckConstraint("consent_status IN ('confirmed','unconfirmed')", name="ck_contacts_consent_status"),
         CheckConstraint("source IN ('manual','csv','landing','referral')", name="ck_contacts_source"),
         CheckConstraint("engagement_score BETWEEN 0 AND 100", name="ck_contacts_engagement"),
         CheckConstraint(

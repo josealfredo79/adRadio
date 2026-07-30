@@ -417,13 +417,24 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
 
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
-def import_contacts_csv(self, advertiser_id: str, rows: list[dict]):
-    """Bulk import contacts from CSV rows."""
+def import_contacts_csv(self, advertiser_id: str, rows: list[dict], consent_confirmed: bool = False):
+    """Bulk import contacts from CSV rows.
+
+    consent_confirmed reflects the advertiser's explicit checkbox at upload
+    time ("I confirm these contacts agreed to receive WhatsApp"). When False,
+    new contacts are stored as consent_status='unconfirmed' — they can still
+    receive messages while their conversation window is open (e.g. they wrote
+    in first), but campaign sends can't use an approved template to reopen a
+    closed window for them (see _ensure_conversation_window). This is the
+    guard against blasting cold, unverified lists.
+    """
     async def _import():
         import re
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.contact import Contact
         from sqlalchemy import select
+
+        consent_status = "confirmed" if consent_confirmed else "unconfirmed"
 
         async with AsyncSessionLocal() as db:
             imported = 0
@@ -450,6 +461,7 @@ def import_contacts_csv(self, advertiser_id: str, rows: list[dict]):
                         email=str(row.get("email", "")).strip() or None,
                         city=str(row.get("city", row.get("ciudad", ""))).strip() or None,
                         source="csv",
+                        consent_status=consent_status,
                     )
                     db.add(contact)
                     imported += 1

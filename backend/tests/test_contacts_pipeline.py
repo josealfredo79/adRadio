@@ -39,7 +39,7 @@ class TestPipelineEndpoint:
     def test_returns_only_active_contacts_for_current_user(self, client, test_user):
         c1 = MagicMock(
             id=uuid.uuid4(), phone="+521111111111", email=None, city=None,
-            tags=[], language="es", status="active", engagement_score=10, source="manual",
+            tags=[], language="es", status="active", consent_status="confirmed", engagement_score=10, source="manual",
             pipeline_stage="nuevo", last_interaction=None,
         )
         c1.name = "Juan"  # MagicMock(name=...) sets the mock's repr, not a .name attribute
@@ -67,7 +67,7 @@ class TestUpdateContactPipelineStage:
         from datetime import datetime, timezone
         contact = MagicMock(
             id=uuid.uuid4(), advertiser_id=test_user.id, phone="+521111111111",
-            email=None, city=None, tags=[], language="es", status="active", engagement_score=0,
+            email=None, city=None, tags=[], language="es", status="active", consent_status="confirmed", engagement_score=0,
             source="manual", pipeline_stage="nuevo", last_interaction=None,
             created_at=datetime.now(timezone.utc),
         )

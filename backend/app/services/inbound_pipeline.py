@@ -416,6 +416,9 @@ async def process_inbound_message(
     contact.last_interaction = func.now()
     contact.failed_send_count = 0
     contact.suppressed_until = None
+    # A real reply from this number is the strongest consent signal there is —
+    # unblocks future cold-window template sends regardless of import origin.
+    contact.consent_status = "confirmed"
 
     contact_name = (contact.name or "Cliente").split()[0]
 

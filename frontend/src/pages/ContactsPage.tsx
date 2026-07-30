@@ -37,6 +37,8 @@ export default function ContactsPage() {
   const [uploadMsg, setUploadMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [page, setPage] = useState(1)
   const [isUploading, setIsUploading] = useState(false)
+  const [pendingCsvFile, setPendingCsvFile] = useState<File | null>(null)
+  const [consentConfirmed, setConsentConfirmed] = useState(false)
   const [editTagsId, setEditTagsId] = useState<string | null>(null)
   const [editTagsValue, setEditTagsValue] = useState<string[]>([])
   const [editTagInput, setEditTagInput] = useState('')
@@ -187,22 +189,41 @@ export default function ContactsPage() {
     setEditTagInput('')
   }
 
-  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCSVSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    setConsentConfirmed(false)
+    setPendingCsvFile(file)
+    e.target.value = ''
+  }
+
+  const cancelCSVImport = () => {
+    setPendingCsvFile(null)
+    setConsentConfirmed(false)
+  }
+
+  const confirmCSVImport = async () => {
+    if (!pendingCsvFile) return
+    const file = pendingCsvFile
     setUploadMsg(null)
     setIsUploading(true)
+    setPendingCsvFile(null)
     const fd = new FormData()
     fd.append('file', file)
+    fd.append('consent_confirmed', String(consentConfirmed))
     try {
       await api.post('/contacts/import-csv', fd)
-      setUploadMsg({ type: 'success', text: `Archivo "${file.name}" importado exitosamente.` })
+      setUploadMsg({
+        type: 'success',
+        text: consentConfirmed
+          ? `Archivo "${file.name}" importado exitosamente.`
+          : `Archivo "${file.name}" importado. Como no confirmaste consentimiento, estos contactos solo son alcanzables por campaña si ellos te escriben primero.`,
+      })
       qc.invalidateQueries({ queryKey: ['contacts'] })
     } catch (err: unknown) {
       setUploadMsg({ type: 'error', text: getApiError(err, 'Error al importar CSV') })
     } finally {
       setIsUploading(false)
-      e.target.value = ''
     }
   }
 
@@ -264,7 +285,7 @@ export default function ContactsPage() {
           <label className={`flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-colors ${isUploading ? 'bg-muted text-muted-foreground border-border cursor-not-allowed' : 'border-border text-muted-foreground hover:bg-muted'}`}>
             <Upload className="h-4 w-4" />
             {isUploading ? 'Importando...' : 'Importar CSV'}
-            <input type="file" accept=".csv" className="hidden" onChange={handleCSVUpload} disabled={isUploading} />
+            <input type="file" accept=".csv" className="hidden" onChange={handleCSVSelect} disabled={isUploading} />
           </label>
           {(data?.total ?? 0) > 0 && (
             <button
@@ -728,6 +749,43 @@ export default function ContactsPage() {
       )}
 
       {/* Batch Tag Modal */}
+      {pendingCsvFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={cancelCSVImport}>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="mb-2 text-lg font-semibold text-card-foreground">Importar "{pendingCsvFile.name}"</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              WhatsApp restringe el número si se manda a listas frías sin consentimiento —
+              confírmalo para que estos contactos puedan recibir campañas normalmente.
+            </p>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3.5 hover:bg-muted">
+              <input
+                type="checkbox"
+                checked={consentConfirmed}
+                onChange={e => setConsentConfirmed(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span className="text-sm text-card-foreground">
+                Confirmo que estos contactos aceptaron recibir WhatsApp de mi negocio (opt-in real, no una lista fría comprada o recolectada sin permiso).
+              </span>
+            </label>
+            {!consentConfirmed && (
+              <p className="mt-3 text-xs text-amber-500">
+                Sin confirmar, estos contactos solo podrán recibir mensajes de campaña si ellos te escriben primero — no se les podrá reabrir la ventana de 24h con plantilla.
+              </p>
+            )}
+            <div className="mt-5 flex gap-3">
+              <button onClick={cancelCSVImport} className="flex-1 rounded-lg border border-border py-2.5 text-sm text-muted-foreground hover:bg-muted">Cancelar</button>
+              <button
+                onClick={confirmCSVImport}
+                className="flex-1 rounded-lg bg-brand-500 py-2.5 text-sm font-medium text-white hover:bg-brand-600"
+              >
+                Importar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showTagModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowTagModal(false)}>
           <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl" onClick={e => e.stopPropagation()}>

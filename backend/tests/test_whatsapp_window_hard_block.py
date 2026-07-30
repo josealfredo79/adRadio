@@ -75,7 +75,7 @@ class TestEnsureConversationWindowHardBlock:
     @pytest.mark.asyncio
     async def test_closed_window_template_send_succeeds_returns_delay(self, mock_db, test_user):
         db = mock_db
-        contact = MagicMock(id="c1", phone="+521234567890", name="Juan")
+        contact = MagicMock(id="c1", phone="+521234567890", name="Juan", consent_status="confirmed")
         convs = {"c1": None}  # no conversation yet, window closed
         test_user.meta_utility_template_name = "notificacion_v2"
 
@@ -86,6 +86,36 @@ class TestEnsureConversationWindowHardBlock:
             extra = await _ensure_conversation_window(db, test_user, contact, _convs=convs)
         assert extra is not None
         assert 10 <= extra <= 20
+
+    @pytest.mark.asyncio
+    async def test_closed_window_unconfirmed_consent_blocks_even_with_template(self, mock_db, test_user):
+        """Cold, bulk-imported contact with no verified consent must never be
+        reachable via a cold-window template reopen, even if the advertiser
+        has an approved template configured — this is the anti-ban guard."""
+        db = mock_db
+        contact = MagicMock(id="c1", phone="+521234567890", name="Juan", consent_status="unconfirmed")
+        convs = {"c1": None}
+        test_user.meta_utility_template_name = "notificacion_v2"
+
+        with patch(
+            "app.services.meta_service.send_whatsapp_template",
+            new=AsyncMock(return_value=("wamid.OK", None)),
+        ) as mock_send:
+            extra = await _ensure_conversation_window(db, test_user, contact, _convs=convs)
+        assert extra is None
+        mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_open_window_reaches_unconfirmed_contact_anyway(self, test_user):
+        """Consent gate only blocks the cold-window reopen path — a contact
+        who already has an open window (e.g. wrote in first) is unaffected
+        regardless of consent_status."""
+        db = AsyncMock()
+        contact = MagicMock(id="c1", phone="+521234567890", name="Juan", consent_status="unconfirmed")
+        convs = {"c1": _conv(1)}  # window open
+
+        extra = await _ensure_conversation_window(db, test_user, contact, _convs=convs)
+        assert extra == 0
 
 
 class TestCampaignCallSitesSkipOnBlock:

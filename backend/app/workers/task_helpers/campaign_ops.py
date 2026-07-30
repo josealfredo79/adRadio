@@ -85,6 +85,15 @@ async def _ensure_conversation_window(
     if is_window_open(conv):
         return 0
 
+    if contact.consent_status == "unconfirmed":
+        # Cold, bulk-imported contact with no verified consent and no open
+        # conversation window — refuse to reopen it with a template. This is
+        # the exact pattern (blast an unverified list) that gets numbers
+        # reported/restricted by Meta. They become reachable normally as soon
+        # as they reply once (see inbound_pipeline.process_inbound_message).
+        logger.info("[CONSENT] Contact %s has unconfirmed consent — blocking cold-window send", contact.id)
+        return None
+
     template_name = advertiser.meta_utility_template_name
     if not template_name:
         # No approved utility template configured yet for this advertiser —

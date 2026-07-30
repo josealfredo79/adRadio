@@ -6,7 +6,7 @@ import io
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, UploadFile, File, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -180,6 +180,7 @@ async def delete_contact(
 async def import_csv(
     request: Request,
     file: UploadFile = File(...),
+    consent_confirmed: bool = Form(...),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
     if file.content_type not in ("text/csv", "application/vnd.ms-excel"):
@@ -199,8 +200,10 @@ async def import_csv(
     if len(rows) > 10_000:
         raise HTTPException(status_code=400, detail="Máximo 10,000 registros por importación")
 
-    # Dispatch to Celery
-    import_contacts_csv.delay(str(current_user.id), rows)
+    # Dispatch to Celery — consent_confirmed decides whether these contacts can
+    # later be reached via a cold-window template reopen in campaigns, or only
+    # while they have an open window (i.e. they wrote in first).
+    import_contacts_csv.delay(str(current_user.id), rows, consent_confirmed)
 
     return {"message": f"Importando {len(rows)} contactos en segundo plano"}
 
