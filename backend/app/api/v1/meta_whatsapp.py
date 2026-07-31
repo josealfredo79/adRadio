@@ -18,6 +18,7 @@ from app.models.user import User
 from app.schemas.meta_whatsapp import (
     MetaWhatsappConnectionOut,
     MetaWhatsappCredentials,
+    MetaWhatsappHealthOut,
     MetaWhatsappTestResult,
 )
 from app.services.meta_connect_service import subscribe_app_to_waba, test_connection
@@ -54,6 +55,53 @@ async def get_whatsapp_connection(current_user: User = Depends(get_current_user)
         utility_template_status=current_user.meta_utility_template_status,
         utility_template_name=current_user.meta_utility_template_name,
         appointment_template_name=current_user.meta_appointment_template_name,
+    )
+
+
+@router.get("/me/whatsapp-health", response_model=MetaWhatsappHealthOut)
+async def get_whatsapp_health(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Capa 15 anti-baneo: snapshot de todo lo que las capas 6-14 vienen
+    calculando en segundo plano (rating, tier, warm-up, tope efectivo de
+    destinatarios, campañas activas/pausadas) para que el advertiser no
+    tenga que adivinar por qué sus campañas dejaron de enviarse."""
+    from sqlalchemy import func, select
+
+    from app.models.campaign import Campaign
+    from app.services.meta_quality_service import (
+        resolve_tier_limit, resolve_warmup_cap, warmup_days_remaining,
+    )
+    from app.workers.task_helpers.campaign_ops import get_recipient_cap_state
+
+    tier_limit = resolve_tier_limit(current_user.meta_messaging_tier)
+    warmup_cap = resolve_warmup_cap(current_user.meta_connected_at)
+    cap_state = await get_recipient_cap_state(db, current_user)
+
+    counts_result = await db.execute(
+        select(Campaign.status, func.count()).where(
+            Campaign.advertiser_id == current_user.id,
+            Campaign.status.in_(("scheduled", "running", "paused")),
+        ).group_by(Campaign.status)
+    )
+    counts = dict(counts_result.all())
+    active_count = counts.get("scheduled", 0) + counts.get("running", 0)
+    paused_count = counts.get("paused", 0)
+
+    return MetaWhatsappHealthOut(
+        quality_rating=current_user.meta_quality_rating,
+        messaging_tier=current_user.meta_messaging_tier,
+        tier_recipient_limit=tier_limit,
+        send_throttle_per_hour=current_user.meta_send_throttle_per_hour,
+        connected_at=current_user.meta_connected_at.isoformat() if current_user.meta_connected_at else None,
+        warmup_active=warmup_cap is not None,
+        warmup_recipient_cap=warmup_cap,
+        warmup_days_remaining=warmup_days_remaining(current_user.meta_connected_at),
+        recipients_sent_last_24h=cap_state.count,
+        effective_recipient_limit=cap_state.limit,
+        active_campaigns_count=active_count,
+        paused_campaigns_count=paused_count,
     )
 
 

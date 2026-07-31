@@ -86,6 +86,21 @@ def resolve_warmup_cap(connected_at: datetime | None) -> int | None:
     return None
 
 
+def warmup_days_remaining(connected_at: datetime | None) -> float | None:
+    """Días restantes hasta que la rampa de warm-up se levante por completo
+    (día 29), redondeado a 1 decimal. None si no hay restricción vigente —
+    ya sea porque el número no es nuevo, o porque connected_at es
+    desconocido (ver resolve_warmup_cap). Pensado para mostrarle al
+    advertiser cuánto le falta, no para lógica de decisión (esa vive en
+    resolve_warmup_cap)."""
+    if connected_at is None:
+        return None
+    days_connected = (datetime.now(timezone.utc) - connected_at).total_seconds() / 86400
+    last_threshold = _WARMUP_RAMP[-1][0]
+    remaining = last_threshold - days_connected
+    return round(remaining, 1) if remaining > 0 else None
+
+
 # Capa 13 — códigos de error de Meta que señalan riesgo real de baneo a
 # nivel de CUENTA (no solo "reintenta este mensaje"), suficiente para
 # pausar toda campaña activa del advertiser, igual que un rating RED
