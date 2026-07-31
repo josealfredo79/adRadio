@@ -10,11 +10,11 @@
 
 | Indicador | Resultado |
 |---|---:|
-| Tests Backend (total) | 444 (442 passing + 2 fallas de entorno local conocidas, no del código) |
-| Archivos de test backend | 39 |
+| Tests Backend (total) | 477 (475 passing + 2 fallas de entorno local conocidas, no del código) |
+| Archivos de test backend | 44 |
 | Tests Frontend | 124 ✅ |
 | Archivos de test frontend | 21 |
-| Routers backend sin ningún test dedicado | **10 de 24** — ver tabla abajo |
+| Routers backend sin ningún test dedicado | **8 de 24** (Admin y Public API cerrados 2026-07-31) — ver tabla abajo |
 | Capas del sistema anti-baneo | 10 (capas 6-15), todas en producción |
 
 ---
@@ -38,13 +38,13 @@
 | **Knowledge Base** | ❌ | |
 | **Team** | ❌ | |
 | **Radio** | ❌ | |
-| **Public API** | ❌ | Superficie de autorización externa — prioridad alta |
+| Public API | ✅✅ | `test_api_key_auth.py` (dependencia) + `test_public_api_endpoints.py` (handlers, DB real) — encontró y arregló un bug real: `POST /api/v1/api-keys` tronaba SIEMPRE con 500 (campo `created_at` tipado `str` recibiendo un `datetime`), nadie pudo haber creado una API key por HTTP hasta el fix |
 | **Profile/Dash** | ❌ | |
 | **Widget** | ❌ | |
 | **Analytics** | ❌ | |
-| **Admin** | ❌ | Superficie de autorización — prioridad alta |
+| Admin | ✅✅ | `test_admin_auth.py` (dependencia) + `test_admin_endpoints.py` (handlers, DB real) — encontró y arregló un bug real: `GET /admin/subscriptions/{id}/transactions` tronaba con 500 en cuanto el usuario tuviera una transacción (mismo tipo de bug: `TransactionResponse.id` sin el validador UUID→str que sus clases hermanas sí tenían) |
 
-**Recomendación de orden si se cierra esta brecha:** Admin y Public API primero (autorización = mayor blast radius de un bug), luego Appointments/Automations (lógica de negocio con estado propio), el resto después.
+**Recomendación de orden si se sigue cerrando esta brecha:** Appointments/Automations primero (lógica de negocio con estado propio), el resto después.
 
 ---
 
@@ -103,6 +103,9 @@ conteos exactos antes de citarlos si ha pasado mucho tiempo.
 
 | Fecha | Cambio |
 |---|---|
+| 2026-07-31 | Cobertura de Admin + Public API (30 tests) — 2 bugs reales de 500 encontrados y arreglados en el proceso (commit `7ae199f`) |
+| 2026-07-31 | Adaptador LLM OpenRouter/Anthropic intercambiable, activado y probado en vivo con modelo gratis (commits `17735a6`, `23af15f`) |
+| 2026-07-31 | Escalado a humano pedido por el cliente + fix de falso positivo en detección de intención de plan (commits `eea99dd`, `b3370c3`) |
 | 2026-07-31 | Auditoría visual completa (16 vistas, claro/oscuro) — bugs de dark mode, alineación y overlap corregidos (commit `70ca420`) |
 | 2026-07-30/31 | Sistema anti-baneo completo, capas 6-15 (backend + frontend), ver `git log --grep="anti-baneo"` |
 | 2026-07-30 | Retiro completo de Twilio consolidado; Meta Cloud API es el único canal |
