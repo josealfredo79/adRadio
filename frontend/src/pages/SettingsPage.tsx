@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Settings, Save, Copy, Check, Lock, CreditCard, AlertTriangle, Trash2, Plus, X, Globe, Palette, Key, Webhook } from 'lucide-react'
 import SEO from '@/components/SEO'
 import WhatsappWizard from '@/components/WhatsappWizard'
+import WhatsappHealthCard from '@/components/WhatsappHealthCard'
 
 const CATEGORIES = [
   { value: 'restaurante', label: 'Restaurante / Bar / Taquería' },
@@ -612,6 +613,7 @@ export default function SettingsPage() {
       </div>
 
       <WhatsappWizard />
+      <WhatsappHealthCard />
 
       {/* Bot config */}
       <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">
