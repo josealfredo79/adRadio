@@ -140,7 +140,7 @@ export function RadioModePanel({
             }
             value={extraContext}
             onChange={(e) => setExtraContext(e.target.value)}
-            className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
           />
         </div>
       )}
@@ -153,7 +153,7 @@ export function RadioModePanel({
           placeholder="Ej: farmacia, restaurante, gimnasio, inmobiliaria..."
           value={businessCategory}
           onChange={(e) => setBusinessCategory(e.target.value)}
-          className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+          className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
         />
       </div>
 
@@ -162,7 +162,7 @@ export function RadioModePanel({
         <select
           value={radioCountry}
           onChange={(e) => setRadioCountry(e.target.value)}
-          className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+          className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
         >
           <option value="mx">🇲🇽 México</option>
           <option value="co">🇨🇴 Colombia</option>
@@ -177,7 +177,7 @@ export function RadioModePanel({
           <select
             value={radioVoiceId}
             onChange={(e) => setRadioVoiceId(e.target.value)}
-            className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
           >
             <option value="">— Por defecto según país —</option>
             {voicesData.map((v) => (

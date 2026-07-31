@@ -380,7 +380,7 @@ export default function ContactsPage() {
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1) }}
           placeholder="Buscar por nombre o teléfono..."
-          className="w-full rounded-lg border border-border py-2.5 pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          className="w-full rounded-lg border border-border bg-background text-foreground py-2.5 pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
         />
       </div>
 
@@ -408,7 +408,7 @@ export default function ContactsPage() {
                       type="checkbox"
                       checked={filtered.length > 0 && selectedIds.size === filtered.length}
                       onChange={toggleSelectAll}
-                      className="rounded border-border text-brand-500 focus:ring-brand-500"
+                      className="rounded border-border bg-background text-brand-500 focus:ring-brand-500"
                     />
                   </th>
                   <th className="px-6 py-3 text-left">Nombre</th>
@@ -430,7 +430,7 @@ export default function ContactsPage() {
                         type="checkbox"
                         checked={selectedIds.has(contact.id)}
                         onChange={() => toggleSelect(contact.id)}
-                        className="rounded border-border text-brand-500 focus:ring-brand-500"
+                        className="rounded border-border bg-background text-brand-500 focus:ring-brand-500"
                       />
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-foreground">{contact.name}</td>
@@ -548,7 +548,7 @@ export default function ContactsPage() {
                             type="checkbox"
                             checked={selectedIds.has(contact.id)}
                             onChange={() => toggleSelect(contact.id)}
-                            className="rounded border-border text-brand-500 focus:ring-brand-500"
+                            className="rounded border-border bg-background text-brand-500 focus:ring-brand-500"
                           />
                           <button
                             onClick={() => {
@@ -671,28 +671,28 @@ export default function ContactsPage() {
                 placeholder="Nombre *"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
               <input
                 type="tel"
                 placeholder="Teléfono E.164 * (ej: +521234567890)"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
               <input
                 type="email"
                 placeholder="Email (opcional)"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
               <input
                 type="text"
                 placeholder="Ciudad (opcional)"
                 value={form.city}
                 onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
               <div>
                 <div className="flex flex-wrap gap-1.5 mb-1.5 min-h-[1.5rem]">
@@ -715,7 +715,7 @@ export default function ContactsPage() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTagToForm() }
                     }}
-                    className="flex-1 rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                    className="flex-1 rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
                   />
                   <button
                     type="button"
@@ -811,7 +811,7 @@ export default function ContactsPage() {
                 placeholder="etiqueta1, etiqueta2, ..."
                 value={batchTagInput}
                 onChange={e => setBatchTagInput(e.target.value)}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
             <div className="mt-5 flex gap-3">
@@ -837,7 +837,7 @@ export default function ContactsPage() {
             <select
               value={batchStatus}
               onChange={e => setBatchStatus(e.target.value)}
-              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
             >
               <option value="active">Activo</option>
               <option value="unsubscribed">Dado de baja</option>
@@ -866,7 +866,7 @@ export default function ContactsPage() {
             <select
               value={batchCampaignId}
               onChange={e => setBatchCampaignId(e.target.value)}
-              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
             >
               <option value="">Seleccionar campaña...</option>
               {(campaignsQuery.data ?? []).map(c => (

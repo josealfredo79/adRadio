@@ -34,7 +34,7 @@ export function BannerModePanel({
           placeholder="Ej: 20% de descuento esta semana en todos los productos, solo por tiempo limitado"
           value={bannerPromo}
           onChange={(e) => setBannerPromo(e.target.value)}
-          className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none"
+          className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none"
         />
         <p className="mt-1 text-xs text-indigo-700 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg px-3 py-2">
           🎨 La IA generará el copy del banner y diseñará la imagen. Cada contacto recibirá su nombre dentro de la foto.
@@ -109,7 +109,7 @@ export function BannerModePanel({
           placeholder="Ej: ¡Hola! Mira lo que tenemos para ti 👆"
           value={bannerCaption}
           onChange={(e) => setBannerCaption(e.target.value)}
-          className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+          className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
         />
         <p className="mt-1 text-xs text-muted-foreground">Este texto se envía junto con la imagen. Si lo dejas vacío se genera automáticamente.</p>
       </div>

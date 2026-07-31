@@ -174,7 +174,7 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
                 placeholder="Ej: Pizzería Don Corleone"
                 value={parrillaBusinessName}
                 onChange={(e) => setParrillaBusinessName(e.target.value)}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
             <div>
@@ -184,7 +184,7 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
                 placeholder="Ej: Anunciar nuestras nuevas pizzas veganas y la promo del 2x1 los jueves"
                 value={parrillaIntent}
                 onChange={(e) => setParrillaIntent(e.target.value)}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none resize-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm focus:border-brand-500 focus:outline-none resize-none"
               />
             </div>
             <div>
@@ -194,7 +194,7 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
                 placeholder="Ej: restaurante, zapatería"
                 value={parrillaCategory}
                 onChange={(e) => setParrillaCategory(e.target.value)}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
             <div>
@@ -204,7 +204,7 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
                 placeholder="Ej: Premio de la trivia, temporada"
                 value={parrillaContext}
                 onChange={(e) => setParrillaContext(e.target.value)}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
             {/* Preferencias de banner */}
@@ -262,7 +262,7 @@ export function ParrillaModal({ onClose }: ParrillaModalProps) {
                   type="checkbox"
                   checked={parrillaAutoSchedule}
                   onChange={(e) => setParrillaAutoSchedule(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-border text-blue-600 dark:text-blue-300 focus:ring-blue-500"
+                  className="mt-0.5 h-4 w-4 rounded border-border bg-background text-blue-600 dark:text-blue-300 focus:ring-blue-500"
                 />
                 <div>
                   <span className="text-sm font-medium text-blue-900 dark:text-blue-100">Programar envíos automáticos</span>

@@ -72,7 +72,7 @@ export default function AnalyticsPage() {
             <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-6">Mensajes entrantes por hora</h2>
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={data.hours} margin={{ top: 0, right: 8, left: -16, bottom: 0 }}>
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="label" interval={1} tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip
                   formatter={(value: number) => [value, 'mensajes']}

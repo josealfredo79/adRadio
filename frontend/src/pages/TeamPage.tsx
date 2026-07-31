@@ -56,7 +56,7 @@ export default function TeamPage() {
   return (
     <>
       <SEO title="Equipo" description="Panel de control de IaRadio." noIndex />
-      <div className="mx-auto max-w-2xl space-y-8">
+      <div className="max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Equipo</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Invita colaboradores a tu cuenta de IaRadio.</p>

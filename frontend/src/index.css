@@ -14,6 +14,7 @@
     --muted-foreground: 215.4 16.3% 46.9%;
     --border: 214.3 31.8% 91.4%;
     --radius: 0.5rem;
+    color-scheme: light;
   }
 
   .dark {
@@ -26,6 +27,12 @@
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
     --border: 217.2 32.6% 17.5%;
+    /* Tells the browser to render native form controls (checkboxes,
+       radios, scrollbars, date/select popups) with dark OS widgets —
+       without this, unchecked checkboxes stay a hardcoded white square
+       no Tailwind class can override, since there's no @tailwindcss/forms
+       plugin replacing native control rendering. */
+    color-scheme: dark;
   }
 
   * {

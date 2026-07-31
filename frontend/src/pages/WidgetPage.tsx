@@ -72,13 +72,15 @@ export default function WidgetPage() {
             <Smartphone size={16} />
             Vista previa en vivo
           </div>
-          <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg h-64 flex items-end justify-end p-4 relative">
+          <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg h-80 flex items-end justify-end p-4 relative overflow-hidden">
             <span className="text-gray-300 dark:text-gray-600 text-sm absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               Tu sitio web
             </span>
-            {/* Simulated popup */}
+            {/* Simulated popup — greeting can run up to 200 chars, so this can
+                grow tall; bottom-16 + overflow-hidden on the mockup above
+                keep it from overlapping the "Vista previa" label past the box. */}
             <div
-              className={`absolute bottom-20 ${configData.position === 'left' ? 'left-6' : 'right-6'} w-64 rounded-2xl bg-white dark:bg-gray-950 shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden`}
+              className={`absolute bottom-16 ${configData.position === 'left' ? 'left-6' : 'right-6'} w-64 rounded-2xl bg-white dark:bg-gray-950 shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden`}
             >
               <div className="flex items-center gap-2 px-4 py-3" style={{ background: configData.color }}>
                 <div className="w-9 h-9 rounded-full bg-white/25 flex items-center justify-center text-lg shrink-0">🎙️</div>

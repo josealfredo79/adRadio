@@ -107,7 +107,7 @@ export default function WhatsappWizard() {
             value={wabaId}
             onChange={(e) => { setWabaId(e.target.value); setTestResult(null) }}
             placeholder="Ej: 123456789012345"
-            className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
           />
         </div>
         <div>
@@ -117,7 +117,7 @@ export default function WhatsappWizard() {
             value={phoneNumberId}
             onChange={(e) => { setPhoneNumberId(e.target.value); setTestResult(null) }}
             placeholder="Ej: 109876543210987"
-            className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
           />
         </div>
         <div>
@@ -127,7 +127,7 @@ export default function WhatsappWizard() {
             value={token}
             onChange={(e) => { setToken(e.target.value); setTestResult(null) }}
             placeholder="EAAG..."
-            className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
           />
         </div>
       </div>
@@ -184,7 +184,7 @@ export default function WhatsappWizard() {
                 onChange={(e) => setUtilityTemplate(e.target.value)}
                 onBlur={() => templatesMutation.mutate({ utility_template_name: utilityTemplate })}
                 placeholder="Ej: notificacion_informativa"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
             <div>
@@ -195,7 +195,7 @@ export default function WhatsappWizard() {
                 onChange={(e) => setApptTemplate(e.target.value)}
                 onBlur={() => templatesMutation.mutate({ appointment_template_name: apptTemplate })}
                 placeholder="Ej: recordatorio_cita"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
           </div>

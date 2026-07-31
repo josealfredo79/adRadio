@@ -144,14 +144,14 @@ function WebhooksSection() {
             placeholder="Nombre del webhook"
             value={newWh.name}
             onChange={e => setNewWh({ ...newWh, name: e.target.value })}
-            className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm"
           />
           <input
             type="url"
             placeholder="https://ejemplo.com/webhook"
             value={newWh.url}
             onChange={e => setNewWh({ ...newWh, url: e.target.value })}
-            className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm"
           />
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Eventos</label>
@@ -247,13 +247,13 @@ function WhiteLabelSection() {
             type="color"
             value={form.primary_color}
             onChange={e => setForm({ ...form, primary_color: e.target.value })}
-            className="h-9 w-9 rounded border border-border cursor-pointer"
+            className="h-9 w-9 rounded border border-border bg-background cursor-pointer"
           />
           <input
             type="text"
             value={form.primary_color}
             onChange={e => setForm({ ...form, primary_color: e.target.value })}
-            className="flex-1 rounded-lg border border-border px-3 py-2 text-sm font-mono"
+            className="flex-1 rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm font-mono"
           />
         </div>
       </div>
@@ -265,7 +265,7 @@ function WhiteLabelSection() {
           value={form.app_name}
           onChange={e => setForm({ ...form, app_name: e.target.value })}
           placeholder="Ej: Mi Radio"
-          className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm"
         />
       </div>
 
@@ -287,7 +287,7 @@ function WhiteLabelSection() {
             value={form.custom_domain}
             onChange={e => setForm({ ...form, custom_domain: e.target.value })}
             placeholder="ejemplo.com"
-            className="w-full rounded-lg border border-border px-3 py-2 text-sm pr-24"
+            className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm pr-24"
           />
           <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
             Próximamente
@@ -302,7 +302,7 @@ function WhiteLabelSection() {
           value={form.favicon_url}
           onChange={e => setForm({ ...form, favicon_url: e.target.value })}
           placeholder="https://ejemplo.com/favicon.ico"
-          className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm"
         />
       </div>
 
@@ -441,7 +441,7 @@ function ApiKeysSection() {
             placeholder="Nombre de la API key"
             value={newKey.name}
             onChange={e => setNewKey({ ...newKey, name: e.target.value })}
-            className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm"
           />
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Permisos</label>
@@ -569,7 +569,7 @@ export default function SettingsPage() {
         value={form[key]}
         onChange={(e) => setForm({ ...form, [key]: e.target.value })}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+        className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
       />
     </div>
   )
@@ -753,7 +753,7 @@ export default function SettingsPage() {
               value={pwForm.current_password}
               onChange={(e) => setPwForm({ ...pwForm, current_password: e.target.value })}
               placeholder="••••••••"
-              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
           <div>
@@ -763,7 +763,7 @@ export default function SettingsPage() {
               value={pwForm.new_password}
               onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })}
               placeholder="Mínimo 8 caracteres"
-              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
           <div>
@@ -773,7 +773,7 @@ export default function SettingsPage() {
               value={pwForm.confirm_password}
               onChange={(e) => setPwForm({ ...pwForm, confirm_password: e.target.value })}
               placeholder="Repite la nueva contraseña"
-              className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
         </div>

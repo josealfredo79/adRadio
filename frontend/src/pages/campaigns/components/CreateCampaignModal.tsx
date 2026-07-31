@@ -160,7 +160,7 @@ export function CreateCampaignModal({
                   const t = templatesData.find((x) => x.id === e.target.value)
                   if (t) setForm({ ...form, message_text: t.content })
                 }}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               >
                 <option value="">— Seleccionar template —</option>
                 {templatesData.map((t) => (
@@ -182,7 +182,7 @@ export function CreateCampaignModal({
                 placeholder="Ej: Promo verano"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
             <div>
@@ -190,7 +190,7 @@ export function CreateCampaignModal({
               <select
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
               >
                 {CAMPAIGN_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>
@@ -222,7 +222,7 @@ export function CreateCampaignModal({
                 placeholder="Ej: 30% de descuento este fin de semana"
                 value={intent}
                 onChange={(e) => setIntent(e.target.value)}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none"
               />
               <p className="mt-1 text-xs text-muted-foreground">
                 Puedes usar <code>{'{{nombre}}'}</code>, <code>{'{{ciudad}}'}</code> en el mensaje para personalización automática
@@ -237,7 +237,7 @@ export function CreateCampaignModal({
                 placeholder="Ej: Lanzamiento de nuevos platillos de temporada"
                 value={intent}
                 onChange={(e) => setIntent(e.target.value)}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none"
               />
               <p className="mt-1 text-xs text-muted-foreground">Claude creará 3 mensajes para días 1, 3 y 5</p>
             </div>
@@ -251,7 +251,7 @@ export function CreateCampaignModal({
                   placeholder="Ej: Clases de yoga para mamás con poco tiempo"
                   value={productDesc}
                   onChange={(e) => setProductDesc(e.target.value)}
-                  className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none"
+                  className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none"
                 />
               </div>
               <div>
@@ -260,7 +260,7 @@ export function CreateCampaignModal({
                   type="text"
                   value={protagonist}
                   onChange={(e) => setProtagonist(e.target.value)}
-                  className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
                 />
               </div>
               <p className="text-xs text-muted-foreground">Claude creará 4 episodios semanales al estilo radionovela 📻</p>
@@ -394,7 +394,7 @@ export function CreateCampaignModal({
                 placeholder="El mensaje que recibirán tus clientes..."
                 value={form.message_text}
                 onChange={(e) => setForm({ ...form, message_text: e.target.value })}
-                className="w-full rounded-lg border border-border px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none"
+                className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none resize-none"
               />
             </div>
           )}
@@ -406,7 +406,7 @@ export function CreateCampaignModal({
                 type="checkbox"
                 checked={hasCoupon}
                 onChange={(e) => setHasCoupon(e.target.checked)}
-                className="h-4 w-4 rounded border-border text-amber-500"
+                className="h-4 w-4 rounded border-border bg-background text-amber-500"
               />
               <span className="text-sm font-medium text-gray-700">🎫 Incluir cupón con expiración</span>
             </label>
@@ -446,7 +446,7 @@ export function CreateCampaignModal({
                 type="checkbox"
                 checked={abEnabled}
                 onChange={(e) => setAbEnabled(e.target.checked)}
-                className="h-4 w-4 rounded border-border text-purple-500"
+                className="h-4 w-4 rounded border-border bg-background text-purple-500"
               />
               <span className="text-sm font-medium text-gray-700">🔬 Prueba A/B</span>
             </label>
