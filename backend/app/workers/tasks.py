@@ -799,9 +799,13 @@ def update_contact_engagement_score(contact_id: str):
             )
 
             try:
+                # 350, no 150: algunos modelos gratis de OpenRouter razonan
+                # antes de responder (tokens ocultos que sí cuentan contra
+                # max_tokens) — un techo muy ajustado los corta antes de
+                # escribir el JSON visible.
                 raw_text = await chat_completion(
                     [{"role": "user", "content": f"Conversación:\n{chat_str}"}],
-                    system=system_prompt, max_tokens=150, temperature=0.0,
+                    system=system_prompt, max_tokens=350, temperature=0.0,
                 )
 
                 if raw_text.startswith("```json"):

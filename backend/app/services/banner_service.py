@@ -858,9 +858,12 @@ Responde ÚNICAMENTE con un JSON con estas claves (sin texto extra):
 }}"""
 
     try:
+        # 350, no 120: algunos modelos gratis de OpenRouter razonan antes
+        # de responder (tokens ocultos que sí cuentan contra max_tokens) —
+        # un techo muy ajustado los corta antes de escribir el JSON visible.
         raw = await chat_completion(
             [{"role": "user", "content": prompt}],
-            max_tokens=120, temperature=0.7,
+            max_tokens=350, temperature=0.7,
         )
         data = json.loads(raw)
         return BannerCopy(

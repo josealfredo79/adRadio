@@ -364,9 +364,14 @@ Conversación:
 Responde ÚNICAMENTE con el JSON array, sin texto adicional. Ejemplo: ["interesado","precio"]"""
 
     try:
+        # 300, no 50: varios modelos gratis de OpenRouter razonan antes de
+        # responder (tokens de "thinking" ocultos que sí cuentan contra
+        # max_tokens) — con un techo muy ajustado se cortan sin llegar a
+        # escribir el JSON visible. No cuesta nada de más con Claude (es un
+        # techo, no un piso) ni con modelos que no razonan.
         raw = await chat_completion(
             [{"role": "user", "content": prompt}],
-            max_tokens=50, temperature=0.0,
+            max_tokens=300, temperature=0.0,
             anthropic_model="claude-haiku-4-5-20251001",
         )
         import json

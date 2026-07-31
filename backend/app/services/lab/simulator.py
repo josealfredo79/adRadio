@@ -51,9 +51,12 @@ async def generate_persona_message(
         "No agregues explicaciones ni comillas, solo el mensaje de WhatsApp."
     )
 
+    # 400, no 200: algunos modelos gratis de OpenRouter razonan antes de
+    # responder (tokens ocultos que sí cuentan contra max_tokens) — un techo
+    # muy ajustado los corta antes de escribir el mensaje visible.
     return await chat_completion(
         [{"role": "user", "content": instruction}],
-        system=system, max_tokens=200, temperature=0.8,
+        system=system, max_tokens=400, temperature=0.8,
     )
 
 
