@@ -6,6 +6,7 @@ Graph API (tasks.poll_meta_quality_ratings), which is the only source for
 the real GREEN/YELLOW/RED rating.
 """
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -53,6 +54,36 @@ def resolve_tier_limit(tier: str | None) -> int | None:
         )
         return _DEFAULT_TIER_LIMIT
     return _TIER_LIMITS[tier]
+
+
+# Capa 11 — rampa de warm-up para números recién conectados a Meta. Meta
+# banea/limita agresivamente números que arrancan enviando a tope de tier
+# desde el día 1 (patrón típico de spam); esta rampa reduce el tope de
+# destinatarios únicos/24h por debajo del que ya impone messaging_limit_tier
+# mientras el número es nuevo, sin importar qué tier reporte Meta todavía
+# (un número nuevo normalmente ni siquiera tiene tier asignado aún).
+# (días desde la conexión, tope) — ordenado ascendente, primer umbral que
+# cubre a `días_conectado` gana.
+_WARMUP_RAMP: list[tuple[int, int]] = [
+    (2, 20),
+    (6, 50),
+    (13, 150),
+    (29, 500),
+]
+
+
+def resolve_warmup_cap(connected_at: datetime | None) -> int | None:
+    """Tope de warm-up vigente según cuántos días lleva conectado el número,
+    o None si ya completó la rampa. `connected_at=None` también devuelve
+    None (sin restricción) — números conectados antes de que existiera esta
+    columna se tratan como ya calentados, no se restringen retroactivamente."""
+    if connected_at is None:
+        return None
+    days_connected = (datetime.now(timezone.utc) - connected_at).total_seconds() / 86400
+    for days_threshold, cap in _WARMUP_RAMP:
+        if days_connected <= days_threshold:
+            return cap
+    return None
 
 
 async def pause_active_campaigns(db, advertiser_id) -> None:

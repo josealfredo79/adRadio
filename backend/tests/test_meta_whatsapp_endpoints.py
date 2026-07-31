@@ -115,6 +115,54 @@ class TestSaveConnection:
             # Must not have been marked connected.
             assert test_user.meta_connection_status != "connected"
 
+    def test_first_connection_sets_connected_at(self, client, test_user):
+        """Capa 11: primera conexión (meta_phone_number_id era None) arranca
+        la rampa de warm-up."""
+        assert test_user.meta_connected_at is None
+        with patch("app.api.v1.meta_whatsapp.test_connection", new=AsyncMock(return_value=ConnectionCheck(
+            ok=True, display_phone_number="+521234567890", verified_name="Mi Negocio",
+        ))), patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()):
+            r = client.put("/api/v1/me/whatsapp-connection", json={
+                "waba_id": "waba-1", "phone_number_id": "phone-1", "token": "real-token",
+            })
+            assert r.status_code == 200
+            assert test_user.meta_connected_at is not None
+
+    def test_reconnecting_same_number_does_not_reset_warmup(self, client, test_user):
+        """Refrescar el token del mismo número (ej. tras reconnect_required)
+        no debe reiniciar la rampa de warm-up ya en curso."""
+        from datetime import datetime, timedelta, timezone
+
+        test_user.meta_phone_number_id = "phone-1"
+        original_connected_at = datetime.now(timezone.utc) - timedelta(days=10)
+        test_user.meta_connected_at = original_connected_at
+
+        with patch("app.api.v1.meta_whatsapp.test_connection", new=AsyncMock(return_value=ConnectionCheck(
+            ok=True, display_phone_number="+521234567890", verified_name="Mi Negocio",
+        ))), patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()):
+            r = client.put("/api/v1/me/whatsapp-connection", json={
+                "waba_id": "waba-1", "phone_number_id": "phone-1", "token": "new-token",
+            })
+            assert r.status_code == 200
+            assert test_user.meta_connected_at == original_connected_at
+
+    def test_connecting_a_different_number_resets_warmup(self, client, test_user):
+        """Cambiar a un número distinto (nuevo phone_number_id) sí reinicia
+        la rampa — Meta lo trata como un número nuevo sin historial."""
+        from datetime import datetime, timedelta, timezone
+
+        test_user.meta_phone_number_id = "phone-old"
+        test_user.meta_connected_at = datetime.now(timezone.utc) - timedelta(days=30)
+
+        with patch("app.api.v1.meta_whatsapp.test_connection", new=AsyncMock(return_value=ConnectionCheck(
+            ok=True, display_phone_number="+521234567890", verified_name="Mi Negocio",
+        ))), patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()):
+            r = client.put("/api/v1/me/whatsapp-connection", json={
+                "waba_id": "waba-1", "phone_number_id": "phone-new", "token": "real-token",
+            })
+            assert r.status_code == 200
+            assert test_user.meta_connected_at > datetime.now(timezone.utc) - timedelta(minutes=1)
+
 
 class TestUpdateTemplates:
     def test_setting_utility_template_marks_approved(self, client, test_user):

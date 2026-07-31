@@ -5,6 +5,7 @@ GET/PUT/POST(test) shape: the test endpoint never persists, PUT always
 re-validates server-side before saving.
 """
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -88,6 +89,13 @@ async def save_whatsapp_connection(
     if not check.ok:
         status_code = 503 if check.code == "meta_unavailable" else 422
         raise HTTPException(status_code=status_code, detail=check.message)
+
+    # Capa 11: reiniciar la rampa de warm-up solo si es un número distinto al
+    # que ya estaba conectado — refrescar el token del mismo número (o volver
+    # a guardar tras un reconnect_required) no debe hacerlo empezar de cero.
+    is_new_number = current_user.meta_phone_number_id != body.phone_number_id
+    if is_new_number or current_user.meta_connected_at is None:
+        current_user.meta_connected_at = datetime.now(timezone.utc)
 
     enc = encrypt_secret(body.token)
     current_user.meta_waba_id = body.waba_id

@@ -84,9 +84,11 @@ class RecipientCapState:
 async def get_recipient_cap_state(db, advertiser) -> RecipientCapState:
     """Cuenta destinatarios únicos (contact_id distintos) con una ventana
     nueva abierta en las últimas 24h para este advertiser, y resuelve el
-    tope numérico vigente según su messaging_limit_tier."""
+    tope numérico vigente: el más estricto entre el messaging_limit_tier de
+    Meta (capa 10) y la rampa de warm-up del número si aún es reciente
+    (capa 11) — ninguno de los dos anula al otro, gana el menor."""
     from app.models.recipient_send import RecipientSend
-    from app.services.meta_quality_service import resolve_tier_limit
+    from app.services.meta_quality_service import resolve_tier_limit, resolve_warmup_cap
 
     since = datetime.now(timezone.utc) - timedelta(hours=24)
     result = await db.execute(
@@ -96,7 +98,16 @@ async def get_recipient_cap_state(db, advertiser) -> RecipientCapState:
         )
     )
     count = result.scalar_one() or 0
-    limit = resolve_tier_limit(advertiser.meta_messaging_tier)
+
+    tier_limit = resolve_tier_limit(advertiser.meta_messaging_tier)
+    warmup_cap = resolve_warmup_cap(advertiser.meta_connected_at)
+    if warmup_cap is None:
+        limit = tier_limit
+    elif tier_limit is None:
+        limit = warmup_cap
+    else:
+        limit = min(tier_limit, warmup_cap)
+
     return RecipientCapState(limit=limit, count=count)
 
 

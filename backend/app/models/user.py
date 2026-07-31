@@ -52,6 +52,11 @@ class User(Base):
     meta_token_tag: Mapped[str | None] = mapped_column(String(64))
     # 'not_connected' | 'connected' | 'reconnect_required'
     meta_connection_status: Mapped[str] = mapped_column(String(20), default="not_connected", server_default="not_connected")
+    # Cuándo se conectó el número de WhatsApp actual (meta_phone_number_id).
+    # Solo se reinicia si cambia el número — reconectar el mismo número (ej.
+    # refrescar el token) no reinicia la rampa de warm-up (ver Capa 11 en
+    # meta_quality_service.py).
+    meta_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # 'not_configured' | 'pending_review' | 'approved' | 'rejected'
     meta_utility_template_status: Mapped[str] = mapped_column(String(20), default="not_configured", server_default="not_configured")
     meta_utility_template_name: Mapped[str | None] = mapped_column(String(255))
