@@ -2,6 +2,8 @@
 Claude Sonnet service — generación de contenido publicitario.
 """
 import logging
+import re
+
 import anthropic
 
 from app.config import settings
@@ -302,56 +304,61 @@ async def detect_order_intent_async(message: str) -> bool:
 
 # ─── Detección de intención de compra de plan/suscripción ───────
 
+_PLAN_TIERS = ("starter", "growth", "pro", "business", "enterprise")
+# \b en "pro" evita matchear dentro de "promocionar"/"producto"/"proyecto".
+_PLAN_TIER_PATTERNS = {tier: re.compile(rf"\b{tier}\b") for tier in _PLAN_TIERS}
+
+# Verbos/frases de intención de compra o contratación — solos NO bastan
+# (ver docstring abajo), solo cuentan combinados con el nombre de un tier.
+_PLAN_INTENT_VERBS = (
+    "quiero", "contratar", "comprar", "dame", "me interesa",
+    "me voy con", "activar", "actívenme", "activenme", "adquirir",
+    "pagar", "suscrib",
+)
+
+# Frases que se refieren inequívocamente a anunciarse/promocionarse CON IA
+# — el pitch propio de IaRadio, no algo que un cliente le diría a un
+# negocio sobre el producto de ESE negocio.
+_ADVERTISING_INTENT_PATTERNS = (
+    "me interesa anunciarme", "quiero anunciarme",
+    "quiero promocionar mi negocio", "me interesa promocionar mi negocio",
+    "quiero publicidad con ia", "me interesa la publicidad con ia",
+)
+
+
 def detect_plan_purchase_intent(message: str) -> str | None:
     """
-    Detecta si el mensaje indica intención de comprar un plan/suscripción.
-    Returns el nombre del plan (starter, growth, pro) o None si no se detecta.
+    Detecta si el mensaje indica intención de comprar un plan DE IARADIO
+    (no un producto/servicio del negocio del advertiser). Returns el nombre
+    del plan (starter/growth/pro/business/enterprise) o None.
     Función síncrona — costo $0.
+
+    Exige una señal inequívoca — mencionar la plataforma por nombre, o un
+    tier real combinado con un verbo de intención — porque palabras sueltas
+    como "precio"/"contratar"/"comprar"/"pagar" son exactamente lo que un
+    cliente normal le pregunta AL NEGOCIO sobre SUS productos, no sobre
+    IaRadio. Bug real encontrado en producción con la versión anterior (una
+    lista de ~40 palabras sueltas): "¿cuánto cuesta el pastel de 4
+    personas?" se interpretaba como "quiere comprar el Plan Starter" y le
+    contestaba con una confirmación de compra de plan en vez de su
+    pregunta real — pasaba con cualquier mensaje que dijera "precio",
+    "comprar", "contratar" o "pagar", sin importar el contexto.
     """
     text = message.lower().strip()
 
-    patterns = [
-        "quiero el starter", "quiero el growth", "quiero el pro",
-        "quiero el plan starter", "quiero el plan growth", "quiero el plan pro",
-        "me interesa el starter", "me interesa el growth", "me interesa el pro",
-        "me interesa el plan", "comprar el starter", "comprar el growth",
-        "contratar el starter", "contratar el growth",
-        "dame el starter", "dame el growth",
-        "me voy con el starter", "me voy con el growth", "me voy con el pro",
-        "quiero suscribirme", "quiero contratar",
-        "quiero comprar el plan", "quiero contratar el plan",
-        "comprar plan", "contratar plan", "suscribirme",
-        "contratar", "suscribir",
-        # Patrones adicionales para lenguaje más natural
-        "cuánto cuesta", "cuanto cuesta", "precios", "precio",
-        "qué planes", "que planes", "planes disponibles",
-        "me interesa anunciarme", "quiero anunciarme",
-        "quiero publicidad", "me interesa publicidad",
-        "cómo contrato", "como contrato", "cómo me registro",
-        "quiero registrarme", "quiero darme de alta",
-        "me interesa el servicio", "quiero el servicio",
-        "quiero promocionar", "quiero promocionar mi",
-        "necesito un plan", "necesito el plan",
-        "pasarme al", "cambiarme al", "actualizar a",
-        "upgrade", "mejorar mi plan",
-        "quiero ser parte", "me interesa ser parte",
-        "manda información", "manda precios",
-        "info de planes", "info planes",
-        "cotizar", "cotización", "quiero cotizar",
-        "actívenme", "activenme", "quiero activar",
-        "pagar", "pagar plan", "pagar el plan",
-        "comprar", "adquirir", "adquirir plan",
-        "starter", "growth", "pro",
-        "plan básico", "plan intermedio", "plan premium",
-        "más barato", "más caro", "recomiéndame",
-    ]
+    if "iaradio" in text or "ia radio" in text or "adradio" in text:
+        for tier, pattern in _PLAN_TIER_PATTERNS.items():
+            if pattern.search(text):
+                return tier
+        return "starter"
 
-    for pattern in patterns:
-        if pattern in text:
-            for plan in ("starter", "growth", "pro"):
-                if plan in text:
-                    return plan
-            return "starter"
+    for tier, pattern in _PLAN_TIER_PATTERNS.items():
+        if pattern.search(text) and any(v in text for v in _PLAN_INTENT_VERBS):
+            return tier
+
+    if any(p in text for p in _ADVERTISING_INTENT_PATTERNS):
+        return "starter"
+
     return None
 
 
