@@ -133,12 +133,17 @@ async def process_inbound_message(
                 await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(existing_contact.id)})
             return {"message": "ok"}
 
+    # Capa 12 anti-baneo: opt-out por palabra clave. Un STOP ignorado (por un
+    # desfase de formato de número, o por puntuación/espacios que rompen el
+    # match exacto) sigue enviándole campañas a alguien que pidió baja — la
+    # causa #1 de reportes de spam que hunden el quality rating de la cuenta.
     stop_words = {"baja", "stop", "no quiero", "cancelar", "salir"}
-    if body_text.lower() in stop_words:
+    normalized_stop_body = body_text.strip().lower().rstrip(".!¡¿? ")
+    if normalized_stop_body in stop_words:
         contact_result = await db.execute(
             select(Contact).where(
                 Contact.advertiser_id == advertiser.id,
-                Contact.phone == from_number,
+                Contact.phone.in_(from_candidates),
             )
         )
         contact = contact_result.scalar_one_or_none()
@@ -146,6 +151,14 @@ async def process_inbound_message(
             contact.status = "unsubscribed"
             contact.engagement_score = 0
             await db.commit()
+            try:
+                await send(
+                    from_number,
+                    "Listo, no volverás a recibir mensajes nuestros. "
+                    "Si cambias de opinión, escríbenos cuando quieras 🙏",
+                )
+            except Exception:
+                logger.warning("[STOP] Failed to send opt-out confirmation to %s", from_number, exc_info=True)
         return {"message": "ok"}
 
     # Appointment reschedule handler
