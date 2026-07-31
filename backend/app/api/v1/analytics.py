@@ -269,7 +269,7 @@ async def top_contacts(
     """Contacts with the most interactions (inbound+outbound)."""
     uid = current_user.id
 
-    rows = await db.execute(
+    rows = (await db.execute(
         select(
             Message.contact_id,
             func.count().label("total"),
@@ -281,7 +281,7 @@ async def top_contacts(
         ).order_by(
             func.count().desc(),
         ).limit(limit)
-    )
+    )).all()
 
     contact_ids = [row.contact_id for row in rows]
     if not contact_ids:
