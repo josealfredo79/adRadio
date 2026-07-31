@@ -30,6 +30,7 @@ from app.services.claude_service import (
     personalize_message,
 )
 from app.services.coupon_service import is_expired, is_redeem_intent
+from app.services.handoff_service import matches_handoff_intent
 from app.services.rag_service import answer_with_rag
 from app.services.template_lookup import get_template
 from app.services.lead_score import calculate_lead_score
@@ -435,6 +436,45 @@ async def process_inbound_message(
 
     contact_name = (contact.name or "Cliente").split()[0]
 
+    # Escalado a humano pedido por el cliente — mismo patrón de "silencio
+    # total" que ya usa el botón manual "Pausar bot" (ver el gate de handoff
+    # al inicio de esta función), pero disparado por el propio cliente. El
+    # bot en AdRadio solo genera texto libre (nunca decide "escalar" como
+    # acción estructurada), así que este regex de respaldo es hoy la única
+    # vía — ver handoff_service.py para el porqué del patrón.
+    if matches_handoff_intent(body_text):
+        conv.status = "escalated"
+        farewell = "Claro, en un momento te atiende alguien del equipo 🙌"
+        out_msg = Message(
+            advertiser_id=advertiser.id,
+            contact_id=contact.id,
+            direction="outbound",
+            content=farewell,
+            status="queued",
+        )
+        db.add(out_msg)
+        await db.commit()
+        await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
+
+        sid_h, err_h = await send(from_number, farewell)
+        if sid_h:
+            out_msg.status = "sent"
+            out_msg.wa_message_id = sid_h
+            out_msg.sent_at = datetime.now(timezone.utc)
+        else:
+            out_msg.status = "failed"
+            out_msg.error_code = err_h
+        await db.commit()
+        await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
+
+        if advertiser.whatsapp_number or advertiser.phone:
+            owner_wa = advertiser.whatsapp_number or advertiser.phone
+            try:
+                await send_owner(owner_wa, f"🙋 {contact_name} pidió hablar con una persona — revisa el Inbox.")
+            except Exception:
+                logger.warning("[HANDOFF] Failed to notify owner of client-requested handoff", exc_info=True)
+        return {"message": "ok"}
+
     # Order state machine
     pending_order_result = await db.execute(
         select(Order).where(
@@ -741,14 +781,21 @@ async def process_inbound_message(
         )
     except Exception as e:
         logger.error("[PIPELINE] RAG/Claude error: %s", e, exc_info=True)
+        # Escalar en vez de arriesgarse a que el bot siga "adivinando" sin
+        # el modelo funcionando — un genérico repetido en cada turno se
+        # siente peor que admitir el problema y pasar a un humano.
         biz = advertiser.business_name or "el negocio"
-        name = advertiser.bot_name or "Asistente"
-        personality = advertiser.bot_personality or "Estoy aquí para ayudarte con información sobre nuestros servicios y productos."
+        conv.status = "escalated"
         reply = (
-            f"Hola! Soy {name} de {biz}. "
-            f"{personality} "
-            "¿En qué puedo ayudarte hoy? 😊"
+            f"Disculpa, tuve un problema técnico. Ya avisé al equipo de {biz} "
+            "para que te atienda directamente en un momento 🙏"
         )
+        if advertiser.whatsapp_number or advertiser.phone:
+            owner_wa = advertiser.whatsapp_number or advertiser.phone
+            try:
+                await send_owner(owner_wa, f"⚠️ El bot falló respondiéndole a {contact_name} — revisa el Inbox.")
+            except Exception:
+                logger.warning("[HANDOFF] Failed to notify owner of bot-error handoff", exc_info=True)
 
     updated_msgs = conv.messages + [
         {"role": "user", "content": body_text},
