@@ -10,11 +10,11 @@
 
 | Indicador | Resultado |
 |---|---:|
-| Tests Backend (total) | 548 (533 passing + 15 nuevos de Knowledge Base, 0 fallas — las 2 fallas "de entorno" previas también eran el mismo gotcha de `ALLOWED_HOSTS`, confirmado en esta pasada) |
-| Archivos de test backend | 48 |
+| Tests Backend (total) | 561 (548 previos + 13 nuevos de Team), 0 fallas conocidas (ver nota de `ALLOWED_HOSTS`/`REDIS_URL` locales) |
+| Archivos de test backend | 49 |
 | Tests Frontend | 124 ✅ |
 | Archivos de test frontend | 21 |
-| Routers backend sin ningún test dedicado | **5 de 24** (Admin, Public API, Appointments, Automations y Knowledge Base cerrados 2026-07-31; User Webhooks también cerrado, no estaba contado en el 24 original) — ver tabla abajo |
+| Routers backend sin ningún test dedicado | **4 de 24** (Admin, Public API, Appointments, Automations, Knowledge Base y Team cerrados 2026-07-31; User Webhooks también cerrado, no estaba contado en el 24 original) — ver tabla abajo |
 | Capas del sistema anti-baneo | 10 (capas 6-15), todas en producción |
 
 ---
@@ -37,7 +37,7 @@
 | User Webhooks | ✅✅ | `test_user_webhooks_endpoints.py` — CRUD + ping con `httpx` mockeado. Encontró y arregló un bug real: mismo patrón que Admin/Public API (`UserWebhookOut.created_at` tipado `str` recibiendo `datetime`), `POST`/`PATCH` tronaban siempre con 500 |
 | Automations | ✅✅ | `test_automations_endpoints.py` — CRUD con scoping por dueño, whitelist de `trigger` (400), enrollment con 409 en duplicado y 404 cruzado (flujo/contacto de otro advertiser), cálculo de `next_send_at`. Sin bugs nuevos — `FlowOut`/`StepOut` ya estaban bien tipados |
 | Knowledge Base | ✅✅ | `test_knowledge_base_endpoints.py` — list (scoping + filtro `is_active`, paginación), upload (gate de plan RAG, whitelist MIME, límite 50MB, dispatch a Celery mockeado), get-content (scoping), delete (scoping), `/test` bot (gate de plan, query vacía, respuesta mockeada de `answer_with_rag`). Sin bugs nuevos — este router devuelve dicts planos, no hay modelos Pydantic con el patrón `str`/`UUID`/`datetime` que sí rompió en Admin/Public API/User Webhooks |
-| **Team** | ❌ | |
+| Team | ✅✅ | `test_team_endpoints.py` — invite (rol por default, whitelist agent/viewer, 409 en invitación duplicada, mismo email permitido entre dueños distintos), list (scoping, paginación), update-role (scoping, whitelist, 404), remove (scoping, 404). Sin bugs nuevos — `TeamMemberOut` ya estaba bien tipado (`id: UUID`, `invited_at`/`accepted_at: datetime`) |
 | **Radio** | ❌ | |
 | Public API | ✅✅ | `test_api_key_auth.py` (dependencia) + `test_public_api_endpoints.py` (handlers, DB real) — encontró y arregló un bug real: `POST /api/v1/api-keys` tronaba SIEMPRE con 500 (campo `created_at` tipado `str` recibiendo un `datetime`), nadie pudo haber creado una API key por HTTP hasta el fix |
 | **Profile/Dash** | ❌ | |
@@ -45,7 +45,7 @@
 | **Analytics** | ❌ | |
 | Admin | ✅✅ | `test_admin_auth.py` (dependencia) + `test_admin_endpoints.py` (handlers, DB real) — encontró y arregló un bug real: `GET /admin/subscriptions/{id}/transactions` tronaba con 500 en cuanto el usuario tuviera una transacción (mismo tipo de bug: `TransactionResponse.id` sin el validador UUID→str que sus clases hermanas sí tenían) |
 
-**Recomendación de orden si se sigue cerrando esta brecha:** el resto (Team, Radio, Profile/Dash, Widget, Analytics) no tiene un orden crítico particular — todos son de prioridad similar (menor superficie de autorización/estado que lo ya cerrado).
+**Recomendación de orden si se sigue cerrando esta brecha:** el resto (Radio, Profile/Dash, Widget, Analytics) no tiene un orden crítico particular — todos son de prioridad similar (menor superficie de autorización/estado que lo ya cerrado).
 
 ---
 
