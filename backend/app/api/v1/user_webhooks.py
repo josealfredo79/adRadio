@@ -4,6 +4,7 @@ User Webhooks router — /api/v1/user-webhooks
 import logging
 import secrets
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -39,7 +40,7 @@ class UserWebhookOut(BaseModel):
     url: str
     events: list[str]
     active: bool
-    created_at: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
