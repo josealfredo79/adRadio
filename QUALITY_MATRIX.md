@@ -1,62 +1,75 @@
 # Matriz de Calidad — IaRadio
 
+> Actualizado 2026-07-31. La versión anterior (2026-06-04) predataba el retiro
+> completo de Twilio y el sistema anti-baneo — varios números y filas de
+> abajo cambiaron de forma sustancial, no solo cosmética.
+
 ---
 
 ## 🎯 Resumen Ejecutivo
 
-| Indicador | Resultado | Cobertura |
-|---|---:|---:|
-| Tests Backend (API) | 146 ✅ | 9 archivos |
-| Tests Servicios | 128 ✅ | 17 servicios |
-| Tests Frontend | 103 ✅ | 15 módulos |
-| Pages con Print/PDF | 3 ✅ | Orders, Campaigns, Contacts |
-| Prioridades Completadas | 14/14 | P1 → P14 ✅ |
+| Indicador | Resultado |
+|---|---:|
+| Tests Backend (total) | 444 (442 passing + 2 fallas de entorno local conocidas, no del código) |
+| Archivos de test backend | 39 |
+| Tests Frontend | 124 ✅ |
+| Archivos de test frontend | 21 |
+| Routers backend sin ningún test dedicado | **10 de 24** — ver tabla abajo |
+| Capas del sistema anti-baneo | 10 (capas 6-15), todas en producción |
 
 ---
 
 ## 🖥️ Backend — API Endpoints
 
-| Módulo | Tests | Logs | Idempotencia | N+1 |
-|---|---|---|---|---|
-| Campaigns | ✅ | ✅ | ✅ | ✅ |
-| Contacts | ⚠️ | ⚠️ | ⚠️ | ✅ |
-| Appointments | ❌ | ✅ | ⚠️ | ◻️ |
-| Payments | ❌ | ⚠️ | ✅ | ◻️ |
-| Knowledge Base | ❌ | ⚠️ | ✅ | ◻️ |
-| Automations | ❌ | ⚠️ | ⚠️ | ✅ |
-| Team | ❌ | ⚠️ | ⚠️ | ◻️ |
-| Conversations | ❌ | ⚠️ | ✅ | ✅ |
-| Radio | ❌ | ✅ | ◻️ | ◻️ |
-| Public API | ❌ | ⚠️ | ✅ | ◻️ |
-| Profile/Dash | ❌ | ⚠️ | ✅ | ◻️ |
-| Widget | ❌ | ✅ | ✅ | ◻️ |
-| Analytics | ❌ | ✅ | ◻️ | ◻️ |
+| Módulo | Tests dedicados | Notas |
+|---|---|---|
+| Campaigns | ✅ | Incluye recipient cap, segment cooldown, human-hour gate |
+| Contacts | ⚠️ | Cubre pipeline y consentimiento CSV; falta CRUD básico |
+| Conversations | ✅ | SSE, realtime, cambio de estado |
+| Orders | ✅ | |
+| Auth | ✅ | |
+| Meta WhatsApp (`/me/whatsapp-*`) | ✅✅ | Conexión, salud de cuenta, warm-up, quality service — el módulo mejor cubierto del repo |
+| Webhooks Meta | ✅✅ | Firma HMAC, quality updates, routing |
+| Webhooks Stripe | ✅ | |
+| Payments | ⚠️ | Solo vía webhook, sin tests directos de `payments.py` |
+| Lab | ✅✅ | Endpoints, judge, personas, runner, simulator — muy completo |
+| **Appointments** | ❌ | Solo reminders (vía `test_tasks_helpers.py`), no el CRUD/API |
+| **Automations** | ❌ | |
+| **Knowledge Base** | ❌ | |
+| **Team** | ❌ | |
+| **Radio** | ❌ | |
+| **Public API** | ❌ | Superficie de autorización externa — prioridad alta |
+| **Profile/Dash** | ❌ | |
+| **Widget** | ❌ | |
+| **Analytics** | ❌ | |
+| **Admin** | ❌ | Superficie de autorización — prioridad alta |
 
-> ✅ = Auth, Validación, Paginación, SQL Injection, Async, Types — todo cubierto en los 13 módulos.
+**Recomendación de orden si se cierra esta brecha:** Admin y Public API primero (autorización = mayor blast radius de un bug), luego Appointments/Automations (lógica de negocio con estado propio), el resto después.
 
 ---
 
-## ⚙️ Backend — Servicios
+## ⚙️ Backend — Servicios de mensajería / anti-baneo (nuevo desde la matriz anterior)
 
-| Servicio | Tests | Types | Logs |
-|---|---|---|---|
-| Claude | ✅ 11 | ⚠️ | ⚠️ |
-| Embedding | ✅ 8 | ⚠️ | ⚠️ |
-| RAG | ✅ 4 | ⚠️ | ⚠️ |
-| Storage | ✅ 4 | ⚠️ | ⚠️ |
-| Calendar | ✅ 6 | ⚠️ | ⚠️ |
-| Banner | ✅ 6 | ⚠️ | ⚠️ |
-| Number Pool | ✅ 8 | ⚠️ | ⚠️ |
-| Radio Scripts | ✅ 5 | ⚠️ | ⚠️ |
-| Radio TTS | ✅ 3 | ⚠️ | ⚠️ |
-| Radio Audio | ✅ 7 | ⚠️ | ⚠️ |
-| Radio Pipeline | ✅ 2 | ⚠️ | ⚠️ |
-| Imagen | ✅ 6 | ⚠️ | ⚠️ |
-| Whisper | ✅ 4 | ⚠️ | ⚠️ |
-| Coupon | ✅ 8 | ⚠️ | ⚠️ |
-| Twilio | ✅ 1 | ⚠️ | ⚠️ |
-| Webhook Dispatcher | ✅ 2 | ⚠️ | ⚠️ |
-| Demo Data | ✅ 1 | ⚠️ | ⚠️ |
+Todo lo relacionado a Meta WhatsApp reemplazó por completo a lo relacionado a
+Twilio (fila "Twilio" de la matriz anterior — ya no existe el paquete `twilio`
+en `requirements.txt`).
+
+| Servicio | Qué hace | Tests |
+|---|---|---|
+| `meta_client.py` / `meta_service.py` | Cliente Graph API + envío de mensajes/plantillas/media | ✅✅ |
+| `meta_connect_service.py` | Flujo de conexión "pegar credenciales → probar → guardar" | ✅ |
+| `meta_quality_service.py` | Rating de calidad, warm-up, ban-risk error codes, next-human-hour | ✅✅ (capas 8/11/13/14 anti-baneo) |
+| `crypto.py` | Cifrado AES-256-GCM de tokens en reposo | ✅ |
+| `inbound_pipeline.py` | Bot, opt-out STOP, estado de pedidos/citas | ⚠️ handoff + opt-out cubiertos, resto parcial |
+| `messaging_throttle.py` | Delay anti-baneo, gate de horario/domingo | ✅✅ |
+| `task_helpers/campaign_ops.py` | Envío de campañas, tope de destinatarios, segment cooldown | ✅✅ |
+
+## ⚙️ Backend — Otros servicios (sin cambios recientes, no re-verificados en esta pasada)
+
+Claude, Embedding, RAG, Storage, Calendar, Banner, Radio (Scripts/TTS/Audio/Pipeline),
+Imagen, Whisper, Coupon, Webhook Dispatcher, Demo Data — mantienen la cobertura
+de la matriz de 2026-06-04 (no se tocaron en el trabajo de julio); re-verificar
+conteos exactos antes de citarlos si ha pasado mucho tiempo.
 
 ---
 
@@ -74,10 +87,15 @@
 | VerifyEmailPage | ✅ | ⚠️ | ◻️ | ◻️ |
 | ResetPasswordPage | ❌ | ⚠️ | ◻️ | ◻️ |
 | OnboardingWizard | ❌ | ⚠️ | ◻️ | ◻️ |
+| WhatsappHealthCard | ✅ 8 | ◻️ | ◻️ | ◻️ |
 | SEO | ✅ 6 | ◻️ | ◻️ | ◻️ |
 | PrintButton | ✅ 4 | ◻️ | ◻️ | ✅ |
 | CookieConsent | ✅ 4 | ◻️ | ◻️ | ◻️ |
 | ErrorBoundary | ✅ 3 | ✅ | ◻️ | ◻️ |
+
+**Sin tests aún**: PipelinePage, InboxPage (parcial vía `InboxPage.realtime.test.tsx`), LabPage, PlansPage, AutomationsPage, AnalyticsPage, WidgetPage, TemplatesPage, dashboard.
+
+**Auditoría visual 2026-07-31**: se recorrieron las 16 vistas autenticadas en claro y oscuro con datos reales. Se encontraron y corrigieron: modo oscuro roto en ~50 inputs/selects (faltaba `bg-background text-foreground`), checkboxes con cuadro blanco fijo en dark mode (faltaba `color-scheme: dark` en `index.css` — el proyecto no usa `@tailwindcss/forms`), desalineación en TeamPage (`mx-auto` de más), overlap visual en WidgetPage, y espaciado irregular del eje X en AnalyticsPage (Recharts). Commit `70ca420`.
 
 ---
 
@@ -85,6 +103,9 @@
 
 | Fecha | Cambio |
 |---|---|
+| 2026-07-31 | Auditoría visual completa (16 vistas, claro/oscuro) — bugs de dark mode, alineación y overlap corregidos (commit `70ca420`) |
+| 2026-07-30/31 | Sistema anti-baneo completo, capas 6-15 (backend + frontend), ver `git log --grep="anti-baneo"` |
+| 2026-07-30 | Retiro completo de Twilio consolidado; Meta Cloud API es el único canal |
 | 2026-06-04 | **P14** — CampaignsPage paginación frontend + OrdersPage test |
 | 2026-06-04 | **P12-P13** — Idempotencia real: store_idempotency_response en 8 endpoints + Widget |
 | 2026-06-04 | **P2-P3** — N+1 verificado sin issues (todos ✅) |
