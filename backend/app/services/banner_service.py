@@ -835,15 +835,12 @@ async def generate_banner_copy_with_claude(
     business_category: str | None = None,
     campaign_type: str | None = None,
 ) -> BannerCopy:
-    """Usa Claude Sonnet para generar el copy del banner, adaptado al negocio y campaña."""
+    """Genera el copy del banner, adaptado al negocio y campaña."""
     import json
-    from anthropic import AsyncAnthropic
-    from app.config import settings
+    from app.services.llm_client import chat_completion
 
     design = select_design(business_category, campaign_type)
     vibe_tone = VIBE_TONES.get(design.vibe, "Tono profesional y atractivo.")
-
-    client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
     prompt = f"""Eres un experto en marketing latinoamericano.
 Genera el copy para un banner publicitario de WhatsApp.
@@ -861,13 +858,10 @@ Responde ÚNICAMENTE con un JSON con estas claves (sin texto extra):
 }}"""
 
     try:
-        response = await client.messages.create(
-            model=settings.ANTHROPIC_MODEL,
-            max_tokens=120,
-            temperature=0.7,
-            messages=[{"role": "user", "content": prompt}],
+        raw = await chat_completion(
+            [{"role": "user", "content": prompt}],
+            max_tokens=120, temperature=0.7,
         )
-        raw = response.content[0].text.strip()
         data = json.loads(raw)
         return BannerCopy(
             headline=data.get("headline", promo_description[:30].upper()),

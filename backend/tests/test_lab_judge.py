@@ -1,4 +1,4 @@
-"""Tests for app.services.lab.judge — mocked Claude calls, no real API."""
+"""Tests for app.services.lab.judge — mocked LLM calls, no real API."""
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,11 +8,8 @@ from app.services.lab.judge import _parse_judge_json, evaluate_transcript
 from app.services.lab.personas import PERSONAS
 
 
-def _claude_response(payload: dict | str):
-    text = payload if isinstance(payload, str) else json.dumps(payload)
-    resp = MagicMock()
-    resp.content = [MagicMock(text=text)]
-    return resp
+def _claude_response_text(payload: dict | str) -> str:
+    return payload if isinstance(payload, str) else json.dumps(payload)
 
 
 VALID_PAYLOAD = {
@@ -76,23 +73,22 @@ class TestParseJudgeJson:
 class TestEvaluateTranscript:
     @pytest.mark.asyncio
     async def test_empty_transcript_returns_zero_no_llm_call(self, mock_db, test_user):
-        client = MagicMock()
-        client.messages.create = AsyncMock()
-        with patch("app.services.lab.judge._get_client", return_value=client):
+        with patch("app.services.lab.judge.chat_completion", new=AsyncMock()) as mock_chat:
             result = await evaluate_transcript(PERSONAS[0], [], test_user, mock_db)
         assert result["score"] == 0
-        client.messages.create.assert_not_called()
+        mock_chat.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_successful_evaluation(self, mock_db, test_user):
         mock_db.execute.return_value = MagicMock(all=lambda: [("Horario: 9am-6pm",)])
-        client = MagicMock()
-        client.messages.create = AsyncMock(return_value=_claude_response(VALID_PAYLOAD))
         transcript = [
             {"role": "user", "content": "¿cuánto cuesta el envío?"},
             {"role": "assistant", "content": "el envío cuesta $50"},
         ]
-        with patch("app.services.lab.judge._get_client", return_value=client):
+        with patch(
+            "app.services.lab.judge.chat_completion",
+            new=AsyncMock(return_value=_claude_response_text(VALID_PAYLOAD)),
+        ):
             result = await evaluate_transcript(PERSONAS[0], transcript, test_user, mock_db)
         assert result["score"] == 78
         assert result["findings"][0]["type"] == "alucinacion"
@@ -100,10 +96,11 @@ class TestEvaluateTranscript:
     @pytest.mark.asyncio
     async def test_api_failure_returns_diagnostic_finding_not_raise(self, mock_db, test_user):
         mock_db.execute.return_value = MagicMock(all=lambda: [])
-        client = MagicMock()
-        client.messages.create = AsyncMock(side_effect=Exception("anthropic down"))
         transcript = [{"role": "user", "content": "hola"}, {"role": "assistant", "content": "hola!"}]
-        with patch("app.services.lab.judge._get_client", return_value=client):
+        with patch(
+            "app.services.lab.judge.chat_completion",
+            new=AsyncMock(side_effect=Exception("anthropic down")),
+        ):
             result = await evaluate_transcript(PERSONAS[0], transcript, test_user, mock_db)
         assert result["score"] == 0
         assert len(result["findings"]) == 1
@@ -112,10 +109,11 @@ class TestEvaluateTranscript:
     @pytest.mark.asyncio
     async def test_malformed_judge_response_returns_diagnostic_finding(self, mock_db, test_user):
         mock_db.execute.return_value = MagicMock(all=lambda: [])
-        client = MagicMock()
-        client.messages.create = AsyncMock(return_value=_claude_response("esto no es json"))
         transcript = [{"role": "user", "content": "hola"}, {"role": "assistant", "content": "hola!"}]
-        with patch("app.services.lab.judge._get_client", return_value=client):
+        with patch(
+            "app.services.lab.judge.chat_completion",
+            new=AsyncMock(return_value=_claude_response_text("esto no es json")),
+        ):
             result = await evaluate_transcript(PERSONAS[0], transcript, test_user, mock_db)
         assert result["score"] == 0
         assert result["findings"]

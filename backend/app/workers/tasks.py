@@ -768,8 +768,7 @@ def update_contact_engagement_score(contact_id: str):
         from app.models.contact import Contact
         from app.models.conversation import Conversation
         from app.models.message import Message
-        from app.config import settings
-        from app.services.claude_service import _get_client
+        from app.services.llm_client import chat_completion
         from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
@@ -799,14 +798,11 @@ def update_contact_engagement_score(contact_id: str):
                 "0-30: sin interés, 31-60: frío, 61-85: alto interés, 86-100: listo para comprar."
             )
 
-            client = _get_client()
             try:
-                response = await client.messages.create(
-                    model=settings.ANTHROPIC_MODEL, max_tokens=150, temperature=0.0,
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": f"Conversación:\n{chat_str}"}],
+                raw_text = await chat_completion(
+                    [{"role": "user", "content": f"Conversación:\n{chat_str}"}],
+                    system=system_prompt, max_tokens=150, temperature=0.0,
                 )
-                raw_text = response.content[0].text.strip()
 
                 if raw_text.startswith("```json"):
                     raw_text = raw_text.replace("```json", "").replace("```", "").strip()

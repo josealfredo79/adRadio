@@ -56,10 +56,27 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""
 
-    # Anthropic
+    # Anthropic — usado como fallback si OPENROUTER_MODEL no está configurado
+    # (ver app/services/llm_client.py). Único proveedor de texto hasta 2026-07-31.
     ANTHROPIC_API_KEY: str = ""
     # Modelo de Claude a usar — configurable para migrar cuando Anthropic deprecate el actual
     ANTHROPIC_MODEL: str = "claude-sonnet-4-6"
+
+    # OpenRouter — adaptador de proveedor LLM intercambiable (port del patrón
+    # de vocero-crm). Si OPENROUTER_API_KEY y OPENROUTER_MODEL están ambos
+    # configurados, TODA la generación de texto (bot, campañas, Laboratorio,
+    # banners) pasa por aquí en vez de Anthropic directo — permite usar
+    # modelos gratis/baratos de OpenRouter (ver openrouter.ai/models) sin
+    # tocar código, solo cambiando estas variables. Vacío = comportamiento
+    # anterior sin cambios (Anthropic directo).
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_MODEL: str = ""
+    # Modelo aparte para el juez del Laboratorio (evaluación) — opcional, si
+    # se omite usa OPENROUTER_MODEL. Igual que vocero-crm: separar el modelo
+    # "conversacional" del "juez" permite, por ejemplo, un modelo barato para
+    # el agente y uno más fuerte (o viceversa) solo para evaluar.
+    OPENROUTER_JUDGE_MODEL: str = ""
 
     # OpenAI (embeddings + Whisper)
     OPENAI_API_KEY: str = ""

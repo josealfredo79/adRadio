@@ -8,11 +8,10 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.models.knowledge_base import KnowledgeBase
 from app.models.user import User
-from app.services.claude_service import _get_client
 from app.services.lab.personas import Persona
+from app.services.llm_client import chat_completion
 
 logger = logging.getLogger(__name__)
 
@@ -121,16 +120,12 @@ OBJETIVO DE ESTA PERSONA SIMULADA ({persona.label}): {persona.goal}
 CONVERSACIÓN A EVALUAR:
 {transcript_text}"""
 
-    client = _get_client()
     try:
-        response = await client.messages.create(
-            model=settings.ANTHROPIC_MODEL,
-            max_tokens=1200,
-            temperature=0.0,
-            system=JUDGE_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
+        raw_text = await chat_completion(
+            [{"role": "user", "content": user_prompt}],
+            system=JUDGE_SYSTEM_PROMPT, max_tokens=1200, temperature=0.0,
+            judge=True,
         )
-        raw_text = response.content[0].text
         return _parse_judge_json(raw_text)
     except Exception as e:
         logger.error("[LAB JUDGE] Evaluation failed for persona=%s: %s", persona.key, e, exc_info=True)

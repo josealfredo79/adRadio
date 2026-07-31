@@ -19,14 +19,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 class TestClaudeService:
     """Tests para el servicio de Claude (sin API real)."""
 
-    @patch("app.services.claude_service._get_client")
+    @patch("app.services.claude_service.chat_completion")
     @pytest.mark.asyncio
-    async def test_generate_campaign_variants(self, mock_get_client):
-        mock_client = AsyncMock()
-        msg = MagicMock()
-        msg.content = [MagicMock(text="🔥 Oferta especial\n---\n✨ Descuento único\n---\n🎉 No te lo pierdas")]
-        mock_client.messages.create.return_value = msg
-        mock_get_client.return_value = mock_client
+    async def test_generate_campaign_variants(self, mock_chat):
+        mock_chat.return_value = "🔥 Oferta especial\n---\n✨ Descuento único\n---\n🎉 No te lo pierdas"
 
         from app.services.claude_service import generate_campaign_variants
         variants = await generate_campaign_variants("promo", "Mi Negocio", "vender más")
@@ -35,14 +31,10 @@ class TestClaudeService:
         assert len(variants) == 3
         assert "Oferta" in variants[0]
 
-    @patch("app.services.claude_service._get_client")
+    @patch("app.services.claude_service.chat_completion")
     @pytest.mark.asyncio
-    async def test_generate_bot_response(self, mock_get_client):
-        mock_client = AsyncMock()
-        msg = MagicMock()
-        msg.content = [MagicMock(text="Claro, te ayudo con eso 😊")]
-        mock_client.messages.create.return_value = msg
-        mock_get_client.return_value = mock_client
+    async def test_generate_bot_response(self, mock_chat):
+        mock_chat.return_value = "Claro, te ayudo con eso 😊"
 
         from app.services.claude_service import generate_bot_response
         reply = await generate_bot_response(
@@ -90,67 +82,47 @@ class TestClaudeService:
         assert await detect_order_intent_async("quiero pedir") is True
         assert await detect_order_intent_async("hola") is False
 
-    @patch("app.services.claude_service._get_client")
+    @patch("app.services.claude_service.chat_completion")
     @pytest.mark.asyncio
-    async def test_generate_sequence_messages(self, mock_get_client):
-        mock_client = AsyncMock()
-        msg = MagicMock()
-        msg.content = [MagicMock(text="📢 Día 1\n---\n💡 Día 3\n---\n🎯 Día 5")]
-        mock_client.messages.create.return_value = msg
-        mock_get_client.return_value = mock_client
+    async def test_generate_sequence_messages(self, mock_chat):
+        mock_chat.return_value = "📢 Día 1\n---\n💡 Día 3\n---\n🎯 Día 5"
 
         from app.services.claude_service import generate_sequence_messages
         seq = await generate_sequence_messages("Tienda", "promo")
         assert len(seq) == 3
 
-    @patch("app.services.claude_service._get_client")
+    @patch("app.services.claude_service.chat_completion")
     @pytest.mark.asyncio
-    async def test_generate_saga_episodes(self, mock_get_client):
-        mock_client = AsyncMock()
-        msg = MagicMock()
-        msg.content = [MagicMock(text="📻 Episodio 1:...\n---\n📻 Episodio 2:...\n---\n📻 Episodio 3:...\n---\n📻 Episodio 4:...")]
-        mock_client.messages.create.return_value = msg
-        mock_get_client.return_value = mock_client
+    async def test_generate_saga_episodes(self, mock_chat):
+        mock_chat.return_value = "📻 Episodio 1:...\n---\n📻 Episodio 2:...\n---\n📻 Episodio 3:...\n---\n📻 Episodio 4:..."
 
         from app.services.claude_service import generate_saga_episodes
         eps = await generate_saga_episodes("Negocio", "Producto X")
         assert len(eps) == 4
 
-    @patch("app.services.claude_service._get_client")
+    @patch("app.services.claude_service.chat_completion")
     @pytest.mark.asyncio
-    async def test_detect_intent_tags(self, mock_get_client):
-        mock_client = AsyncMock()
-        msg = MagicMock()
-        msg.content = [MagicMock(text='["interesado","precio"]')]
-        mock_client.messages.create.return_value = msg
-        mock_get_client.return_value = mock_client
+    async def test_detect_intent_tags(self, mock_chat):
+        mock_chat.return_value = '["interesado","precio"]'
 
         from app.services.claude_service import detect_intent_tags
         tags = await detect_intent_tags("¿Cuánto cuesta?")
         assert "interesado" in tags
         assert "precio" in tags
 
-    @patch("app.services.claude_service._get_client")
+    @patch("app.services.claude_service.chat_completion")
     @pytest.mark.asyncio
-    async def test_detect_intent_tags_parse_failure(self, mock_get_client):
-        mock_client = AsyncMock()
-        msg = MagicMock()
-        msg.content = [MagicMock(text="not json at all")]
-        mock_client.messages.create.return_value = msg
-        mock_get_client.return_value = mock_client
+    async def test_detect_intent_tags_parse_failure(self, mock_chat):
+        mock_chat.return_value = "not json at all"
 
         from app.services.claude_service import detect_intent_tags
         tags = await detect_intent_tags("Hola")
         assert tags == []
 
-    @patch("app.services.claude_service._get_client")
+    @patch("app.services.claude_service.chat_completion")
     @pytest.mark.asyncio
-    async def test_generate_voces_capsule(self, mock_get_client):
-        mock_client = AsyncMock()
-        msg = MagicMock()
-        msg.content = [MagicMock(text="🎙️ Cápsula narrativa de radio...")]
-        mock_client.messages.create.return_value = msg
-        mock_get_client.return_value = mock_client
+    async def test_generate_voces_capsule(self, mock_chat):
+        mock_chat.return_value = "🎙️ Cápsula narrativa de radio..."
 
         from app.services.claude_service import generate_voces_capsule
         capsule = await generate_voces_capsule(
@@ -567,79 +539,55 @@ class TestBannerService:
         result = generate_banner_png(copy, palette_name="nonexistent")
         assert len(result) > 100
 
-    @patch("app.config.settings")
+    @patch("app.services.llm_client.chat_completion")
     @pytest.mark.asyncio
-    async def test_generate_banner_copy_with_claude(self, mock_settings):
-        mock_settings.ANTHROPIC_API_KEY = "sk-ant-test"
+    async def test_generate_banner_copy_with_claude(self, mock_chat):
+        mock_chat.return_value = '{"headline": "SUPER OFERTA", "subheadline": "50% descuento", "cta": "Compra ya"}'
 
-        with patch("anthropic.AsyncAnthropic") as mock_anthropic:
-            mock_client = AsyncMock()
-            msg = MagicMock()
-            msg.content = [MagicMock(text='{"headline": "SUPER OFERTA", "subheadline": "50% descuento", "cta": "Compra ya"}')]
-            mock_client.messages.create.return_value = msg
-            mock_anthropic.return_value = mock_client
+        from app.services.banner_service import generate_banner_copy_with_claude
+        copy = await generate_banner_copy_with_claude("Tienda", "Luis", "Descuento del 50%")
+        assert copy.headline == "SUPER OFERTA"
+        assert copy.cta == "Compra ya"
+        assert copy.contact_name == "Luis"
+        assert copy.business_name == "Tienda"
 
-            from app.services.banner_service import generate_banner_copy_with_claude
-            copy = await generate_banner_copy_with_claude("Tienda", "Luis", "Descuento del 50%")
-            assert copy.headline == "SUPER OFERTA"
-            assert copy.cta == "Compra ya"
-            assert copy.contact_name == "Luis"
-            assert copy.business_name == "Tienda"
-
-    @patch("app.config.settings")
+    @patch("app.services.llm_client.chat_completion")
     @pytest.mark.asyncio
-    async def test_generate_banner_copy_fallback(self, mock_settings):
-        mock_settings.ANTHROPIC_API_KEY = "sk-ant-test"
+    async def test_generate_banner_copy_fallback(self, mock_chat):
+        mock_chat.side_effect = Exception("API Error")
 
-        with patch("anthropic.AsyncAnthropic") as mock_anthropic:
-            mock_client = AsyncMock()
-            mock_client.messages.create.side_effect = Exception("API Error")
-            mock_anthropic.return_value = mock_client
-
-            from app.services.banner_service import generate_banner_copy_with_claude
-            copy = await generate_banner_copy_with_claude("Tienda", "Luis", "Oferta increíble")
-            assert "OFERTA INCREÍBLE" in copy.headline
-            assert copy.contact_name == "Luis"
+        from app.services.banner_service import generate_banner_copy_with_claude
+        copy = await generate_banner_copy_with_claude("Tienda", "Luis", "Oferta increíble")
+        assert "OFERTA INCREÍBLE" in copy.headline
+        assert copy.contact_name == "Luis"
 
 
 class TestRadioScripts:
     """Tests para generación de guiones de radio."""
 
-    @patch("app.services.claude_service._get_client")
+    @patch("app.services.llm_client.chat_completion")
     @pytest.mark.asyncio
-    async def test_generate_radio_script_classic(self, mock_get_client):
-        mock_client = AsyncMock()
-        msg = MagicMock()
-        msg.content = [MagicMock(text="🎵 ¿Cansado del mismo café? Ven a Coffee House...")]
-        mock_client.messages.create.return_value = msg
-        mock_get_client.return_value = mock_client
+    async def test_generate_radio_script_classic(self, mock_chat):
+        mock_chat.return_value = "🎵 ¿Cansado del mismo café? Ven a Coffee House..."
 
         from app.services.radio.scripts import generate_radio_script
         script = await generate_radio_script("Coffee House", "Promo café", mode="classic")
         assert len(script) > 0
         assert "Coffee" in script
 
-    @patch("app.services.claude_service._get_client")
+    @patch("app.services.llm_client.chat_completion")
     @pytest.mark.asyncio
-    async def test_generate_radio_script_comunitaria(self, mock_get_client):
-        mock_client = AsyncMock()
-        msg = MagicMock()
-        msg.content = [MagicMock(text="🌱 ¿Sabías que...")]
-        mock_client.messages.create.return_value = msg
-        mock_get_client.return_value = mock_client
+    async def test_generate_radio_script_comunitaria(self, mock_chat):
+        mock_chat.return_value = "🌱 ¿Sabías que..."
 
         from app.services.radio.scripts import generate_radio_script
         script = await generate_radio_script("Tienda", "consejos", mode="comunitaria")
         assert len(script) > 0
 
-    @patch("app.services.claude_service._get_client")
+    @patch("app.services.llm_client.chat_completion")
     @pytest.mark.asyncio
-    async def test_generate_radio_script_unknown_mode(self, mock_get_client):
-        mock_client = AsyncMock()
-        msg = MagicMock()
-        msg.content = [MagicMock(text="Texto genérico de locutor...")]
-        mock_client.messages.create.return_value = msg
-        mock_get_client.return_value = mock_client
+    async def test_generate_radio_script_unknown_mode(self, mock_chat):
+        mock_chat.return_value = "Texto genérico de locutor..."
 
         from app.services.radio.scripts import generate_radio_script
         script = await generate_radio_script("Negocio", "msg", mode="unknown")

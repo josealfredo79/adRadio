@@ -10,10 +10,9 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.models.user import User
-from app.services.claude_service import _get_client
 from app.services.lab.personas import Persona
+from app.services.llm_client import chat_completion
 from app.services.rag_service import answer_with_rag
 
 logger = logging.getLogger(__name__)
@@ -27,8 +26,6 @@ async def generate_persona_message(
     """Ask the persona LLM to write its next customer message, given the
     transcript so far rendered as plain text (avoids message-role-alternation
     edge cases from inverting an existing user/assistant transcript)."""
-    client = _get_client()
-
     if history:
         lines = [
             f"{'Tú (cliente)' if m['role'] == 'user' else 'Negocio'}: {m['content']}"
@@ -54,14 +51,10 @@ async def generate_persona_message(
         "No agregues explicaciones ni comillas, solo el mensaje de WhatsApp."
     )
 
-    response = await client.messages.create(
-        model=settings.ANTHROPIC_MODEL,
-        max_tokens=200,
-        temperature=0.8,
-        system=system,
-        messages=[{"role": "user", "content": instruction}],
+    return await chat_completion(
+        [{"role": "user", "content": instruction}],
+        system=system, max_tokens=200, temperature=0.8,
     )
-    return response.content[0].text.strip()
 
 
 async def run_persona_conversation(

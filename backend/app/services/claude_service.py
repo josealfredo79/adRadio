@@ -1,23 +1,13 @@
 """
-Claude Sonnet service — generación de contenido publicitario.
+Generación de contenido publicitario — llama al proveedor LLM configurado
+(Anthropic por default, u OpenRouter si está configurado) vía llm_client.py.
 """
 import logging
 import re
 
-import anthropic
-
-from app.config import settings
+from app.services.llm_client import chat_completion
 
 logger = logging.getLogger(__name__)
-
-_client: anthropic.AsyncAnthropic | None = None
-
-
-def _get_client() -> anthropic.AsyncAnthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-    return _client
 
 
 CAMPAIGN_SYSTEM_PROMPT = """Eres un experto en marketing digital y publicidad para WhatsApp.
@@ -39,9 +29,7 @@ async def generate_campaign_variants(
     business_name: str,
     intent: str,
 ) -> list[str]:
-    """Generate 3 unique WhatsApp ad message variants using Claude."""
-    client = _get_client()
-
+    """Generate 3 unique WhatsApp ad message variants."""
     prompt = f"""Genera exactamente 3 variantes de mensaje publicitario para WhatsApp.
 
 Tipo de campaña: {campaign_type}
@@ -50,15 +38,12 @@ Intención del anunciante: {intent}
 
 Devuelve solo las 3 variantes, separadas por "---", sin numeración ni explicaciones adicionales."""
 
-    message = await client.messages.create(
-        model=settings.ANTHROPIC_MODEL,
+    raw = await chat_completion(
+        [{"role": "user", "content": prompt}],
+        system=CAMPAIGN_SYSTEM_PROMPT,
         max_tokens=600,
         temperature=0.7,
-        system=CAMPAIGN_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
     )
-
-    raw = message.content[0].text.strip()
     variants = [v.strip() for v in raw.split("---") if v.strip()]
     return variants[:3]
 
@@ -72,9 +57,7 @@ async def generate_bot_response(
     bot_personality: str = "amigable y profesional",
     bot_instructions: str | None = None,
 ) -> str:
-    """Generate a RAG-based bot response using Claude."""
-    client = _get_client()
-
+    """Generate a RAG-based bot response."""
     custom_block = ""
     if bot_instructions:
         custom_block = f"""INSTRUCCIONES PERSONALIZADAS (prioridad sobre el resto):
@@ -136,14 +119,10 @@ Tu personalidad es: {bot_personality}.
     ]
 
     try:
-        response = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=500,
-            temperature=0.3,
-            system=system,
-            messages=messages,
+        return await chat_completion(
+            messages, system=system, max_tokens=500, temperature=0.3,
+            anthropic_model="claude-haiku-4-5-20251001",
         )
-        return response.content[0].text.strip()
     except Exception as e:
         logger.warning("[CLAUDE] generate_bot_response failed: %s", e, exc_info=True)
         return (
@@ -202,8 +181,6 @@ async def generate_sequence_messages(
     campaign_type: str = "promo",
 ) -> list[str]:
     """Genera una secuencia de 3 mensajes para campaña en días distintos."""
-    client = _get_client()
-
     prompt = f"""Crea una secuencia de 3 mensajes WhatsApp para:
 
 Negocio: {business_name}
@@ -213,15 +190,12 @@ Mensaje a comunicar: {intent}
 Usa {{{{nombre}}}} para personalizar con el nombre del cliente cuando sea natural.
 Devuelve solo los 3 mensajes separados por "---"."""
 
-    message = await client.messages.create(
-        model=settings.ANTHROPIC_MODEL,
+    raw = await chat_completion(
+        [{"role": "user", "content": prompt}],
+        system=SEQUENCE_SYSTEM_PROMPT,
         max_tokens=800,
         temperature=0.7,
-        system=SEQUENCE_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
     )
-
-    raw = message.content[0].text.strip()
     parts = [v.strip() for v in raw.split("---") if v.strip()]
     return parts[:3]
 
@@ -252,8 +226,6 @@ async def generate_saga_episodes(
     protagonist_name: str = "María",
 ) -> list[str]:
     """Genera 4 episodios de radionovela de marketing para campaña saga."""
-    client = _get_client()
-
     prompt = f"""Crea una saga de 4 episodios para:
 
 Negocio: {business_name}
@@ -263,15 +235,12 @@ Nombre del protagonista: {protagonist_name}
 Usa {{{{nombre}}}} al final del episodio 4 para personalizar la oferta final.
 Devuelve solo los 4 episodios separados por "---"."""
 
-    message = await client.messages.create(
-        model=settings.ANTHROPIC_MODEL,
+    raw = await chat_completion(
+        [{"role": "user", "content": prompt}],
+        system=SAGA_SYSTEM_PROMPT,
         max_tokens=1200,
         temperature=0.8,
-        system=SAGA_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
     )
-
-    raw = message.content[0].text.strip()
     parts = [v.strip() for v in raw.split("---") if v.strip()]
     return parts[:4]
 
@@ -377,7 +346,6 @@ async def detect_intent_tags(conversation_text: str) -> list[str]:
     Use Claude to classify a WhatsApp conversation into intent tags.
     Returns a list of tag strings to add to the contact.
     """
-    client = _get_client()
     prompt = f"""Analiza esta conversación de WhatsApp y clasifica la intención del cliente.
 Devuelve ÚNICAMENTE un JSON array con las etiquetas que apliquen, eligiendo SOLO de esta lista:
 ["interesado", "compra", "soporte", "queja", "precio", "no-interesado"]
@@ -396,13 +364,11 @@ Conversación:
 Responde ÚNICAMENTE con el JSON array, sin texto adicional. Ejemplo: ["interesado","precio"]"""
 
     try:
-        response = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=50,
-            temperature=0.0,
-            messages=[{"role": "user", "content": prompt}],
+        raw = await chat_completion(
+            [{"role": "user", "content": prompt}],
+            max_tokens=50, temperature=0.0,
+            anthropic_model="claude-haiku-4-5-20251001",
         )
-        raw = response.content[0].text.strip()
         import json
         tags = json.loads(raw)
         if isinstance(tags, list):
@@ -437,8 +403,6 @@ async def generate_voces_capsule(
     campaign_intent: str,
 ) -> str:
     """Generate a narrative radio capsule from real customer stories."""
-    client = _get_client()
-
     stories_text = "\n\n".join(
         f"Cliente: {s.get('name', 'Alguien')}\nHistoria: {s.get('text', '')}"
         for s in stories
@@ -454,12 +418,9 @@ Intención de la campaña: {campaign_intent}
 Genera solo la cápsula narrativa, sin introducciones ni explicaciones adicionales.
 Debe sonar como un segmento de radio del barrio, no como un anuncio."""
 
-    message = await client.messages.create(
-        model=settings.ANTHROPIC_MODEL,
+    return await chat_completion(
+        [{"role": "user", "content": prompt}],
+        system=VOCES_SYSTEM_PROMPT,
         max_tokens=600,
         temperature=0.7,
-        system=VOCES_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
     )
-
-    return message.content[0].text.strip()

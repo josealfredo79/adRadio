@@ -1,5 +1,5 @@
-"""Tests for app.services.lab.simulator — mocked Claude calls, no real API."""
-from unittest.mock import AsyncMock, MagicMock, patch
+"""Tests for app.services.lab.simulator — mocked LLM calls, no real API."""
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -7,37 +7,33 @@ from app.services.lab.personas import PERSONAS
 from app.services.lab.simulator import generate_persona_message, run_persona_conversation
 
 
-def _claude_response(text: str):
-    resp = MagicMock()
-    resp.content = [MagicMock(text=text)]
-    return resp
-
-
 class TestGeneratePersonaMessage:
     @pytest.mark.asyncio
     async def test_first_message_has_no_history_instruction(self):
         persona = PERSONAS[0]
-        client = MagicMock()
-        client.messages.create = AsyncMock(return_value=_claude_response("Hola, quiero comprar."))
-        with patch("app.services.lab.simulator._get_client", return_value=client):
+        with patch(
+            "app.services.lab.simulator.chat_completion",
+            new=AsyncMock(return_value="Hola, quiero comprar."),
+        ) as mock_chat:
             msg = await generate_persona_message(persona, {"business_name": "Tacos El Primo"}, [])
         assert msg == "Hola, quiero comprar."
-        call_kwargs = client.messages.create.call_args.kwargs
-        assert "primer mensaje" in call_kwargs["messages"][0]["content"]
+        call_args = mock_chat.call_args
+        assert "primer mensaje" in call_args.args[0][0]["content"]
 
     @pytest.mark.asyncio
     async def test_subsequent_message_includes_transcript(self):
         persona = PERSONAS[0]
-        client = MagicMock()
-        client.messages.create = AsyncMock(return_value=_claude_response("¿Y el precio?"))
         history = [
             {"role": "user", "content": "Hola"},
             {"role": "assistant", "content": "¡Hola! ¿En qué te ayudo?"},
         ]
-        with patch("app.services.lab.simulator._get_client", return_value=client):
+        with patch(
+            "app.services.lab.simulator.chat_completion",
+            new=AsyncMock(return_value="¿Y el precio?"),
+        ) as mock_chat:
             msg = await generate_persona_message(persona, {"business_name": "Tacos El Primo"}, history)
         assert msg == "¿Y el precio?"
-        prompt_text = client.messages.create.call_args.kwargs["messages"][0]["content"]
+        prompt_text = mock_chat.call_args.args[0][0]["content"]
         assert "Hola" in prompt_text
         assert "¡Hola! ¿En qué te ayudo?" in prompt_text
 

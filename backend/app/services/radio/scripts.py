@@ -178,12 +178,10 @@ async def generate_radio_script(
     business_category: str | None = None,
     extra_context: str | None = None,
 ) -> str:
-    """Claude genera el guión de la cuña según el modo seleccionado."""
+    """Genera el guión de la cuña según el modo seleccionado."""
     from datetime import datetime, timezone
-    from app.config import settings
-    from app.services.claude_service import _get_client
+    from app.services.llm_client import chat_completion
 
-    client = _get_client()
     system = _MODE_PROMPTS.get(mode, GUION_SYSTEM_PROMPT)
 
     base = f"""Negocio: {business_name}
@@ -240,11 +238,7 @@ de forma que el oyente sienta que el mensaje llegó justo cuando lo necesitaba."
     else:
         prompt = base + f"Mensaje: {message_or_intent}\n\nDevuelve SOLO el texto del locutor."
 
-    response = await client.messages.create(
-        model=settings.ANTHROPIC_MODEL,
-        max_tokens=600,
-        temperature=0.85,
-        system=system,
-        messages=[{"role": "user", "content": prompt}],
+    return await chat_completion(
+        [{"role": "user", "content": prompt}],
+        system=system, max_tokens=600, temperature=0.85,
     )
-    return response.content[0].text.strip()
