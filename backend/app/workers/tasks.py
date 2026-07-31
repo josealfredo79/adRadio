@@ -314,15 +314,13 @@ def schedule_campaign(self, campaign_id: str):
         from app.models.campaign import Campaign
         from app.models.contact import Contact
         from app.models.user import User
-        from app.services.messaging_throttle import is_human_hour
+        from app.services.messaging_throttle import is_human_hour, next_human_hour_utc
         from sqlalchemy import select
 
         if not is_human_hour(timezone_offset=-6):
             now_utc = datetime.now(timezone.utc)
-            next_8am = now_utc.replace(hour=14, minute=0, second=0, microsecond=0)
-            if now_utc.hour >= 14:
-                next_8am += timedelta(days=1)
-            delay_secs = int((next_8am - now_utc).total_seconds())
+            next_slot = next_human_hour_utc(timezone_offset=-6)
+            delay_secs = max(60, int((next_slot - now_utc).total_seconds()))
             logger.info("[CAMPAIGN] Outside human hours — rescheduling in %ds", delay_secs)
             schedule_campaign.apply_async(args=[campaign_id], countdown=delay_secs, queue="whatsapp")
             return
