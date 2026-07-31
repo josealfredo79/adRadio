@@ -10,11 +10,11 @@
 
 | Indicador | Resultado |
 |---|---:|
-| Tests Backend (total) | 561 (548 previos + 13 nuevos de Team), 0 fallas conocidas (ver nota de `ALLOWED_HOSTS`/`REDIS_URL` locales) |
-| Archivos de test backend | 49 |
+| Tests Backend (total) | 601 (561 previos + 8 Radio + 13 Profile/Dash + 11 Widget + 9 Analytics), 0 fallas conocidas (ver nota de `ALLOWED_HOSTS`/`REDIS_URL` locales) |
+| Archivos de test backend | 53 |
 | Tests Frontend | 124 ✅ |
 | Archivos de test frontend | 21 |
-| Routers backend sin ningún test dedicado | **4 de 24** (Admin, Public API, Appointments, Automations, Knowledge Base y Team cerrados 2026-07-31; User Webhooks también cerrado, no estaba contado en el 24 original) — ver tabla abajo |
+| Routers backend sin ningún test dedicado | **0 de 24** — barrido completo cerrado 2026-07-31 (Admin, Public API, Appointments, Automations, Knowledge Base, Team, Radio, Profile/Dash, Widget, Analytics; User Webhooks también cerrado, no estaba contado en el 24 original) — ver tabla abajo. Quedan gaps *parciales* en Contacts (falta CRUD básico) y Payments (solo webhook) |
 | Capas del sistema anti-baneo | 10 (capas 6-15), todas en producción |
 
 ---
@@ -38,14 +38,14 @@
 | Automations | ✅✅ | `test_automations_endpoints.py` — CRUD con scoping por dueño, whitelist de `trigger` (400), enrollment con 409 en duplicado y 404 cruzado (flujo/contacto de otro advertiser), cálculo de `next_send_at`. Sin bugs nuevos — `FlowOut`/`StepOut` ya estaban bien tipados |
 | Knowledge Base | ✅✅ | `test_knowledge_base_endpoints.py` — list (scoping + filtro `is_active`, paginación), upload (gate de plan RAG, whitelist MIME, límite 50MB, dispatch a Celery mockeado), get-content (scoping), delete (scoping), `/test` bot (gate de plan, query vacía, respuesta mockeada de `answer_with_rag`). Sin bugs nuevos — este router devuelve dicts planos, no hay modelos Pydantic con el patrón `str`/`UUID`/`datetime` que sí rompió en Admin/Public API/User Webhooks |
 | Team | ✅✅ | `test_team_endpoints.py` — invite (rol por default, whitelist agent/viewer, 409 en invitación duplicada, mismo email permitido entre dueños distintos), list (scoping, paginación), update-role (scoping, whitelist, 404), remove (scoping, 404). Sin bugs nuevos — `TeamMemberOut` ya estaba bien tipado (`id: UUID`, `invited_at`/`accepted_at: datetime`) |
-| **Radio** | ❌ | |
+| Radio | ✅✅ | `test_radio_endpoints.py` — proxy de audio (sin modelos/DB): lista de voces, guardia anti path-traversal, servir archivo local, y los 3 desenlaces del fallback a R2 (éxito con caché local, `NoSuchKey`→404, otro `ClientError`→502). Sin bugs |
 | Public API | ✅✅ | `test_api_key_auth.py` (dependencia) + `test_public_api_endpoints.py` (handlers, DB real) — encontró y arregló un bug real: `POST /api/v1/api-keys` tronaba SIEMPRE con 500 (campo `created_at` tipado `str` recibiendo un `datetime`), nadie pudo haber creado una API key por HTTP hasta el fix |
-| **Profile/Dash** | ❌ | |
-| **Widget** | ❌ | |
-| **Analytics** | ❌ | |
+| Profile/Dash | ✅✅ | `test_profile_endpoints.py` — `/me` GET/PATCH, cambio de contraseña (verificación de hash, longitud mínima), gate de white-label (plan enterprise), y `dashboard`/`dashboard/chart` (conteos de contactos/campañas/automatizaciones/mensajes/órdenes/leads sin responder, verificados con datos sembrados). Sin bugs — `UserOut` ya estaba bien tipado |
+| Widget | ✅✅ | `test_widget_endpoints.py` — snippet embebible (defaults, escapado de comillas simples para no romper el JS inline), preview público (404, passthrough de config), update/get config (validación de color hex/greeting/position) |
+| Analytics | ✅✅ | `test_analytics_endpoints.py` — distribución horaria (solo inbound), `/summary` (tasas de entrega/lectura/respuesta calculadas con datos sembrados), `/campaign-performance` (breakdown por status, filtro de ventana de días), `/trends` (bucketing diario), `/top-contacts` (ranking). **Encontró y arregló un bug real**: `top_contacts` iteraba el `Result` de `db.execute()` dos veces (una para extraer `contact_ids`, otra para construir la respuesta) — la segunda iteración siempre encontraba el cursor ya agotado, así que `GET /api/v1/analytics/top-contacts` devolvía `[]` incondicionalmente sin importar los datos reales. Arreglado materializando `.all()` una sola vez |
 | Admin | ✅✅ | `test_admin_auth.py` (dependencia) + `test_admin_endpoints.py` (handlers, DB real) — encontró y arregló un bug real: `GET /admin/subscriptions/{id}/transactions` tronaba con 500 en cuanto el usuario tuviera una transacción (mismo tipo de bug: `TransactionResponse.id` sin el validador UUID→str que sus clases hermanas sí tenían) |
 
-**Recomendación de orden si se sigue cerrando esta brecha:** el resto (Radio, Profile/Dash, Widget, Analytics) no tiene un orden crítico particular — todos son de prioridad similar (menor superficie de autorización/estado que lo ya cerrado).
+**Barrido de test coverage por router: completo (2026-07-31).** Quedan solo los gaps parciales de Contacts (CRUD básico) y Payments (tests directos, hoy solo cubierto vía webhook) si se quiere seguir profundizando.
 
 ---
 
@@ -104,8 +104,9 @@ conteos exactos antes de citarlos si ha pasado mucho tiempo.
 
 | Fecha | Cambio |
 |---|---|
+| 2026-07-31 | Barrido de test coverage completo: Knowledge Base (15), Team (13), Radio (8), Profile/Dash (13), Widget (11), Analytics (9) — 69 tests nuevos, 0 routers sin cobertura. **Bug real encontrado y arreglado**: `top_contacts` en `analytics.py` iteraba el `Result` de `db.execute()` dos veces; la segunda pasada siempre encontraba el cursor agotado, así que `GET /api/v1/analytics/top-contacts` devolvía `[]` incondicionalmente. Corregido materializando `.all()` una sola vez (commits `aed4446`, `8524b19`, y los de Radio/Profile/Widget/Analytics) |
+| 2026-07-31 | Corrección de nota anterior: las "2 fallas de entorno local conocidas" resultaron ser 50 al correr la suite completa fresca — mismo gotcha de `ALLOWED_HOSTS`/`testserver`, no eran solo 2. Comando local que da 0 fallas: `REDIS_URL="redis://localhost:6379/0" ALLOWED_HOSTS="www.iaradio.online,iaradio.online,adradio.railway.app,testserver,test" pytest` (además `.env`'s `REDIS_URL` apunta a Railway interno, inalcanzable localmente) |
 | 2026-07-31 | Cobertura de Automations (14 tests) — sin bugs nuevos (commit `eb9ea9b`) |
-| 2026-07-31 | Confirmadas las 2 fallas de entorno local: `test_meta_incoming_webhook.py::TestPhoneNumberQualityUpdate` — `AllowedHostsMiddleware` rechaza el Host `test` que manda `httpx.AsyncClient(ASGITransport)` porque `.env` local trae `ALLOWED_HOSTS` sin `test`/`testserver` y `DEBUG=false`. No es bug de producción (los Hosts reales sí están permitidos); pendiente decidir si se agrega `testserver`/`test` al allowlist local o se ajusta el helper de estos tests |
 | 2026-07-31 | Cobertura de Appointments (16 tests) — incluye la firma HMAC `_sign_state`/`_verify_state` del OAuth CSRF, sin cobertura previa; no se encontraron bugs nuevos (commit `cea2a8d`) |
 | 2026-07-31 | Cobertura de User Webhooks (14 tests) — mismo bug de `str`/`datetime` que Admin/Public API encontrado y arreglado en `created_at` (commit `e279b56`) |
 | 2026-07-31 | Cobertura de Admin + Public API (30 tests) — 2 bugs reales de 500 encontrados y arreglados en el proceso (commit `7ae199f`) |
