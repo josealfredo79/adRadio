@@ -91,10 +91,13 @@ async def save_whatsapp_connection(
         raise HTTPException(status_code=status_code, detail=check.message)
 
     # Capa 11: reiniciar la rampa de warm-up solo si es un número distinto al
-    # que ya estaba conectado — refrescar el token del mismo número (o volver
-    # a guardar tras un reconnect_required) no debe hacerlo empezar de cero.
+    # que ya estaba conectado (incluye la primera conexión, donde no había
+    # ninguno). Ojo: NO usar "meta_connected_at is None" como condición extra
+    # — eso dispararía en cualquier resave (ej. refrescar un token vencido)
+    # de una cuenta ya conectada desde antes de que existiera esta columna,
+    # reiniciando de la nada la rampa de un número que ya lleva meses sano.
     is_new_number = current_user.meta_phone_number_id != body.phone_number_id
-    if is_new_number or current_user.meta_connected_at is None:
+    if is_new_number:
         current_user.meta_connected_at = datetime.now(timezone.utc)
 
     enc = encrypt_secret(body.token)
