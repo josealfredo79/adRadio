@@ -86,6 +86,33 @@ def resolve_warmup_cap(connected_at: datetime | None) -> int | None:
     return None
 
 
+# Capa 13 — códigos de error de Meta que señalan riesgo real de baneo a
+# nivel de CUENTA (no solo "reintenta este mensaje"), suficiente para
+# pausar toda campaña activa del advertiser, igual que un rating RED
+# (ver apply_quality_signal arriba). Meta formatea sus mensajes de error
+# como "(#<code>) <descripción>"; 131049 es lo bastante largo para
+# matchear tal cual, 368 se busca con la forma "(#368)" para no
+# confundirse con un "368" suelto en otro contexto del mensaje.
+# Fuente: referencia oficial de códigos de error de WhatsApp Cloud API
+# (developers.facebook.com/.../whatsapp/support/error-codes).
+# 131049 = "This message was not delivered to maintain healthy ecosystem
+#           engagement" — Meta mismo empieza a frenar la entrega por baja
+#           interacción predicha, un antecedente directo de una caída de
+#           quality rating.
+# 368     = "Temporarily blocked for policies violations" — bloqueo de
+#           Meta a nivel de cuenta, no una falla de un solo mensaje.
+_BAN_RISK_ERROR_CODES = ("131049", "(#368)")
+
+
+def is_ban_risk_error(error: str | None) -> bool:
+    """True si un error de envío de WhatsApp señala riesgo de baneo/
+    restricción a nivel de cuenta por parte de Meta, a diferencia de una
+    falla de entrega ordinaria de un solo mensaje."""
+    if not error:
+        return False
+    return any(code in error for code in _BAN_RISK_ERROR_CODES)
+
+
 async def pause_active_campaigns(db, advertiser_id) -> None:
     result = await db.execute(
         select(Campaign).where(

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.meta_quality_service import apply_quality_signal, pause_active_campaigns
+from app.services.meta_quality_service import apply_quality_signal, is_ban_risk_error, pause_active_campaigns
 
 
 def _db_with_campaigns(campaigns):
@@ -77,3 +77,28 @@ class TestPauseActiveCampaigns:
         # The query itself filters by status — this just confirms whatever
         # comes back gets paused unconditionally, matching the SQL filter.
         assert completed.status == "paused"
+
+
+class TestIsBanRiskError:
+    def test_none_is_not_ban_risk(self):
+        assert is_ban_risk_error(None) is False
+
+    def test_unrelated_error_is_not_ban_risk(self):
+        assert is_ban_risk_error("(#131026) Message undeliverable") is False
+
+    def test_healthy_ecosystem_engagement_code_is_ban_risk(self):
+        assert is_ban_risk_error("(#131049) This message was not delivered to maintain healthy ecosystem engagement") is True
+
+    def test_temporarily_blocked_code_is_ban_risk(self):
+        assert is_ban_risk_error("(#368) Temporarily blocked for policies violations") is True
+
+    def test_bare_368_substring_without_parens_does_not_false_match(self):
+        """368 alone (e.g. as part of an unrelated numeric id in a message)
+        must not trigger — only the parenthesized Meta error-code form does."""
+        assert is_ban_risk_error("Error interno 12368 procesando el mensaje") is False
+
+    def test_ordinary_rate_limit_error_is_not_ban_risk(self):
+        """Rate-limit codes (already handled separately by
+        _RATE_LIMIT_ERROR_CODES in tasks.py) are retry-worthy, not
+        ban-risk — a different reaction (retry vs. pause everything)."""
+        assert is_ban_risk_error("(#130429) Rate limit hit") is False

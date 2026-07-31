@@ -69,6 +69,20 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
                     await suppress_contact_on_error(db, msg.contact_id, error)
                     await db.commit()
 
+                # Capa 13: un error de riesgo de baneo a nivel de cuenta
+                # (ver is_ban_risk_error) pausa toda campaña activa del
+                # advertiser — pause_active_campaigns ya es un no-op sobre
+                # campañas que otra tarea concurrente dejó en 'paused'.
+                if not sid and error and advertiser:
+                    from app.services.meta_quality_service import is_ban_risk_error, pause_active_campaigns
+                    if is_ban_risk_error(error):
+                        await pause_active_campaigns(db, advertiser.id)
+                        await db.commit()
+                        logger.warning(
+                            "[BAN RISK] advertiser=%s error=%s — campañas activas auto-pausadas",
+                            advertiser.id, error,
+                        )
+
             if error and any(code in str(error) for code in _RATE_LIMIT_ERROR_CODES):
                 raise RuntimeError(f"WhatsApp rate limit: {error}")
 
@@ -120,6 +134,20 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
                     await suppress_contact_on_error(db, msg.contact_id, error)
                     await db.commit()
 
+                # Capa 13: un error de riesgo de baneo a nivel de cuenta
+                # (ver is_ban_risk_error) pausa toda campaña activa del
+                # advertiser — pause_active_campaigns ya es un no-op sobre
+                # campañas que otra tarea concurrente dejó en 'paused'.
+                if not sid and error and advertiser:
+                    from app.services.meta_quality_service import is_ban_risk_error, pause_active_campaigns
+                    if is_ban_risk_error(error):
+                        await pause_active_campaigns(db, advertiser.id)
+                        await db.commit()
+                        logger.warning(
+                            "[BAN RISK] advertiser=%s error=%s — campañas activas auto-pausadas",
+                            advertiser.id, error,
+                        )
+
             if error and any(code in str(error) for code in _RATE_LIMIT_ERROR_CODES):
                 raise RuntimeError(f"WhatsApp rate limit: {error}")
 
@@ -170,6 +198,20 @@ def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, 
                 if not sid and msg.contact_id and error:
                     await suppress_contact_on_error(db, msg.contact_id, error)
                     await db.commit()
+
+                # Capa 13: un error de riesgo de baneo a nivel de cuenta
+                # (ver is_ban_risk_error) pausa toda campaña activa del
+                # advertiser — pause_active_campaigns ya es un no-op sobre
+                # campañas que otra tarea concurrente dejó en 'paused'.
+                if not sid and error and advertiser:
+                    from app.services.meta_quality_service import is_ban_risk_error, pause_active_campaigns
+                    if is_ban_risk_error(error):
+                        await pause_active_campaigns(db, advertiser.id)
+                        await db.commit()
+                        logger.warning(
+                            "[BAN RISK] advertiser=%s error=%s — campañas activas auto-pausadas",
+                            advertiser.id, error,
+                        )
 
             if error and any(code in str(error) for code in _RATE_LIMIT_ERROR_CODES):
                 raise RuntimeError(f"WhatsApp rate limit: {error}")
