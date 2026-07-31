@@ -2,6 +2,7 @@ from app.models.user import User
 from app.models.contact import Contact
 from app.models.campaign import Campaign
 from app.models.campaign_segment_send import CampaignSegmentSend
+from app.models.recipient_send import RecipientSend
 from app.models.message import Message
 from app.models.knowledge_base import KnowledgeBase
 from app.models.conversation import Conversation
@@ -23,6 +24,7 @@ __all__ = [
     "Contact",
     "Campaign",
     "CampaignSegmentSend",
+    "RecipientSend",
     "Message",
     "KnowledgeBase",
     "Conversation",

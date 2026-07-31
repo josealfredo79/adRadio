@@ -6,9 +6,10 @@ import json
 import logging
 import random
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,37 @@ async def record_segment_send(db, advertiser_id, fingerprint: str) -> None:
         db.add(CampaignSegmentSend(advertiser_id=advertiser_id, segment_fingerprint=fingerprint, last_sent_at=now))
 
 
+@dataclass
+class RecipientCapState:
+    """Snapshot por invocación de loop para la Capa 10: el tope numérico
+    resuelto del messaging_limit_tier del advertiser, y el conteo de
+    destinatarios únicos ya enganchados con una ventana NUEVA en la ventana
+    móvil de 24h actual — incluyendo cualquiera abierta durante este mismo
+    loop. Se muta in-place conforme se abren ventanas nuevas, para evitar
+    una query COUNT por contacto."""
+    limit: int | None
+    count: int
+
+
+async def get_recipient_cap_state(db, advertiser) -> RecipientCapState:
+    """Cuenta destinatarios únicos (contact_id distintos) con una ventana
+    nueva abierta en las últimas 24h para este advertiser, y resuelve el
+    tope numérico vigente según su messaging_limit_tier."""
+    from app.models.recipient_send import RecipientSend
+    from app.services.meta_quality_service import resolve_tier_limit
+
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    result = await db.execute(
+        select(func.count(func.distinct(RecipientSend.contact_id))).where(
+            RecipientSend.advertiser_id == advertiser.id,
+            RecipientSend.sent_at >= since,
+        )
+    )
+    count = result.scalar_one() or 0
+    limit = resolve_tier_limit(advertiser.meta_messaging_tier)
+    return RecipientCapState(limit=limit, count=count)
+
+
 def _is_contact_active(contact) -> bool:
     """Skip inactive contacts to reduce ban risk.
     New contacts (never interacted) are always considered active.
@@ -107,6 +139,7 @@ async def _ensure_conversation_window(
     advertiser,
     contact,
     _convs: dict[str, object] | None = None,
+    _cap: "RecipientCapState | None" = None,
 ) -> int | None:
     """Send the advertiser's approved utility template if the 24h window is closed.
     Returns extra delay (seconds) if it's safe to send now (window open, or an
@@ -115,8 +148,13 @@ async def _ensure_conversation_window(
     WhatsApp policy prohibits free-text outside the window, so unlike before
     there is no silent fallback to plain text here.
     Accepts optional preloaded conversations dict {contact_id: conv} to avoid N+1.
+    Accepts optional _cap (Capa 10): if provided and the advertiser is
+    already at Meta's messaging_limit_tier cap of unique recipients in the
+    rolling 24h window, a NEW window is refused (re-engaging an already-open
+    window above is unaffected — that's returned before this check runs).
     """
     from app.models.conversation import Conversation
+    from app.models.recipient_send import RecipientSend
     from app.services.meta_service import send_whatsapp_template
     from app.services.whatsapp_window import is_window_open
 
@@ -151,6 +189,17 @@ async def _ensure_conversation_window(
         logger.info("[TEMPLATE] No meta_utility_template_name for advertiser=%s — blocking send, window closed", advertiser.id)
         return None
 
+    # Capa 10: a punto de abrir una ventana NUEVA — esto es exactamente lo
+    # que Meta limita con messaging_limit_tier (destinatarios únicos nuevos
+    # por ventana móvil de 24h). Re-mensajear una ventana ya abierta no pasa
+    # por aquí (ver el `return 0` de is_window_open arriba).
+    if _cap is not None and _cap.limit is not None and _cap.count >= _cap.limit:
+        logger.warning(
+            "[TIER CAP] advertiser=%s alcanzó el tope messaging_limit_tier (%d/%d) — bloqueando ventana nueva a contact=%s",
+            advertiser.id, _cap.count, _cap.limit, contact.id,
+        )
+        return None
+
     contact_name = (contact.name or "Cliente").split()[0] if contact.name else "Cliente"
     business_name = advertiser.business_name or "IARadio"
 
@@ -169,6 +218,10 @@ async def _ensure_conversation_window(
     if not sid:
         logger.warning("[TEMPLATE] Utility template failed for %s: %s — blocking send", contact.phone, error)
         return None
+
+    if _cap is not None:
+        db.add(RecipientSend(advertiser_id=advertiser.id, contact_id=contact.id))
+        _cap.count += 1
 
     if not conv:
         conv = Conversation(advertiser_id=advertiser.id, contact_id=contact.id, messages=[], lead_score="cold")
@@ -220,6 +273,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
 
     # Preload conversations to avoid N+1
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
+    _cap = await get_recipient_cap_state(db, advertiser)
 
     # Selección de diseño según negocio y tipo de campaña
     design = select_design(advertiser.business_category, campaign.type)
@@ -241,7 +295,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         if idx_b > 0 and idx_b % MAX_PER_HOUR == 0:
             ban_delay = int(idx_b / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs)
+        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs, _cap=_cap)
         if extra is None:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
@@ -312,6 +366,7 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
     MAX_PER_HOUR = advertiser.meta_send_throttle_per_hour or 60
 
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
+    _cap = await get_recipient_cap_state(db, advertiser)
 
     sent_count = 0
     skipped_count = 0
@@ -328,7 +383,7 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         if idx_r > 0 and idx_r % MAX_PER_HOUR == 0:
             ban_delay = int(idx_r / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs)
+        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs, _cap=_cap)
         if extra is None:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
@@ -382,6 +437,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
 
     MAX_PER_HOUR = advertiser.meta_send_throttle_per_hour or 60
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
+    _cap = await get_recipient_cap_state(db, advertiser)
 
     ab_enabled = ab.get("enabled", False)
     ab_variant_b = ab.get("variant_b", "")
@@ -411,7 +467,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         if i > 0 and i % MAX_PER_HOUR == 0:
             ban_delay = int(i / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs)
+        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs, _cap=_cap)
         if extra is None:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
@@ -597,6 +653,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
     sent = 0
     skipped_count = 0
     _convs = await _preload_conversations(db, advertiser.id, contacts)
+    _cap = await get_recipient_cap_state(db, advertiser)
 
     for idx, contact in enumerate(contacts):
         if advertiser.messages_remaining <= 0:
@@ -610,7 +667,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
         if idx > 0 and idx % MAX_PER_HOUR == 0:
             ban_delay = int(idx / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs)
+        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs, _cap=_cap)
         if extra is None:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)

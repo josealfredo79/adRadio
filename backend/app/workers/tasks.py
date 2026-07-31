@@ -12,6 +12,7 @@ from app.workers.task_helpers import (
     send_parrilla_messages, notify_campaign_failed, run_parrilla_generation,
     send_24h_reminders, send_1h_reminders,
     segment_fingerprint, is_segment_on_cooldown, record_segment_send,
+    get_recipient_cap_state,
 )
 from app.workers.task_helpers.common import suppress_contact_on_error
 
@@ -304,6 +305,16 @@ def schedule_campaign(self, campaign_id: str):
                 logger.warning(
                     "[CAMPAIGN] Auto-paused %s — same list relaunched within the cooldown window",
                     campaign.id,
+                )
+                return
+
+            cap_state = await get_recipient_cap_state(db, advertiser)
+            if cap_state.limit is not None and cap_state.count >= cap_state.limit:
+                campaign.status = "paused"
+                await db.commit()
+                logger.warning(
+                    "[CAMPAIGN] Auto-paused %s — advertiser=%s ya está en el tope messaging_limit_tier (%d/%d)",
+                    campaign.id, campaign.advertiser_id, cap_state.count, cap_state.limit,
                 )
                 return
 
@@ -626,8 +637,9 @@ def poll_meta_quality_ratings():
                     logger.warning("[META QUALITY POLL] advertiser=%s failed: %s", advertiser.id, e)
                     continue
                 rating = data.get("quality_rating")
-                if rating:
-                    await apply_quality_signal(db, advertiser, rating, data.get("messaging_limit_tier"))
+                tier = data.get("messaging_limit_tier")
+                if rating or tier:
+                    await apply_quality_signal(db, advertiser, rating, tier)
 
     run_async(_poll())
 

@@ -16,6 +16,44 @@ logger = logging.getLogger(__name__)
 _BASELINE_PER_HOUR = 60
 _THROTTLED_PER_HOUR = _BASELINE_PER_HOUR // 2
 
+# Meta's documented messaging_limit_tier values — caps unique customers the
+# business can start a NEW 24h conversation window with, per rolling 24h
+# period. Includes both the current vocabulary and the older TIER_50/TIER_1K
+# values this repo's own webhook fixtures reference, since some accounts may
+# still report them. Re-verify against a live Graph API response if Meta
+# renames this scheme again (they've flagged messaging_limit_tier as being
+# superseded by whatsapp_business_manager_messaging_limit).
+_TIER_LIMITS: dict[str, int | None] = {
+    "TIER_50": 50,
+    "TIER_250": 250,
+    "TIER_1K": 1_000,
+    "TIER_2K": 2_000,
+    "TIER_10K": 10_000,
+    "TIER_100K": 100_000,
+    "TIER_UNLIMITED": None,  # None = sin tope
+}
+# Fallback usado cuando meta_messaging_tier es None (aún no se ha hecho el
+# primer poll) o un string no reconocido (Meta cambió el vocabulario) —
+# fail-open pero conservador: ni bloquea todo el envío (fail-closed
+# rompería el onboarding) ni deja sin tope (fail-open-ilimitado anularía
+# el propósito de esta capa). Se autocorrige en el siguiente poll de 30 min.
+_DEFAULT_TIER_LIMIT = 250
+
+
+def resolve_tier_limit(tier: str | None) -> int | None:
+    """Resuelve el string crudo de messaging_limit_tier a un tope numérico
+    de destinatarios únicos por ventana móvil de 24h. Devuelve None solo
+    para un tier reconocido como ilimitado."""
+    if tier is None:
+        return _DEFAULT_TIER_LIMIT
+    if tier not in _TIER_LIMITS:
+        logger.warning(
+            "[TIER] messaging_limit_tier desconocido=%r — usando tope conservador=%d",
+            tier, _DEFAULT_TIER_LIMIT,
+        )
+        return _DEFAULT_TIER_LIMIT
+    return _TIER_LIMITS[tier]
+
 
 async def pause_active_campaigns(db, advertiser_id) -> None:
     result = await db.execute(

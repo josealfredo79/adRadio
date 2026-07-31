@@ -59,3 +59,21 @@ class TestPollMetaQualityRatings:
             poll_meta_quality_ratings()  # must not raise
 
         mock_apply.assert_not_called()
+
+    def test_persists_tier_even_without_a_rating(self, test_user):
+        """Regresión Capa 10: antes, apply_quality_signal (y por tanto la
+        persistencia del tier) solo se llamaba `if rating:` — si Meta
+        devolvía messaging_limit_tier sin quality_rating, el tier se perdía
+        silenciosamente. Debe llamarse igual cuando solo llega el tier."""
+        db = _db_with_advertisers([test_user])
+
+        with patch("app.database.CeleryAsyncSessionLocal", return_value=db), \
+             patch("app.services.meta_service._connection", return_value=("phone-1", "token-1")), \
+             patch("app.services.meta_client.graph_request", new=AsyncMock(
+                 return_value={"messaging_limit_tier": "TIER_2K"}
+             )), \
+             patch("app.services.meta_quality_service.apply_quality_signal", new=AsyncMock()) as mock_apply, \
+             patch("app.workers.tasks.run_async", side_effect=lambda coro: asyncio.run(coro)):
+            poll_meta_quality_ratings()
+
+        mock_apply.assert_awaited_once_with(db, test_user, None, "TIER_2K")
