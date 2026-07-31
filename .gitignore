@@ -67,3 +67,6 @@ backend/celerybeat-schedule
 
 # Cloudflare tunnel credentials
 cloudflared/credentials.json
+
+# Local working state of unrelated AI coding tools
+.mimocode/
