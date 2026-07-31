@@ -41,6 +41,11 @@ class TransactionResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_uuid(cls, v):
+        return str(v)
+
 
 class UserSubscriptionResponse(BaseModel):
     id: str

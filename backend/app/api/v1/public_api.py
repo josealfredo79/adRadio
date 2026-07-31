@@ -4,6 +4,7 @@ API Keys management router — /api/v1/api-keys
 import logging
 import secrets
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis
@@ -37,9 +38,9 @@ class ApiKeyOut(BaseModel):
     name: str
     prefix: str
     scopes: list[str]
-    last_used_at: str | None = None
+    last_used_at: datetime | None = None
     active: bool
-    created_at: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -51,7 +52,7 @@ class ApiKeyCreatedOut(BaseModel):
     scopes: list[str]
     key: str
     active: bool
-    created_at: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
