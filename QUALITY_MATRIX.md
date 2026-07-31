@@ -10,11 +10,11 @@
 
 | Indicador | Resultado |
 |---|---:|
-| Tests Backend (total) | 477 (475 passing + 2 fallas de entorno local conocidas, no del código) |
-| Archivos de test backend | 44 |
+| Tests Backend (total) | 521 (519 passing + 2 fallas de entorno local conocidas, no del código) |
+| Archivos de test backend | 46 |
 | Tests Frontend | 124 ✅ |
 | Archivos de test frontend | 21 |
-| Routers backend sin ningún test dedicado | **8 de 24** (Admin y Public API cerrados 2026-07-31) — ver tabla abajo |
+| Routers backend sin ningún test dedicado | **7 de 24** (Admin, Public API y Appointments cerrados 2026-07-31; User Webhooks también cerrado, no estaba contado en el 24 original) — ver tabla abajo |
 | Capas del sistema anti-baneo | 10 (capas 6-15), todas en producción |
 
 ---
@@ -33,7 +33,8 @@
 | Webhooks Stripe | ✅ | |
 | Payments | ⚠️ | Solo vía webhook, sin tests directos de `payments.py` |
 | Lab | ✅✅ | Endpoints, judge, personas, runner, simulator — muy completo |
-| **Appointments** | ❌ | Solo reminders (vía `test_tasks_helpers.py`), no el CRUD/API |
+| Appointments | ✅✅ | `test_appointments_endpoints.py` — CRUD con scoping por dueño, `/stats`, sync a Google Calendar (fallo tolerado sin bloquear creación), y `_sign_state`/`_verify_state` (firma HMAC del CSRF de OAuth) probados a fondo: firma alterada, user_id falsificado, token expirado. Sin bugs nuevos — `AppointmentOut` ya estaba bien tipado |
+| User Webhooks | ✅✅ | `test_user_webhooks_endpoints.py` — CRUD + ping con `httpx` mockeado. Encontró y arregló un bug real: mismo patrón que Admin/Public API (`UserWebhookOut.created_at` tipado `str` recibiendo `datetime`), `POST`/`PATCH` tronaban siempre con 500 |
 | **Automations** | ❌ | |
 | **Knowledge Base** | ❌ | |
 | **Team** | ❌ | |
@@ -44,7 +45,7 @@
 | **Analytics** | ❌ | |
 | Admin | ✅✅ | `test_admin_auth.py` (dependencia) + `test_admin_endpoints.py` (handlers, DB real) — encontró y arregló un bug real: `GET /admin/subscriptions/{id}/transactions` tronaba con 500 en cuanto el usuario tuviera una transacción (mismo tipo de bug: `TransactionResponse.id` sin el validador UUID→str que sus clases hermanas sí tenían) |
 
-**Recomendación de orden si se sigue cerrando esta brecha:** Appointments/Automations primero (lógica de negocio con estado propio), el resto después.
+**Recomendación de orden si se sigue cerrando esta brecha:** Automations primero (lógica de negocio con estado propio), el resto después.
 
 ---
 
@@ -103,6 +104,9 @@ conteos exactos antes de citarlos si ha pasado mucho tiempo.
 
 | Fecha | Cambio |
 |---|---|
+| 2026-07-31 | Confirmadas las 2 fallas de entorno local: `test_meta_incoming_webhook.py::TestPhoneNumberQualityUpdate` — `AllowedHostsMiddleware` rechaza el Host `test` que manda `httpx.AsyncClient(ASGITransport)` porque `.env` local trae `ALLOWED_HOSTS` sin `test`/`testserver` y `DEBUG=false`. No es bug de producción (los Hosts reales sí están permitidos); pendiente decidir si se agrega `testserver`/`test` al allowlist local o se ajusta el helper de estos tests |
+| 2026-07-31 | Cobertura de Appointments (16 tests) — incluye la firma HMAC `_sign_state`/`_verify_state` del OAuth CSRF, sin cobertura previa; no se encontraron bugs nuevos (commit `cea2a8d`) |
+| 2026-07-31 | Cobertura de User Webhooks (14 tests) — mismo bug de `str`/`datetime` que Admin/Public API encontrado y arreglado en `created_at` (commit `e279b56`) |
 | 2026-07-31 | Cobertura de Admin + Public API (30 tests) — 2 bugs reales de 500 encontrados y arreglados en el proceso (commit `7ae199f`) |
 | 2026-07-31 | Adaptador LLM OpenRouter/Anthropic intercambiable, activado y probado en vivo con modelo gratis (commits `17735a6`, `23af15f`) |
 | 2026-07-31 | Escalado a humano pedido por el cliente + fix de falso positivo en detección de intención de plan (commits `eea99dd`, `b3370c3`) |
