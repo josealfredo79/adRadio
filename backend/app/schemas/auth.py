@@ -6,6 +6,8 @@ from pydantic import BaseModel, EmailStr, field_validator
 def _validate_password_strength(v: str) -> str:
     if len(v) < 8:
         raise ValueError("La contraseña debe tener al menos 8 caracteres")
+    if len(v.encode("utf-8")) > 72:
+        raise ValueError("La contraseña no puede superar 72 bytes (límite del algoritmo bcrypt)")
     if not re.search(r"[A-Z]", v):
         raise ValueError("La contraseña debe tener al menos una mayúscula")
     if not re.search(r"\d", v):

@@ -12,7 +12,7 @@ export default function PricingSection() {
   const [backendPrices, setBackendPrices] = useState<Record<string, BackendPlan> | null>(null)
 
   useEffect(() => {
-    fetch('/api/v1/plans')
+    fetch(`${import.meta.env.VITE_API_URL ?? ''}/api/v1/plans`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => data && setBackendPrices(data))
       .catch(() => {})

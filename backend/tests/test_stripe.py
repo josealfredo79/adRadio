@@ -255,7 +255,7 @@ class TestHealthCheck:
     def test_health_response_format(self):
         """Verifica que la respuesta de /health tiene la estructura esperada."""
         from app.main import app
-        expected_routes = {route.path for route in app.routes}
+        expected_routes = {getattr(route, "path", None) for route in app.routes}
         assert "/health" in expected_routes
 
     def test_health_version_present(self):

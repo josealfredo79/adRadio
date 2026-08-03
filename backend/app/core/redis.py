@@ -2,7 +2,9 @@ import logging
 
 import redis.asyncio as aioredis
 from fastapi import HTTPException
+from redis.backoff import ExponentialWithJitterBackoff
 from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
+from redis.retry import Retry
 
 from app.config import settings
 
@@ -36,7 +38,8 @@ async def get_redis() -> aioredis.Redis:
                 socket_connect_timeout=10,
                 socket_timeout=10,
                 socket_keepalive=True,
-                retry_on_timeout=True,
+                retry=Retry(ExponentialWithJitterBackoff(base=0.01, cap=1), 3),
+                retry_on_error=[RedisConnectionError, RedisTimeoutError],
                 health_check_interval=30,
             )
             await _redis_pool.ping()

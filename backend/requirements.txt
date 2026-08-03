@@ -1,41 +1,41 @@
 # Web framework
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
 
 # Database
-sqlalchemy==2.0.36
-asyncpg==0.30.0
-alembic==1.14.0
-pgvector==0.3.6
+sqlalchemy==2.0.51
+asyncpg==0.31.0
+alembic==1.18.5
+pgvector==0.5.0
 
 # Config
-pydantic-settings==2.6.1
-pydantic[email]==2.10.3
+pydantic-settings==2.14.2
+pydantic[email]==2.13.4
 
 # Auth & Security
-python-jose[cryptography]==3.3.0
-cryptography==48.0.0
-bcrypt==4.2.1
-python-multipart==0.0.12
+python-jose[cryptography]==3.5.0
+cryptography==50.0.0
+bcrypt==5.0.0
+python-multipart==0.0.32
 
 # Redis
-redis==5.2.0
+redis==8.1.0
 
 # Celery
-celery==5.4.0
+celery==5.6.3
 
 # AI Services
-anthropic==0.40.0
-openai==1.57.0
-voyageai==0.3.7
+anthropic==0.120.2
+openai==2.52.0
+voyageai==0.5.0
 httpx==0.28.1
-google-auth==2.37.0
+google-auth==2.56.2
 google-auth-oauthlib==1.4.0
-google-api-python-client==2.196.0
-google-cloud-texttospeech==2.17.2
+google-api-python-client==2.198.0
+google-cloud-texttospeech==2.37.0
 
 # Payments
-stripe==11.3.0
+stripe==15.4.0
 
 # File processing
 python-docx==1.1.2
@@ -44,22 +44,22 @@ openpyxl==3.1.5
 Pillow==11.0.0
 
 # Storage (Cloudflare R2 via S3 compat)
-boto3==1.35.80
+boto3==1.43.62
 
 # Monitoring
-sentry-sdk[fastapi]==2.19.2
-posthog==3.5.0
+sentry-sdk[fastapi]==2.66.1
+posthog==7.35.5
 
 # Email
 # (uses stdlib smtplib — no extra dep needed)
 
 # Audio — locutor de radio con IA (La Nueva Radio)
-edge-tts==6.1.12
+edge-tts==7.2.8
 pydub==0.25.1
 fish-audio-sdk>=1.0.0
 
 # Rate limiting
-slowapi==0.1.9
+slowapi==0.1.10
 
 # Dev
 pytest==8.3.4
