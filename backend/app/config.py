@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     # Opcional: App Secret de la app de Meta, para validar la firma
     # X-Hub-Signature-256 de cada evento del webhook.
     META_APP_SECRET: str = ""
+    # Embedded Signup — "Conectar con Meta" (un clic, sin pegar tokens).
+    # Se obtienen en developers.facebook.com → tu app → App Dashboard.
+    META_APP_ID: str = ""
+    # ID del "WhatsApp Embedded Signup configuration" (dashboard → WhatsApp → Embedded Signup).
+    META_EMBEDDED_SIGNUP_CONFIG_ID: str = ""
 
     # Stripe
     STRIPE_SECRET_KEY: str = ""

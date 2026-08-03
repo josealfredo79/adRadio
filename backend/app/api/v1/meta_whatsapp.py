@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.config import settings
 from app.core.crypto import encrypt_secret
 from app.database import get_db
 from app.models.user import User
@@ -22,6 +23,7 @@ from app.schemas.meta_whatsapp import (
     MetaWhatsappTestResult,
 )
 from app.services.meta_connect_service import subscribe_app_to_waba, test_connection
+from app.services.meta_oauth_service import exchange_embedded_code
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +126,64 @@ async def test_whatsapp_connection(
         code=check.code,
         message=check.message,
     )
+
+
+class MetaEmbeddedConfigOut(BaseModel):
+    app_id: str
+    config_id: str
+    enabled: bool
+
+
+@router.get("/me/whatsapp-embedded-config", response_model=MetaEmbeddedConfigOut)
+async def get_whatsapp_embedded_config(current_user: User = Depends(get_current_user)):
+    """Expose whether one-click "Conectar con Meta" is wired up server-side.
+    App ID / config ID are public (they ship inside the FB JS SDK anyway)."""
+    enabled = bool(settings.META_APP_ID and settings.META_EMBEDDED_SIGNUP_CONFIG_ID)
+    return MetaEmbeddedConfigOut(
+        app_id=settings.META_APP_ID,
+        config_id=settings.META_EMBEDDED_SIGNUP_CONFIG_ID,
+        enabled=enabled,
+    )
+
+
+class MetaEmbeddedSignupBody(BaseModel):
+    """Payload from the "Conectar con Meta" flow: the OAuth code plus the
+    WABA/phone the customer picked in Meta's own signup window."""
+    code: str
+    waba_id: str
+    phone_number_id: str
+
+
+@router.post("/me/whatsapp-connection/embedded", response_model=MetaWhatsappConnectionOut)
+async def connect_whatsapp_embedded(
+    body: MetaEmbeddedSignupBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """One-click "Conectar con Meta" (Embedded Signup). Exchanges the code
+    server-side, persists the resulting long-lived token, and subscribes the
+    webhook — the advertiser never touches a token."""
+    result = await exchange_embedded_code(body.code, body.waba_id, body.phone_number_id)
+    if not result.ok or not result.token:
+        status_code = 503 if result.code == "meta_unavailable" else 422
+        raise HTTPException(status_code=status_code, detail=result.message)
+
+    enc = encrypt_secret(result.token)
+    current_user.meta_waba_id = body.waba_id
+    current_user.meta_phone_number_id = body.phone_number_id
+    current_user.meta_display_phone_number = result.display_phone_number
+    current_user.meta_verified_name = result.verified_name
+    current_user.meta_token_cipher = enc.cipher
+    current_user.meta_token_iv = enc.iv
+    current_user.meta_token_tag = enc.tag
+    current_user.meta_connection_status = "connected"
+    current_user.meta_connected_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(current_user)
+
+    await subscribe_app_to_waba(body.waba_id, result.token)
+
+    return await get_whatsapp_connection(current_user)
 
 
 @router.put("/me/whatsapp-connection", response_model=MetaWhatsappConnectionOut)

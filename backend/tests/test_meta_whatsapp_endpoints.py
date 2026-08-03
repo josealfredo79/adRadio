@@ -7,7 +7,9 @@ from fastapi.testclient import TestClient
 import app.main as main_module
 from app.api.deps import get_current_user
 from app.database import get_db
+from app.schemas.meta_whatsapp import MetaWhatsappConnectionOut
 from app.services.meta_connect_service import ConnectionCheck
+from app.services.meta_oauth_service import OAuthResult
 
 
 @pytest.fixture
@@ -192,4 +194,69 @@ class TestUpdateTemplates:
         r = client.patch("/api/v1/me/whatsapp-templates", json={"utility_template_name": ""})
         assert r.status_code == 200
         assert test_user.meta_utility_template_name is None
+
+
+class TestEmbeddedConfig:
+    def test_returns_disabled_when_not_configured(self, client, test_user):
+        with patch("app.api.v1.meta_whatsapp.settings") as mock_settings:
+            mock_settings.META_APP_ID = ""
+            mock_settings.META_EMBEDDED_SIGNUP_CONFIG_ID = ""
+            r = client.get("/api/v1/me/whatsapp-embedded-config")
+            assert r.status_code == 200
+            data = r.json()
+            assert data["enabled"] is False
+
+    def test_returns_enabled_when_configured(self, client, test_user):
+        with patch("app.api.v1.meta_whatsapp.settings") as mock_settings:
+            mock_settings.META_APP_ID = "123456789"
+            mock_settings.META_EMBEDDED_SIGNUP_CONFIG_ID = "cfg-123"
+            r = client.get("/api/v1/me/whatsapp-embedded-config")
+            assert r.status_code == 200
+            data = r.json()
+            assert data["enabled"] is True
+            assert data["app_id"] == "123456789"
+            assert data["config_id"] == "cfg-123"
+
+
+class TestEmbeddedSignup:
+    def test_missing_server_config_returns_422(self, client, test_user):
+        with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(
+            ok=False, code="missing_config", message="META_APP_ID / META_APP_SECRET no están configurados en el servidor",
+        ))):
+            r = client.post("/api/v1/me/whatsapp-connection/embedded", json={
+                "code": "abc123", "waba_id": "waba-1", "phone_number_id": "phone-1",
+            })
+            assert r.status_code == 422
+            assert "no están configurados" in r.json()["detail"]
+
+    def test_successful_embedded_signup_persists_and_subscribes(self, client, test_user):
+        from app.api.v1.meta_whatsapp import get_whatsapp_connection
+        with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(
+            ok=True, token="EAAGembeddedtoken", display_phone_number="+521234567890",
+            verified_name="Mi Negocio",
+        ))), patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()) as mock_subscribe, \
+                patch("app.api.v1.meta_whatsapp.get_whatsapp_connection", new=AsyncMock(return_value=MetaWhatsappConnectionOut(
+                    waba_id="waba-1", phone_number_id="phone-1", status="connected",
+                    utility_template_status="not_configured",
+                ))):
+            r = client.post("/api/v1/me/whatsapp-connection/embedded", json={
+                "code": "abc123", "waba_id": "waba-1", "phone_number_id": "phone-1",
+            })
+            assert r.status_code == 200
+            assert test_user.meta_waba_id == "waba-1"
+            assert test_user.meta_phone_number_id == "phone-1"
+            assert test_user.meta_connection_status == "connected"
+            assert test_user.meta_connected_at is not None
+            assert mock_subscribe.await_count == 1
+            mock_subscribe.assert_awaited_with("waba-1", "EAAGembeddedtoken")
+
+    def test_exchange_failure_returns_422(self, client, test_user):
+        with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(
+            ok=False, code="exchange_failed", message="Meta rechazó el código de autorización",
+        ))):
+            r = client.post("/api/v1/me/whatsapp-connection/embedded", json={
+                "code": "bad", "waba_id": "waba-1", "phone_number_id": "phone-1",
+            })
+            assert r.status_code == 422
+            assert test_user.meta_connection_status == "not_connected"
         assert test_user.meta_utility_template_status == "not_configured"
