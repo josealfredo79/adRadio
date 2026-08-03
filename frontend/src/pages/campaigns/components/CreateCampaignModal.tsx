@@ -16,6 +16,7 @@ interface CreateCampaignModalProps {
   onCreate: (campaignData: Record<string, unknown>) => void
   isCreatePending: boolean
   currentUser?: { business_category?: string | null; current_plan?: string } | null
+  utilityTemplateStatus?: string | null
 }
 
 export function CreateCampaignModal({
@@ -28,6 +29,7 @@ export function CreateCampaignModal({
   onCreate,
   isCreatePending,
   currentUser,
+  utilityTemplateStatus,
 }: CreateCampaignModalProps) {
   const {
     form,
@@ -543,6 +545,17 @@ export function CreateCampaignModal({
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
+
+          {utilityTemplateStatus && utilityTemplateStatus !== 'approved' && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">⚠️ Sin plantilla de reapertura aprobada</p>
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                {utilityTemplateStatus === 'pending_review'
+                  ? 'Tu plantilla utility está en revisión. Los contactos con la ventana de 24 h cerrada no recibirán esta campaña hasta que Meta la apruebe.'
+                  : 'Esta campaña solo llegará a contactos que hayan interactuado en las últimas 24 h. Para alcanzar contactos fríos, configura una plantilla utility aprobada en Conexión con WhatsApp.'}
+              </p>
+            </div>
+          )}
 
           {!scheduledAt && (
             <p className="text-xs text-muted-foreground">

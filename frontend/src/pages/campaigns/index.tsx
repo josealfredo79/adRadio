@@ -77,6 +77,13 @@ export default function CampaignsPage() {
     staleTime: 1000 * 60 * 30,
   })
 
+  const { data: whatsappConnection } = useQuery<{ utility_template_status?: string }>({
+    queryKey: ['whatsapp-connection'],
+    queryFn: () => api.get('/me/whatsapp-connection').then((r) => r.data),
+    staleTime: 1000 * 60 * 5,
+  })
+  const utilityTemplateStatus = whatsappConnection?.utility_template_status ?? null
+
   const handleExportCsv = async () => {
     try {
       const response = await api.get('/campaigns/export-csv', { responseType: 'blob' })
@@ -184,6 +191,7 @@ export default function CampaignsPage() {
           onCreate={(campaignData) => mutations.createMutation.mutate(campaignData)}
           isCreatePending={mutations.createMutation.isPending}
           currentUser={currentUser}
+          utilityTemplateStatus={utilityTemplateStatus}
         />
       )}
 
