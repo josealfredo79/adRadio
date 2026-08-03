@@ -105,8 +105,9 @@ export default function Layout() {
         </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-2 space-y-1">
+      {/* Navigation (scrollable so every item + logout stays reachable on short screens) */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+      <nav className="px-3 py-2 space-y-1">
         {navItems.map(({ to, icon: Icon, label, badge }) => {
           const count = badge === 'orders_pending' ? (dashData?.orders_pending ?? 0) : 0
           return (
@@ -166,6 +167,7 @@ export default function Layout() {
           </nav>
         </>
       )}
+      </div>
 
       {/* User + logout */}
       <div className="border-t border-border p-4">
