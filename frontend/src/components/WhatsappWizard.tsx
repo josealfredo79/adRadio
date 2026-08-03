@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
-import { Check, Loader2, MessageCircle, X } from 'lucide-react'
+import { Check, ChevronDown, ExternalLink, Loader2, MessageCircle, X } from 'lucide-react'
 
 interface Connection {
   waba_id: string | null
@@ -33,6 +33,7 @@ export default function WhatsappWizard() {
   const [phoneNumberId, setPhoneNumberId] = useState('')
   const [token, setToken] = useState('')
   const [testResult, setTestResult] = useState<TestResult | null>(null)
+  const [showGuide, setShowGuide] = useState(false)
 
   const canTest = wabaId.trim() && phoneNumberId.trim() && token.trim()
 
@@ -91,12 +92,105 @@ export default function WhatsappWizard() {
         </div>
       )}
 
+      <button
+        type="button"
+        onClick={() => setShowGuide((v) => !v)}
+        className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/50 px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+      >
+        <span>Guía paso a paso (cómo conseguir estos datos)</span>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showGuide ? 'rotate-180' : ''}`} />
+      </button>
+
+      {showGuide && (
+        <ol className="space-y-4 rounded-lg border border-border p-4 text-sm text-foreground">
+          <li className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">1</span>
+            <div className="space-y-1">
+              <p className="font-medium">
+                Crea tu cuenta de negocio (si no la tienes) y agrega WhatsApp
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Entra a{' '}
+                <a href="https://business.facebook.com" target="_blank" rel="noreferrer" className="underline">
+                  business.facebook.com
+                </a>{' '}
+                con tu cuenta personal. Crea un Business Manager (o entra al tuyo) → en la barra lateral busca{' '}
+                <span className="font-medium">WhatsApp</span> →{' '}
+                <span className="font-medium">Empezar a usar</span>. Esto crea tu WhatsApp Business Account (WABA) gratis.
+              </p>
+            </div>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">2</span>
+            <div className="space-y-1">
+              <p className="font-medium">Agrega tu número de teléfono</p>
+              <p className="text-xs text-muted-foreground">
+                Dentro de la WABA → <span className="font-medium">Configuración de números de teléfono</span> →{' '}
+                <span className="font-medium">Agregar número</span>. Usa un número <span className="font-medium">libre de WhatsApp</span> (otro chip).
+                Verifícalo con el código por SMS o llamada que te llega a ese número.
+              </p>
+            </div>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">3</span>
+            <div className="space-y-1">
+              <p className="font-medium">Crea tu app en Meta for Developers</p>
+              <p className="text-xs text-muted-foreground">
+                En{' '}
+                <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="underline">
+                  developers.facebook.com
+                </a>{' '}
+                → <span className="font-medium">Mis apps</span> → <span className="font-medium">Crear app</span> (tipo 'Negocio', luego
+                agrega el producto <span className="font-medium">WhatsApp</span>). Ahí verás{' '}
+                <span className="font-medium">WABA ID</span> y <span className="font-medium">Phone Number ID</span> en la sección{' '}
+                <span className="font-medium">API Setup</span>.
+              </p>
+            </div>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">4</span>
+            <div className="space-y-1">
+              <p className="font-medium">Genera el token permanente</p>
+              <p className="text-xs text-muted-foreground">
+                En{' '}
+                <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noreferrer" className="underline">
+                  business.facebook.com → Configuración → Usuarios del sistema
+                </a>{' '}
+                crea un usuario del sistema con tu app y permiso{' '}
+                <span className="font-medium">whatsapp_business_messaging</span> y{' '}
+                <span className="font-medium">whatsapp_business_management</span>, luego{' '}
+                <span className="font-medium">Generar token</span> (elige tu app, sin expiración). Ese token de larga duración es el que pegas aquí.
+              </p>
+            </div>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">5</span>
+            <div className="space-y-1">
+              <p className="font-medium">Pega los 3 datos abajo y dale 'Probar conexión'</p>
+              <p className="text-xs text-muted-foreground">
+                El botón de prueba valida el token contra Meta sin guardar nada. Si todo sale bien, guarda. Listo.
+              </p>
+            </div>
+          </li>
+          <li className="flex items-center gap-2 text-xs text-muted-foreground">
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Guía oficial:{' '}
+              <a
+                href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                developers.facebook.com/docs/whatsapp/cloud-api/get-started
+              </a>
+            </span>
+          </li>
+        </ol>
+      )}
+
       <p className="text-xs text-muted-foreground">
-        Obtén estos datos en{' '}
-        <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="underline">
-          developers.facebook.com
-        </a>{' '}
-        → tu app → WhatsApp → API Setup. El token debe ser de un usuario del sistema (no expira).
+        Pega abajo los 3 datos que viste en el paso 3 y 4. El token debe ser de un usuario del sistema (no expira).
       </p>
 
       <div className="space-y-3">
