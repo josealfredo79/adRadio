@@ -4,6 +4,11 @@ import api, { getApiError } from '@/lib/api'
 import { launchEmbeddedSignup } from '@/lib/fbSdk'
 import { Check, ChevronDown, ExternalLink, Loader2, MessageCircle, X } from 'lucide-react'
 
+// Embedded Signup requiere que la app esté certificada como Tech Provider/BSP
+// ante Meta (bloqueado hasta que se apruebe — ver memoria de sesión 2026-08-04).
+// El código queda intacto y probado; solo se oculta del dashboard hasta entonces.
+const EMBEDDED_SIGNUP_LIVE = false
+
 interface Connection {
   waba_id: string | null
   phone_number_id: string | null
@@ -132,33 +137,35 @@ export default function WhatsappWizard() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-        <p className="text-sm font-medium text-foreground">
-          ¿Ya tienes tu cuenta de negocio en Meta? Conecta en un solo clic.
-        </p>
-        <button
-          type="button"
-          onClick={handleConnectWithMeta}
-          disabled={embeddedMutation.isPending}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#1877F2] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0f68d9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {embeddedMutation.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-            </svg>
+      {EMBEDDED_SIGNUP_LIVE && (
+        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+          <p className="text-sm font-medium text-foreground">
+            ¿Ya tienes tu cuenta de negocio en Meta? Conecta en un solo clic.
+          </p>
+          <button
+            type="button"
+            onClick={handleConnectWithMeta}
+            disabled={embeddedMutation.isPending}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#1877F2] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0f68d9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {embeddedMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+              </svg>
+            )}
+            {embeddedMutation.isPending ? 'Conectando con Meta…' : 'Conectar con Meta'}
+          </button>
+          <p className="text-xs text-muted-foreground">
+            Se abrirá una ventana de Meta: inicia sesión, elige tu negocio y tu número. El token y la
+            configuración se hacen solos — no necesitas pegar nada.
+          </p>
+          {connectError && (
+            <p className="text-sm text-red-600">{connectError}</p>
           )}
-          {embeddedMutation.isPending ? 'Conectando con Meta…' : 'Conectar con Meta'}
-        </button>
-        <p className="text-xs text-muted-foreground">
-          Se abrirá una ventana de Meta: inicia sesión, elige tu negocio y tu número. El token y la
-          configuración se hacen solos — no necesitas pegar nada.
-        </p>
-        {connectError && (
-          <p className="text-sm text-red-600">{connectError}</p>
-        )}
-      </div>
+        </div>
+      )}
 
       <button
         type="button"
