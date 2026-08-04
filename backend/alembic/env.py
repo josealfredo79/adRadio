@@ -14,7 +14,6 @@ from app.models.message import Message  # noqa: F401
 from app.models.knowledge_base import KnowledgeBase  # noqa: F401
 from app.models.conversation import Conversation  # noqa: F401
 from app.models.transaction import Transaction  # noqa: F401
-from app.models.prospects_pool import ProspectsPool  # noqa: F401
 from app.models.appointment import Appointment  # noqa: F401
 from app.models.order import Order  # noqa: F401
 from app.models.coupon import Coupon  # noqa: F401
