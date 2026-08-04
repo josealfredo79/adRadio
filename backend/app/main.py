@@ -134,13 +134,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         api_url = settings.FRONTEND_PUBLIC_URL or ""
         csp_parts = ["default-src 'self'"]
         if widget_url:
-            csp_parts.append(f"script-src 'self' {widget_url} https://js.stripe.com")
+            csp_parts.append(f"script-src 'self' {widget_url} https://js.stripe.com https://connect.facebook.net")
             csp_parts.append(f"style-src 'self' 'unsafe-inline' {widget_url}")
         else:
-            csp_parts.append("script-src 'self' https://js.stripe.com")
+            csp_parts.append("script-src 'self' https://js.stripe.com https://connect.facebook.net")
             csp_parts.append("style-src 'self' 'unsafe-inline'")
         csp_parts.append("img-src 'self' data: blob: https:")
-        csp_parts.append("frame-src 'self' https://js.stripe.com")
+        csp_parts.append("frame-src 'self' https://js.stripe.com https://www.facebook.com https://facebook.com")
         connect_src = ["'self'"]
         if api_url:
             connect_src.append(api_url)
