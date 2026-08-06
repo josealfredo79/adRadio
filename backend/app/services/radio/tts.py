@@ -16,6 +16,24 @@ LOCUTOR_VOICES = {
     "default": "es-MX-JorgeNeural",
 }
 
+# Maps this app's edge-tts voice ids (see AVAILABLE_VOICES in app/api/v1/radio.py)
+# to a gender/accent-correct Google Cloud voice. Google Cloud TTS has no
+# separate es-MX/es-AR/es-CO catalog, only es-ES (Spain) and es-US (generic
+# Latin American Spanish) — so all three Latin American accents collapse to
+# the same es-US voice per gender; only the es-ES entries keep a distinct
+# accent. Verified gender against the live Google API (voice names like
+# "Neural2-F" are catalog letters, NOT a gender code).
+GOOGLE_VOICE_MAP = {
+    "es-MX-JorgeNeural": "es-US-Neural2-B",   # male
+    "es-MX-DaliaNeural": "es-US-Neural2-A",   # female
+    "es-AR-TomasNeural": "es-US-Neural2-B",   # male
+    "es-AR-ElenaNeural": "es-US-Neural2-A",   # female
+    "es-CO-GonzaloNeural": "es-US-Neural2-B", # male
+    "es-CO-SalomeNeural": "es-US-Neural2-A",  # female
+    "es-ES-AlvaroNeural": "es-ES-Neural2-F",  # male
+    "es-ES-ElviraNeural": "es-ES-Neural2-A",  # female
+}
+
 
 async def _tts_fish_audio(text: str, voice_id: str | None) -> bytes:
     """Sintetiza voz con Fish Audio S2 (alta calidad). Retorna bytes MP3."""
@@ -59,9 +77,13 @@ async def _tts_google_cloud(text: str, voice_name: str = "es-ES-Neural2-F") -> b
 
     client = tts.TextToSpeechAsyncClient.from_service_account_info(credentials_info)
 
+    # language_code must match voice_name's locale (e.g. "es-US-Neural2-A" needs
+    # "es-US", not "es-ES") or Google Cloud TTS rejects the request.
+    language_code = "-".join(voice_name.split("-")[:2])
+
     synthesis_input = tts.SynthesisInput(text=text)
     voice = tts.VoiceSelectionParams(
-        language_code="es-ES",
+        language_code=language_code,
         name=voice_name,
     )
     audio_config = tts.AudioConfig(
@@ -83,14 +105,16 @@ async def _tts_google_cloud(text: str, voice_name: str = "es-ES-Neural2-F") -> b
 async def text_to_speech(text: str, voice: str, rate: str = "-5%", pitch: str = "-5Hz") -> bytes:
     """
     Sintetiza voz para la cuña de radio.
-    - Si GOOGLE_TTS_PROVIDER="google" → usa Google Cloud TTS (WaveNet).
+    - Si GOOGLE_TTS_PROVIDER="google" → usa Google Cloud TTS (WaveNet), mapeando
+      la voz elegida (acento/género) a su equivalente de Google vía GOOGLE_VOICE_MAP.
     - Si FISH_AUDIO_API_KEY está configurado → usa Fish Audio S2 (calidad profesional).
     - Si no → usa edge-tts (gratuito, Microsoft Neural).
     """
     from app.config import settings
 
     if settings.GOOGLE_TTS_PROVIDER == "google":
-        return await _tts_google_cloud(text, settings.GOOGLE_TTS_VOICE_NAME or "es-ES-Neural2-F")
+        google_voice = GOOGLE_VOICE_MAP.get(voice) or settings.GOOGLE_TTS_VOICE_NAME or "es-ES-Neural2-F"
+        return await _tts_google_cloud(text, google_voice)
     if settings.FISH_AUDIO_API_KEY:
         voice_id = settings.FISH_AUDIO_VOICE_ID or None
         return await _tts_fish_audio(text, voice_id)
