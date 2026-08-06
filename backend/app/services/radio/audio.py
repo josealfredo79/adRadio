@@ -221,7 +221,23 @@ def mix_with_jingle(
     try:
         from pydub import AudioSegment  # type: ignore
 
-        voice = AudioSegment.from_mp3(io.BytesIO(voice_bytes))
+        # Decodificar desde un archivo temporal, no io.BytesIO() directo:
+        # BytesIO no tiene nombre de archivo, así que pydub se lo pasa a
+        # ffmpeg por stdin ("cache:pipe:0") — un pipe no es seekable, y el
+        # probe de MP3 a veces necesita "seekback" para leer el tamaño de
+        # frame. Un archivo real en disco es seekable y evita esa clase de
+        # falla del probe. No es garantía contra un MP3 realmente corrupto
+        # (visto una vez en vivo con un guión largo de Google Cloud TTS,
+        # "Could not seek to 1026" incluso ya con archivo real) — eso
+        # sigue cayendo al except de abajo y devolviendo voice_bytes sin
+        # mezclar, en silencio. Pendiente: decidir si vale la pena
+        # reintentar la llamada a TTS en ese caso.
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".mp3") as tmp:
+            tmp.write(voice_bytes)
+            tmp.flush()
+            voice = AudioSegment.from_mp3(tmp.name)
+
         voice = _process_voice(voice)
         diff = voice_target_dbfs - voice.dBFS
         voice = voice.apply_gain(diff)
