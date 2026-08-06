@@ -27,19 +27,22 @@ jobs:
             exit 1
           fi
 
-      # The production DB runs Postgres 16 (see pgvector/pgvector:pg16 in
-      # .github/workflows/ci.yml), so pg_dump must match that major version.
-      - name: Install PostgreSQL 16 client tools
+      # pg_dump refuses to run when its major version is OLDER than the
+      # server's. Neon's production server is on 17.10 as of 2026-08-06
+      # (confirmed live: "pg_dump: error: aborting because of server
+      # version mismatch — server version: 17.10; pg_dump version: 16.14"
+      # when this pinned to 16) — bump this if Neon upgrades again.
+      - name: Install PostgreSQL 17 client tools
         run: |
-          if sudo apt-get update && sudo apt-get install -y postgresql-client-16; then
-            echo "Installed postgresql-client-16 from default repos."
+          if sudo apt-get update && sudo apt-get install -y postgresql-client-17; then
+            echo "Installed postgresql-client-17 from default repos."
           else
-            echo "postgresql-client-16 not available from default repos; adding the PGDG apt repo."
+            echo "postgresql-client-17 not available from default repos; adding the PGDG apt repo."
             sudo install -d /usr/share/postgresql-common/pgdg
             sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
             echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
             sudo apt-get update
-            sudo apt-get install -y postgresql-client-16
+            sudo apt-get install -y postgresql-client-17
           fi
           pg_dump --version
 
