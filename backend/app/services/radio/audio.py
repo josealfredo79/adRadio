@@ -119,11 +119,25 @@ def _normalize_loudness(segment, target_dbfs: float = -16.0):
     return segment.apply_gain(diff)
 
 
+def _apply_peak_ceiling(segment, ceiling_db: float = -1.0):
+    """Limitador de techo: `_normalize_loudness` ajusta ganancia por RMS
+    (volumen promedio), no por pico — con compresión de por medio eso puede
+    dejar picos por encima de 0dBFS y clipear. Si el pico excede el techo,
+    baja la ganancia lo justo para no saturar."""
+    if segment.max_dBFS > ceiling_db:
+        segment = segment.apply_gain(ceiling_db - segment.max_dBFS)
+    return segment
+
+
 def _process_voice(voice: "AudioSegment") -> "AudioSegment":  # type: ignore[name-defined]
     try:
-        from pydub.effects import high_pass_filter, normalize  # type: ignore
+        from pydub.effects import high_pass_filter, normalize, compress_dynamic_range  # type: ignore
 
         voice = high_pass_filter(voice, cutoff=120)
+        # Compresión tipo locutor de radio: pareja el volumen entre sílabas
+        # fuertes/débiles antes de normalizar, para que suene "pegada" al
+        # micrófono en vez de con la dinámica cruda del TTS.
+        voice = compress_dynamic_range(voice, threshold=-20.0, ratio=4.0, attack=5.0, release=50.0)
         voice = normalize(voice)
         voice = voice + 2.5
         return voice
@@ -157,6 +171,7 @@ def mix_with_jingle(
         if not jingle_path or not Path(jingle_path).exists():
             out = io.BytesIO()
             voice = _normalize_loudness(voice, -14.0)
+            voice = _apply_peak_ceiling(voice)
             voice.export(out, format="ogg", codec="libopus", bitrate="128k")
             return out.getvalue()
 
@@ -202,7 +217,15 @@ def mix_with_jingle(
 
         jingle_track = intro + body + outro
         mixed = jingle_track.overlay(voice, position=jingle_intro_ms)
+
+        # Compresión de bus (máster): controla los picos donde voz y jingle
+        # se solapan en los crossfades, y sube el volumen percibido sin
+        # clipear — el mismo tipo de procesamiento que aplica una consola
+        # de radio a la salida final, no solo a la voz por separado.
+        from pydub.effects import compress_dynamic_range  # type: ignore
+        mixed = compress_dynamic_range(mixed, threshold=-16.0, ratio=2.5, attack=10.0, release=100.0)
         mixed = _normalize_loudness(mixed, -14.0)
+        mixed = _apply_peak_ceiling(mixed)
 
         out = io.BytesIO()
         mixed.export(out, format="ogg", codec="libopus", bitrate="128k")
