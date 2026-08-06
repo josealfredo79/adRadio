@@ -10,6 +10,57 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 JINGLES_DIR = Path(__file__).parent.parent.parent / "static" / "jingles"
+SFX_DIR = Path(__file__).parent.parent.parent / "static" / "sfx"
+
+SFX_FILES: dict[str, str] = {
+    "ding": "sfx_ding.mp3",
+    "whoosh": "sfx_whoosh.mp3",
+    "coin": "sfx_coin.mp3",
+}
+
+# Qué efecto usar según el modo de guión, y en qué punto del audio (fracción
+# 0-1 de la duración de la VOZ, no del audio final con jingle). Solo se
+# asignan modos cuyo prompt (ver scripts.py) escribe una pausa/quiebre
+# explícito en el guión en ese punto — no es una detección real de silencio,
+# es una aproximación basada en la estructura de segundos que cada prompt
+# ya declara. "ding" es universal: no depende del guión, es solo el sting
+# de apertura bajo el intro del jingle.
+SFX_MODE_EVENTS: dict[str, tuple[str, float]] = {
+    # capsula/comunitaria: guión tiene "... Este dato/momento te lo trae..."
+    # justo antes de la mención del negocio, ~mitad del guión.
+    "capsula": ("whoosh", 0.50),
+    "comunitaria": ("whoosh", 0.50),
+    # trivia: "... La respuesta es..." — el momento de premio/revelación,
+    # después de la pregunta (8-10s) + pausa (2-3s) de ~30s totales.
+    "trivia": ("coin", 0.38),
+}
+
+
+def resolve_sfx_events(mode: str, voice_len_ms: int) -> list[tuple[str, int]]:
+    """Decide qué efectos usar y en qué posición (ms, timeline de la voz)
+    según el modo de guión. Devuelve [] si el modo no tiene un punto de
+    quiebre reconocido — mejor omitir el efecto que adivinar mal."""
+    events: list[tuple[str, int]] = [("ding", 0)]
+    mode_event = SFX_MODE_EVENTS.get(mode)
+    if mode_event:
+        sfx_name, fraction = mode_event
+        events.append((sfx_name, int(voice_len_ms * fraction)))
+    return events
+
+
+def _overlay_sfx(track: "AudioSegment", sfx_name: str, position_ms: int, gain_db: float = -9.0) -> "AudioSegment":  # type: ignore[name-defined]
+    """Superpone un efecto corto sobre `track` en `position_ms`, a un volumen
+    bajo el de la voz/jingle para que acentúe sin taparlos."""
+    path = SFX_DIR / SFX_FILES.get(sfx_name, "")
+    if not path.exists():
+        logger.warning("[RADIO] SFX file not found: %s", sfx_name)
+        return track
+    from pydub import AudioSegment  # type: ignore
+
+    sfx = AudioSegment.from_mp3(path)
+    sfx = _normalize_loudness(sfx, gain_db)
+    position_ms = max(0, min(position_ms, max(0, len(track) - 1)))
+    return track.overlay(sfx, position=position_ms)
 
 
 def _norm(s: str) -> str:
@@ -119,11 +170,16 @@ def _normalize_loudness(segment, target_dbfs: float = -16.0):
     return segment.apply_gain(diff)
 
 
-def _apply_peak_ceiling(segment, ceiling_db: float = -1.0):
+def _apply_peak_ceiling(segment, ceiling_db: float = -2.0):
     """Limitador de techo: `_normalize_loudness` ajusta ganancia por RMS
     (volumen promedio), no por pico — con compresión de por medio eso puede
     dejar picos por encima de 0dBFS y clipear. Si el pico excede el techo,
-    baja la ganancia lo justo para no saturar."""
+    baja la ganancia lo justo para no saturar.
+
+    -2.0dB (no -1.0) porque la exportación a Opus (lossy) puede rebasar el
+    pico de muestra pre-encode por "true peak overshoot" — verificado
+    empíricamente: con efectos de sonido (transitorios más agresivos que la
+    voz) -1.0dB seguía clipeando tras re-decodificar el .ogg, -2.0dB no."""
     if segment.max_dBFS > ceiling_db:
         segment = segment.apply_gain(ceiling_db - segment.max_dBFS)
     return segment
@@ -156,6 +212,8 @@ def mix_with_jingle(
     jingle_duck_db: float = -22.0,
     voice_target_dbfs: float = -10.0,
     jingle_offset_ratio: float = 0.0,
+    include_sfx: bool = False,
+    mode: str = "classic",
 ) -> bytes:
     """
     Mezcla profesional de radio con ducking automático.
@@ -168,8 +226,12 @@ def mix_with_jingle(
         diff = voice_target_dbfs - voice.dBFS
         voice = voice.apply_gain(diff)
 
+        sfx_events = resolve_sfx_events(mode, len(voice)) if include_sfx else []
+
         if not jingle_path or not Path(jingle_path).exists():
             out = io.BytesIO()
+            for sfx_name, position_ms in sfx_events:
+                voice = _overlay_sfx(voice, sfx_name, position_ms)
             voice = _normalize_loudness(voice, -14.0)
             voice = _apply_peak_ceiling(voice)
             voice.export(out, format="ogg", codec="libopus", bitrate="128k")
@@ -217,6 +279,13 @@ def mix_with_jingle(
 
         jingle_track = intro + body + outro
         mixed = jingle_track.overlay(voice, position=jingle_intro_ms)
+
+        for sfx_name, position_in_voice_ms in sfx_events:
+            # "ding" es el sting de apertura: va bajo el intro del jingle,
+            # antes de que empiece la voz. El resto están posicionados
+            # relativos al inicio de la voz (jingle_intro_ms de offset).
+            abs_position = position_in_voice_ms if sfx_name == "ding" else jingle_intro_ms + position_in_voice_ms
+            mixed = _overlay_sfx(mixed, sfx_name, abs_position)
 
         # Compresión de bus (máster): controla los picos donde voz y jingle
         # se solapan en los crossfades, y sube el volumen percibido sin

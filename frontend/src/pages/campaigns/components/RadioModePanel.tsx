@@ -13,6 +13,8 @@ interface RadioModePanelProps {
   setRadioCountry: (val: string) => void
   radioVoiceId: string
   setRadioVoiceId: (val: string) => void
+  includeSfx: boolean
+  setIncludeSfx: (val: boolean) => void
   voicesData?: Voice[]
   radioAudioUrl: string
   radioScript: string
@@ -31,6 +33,8 @@ export function RadioModePanel({
   setRadioCountry,
   radioVoiceId,
   setRadioVoiceId,
+  includeSfx,
+  setIncludeSfx,
   voicesData,
   radioAudioUrl,
   radioScript,
@@ -188,6 +192,16 @@ export function RadioModePanel({
           </select>
         </div>
       )}
+
+      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={includeSfx}
+          onChange={(e) => setIncludeSfx(e.target.checked)}
+          className="rounded border-border"
+        />
+        Agregar efectos de sonido (opcional)
+      </label>
 
       {!radioAudioUrl && (
         <p className="text-xs text-muted-foreground">

@@ -554,6 +554,7 @@ async def generate_radio_ad_endpoint(
         mode=body.mode,
         business_category=body.business_category,
         voice_id=body.voice_id,
+        include_sfx=body.include_sfx,
     )
     capture_event("radio_ad_generated", user_id=current_user.id, properties={
         "mode": body.mode,

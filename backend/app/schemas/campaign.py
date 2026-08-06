@@ -91,6 +91,7 @@ class GenerateRadioAdRequest(BaseModel):
     business_category: str | None = None  # inmobiliaria, restaurante, tienda, etc.
     extra_context: str | None = None  # premio de trivia, fecha/temporada, dato extra
     voice_id: str | None = None  # edge-tts voice ID override (ej: es-MX-DaliaNeural)
+    include_sfx: bool = False  # efectos de sonido opcionales (ding/whoosh/coin según modo)
 
 
 class ParrillaRequest(BaseModel):

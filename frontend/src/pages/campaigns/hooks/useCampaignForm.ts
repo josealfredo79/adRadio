@@ -17,6 +17,7 @@ interface AudioState {
   radioVoiceId: string
   extraContext: string
   businessCategory: string
+  includeSfx: boolean
 }
 
 interface BannerState {
@@ -92,6 +93,7 @@ const INITIAL_STATE: CampaignFormState = {
     radioVoiceId: '',
     extraContext: '',
     businessCategory: '',
+    includeSfx: false,
   },
   banner: {
     bannerPromo: '',
@@ -214,6 +216,7 @@ export function useCampaignForm() {
           business_category: audio.businessCategory || undefined,
           extra_context: audio.extraContext || undefined,
           voice_id: audio.radioVoiceId || undefined,
+          include_sfx: audio.includeSfx,
         }, { timeout: 90000 })
         dispatch({ type: 'SET_AUDIO', payload: { radioAudioUrl: data.audio_url, radioScript: data.script ?? '' } })
       }
@@ -298,6 +301,8 @@ export function useCampaignForm() {
     setExtraContext: (payload: string) => dispatch({ type: 'SET_AUDIO', payload: { extraContext: payload } }),
     businessCategory: state.audio.businessCategory,
     setBusinessCategory: (payload: string) => dispatch({ type: 'SET_AUDIO', payload: { businessCategory: payload } }),
+    includeSfx: state.audio.includeSfx,
+    setIncludeSfx: (payload: boolean) => dispatch({ type: 'SET_AUDIO', payload: { includeSfx: payload } }),
     // banner (flat)
     bannerPromo: state.banner.bannerPromo,
     setBannerPromo: (payload: string) => dispatch({ type: 'SET_BANNER', payload: { bannerPromo: payload } }),

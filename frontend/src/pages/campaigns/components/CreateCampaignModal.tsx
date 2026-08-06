@@ -65,6 +65,8 @@ export function CreateCampaignModal({
     setBusinessCategory,
     radioVoiceId,
     setRadioVoiceId,
+    includeSfx,
+    setIncludeSfx,
     scheduledAt,
     setScheduledAt,
     error,
@@ -298,6 +300,8 @@ export function CreateCampaignModal({
               setRadioCountry={setRadioCountry}
               radioVoiceId={radioVoiceId}
               setRadioVoiceId={setRadioVoiceId}
+              includeSfx={includeSfx}
+              setIncludeSfx={setIncludeSfx}
               voicesData={voicesData}
               radioAudioUrl={radioAudioUrl}
               radioScript={radioScript}
