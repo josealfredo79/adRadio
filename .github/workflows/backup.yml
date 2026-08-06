@@ -32,6 +32,15 @@ jobs:
       # (confirmed live: "pg_dump: error: aborting because of server
       # version mismatch — server version: 17.10; pg_dump version: 16.14"
       # when this pinned to 16) — bump this if Neon upgrades again.
+      #
+      # The ubuntu-latest runner image already ships a pg_dump (v16) on
+      # PATH, and installing postgresql-client-17 alongside it does NOT
+      # replace that — Debian's postgresql-common only manages `psql`'s
+      # man page via update-alternatives, not the `pg_dump` binary itself.
+      # Confirmed live: even after installing postgresql-client-17
+      # successfully, `pg_dump --version` still printed 16.14. Prepending
+      # the versioned bin dir to $GITHUB_PATH makes the *next* steps
+      # actually resolve to the one we just installed.
       - name: Install PostgreSQL 17 client tools
         run: |
           if sudo apt-get update && sudo apt-get install -y postgresql-client-17; then
@@ -44,7 +53,8 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y postgresql-client-17
           fi
-          pg_dump --version
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Run backup
         env:
