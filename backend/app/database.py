@@ -1,7 +1,24 @@
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
+
+
+def _set_search_path(dbapi_connection, connection_record):
+    """Force search_path=public on every new physical connection.
+
+    Neon's pooler endpoint has been observed handing out connections with
+    an EMPTY search_path (not the normal Postgres default of "$user",
+    public) — found 2026-08-06 when production logins started failing
+    with "relation users does not exist" even though the table existed.
+    asyncpg's `server_settings` connect_args does NOT survive the pooler
+    (verified empirically: search_path still came back empty with it set);
+    only an explicit SET after connecting works, via the asyncpg DBAPI
+    adapter's run_async() bridge for the sync pool "connect" event.
+    """
+    dbapi_connection.run_async(lambda conn: conn.execute("SET search_path TO public"))
+
 
 engine = create_async_engine(
     settings.database_url_safe,
@@ -11,6 +28,7 @@ engine = create_async_engine(
     max_overflow=settings.DB_MAX_OVERFLOW,
     pool_recycle=300,
 )
+event.listens_for(engine.sync_engine, "connect")(_set_search_path)
 
 AsyncSessionLocal = async_sessionmaker(
     engine,
@@ -32,6 +50,7 @@ def _get_celery_engine():
             max_overflow=max(5, settings.DB_MAX_OVERFLOW // 2),
             pool_recycle=300,
         )
+        event.listens_for(_celery_engine.sync_engine, "connect")(_set_search_path)
     return _celery_engine
 
 
