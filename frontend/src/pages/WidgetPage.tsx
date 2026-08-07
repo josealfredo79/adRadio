@@ -1,9 +1,201 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, MoveHorizontal, Save, Sparkles } from 'lucide-react'
-import api from '@/lib/api'
+import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, MoveHorizontal, Save, Sparkles, Globe, ArrowRight, ArrowLeft, Pencil } from 'lucide-react'
+import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 import { useAuth } from '@/contexts/AuthContext'
+
+const SITE_URL = (import.meta.env.VITE_SITE_URL as string | undefined) ?? (typeof window !== 'undefined' ? window.location.origin : '')
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip accents
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .slice(0, 50)
+}
+
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])?$/
+
+function LandingPageWizard() {
+  const { user, setUser } = useAuth()
+  const published = !!user?.slug
+
+  const [editing, setEditing] = useState(false)
+  const [step, setStep] = useState<1 | 2>(1)
+  const [slug, setSlug] = useState(user?.slug ?? slugify(user?.business_name ?? ''))
+  const [tagline, setTagline] = useState(user?.landing_tagline ?? '')
+  const [copied, setCopied] = useState(false)
+
+  const slugValid = SLUG_RE.test(slug)
+
+  const publishMutation = useMutation({
+    mutationFn: () => api.patch('/me', { slug, landing_tagline: tagline }).then((r) => r.data),
+    onSuccess: (updated) => {
+      if (setUser) setUser(updated)
+      setEditing(false)
+      setStep(1)
+    },
+  })
+
+  const startEditing = () => {
+    setSlug(user?.slug ?? slugify(user?.business_name ?? ''))
+    setTagline(user?.landing_tagline ?? '')
+    setStep(1)
+    publishMutation.reset()
+    setEditing(true)
+  }
+
+  const siteLink = `${SITE_URL}/sitio/${user?.slug}`
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(siteLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  if (published && !editing) {
+    return (
+      <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <Globe size={16} />
+          Tu página web
+        </div>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Tu página ya está publicada y lista para compartir.</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href={siteLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-brand-600 dark:text-brand-400 hover:underline font-mono break-all"
+          >
+            {siteLink}
+          </a>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopyLink}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition"
+          >
+            {copied ? <CheckCheck size={14} /> : <Copy size={14} />}
+            {copied ? 'Copiado!' : 'Copiar link'}
+          </button>
+          <button
+            onClick={startEditing}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition"
+          >
+            <Pencil size={14} />
+            Editar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <Globe size={16} />
+          {published ? 'Editar tu página' : 'Crea tu página web'}
+        </div>
+        <span className="text-xs text-gray-400 dark:text-gray-500">Paso {step} de 2</span>
+      </div>
+
+      {!published && step === 1 && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          AdRadio te da una página pública con tu bot integrado — funciona aunque tu WhatsApp esté desconectado o en revisión.
+        </p>
+      )}
+
+      {step === 1 && (
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Elige el link de tu página</label>
+          <div className="flex items-center rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden focus-within:border-brand-500 dark:focus-within:border-brand-400">
+            <span className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shrink-0">
+              {SITE_URL.replace(/^https?:\/\//, '')}/sitio/
+            </span>
+            <input
+              type="text"
+              value={slug}
+              onChange={(e) => setSlug(slugify(e.target.value))}
+              className="flex-1 min-w-0 px-3 py-2 text-sm bg-transparent text-gray-900 dark:text-gray-100 focus:outline-none"
+              placeholder="mi-negocio"
+              maxLength={50}
+            />
+          </div>
+          {slug && !slugValid && (
+            <p className="text-xs text-red-500">Solo letras minúsculas, números y guiones (2-50 caracteres).</p>
+          )}
+          <button
+            onClick={() => setStep(2)}
+            disabled={!slugValid}
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-brand-500 dark:bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 dark:hover:bg-brand-500 disabled:opacity-50 transition-colors"
+          >
+            Siguiente
+            <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Una frase corta para tus visitantes (opcional)</label>
+            <textarea
+              value={tagline}
+              onChange={(e) => setTagline(e.target.value)}
+              maxLength={140}
+              rows={2}
+              placeholder="Ej. El mejor sabor de la ciudad, a un mensaje de distancia"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm bg-transparent text-gray-900 dark:text-gray-100 focus:border-brand-500 dark:focus:border-brand-400 focus:outline-none resize-none"
+            />
+            <p className="text-xs text-gray-400 dark:text-gray-500 text-right">{tagline.length}/140</p>
+          </div>
+
+          {/* Mini preview */}
+          <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-4 text-center bg-gray-50 dark:bg-gray-900">
+            <div className="text-3xl mb-1">🎙️</div>
+            <p className="font-bold text-sm text-gray-900 dark:text-gray-100">{user?.business_name || 'Tu negocio'}</p>
+            {tagline && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{tagline}</p>}
+          </div>
+
+          {publishMutation.isError && (
+            <p className="text-xs text-red-500">{getApiError(publishMutation.error, 'No se pudo publicar')}</p>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setStep(1)}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+            >
+              <ArrowLeft size={14} />
+              Atrás
+            </button>
+            <button
+              onClick={() => publishMutation.mutate()}
+              disabled={publishMutation.isPending}
+              className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-brand-500 dark:bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 dark:hover:bg-brand-500 disabled:opacity-50 transition-colors"
+            >
+              <Save size={14} />
+              {publishMutation.isPending ? 'Publicando...' : published ? 'Guardar cambios' : 'Publicar'}
+            </button>
+          </div>
+          {published && (
+            <button
+              onClick={() => { setEditing(false); setStep(1) }}
+              className="w-full text-xs text-gray-400 dark:text-gray-500 hover:underline"
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface SnippetData {
   snippet: string
@@ -79,6 +271,8 @@ export default function WidgetPage() {
           </div>
         </div>
       )}
+
+      <LandingPageWizard />
 
       {/* Customization */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

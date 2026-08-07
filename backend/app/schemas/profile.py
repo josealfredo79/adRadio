@@ -16,6 +16,8 @@ class ProfileUpdate(BaseModel):
     widget_color: str | None = None
     widget_greeting: str | None = None
     widget_position: str | None = None
+    slug: str | None = None
+    landing_tagline: str | None = None
 
     @field_validator("phone")
     @classmethod
@@ -52,6 +54,31 @@ class ProfileUpdate(BaseModel):
     def validate_language(cls, v: str | None) -> str | None:
         if v and v not in ("es", "en", "pt"):
             raise ValueError("Idioma no soportado")
+        return v
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        v = v.strip().lower()
+        if not re.match(r"^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])?$", v):
+            raise ValueError(
+                "El link solo puede tener letras minúsculas, números y guiones "
+                "(sin empezar/terminar en guión), entre 2 y 50 caracteres"
+            )
+        return v
+
+    @field_validator("landing_tagline")
+    @classmethod
+    def validate_landing_tagline(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        if len(v) > 140:
+            raise ValueError("La frase no puede tener más de 140 caracteres")
         return v
 
 

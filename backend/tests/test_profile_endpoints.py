@@ -100,6 +100,55 @@ class TestUpdateProfile:
         with pytest.raises(ValueError):
             ProfileUpdate(phone="5511112222")
 
+    @pytest.mark.asyncio
+    async def test_slug_is_lowercased_and_saved(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                out = await update_profile(body=ProfileUpdate(slug="Tacos-El-Primo"), db=db, current_user=user)
+            assert out.slug == "tacos-el-primo"
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_rejects_invalid_slug_format(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(slug="not a valid slug!")
+
+    @pytest.mark.asyncio
+    async def test_duplicate_slug_returns_409(self):
+        user_id_a = await _seed_user()
+        user_id_b = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user_a = await db.get(User, user_id_a)
+                await update_profile(body=ProfileUpdate(slug="mismo-slug"), db=db, current_user=user_a)
+
+            async with AsyncSessionLocal() as db:
+                user_b = await db.get(User, user_id_b)
+                with pytest.raises(HTTPException) as exc_info:
+                    await update_profile(body=ProfileUpdate(slug="mismo-slug"), db=db, current_user=user_b)
+                assert exc_info.value.status_code == 409
+        finally:
+            await _cleanup([user_id_a, user_id_b])
+
+    @pytest.mark.asyncio
+    async def test_landing_tagline_is_saved_and_trimmed(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                out = await update_profile(body=ProfileUpdate(landing_tagline="  El mejor sabor de la ciudad  "), db=db, current_user=user)
+            assert out.landing_tagline == "El mejor sabor de la ciudad"
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_rejects_landing_tagline_over_140_chars(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(landing_tagline="x" * 141)
+
 
 class TestChangePassword:
     @pytest.mark.asyncio

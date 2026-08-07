@@ -25,6 +25,8 @@ interface User {
   widget_color: string
   widget_greeting: string
   widget_position: string
+  slug: string | null
+  landing_tagline: string | null
 }
 
 interface AuthContextType {

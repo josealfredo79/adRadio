@@ -77,5 +77,7 @@ class UserOut(BaseModel):
     widget_color: str = "#25D366"
     widget_greeting: str = "¡Hola! ¿En qué puedo ayudarte?"
     widget_position: str = "right"
+    slug: str | None = None
+    landing_tagline: str | None = None
 
     model_config = {"from_attributes": True}

@@ -34,6 +34,12 @@ class User(Base):
     business_name: Mapped[str | None] = mapped_column(String(255))
     business_category: Mapped[str | None] = mapped_column(String(100))
     city: Mapped[str | None] = mapped_column(String(100))
+    # URL slug for the AdRadio-hosted public landing page (/sitio/{slug}) —
+    # optional, null until the advertiser claims one.
+    slug: Mapped[str | None] = mapped_column(String(60), unique=True)
+    # Short welcome line shown on that landing page, written via the
+    # landing-page setup wizard — separate from widget_greeting (chat opener).
+    landing_tagline: Mapped[str | None] = mapped_column(String(140))
     country: Mapped[str] = mapped_column(String(10), default="MX", server_default="MX")
     logo_url: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(String(20))

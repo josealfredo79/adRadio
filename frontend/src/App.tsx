@@ -21,6 +21,7 @@ const AppointmentsPage = lazy(() => import('@/pages/AppointmentsPage'))
 const TermsPage = lazy(() => import('@/pages/TermsPage'))
 const PrivacyPage = lazy(() => import('@/pages/PrivacyPage'))
 const CustomerStoriesPage = lazy(() => import('@/pages/CustomerStoriesPage'))
+const PublicSitePage = lazy(() => import('@/pages/PublicSitePage'))
 const TeamPage = lazy(() => import('@/pages/TeamPage'))
 const WidgetPage = lazy(() => import('@/pages/WidgetPage'))
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/customer-stories" element={<CustomerStoriesPage />} />
+            <Route path="/sitio/:slug" element={<PublicSitePage />} />
 
             {/* Public */}
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />

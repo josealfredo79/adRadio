@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, check_feature_access
@@ -58,7 +59,11 @@ async def update_profile(
 ):
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(current_user, field, value)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Ese link ya está en uso, elige otro")
     await db.refresh(current_user)
     return UserOut.model_validate(current_user)
 
