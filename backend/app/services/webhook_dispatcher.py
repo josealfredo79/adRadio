@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 
 import httpx
@@ -28,12 +29,19 @@ async def dispatch_webhook_event(
     event: str,
     payload: dict,
     db: AsyncSession,
+    advertiser_id: uuid.UUID,
 ) -> None:
-    """Query active webhooks subscribed to *event* and POST the payload concurrently."""
+    """Query *advertiser_id*'s own active webhooks subscribed to *event* and POST
+    the payload concurrently. advertiser_id is required — without it this would
+    broadcast one advertiser's event to every other advertiser's webhooks."""
     result = await db.execute(
         select(UserWebhook).where(
+            UserWebhook.user_id == advertiser_id,
             UserWebhook.active == True,  # noqa: E712
-            UserWebhook.events.any(event),
+            # events is JSONB (a plain array column), not Postgres ARRAY — .any()
+            # is an ARRAY-comparator method and raises AttributeError on JSONB.
+            # .contains([event]) compiles to the `@>` containment operator instead.
+            UserWebhook.events.contains([event]),
         )
     )
     webhooks = result.scalars().all()

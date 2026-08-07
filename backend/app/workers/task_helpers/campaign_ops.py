@@ -606,11 +606,13 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             "campaign.sent",
             {"id": str(campaign.id), "name": campaign.name, "status": "running"},
             db,
+            advertiser_id=advertiser.id,
         )
         await dispatch_webhook_event(
             "campaign.completed",
             {"id": str(campaign.id), "name": campaign.name, "status": "completed"},
             db,
+            advertiser_id=advertiser.id,
         )
     except Exception as wh_err:
         logger.warning("[CAMPAIGN-WEBHOOK] Failed to dispatch campaign events: %s", wh_err)
@@ -646,6 +648,7 @@ async def notify_campaign_failed(campaign_id, exc):
                         "campaign.failed",
                         {"id": str(c.id), "name": c.name, "error": str(exc)[:500]},
                         db,
+                        advertiser_id=c.advertiser_id,
                     )
                 except Exception as wh_err:
                     logger.warning("[CAMPAIGN-WEBHOOK] Failed to dispatch campaign.failed: %s", wh_err)

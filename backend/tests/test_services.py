@@ -608,7 +608,7 @@ class TestWebhookDispatcher:
                     raise_for_status=lambda: None
                 )
                 from app.services.webhook_dispatcher import dispatch_webhook_event
-                await dispatch_webhook_event("test.event", {"foo": "bar"}, db)
+                await dispatch_webhook_event("test.event", {"foo": "bar"}, db, advertiser_id=uuid.uuid4())
                 mock_client.return_value.__aenter__.return_value.post.assert_called_once()
 
     @pytest.mark.asyncio
@@ -628,8 +628,64 @@ class TestWebhookDispatcher:
 
             with patch('httpx.AsyncClient') as mock_client:
                 from app.services.webhook_dispatcher import dispatch_webhook_event
-                await dispatch_webhook_event("test.event", {"foo": "bar"}, db)
+                await dispatch_webhook_event("test.event", {"foo": "bar"}, db, advertiser_id=uuid.uuid4())
                 mock_client.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dispatch_event_only_reaches_owning_advertisers_webhook(self):
+        """Regression test: dispatch_webhook_event used to query ALL active
+        webhooks subscribed to an event with no tenant filter — advertiser A's
+        contact.created event would fire advertiser B's webhook too. Uses a
+        real DB (not mocks) so the actual SQL filter is exercised, not just
+        the Python call signature."""
+        from app.database import AsyncSessionLocal, engine
+        from app.models.user import User
+        from app.models.user_webhook import UserWebhook
+        from app.core.security import hash_password
+        from sqlalchemy import delete
+
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            advertiser_a = User(
+                email=f"{uuid.uuid4()}@test.com", password_hash=hash_password("pw12345678"),
+            )
+            advertiser_b = User(
+                email=f"{uuid.uuid4()}@test.com", password_hash=hash_password("pw12345678"),
+            )
+            db.add_all([advertiser_a, advertiser_b])
+            await db.commit()
+
+            webhook_a = UserWebhook(
+                user_id=advertiser_a.id, name="A's webhook", url="https://a.example.com/hook",
+                events=["contact.created"], secret="secret-a",
+            )
+            webhook_b = UserWebhook(
+                user_id=advertiser_b.id, name="B's webhook", url="https://b.example.com/hook",
+                events=["contact.created"], secret="secret-b",
+            )
+            db.add_all([webhook_a, webhook_b])
+            await db.commit()
+
+            try:
+                with patch("httpx.AsyncClient") as mock_client:
+                    mock_client.return_value.__aenter__.return_value.post.return_value = MagicMock(
+                        raise_for_status=lambda: None, status_code=200,
+                    )
+                    from app.services.webhook_dispatcher import dispatch_webhook_event
+                    await dispatch_webhook_event(
+                        "contact.created", {"id": "123"}, db, advertiser_id=advertiser_a.id,
+                    )
+                    posted_urls = [
+                        call.args[0] for call in mock_client.return_value.__aenter__.return_value.post.call_args_list
+                    ]
+                assert posted_urls == ["https://a.example.com/hook"]
+            finally:
+                await engine.dispose()
+                async with AsyncSessionLocal() as cleanup_db:
+                    await cleanup_db.execute(delete(UserWebhook).where(UserWebhook.user_id.in_([advertiser_a.id, advertiser_b.id])))
+                    await cleanup_db.execute(delete(User).where(User.id.in_([advertiser_a.id, advertiser_b.id])))
+                    await cleanup_db.commit()
+                await engine.dispose()
 
 
 class TestApiKeyService:

@@ -125,6 +125,7 @@ async def create_contact(
         "contact.created",
         {"id": str(contact.id), "name": contact.name, "phone": contact.phone},
         db,
+        advertiser_id=current_user.id,
     )
 
     return ContactOut.model_validate(contact)
