@@ -2,6 +2,7 @@
 import json
 import logging
 import uuid as uuid_module
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis
@@ -17,7 +18,11 @@ from uuid import UUID
 
 from app.api.deps import get_current_user, get_db
 from app.config import settings
+from app.models.contact import Contact
+from app.models.conversation import Conversation
+from app.models.message import Message
 from app.models.user import User
+from app.schemas.contact import validate_phone_e164
 
 router = APIRouter(prefix="/widget", tags=["widget"])
 
@@ -118,6 +123,91 @@ async def widget_chat(
         await redis.setex(redis_key, CHAT_REDIS_TTL, json.dumps(history))
 
     return {"reply": reply, "session_id": session_id}
+
+
+@router.post("/lead/{advertiser_id}")
+@limiter.limit("10/minute")
+async def widget_capture_lead(
+    request: Request,
+    advertiser_id: UUID,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    redis: AsyncRedis | None = Depends(get_redis_optional),
+) -> dict:
+    """A widget visitor chooses to leave their name/phone. Materializes what
+    was an ephemeral Redis-only chat into a real Contact (source='widget') +
+    Conversation, so the advertiser sees it in Contacts/Inbox exactly like a
+    WhatsApp lead — pulling in whatever transcript exists for *session_id*."""
+    name = (body.get("name") or "").strip()
+    phone_raw = (body.get("phone") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    if not phone_raw:
+        raise HTTPException(status_code=400, detail="phone is required")
+    try:
+        phone = validate_phone_e164(phone_raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    result = await db.execute(select(User).where(User.id == advertiser_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Widget no encontrado")
+
+    contact_result = await db.execute(
+        select(Contact).where(Contact.advertiser_id == advertiser_id, Contact.phone == phone)
+    )
+    contact = contact_result.scalar_one_or_none()
+    is_new_contact = contact is None
+    if not contact:
+        contact = Contact(advertiser_id=advertiser_id, name=name, phone=phone, source="widget")
+        db.add(contact)
+        await db.flush()
+
+    conv_result = await db.execute(
+        select(Conversation).where(
+            Conversation.advertiser_id == advertiser_id, Conversation.contact_id == contact.id
+        )
+    )
+    conv = conv_result.scalar_one_or_none()
+    if not conv:
+        conv = Conversation(advertiser_id=advertiser_id, contact_id=contact.id, messages=[])
+        db.add(conv)
+        await db.flush()
+
+    # Pull whatever transcript exists in Redis for this session and turn it
+    # into real rows — both Conversation.messages (what the Inbox thread view
+    # reads) and Message rows (what the Inbox list's count/preview reads).
+    session_id = body.get("session_id")
+    if redis and session_id:
+        raw = await redis.get(f"{CHAT_REDIS_PREFIX}{advertiser_id}:{session_id}")
+        if raw:
+            try:
+                transcript = json.loads(raw)
+            except json.JSONDecodeError:
+                transcript = []
+            existing = list(conv.messages or [])
+            conv.messages = existing + transcript
+            for turn in transcript:
+                direction = "inbound" if turn.get("role") == "user" else "outbound"
+                db.add(Message(
+                    advertiser_id=advertiser_id, contact_id=contact.id,
+                    direction=direction, content=turn.get("content", ""), status="delivered",
+                ))
+
+    conv.last_activity = datetime.now(timezone.utc)
+    await db.commit()
+
+    if is_new_contact:
+        from app.services.webhook_dispatcher import dispatch_webhook_event
+        await dispatch_webhook_event(
+            "contact.created",
+            {"id": str(contact.id), "name": contact.name, "phone": contact.phone, "source": "widget"},
+            db,
+            advertiser_id=advertiser_id,
+        )
+
+    return {"message": "ok", "contact_id": str(contact.id)}
 
 
 @router.get("/preview/{advertiser_id}", include_in_schema=False)

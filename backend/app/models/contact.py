@@ -54,7 +54,7 @@ class Contact(Base):
     __table_args__ = (
         CheckConstraint("status IN ('active','unsubscribed','blocked')", name="ck_contacts_status"),
         CheckConstraint("consent_status IN ('confirmed','unconfirmed')", name="ck_contacts_consent_status"),
-        CheckConstraint("source IN ('manual','csv','landing','referral')", name="ck_contacts_source"),
+        CheckConstraint("source IN ('manual','csv','landing','referral','widget')", name="ck_contacts_source"),
         CheckConstraint("engagement_score BETWEEN 0 AND 100", name="ck_contacts_engagement"),
         CheckConstraint(
             "pipeline_stage IN ('nuevo','conversacion','interesado','cliente','perdido')",

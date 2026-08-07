@@ -37,12 +37,27 @@
         '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>' +
       '</button>' +
     '</form>' +
+    '<div id="iaradio-widget-lead">' +
+      '<button id="iaradio-widget-lead-toggle" type="button">📋 Dejar mis datos para que me contacten</button>' +
+      '<form id="iaradio-widget-lead-form" class="hidden">' +
+        '<input id="iaradio-widget-lead-name" type="text" placeholder="Tu nombre" autocomplete="name" />' +
+        '<input id="iaradio-widget-lead-phone" type="tel" placeholder="Tu teléfono (con código de país)" autocomplete="tel" />' +
+        '<button type="submit">Enviar mis datos</button>' +
+        '<p id="iaradio-widget-lead-error" class="hidden"></p>' +
+      '</form>' +
+    '</div>' +
     (waLinkHtml ? '<div id="iaradio-widget-footer">' + waLinkHtml + '</div>' : '');
   document.body.appendChild(popup);
 
   var messagesEl = popup.querySelector('#iaradio-widget-messages');
   var formEl = popup.querySelector('#iaradio-widget-input-row');
   var inputEl = popup.querySelector('#iaradio-widget-input');
+  var leadWrap = popup.querySelector('#iaradio-widget-lead');
+  var leadToggle = popup.querySelector('#iaradio-widget-lead-toggle');
+  var leadForm = popup.querySelector('#iaradio-widget-lead-form');
+  var leadNameEl = popup.querySelector('#iaradio-widget-lead-name');
+  var leadPhoneEl = popup.querySelector('#iaradio-widget-lead-phone');
+  var leadErrorEl = popup.querySelector('#iaradio-widget-lead-error');
 
   // Build button
   var btn = document.createElement('button');
@@ -70,6 +85,44 @@
     inputEl.value = '';
     _sendMessage(text);
   });
+
+  leadToggle.addEventListener('click', function () {
+    leadForm.classList.toggle('hidden');
+  });
+
+  leadForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = leadNameEl.value.trim();
+    var phone = leadPhoneEl.value.trim();
+    leadErrorEl.classList.add('hidden');
+    if (!name || !phone) return;
+    _sendLead(name, phone);
+  });
+
+  function _sendLead(name, phone) {
+    var submitBtn = leadForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    fetch(apiBase + '/widget/lead/' + advertiserId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, phone: _formatPhone(phone), session_id: sessionId }),
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.detail || 'Error'); });
+        return res.json();
+      })
+      .then(function () {
+        leadWrap.innerHTML = '';
+        _appendBubble('¡Gracias, ' + name + '! Un miembro del equipo te contactará pronto. 🙌', 'bot');
+      })
+      .catch(function (err) {
+        leadErrorEl.textContent = err.message === 'Error' || !err.message
+          ? 'No pudimos enviar tus datos. Intenta de nuevo.'
+          : err.message;
+        leadErrorEl.classList.remove('hidden');
+        submitBtn.disabled = false;
+      });
+  }
 
   function _sendMessage(text) {
     sending = true;
@@ -103,4 +156,5 @@
 
   function _esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
   function _clean(p) { return p.replace(/\D/g, ''); }
+  function _formatPhone(p) { return '+' + p.replace(/\D/g, ''); }
 })();

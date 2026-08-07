@@ -131,7 +131,11 @@ class WidgetCORSMiddleware(BaseHTTPMiddleware):
     expose any authenticated data. Registered as the outermost middleware
     (added last) so it can short-circuit the OPTIONS preflight before the
     stricter CORSMiddleware ever sees it."""
-    WIDGET_PATHS = (f"{settings.API_PREFIX}/widget/chat/", f"{settings.API_PREFIX}/widget/preview/")
+    WIDGET_PATHS = (
+        f"{settings.API_PREFIX}/widget/chat/",
+        f"{settings.API_PREFIX}/widget/preview/",
+        f"{settings.API_PREFIX}/widget/lead/",
+    )
 
     async def dispatch(self, request: Request, call_next):
         if not request.url.path.startswith(self.WIDGET_PATHS):

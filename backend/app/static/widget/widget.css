@@ -145,6 +145,57 @@
   transition: opacity 0.15s;
 }
 #iaradio-widget-send:hover { opacity: 0.9; }
+.hidden { display: none !important; }
+#iaradio-widget-lead {
+  padding: 0 18px 10px;
+  background: #fff;
+}
+#iaradio-widget-lead-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--iaradio-color, #25D366);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  text-align: center;
+  font-family: inherit;
+}
+#iaradio-widget-lead-toggle:hover { opacity: 0.75; }
+#iaradio-widget-lead-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+}
+#iaradio-widget-lead-form input {
+  border: 1px solid #e2e6ea;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+}
+#iaradio-widget-lead-form input:focus { border-color: var(--iaradio-color, #25D366); }
+#iaradio-widget-lead-form button[type="submit"] {
+  background: var(--iaradio-color, #25D366);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+#iaradio-widget-lead-form button[type="submit"]:hover { opacity: 0.9; }
+#iaradio-widget-lead-form button[type="submit"]:disabled { opacity: 0.6; cursor: default; }
+#iaradio-widget-lead-error {
+  color: #e34747;
+  font-size: 12px;
+  margin: 0;
+}
 #iaradio-widget-footer {
   padding: 8px 18px 14px;
   background: #fff;

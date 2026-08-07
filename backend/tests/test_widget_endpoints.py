@@ -4,16 +4,22 @@ before this file. Covers the embeddable snippet's HTML/JS templating
 the inline JS string), the public preview endpoint's 404 + config
 passthrough, and update/get config's color/greeting/position
 validation."""
+import json
 import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import delete
+from sqlalchemy import delete, func, select
 from starlette.requests import Request
 
-from app.api.v1.widget import get_widget_config, get_widget_snippet, update_widget_config, widget_chat, widget_preview
+from app.api.v1.widget import (
+    get_widget_config, get_widget_snippet, update_widget_config, widget_capture_lead, widget_chat, widget_preview,
+)
 from app.database import AsyncSessionLocal, engine
+from app.models.contact import Contact
+from app.models.conversation import Conversation
+from app.models.message import Message
 from app.models.user import User
 
 
@@ -260,6 +266,140 @@ class TestWidgetChat:
             stored_history = args[2]
             assert '"primer mensaje"' in stored_history
             assert '"primera respuesta"' in stored_history
+        finally:
+            await _cleanup([user_id])
+
+
+class TestWidgetCaptureLead:
+    """A widget visitor leaves their name/phone — turns the ephemeral chat
+    into a real Contact/Conversation/Message so it shows up in Contacts/Inbox
+    exactly like a WhatsApp lead."""
+
+    @pytest.mark.asyncio
+    async def test_unknown_advertiser_returns_404(self):
+        async with AsyncSessionLocal() as db:
+            with pytest.raises(HTTPException) as exc_info:
+                await widget_capture_lead(
+                    request=_request(method="POST"), advertiser_id=uuid.uuid4(),
+                    body={"name": "Ana", "phone": "+525511112222"}, db=db, redis=None,
+                )
+            assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_missing_name_returns_400(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                with pytest.raises(HTTPException) as exc_info:
+                    await widget_capture_lead(
+                        request=_request(method="POST"), advertiser_id=user_id,
+                        body={"name": "", "phone": "+525511112222"}, db=db, redis=None,
+                    )
+                assert exc_info.value.status_code == 400
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_invalid_phone_returns_400(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                with pytest.raises(HTTPException) as exc_info:
+                    await widget_capture_lead(
+                        request=_request(method="POST"), advertiser_id=user_id,
+                        body={"name": "Ana", "phone": "123"}, db=db, redis=None,
+                    )
+                assert exc_info.value.status_code == 400
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_creates_contact_and_conversation_and_fires_webhook(self):
+        user_id = await _seed_user()
+        try:
+            with patch("app.services.webhook_dispatcher.dispatch_webhook_event", new_callable=AsyncMock) as mock_hook:
+                async with AsyncSessionLocal() as db:
+                    out = await widget_capture_lead(
+                        request=_request(method="POST"), advertiser_id=user_id,
+                        body={"name": "Ana López", "phone": "+525511112222"}, db=db, redis=None,
+                    )
+            assert out["message"] == "ok"
+            mock_hook.assert_awaited_once()
+            call_kwargs = mock_hook.call_args.kwargs
+            assert call_kwargs["advertiser_id"] == user_id
+
+            async with AsyncSessionLocal() as db:
+                c = (await db.execute(
+                    select(Contact).where(Contact.id == uuid.UUID(out["contact_id"]))
+                )).scalar_one()
+                assert c.name == "Ana López"
+                assert c.source == "widget"
+                conv = (await db.execute(
+                    select(Conversation).where(Conversation.contact_id == c.id)
+                )).scalar_one_or_none()
+                assert conv is not None
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_reuses_existing_contact_by_phone_and_skips_webhook(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                existing = Contact(advertiser_id=user_id, name="Ya Existía", phone="+525511113333", source="manual")
+                db.add(existing)
+                await db.commit()
+                await db.refresh(existing)
+
+            with patch("app.services.webhook_dispatcher.dispatch_webhook_event", new_callable=AsyncMock) as mock_hook:
+                async with AsyncSessionLocal() as db:
+                    out = await widget_capture_lead(
+                        request=_request(method="POST"), advertiser_id=user_id,
+                        body={"name": "Otro nombre", "phone": "+525511113333"}, db=db, redis=None,
+                    )
+            assert out["contact_id"] == str(existing.id)
+            mock_hook.assert_not_called()
+
+            async with AsyncSessionLocal() as db:
+                count = (await db.execute(
+                    select(func.count()).select_from(Contact).where(
+                        Contact.advertiser_id == user_id, Contact.phone == "+525511113333"
+                    )
+                )).scalar_one()
+                assert count == 1  # no duplicate created
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_pulls_redis_transcript_into_conversation_and_messages(self):
+        user_id = await _seed_user()
+        try:
+            fake_redis = AsyncMock()
+            fake_redis.get.return_value = json.dumps([
+                {"role": "user", "content": "¿Tienen envíos a domicilio?"},
+                {"role": "assistant", "content": "Sí, cubrimos toda la ciudad."},
+            ])
+            async with AsyncSessionLocal() as db:
+                out = await widget_capture_lead(
+                    request=_request(method="POST"), advertiser_id=user_id,
+                    body={"name": "Luis", "phone": "+525511114444", "session_id": "sess-42"},
+                    db=db, redis=fake_redis,
+                )
+            fake_redis.get.assert_awaited_once_with(f"widget_chat:{user_id}:sess-42")
+
+            async with AsyncSessionLocal() as db:
+                conv = (await db.execute(
+                    select(Conversation).where(Conversation.contact_id == uuid.UUID(out["contact_id"]))
+                )).scalar_one()
+                assert len(conv.messages) == 2
+                assert conv.messages[0]["content"] == "¿Tienen envíos a domicilio?"
+
+                messages = (await db.execute(
+                    select(Message).where(Message.contact_id == uuid.UUID(out["contact_id"]))
+                )).scalars().all()
+                assert len(messages) == 2
+                directions = {m.direction for m in messages}
+                assert directions == {"inbound", "outbound"}
         finally:
             await _cleanup([user_id])
 
