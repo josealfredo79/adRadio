@@ -52,11 +52,30 @@ const TYPE_LABEL: Record<string, string> = {
   otro: 'Otro',
 }
 
+// Qué pone a prueba cada persona — mirrors app/services/lab/personas.py::Persona.goal.
+// Vive aquí (no en la API) porque las 6 personas son un set fijo; mostrarlo hace
+// evidente, sin narración, qué está probando cada conversación al hacer una demo en vivo.
+const PERSONA_GOALS: Record<string, string> = {
+  comprador_decidido: 'Prueba si el bot puede tomar un pedido o agendar una cita sin trabarse.',
+  pregunton_precios: 'Prueba si el bot solo da precios reales de tu negocio, sin inventar.',
+  cliente_enojado: 'Prueba el tono/empatía del bot y si escala a un humano cuando corresponde.',
+  pregunta_lo_que_no_sabes: 'Prueba si el bot admite no saber algo en vez de inventar una respuesta.',
+  exige_humano: 'Prueba si el bot cede el control a una persona cuando el cliente lo pide.',
+  informal_typos: 'Prueba si el bot entiende mensajes informales, con errores y jerga mexicana.',
+}
+
 function scoreColor(score: number | null): string {
   if (score === null) return 'text-muted-foreground'
   if (score >= 80) return 'text-green-600'
   if (score >= 50) return 'text-amber-600'
   return 'text-red-600'
+}
+
+function verdict(score: number | null): { label: string; color: string } {
+  if (score === null) return { label: '', color: '' }
+  if (score >= 80) return { label: 'Listo para hablar con clientes reales', color: 'text-green-600' }
+  if (score >= 50) return { label: 'Funciona, pero conviene revisar los hallazgos antes de confiar en él del todo', color: 'text-amber-600' }
+  return { label: 'Necesita ajustes antes de atender clientes reales', color: 'text-red-600' }
 }
 
 function PersonaCard({ conv }: { conv: LabConversation }) {
@@ -67,11 +86,16 @@ function PersonaCard({ conv }: { conv: LabConversation }) {
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between p-4 hover:bg-muted transition-colors"
       >
-        <div className="flex items-center gap-3">
-          {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-          <span className="text-sm font-medium text-foreground">{conv.persona_label}</span>
+        <div className="flex items-center gap-3 text-left">
+          {open ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+          <div>
+            <p className="text-sm font-medium text-foreground">{conv.persona_label}</p>
+            {PERSONA_GOALS[conv.persona_key] && (
+              <p className="text-xs text-muted-foreground mt-0.5">{PERSONA_GOALS[conv.persona_key]}</p>
+            )}
+          </div>
         </div>
-        <span className={`text-lg font-bold ${scoreColor(conv.score)}`}>{conv.score ?? '—'}</span>
+        <span className={`shrink-0 text-lg font-bold ${scoreColor(conv.score)}`}>{conv.score ?? '—'}</span>
       </button>
       {open && (
         <div className="border-t border-border p-4 space-y-4">
@@ -145,7 +169,7 @@ export default function LabPage() {
             <div>
               <h1 className="text-2xl font-bold text-foreground">Laboratorio</h1>
               <p className="text-sm text-muted-foreground">
-                6 clientes simulados prueban a tu bot en un sandbox — nunca se envía un WhatsApp real.
+                Reta a tu bot con 6 tipos de clientes difíciles antes de que lo hagan tus clientes reales — nunca se envía un WhatsApp real.
               </p>
             </div>
           </div>
@@ -225,7 +249,9 @@ export default function LabPage() {
                   </span>
                   <div>
                     <p className="text-sm font-medium text-foreground">Score general</p>
-                    <p className="text-xs text-muted-foreground">Qué tan listo está el bot para hablar con clientes reales</p>
+                    <p className={`text-xs font-medium mt-0.5 ${verdict(activeRun.overall_score).color}`}>
+                      {verdict(activeRun.overall_score).label}
+                    </p>
                   </div>
                 </div>
                 <div className="space-y-3">
