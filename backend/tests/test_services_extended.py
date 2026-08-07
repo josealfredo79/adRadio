@@ -163,6 +163,7 @@ class TestEmbeddingService:
     @pytest.mark.asyncio
     async def test_get_embedding_openai(self, mock_settings):
         mock_settings.OPENAI_API_KEY = "sk-test"
+        mock_settings.USE_OPENAI_EMBEDDINGS = True
 
         with patch("app.services.embedding_service._embed_openai", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.1] * 1024
@@ -176,6 +177,7 @@ class TestEmbeddingService:
     @pytest.mark.asyncio
     async def test_get_embedding_voyage(self, mock_settings):
         mock_settings.OPENAI_API_KEY = ""
+        mock_settings.USE_OPENAI_EMBEDDINGS = False
 
         with patch("app.services.embedding_service._embed_voyage", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.2] * 1024
@@ -184,6 +186,25 @@ class TestEmbeddingService:
             result = await get_embedding("test query")
             assert len(result) == 1024
             mock_embed.assert_awaited_once()
+
+    @patch("app.services.embedding_service.settings")
+    @pytest.mark.asyncio
+    async def test_get_embedding_openai_key_alone_does_not_switch_provider(self, mock_settings):
+        """OPENAI_API_KEY can be set solely to enable Whisper transcription — it must
+        NOT silently flip the RAG embedding provider away from Voyage, or newly
+        embedded chunks would desync from everything already stored in production."""
+        mock_settings.OPENAI_API_KEY = "sk-test"
+        mock_settings.USE_OPENAI_EMBEDDINGS = False
+
+        with patch("app.services.embedding_service._embed_voyage", new_callable=AsyncMock) as mock_voyage, \
+             patch("app.services.embedding_service._embed_openai", new_callable=AsyncMock) as mock_openai:
+            mock_voyage.return_value = [0.3] * 1024
+            from app.services.embedding_service import get_embedding
+
+            result = await get_embedding("test query")
+            assert len(result) == 1024
+            mock_voyage.assert_awaited_once()
+            mock_openai.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_embed_openai_mocked(self):
@@ -942,7 +963,7 @@ class TestWhisperService:
     @patch("app.services.whisper_service.settings")
     @pytest.mark.asyncio
     async def test_transcribe_no_api_key(self, mock_settings):
-        mock_settings.OPENAI_API_KEY = ""
+        mock_settings.GROQ_API_KEY = ""
 
         from app.services.whisper_service import transcribe_audio_bytes
         result = await transcribe_audio_bytes(b"fake_audio_data")
@@ -951,7 +972,7 @@ class TestWhisperService:
     @patch("app.services.whisper_service.settings")
     @pytest.mark.asyncio
     async def test_transcribe_success(self, mock_settings):
-        mock_settings.OPENAI_API_KEY = "sk-test"
+        mock_settings.GROQ_API_KEY = "gsk-test"
 
         from app.services.whisper_service import transcribe_audio_bytes
 
@@ -960,7 +981,7 @@ class TestWhisperService:
 
             whisper_resp = MagicMock()
             whisper_resp.status_code = 200
-            whisper_resp.text = "Hola, esto es una prueba de transcripción"
+            whisper_resp.json.return_value = {"text": "Hola, esto es una prueba de transcripción"}
             whisper_resp.raise_for_status = MagicMock()
 
             mock_client.post.return_value = whisper_resp
@@ -969,11 +990,15 @@ class TestWhisperService:
             text = await transcribe_audio_bytes(b"fake_audio_data", "audio/ogg")
             assert text == "Hola, esto es una prueba de transcripción"
             assert mock_client.post.call_count == 1
+            call_kwargs = mock_client.post.call_args.kwargs
+            assert mock_client.post.call_args.args[0] == "https://api.groq.com/openai/v1/audio/transcriptions"
+            assert call_kwargs["headers"]["Authorization"] == "Bearer gsk-test"
+            assert call_kwargs["files"]["model"] == (None, "whisper-large-v3-turbo")
 
     @patch("app.services.whisper_service.settings")
     @pytest.mark.asyncio
     async def test_transcribe_api_failure(self, mock_settings):
-        mock_settings.OPENAI_API_KEY = "sk-test"
+        mock_settings.GROQ_API_KEY = "gsk-test"
 
         from app.services.whisper_service import transcribe_audio_bytes
 
@@ -988,7 +1013,7 @@ class TestWhisperService:
     @patch("app.services.whisper_service.settings")
     @pytest.mark.asyncio
     async def test_transcribe_empty_response(self, mock_settings):
-        mock_settings.OPENAI_API_KEY = "sk-test"
+        mock_settings.GROQ_API_KEY = "gsk-test"
 
         from app.services.whisper_service import transcribe_audio_bytes
 
@@ -996,7 +1021,7 @@ class TestWhisperService:
             mock_client = AsyncMock()
             whisper_resp = MagicMock()
             whisper_resp.status_code = 200
-            whisper_resp.text = ""
+            whisper_resp.json.return_value = {"text": ""}
             whisper_resp.raise_for_status = MagicMock()
 
             mock_client.post.return_value = whisper_resp

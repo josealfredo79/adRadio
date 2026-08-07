@@ -19,12 +19,15 @@ logger = logging.getLogger(__name__)
 async def get_embedding(text: str) -> list[float]:
     """
     Genera embedding del texto.
-    - Usa OpenAI text-embedding-3-small si OPENAI_API_KEY está configurado (recomendado).
-    - Fallback a Voyage AI voyage-3 si no hay clave de OpenAI.
+    - Usa OpenAI text-embedding-3-small solo si USE_OPENAI_EMBEDDINGS=true (opt-in explícito).
+    - Por defecto usa Voyage AI voyage-3, incluso si OPENAI_API_KEY está configurado
+      (esa clave puede estar presente solo para Whisper). Un switch implícito por la
+      sola presencia de la clave desincronizaría el espacio semántico de los chunks
+      nuevos frente a todo lo ya embebido con Voyage en producción.
     """
     text = text.replace("\n", " ").strip()
 
-    if settings.OPENAI_API_KEY:
+    if settings.USE_OPENAI_EMBEDDINGS and settings.OPENAI_API_KEY:
         return await _embed_openai(text)
     return await _embed_voyage(text)
 

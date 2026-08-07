@@ -31,16 +31,18 @@ def _extract_text(content: bytes, file_type: str) -> str:
             return content.decode("utf-8", errors="ignore")
         elif file_type == "audio":
             from app.config import settings
-            if not settings.OPENAI_API_KEY:
-                logger.warning("OPENAI_API_KEY not set — skipping Whisper transcription")
+            if not settings.GROQ_API_KEY:
+                logger.warning("GROQ_API_KEY not set — skipping Whisper transcription")
                 return ""
             import io
             from openai import OpenAI
-            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            # Whisper via Groq's free tier (OpenAI-SDK-compatible, 2,000 req/day,
+            # no card required) — no OpenAI account/billing needed for this.
+            client = OpenAI(api_key=settings.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
             audio_file = io.BytesIO(content)
             audio_file.name = "audio.mp3"
             transcript = client.audio.transcriptions.create(
-                model="whisper-1",
+                model="whisper-large-v3-turbo",
                 file=audio_file,
                 language="es",
             )

@@ -1,5 +1,7 @@
 """Tests for lead scoring and file text extraction utilities."""
 
+from unittest.mock import MagicMock, patch
+
 from app.services.lead_score import calculate_lead_score
 from app.workers.task_helpers.extract import _extract_text
 
@@ -43,5 +45,25 @@ class TestTextExtraction:
         assert result == ""
 
     def test_extract_empty_audio_no_key(self):
-        result = _extract_text(b"audio_data", "audio")
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.GROQ_API_KEY = ""
+            result = _extract_text(b"audio_data", "audio")
         assert result == ""
+
+    def test_extract_audio_uses_groq(self):
+        """Audio transcription must go through Groq's free Whisper tier
+        (whisper-large-v3-turbo, base_url=api.groq.com), not a paid OpenAI
+        account — no billing should be required for this to work."""
+        with patch("app.config.settings") as mock_settings, \
+             patch("openai.OpenAI") as mock_openai_cls:
+            mock_settings.GROQ_API_KEY = "gsk-test"
+            mock_client = MagicMock()
+            mock_client.audio.transcriptions.create.return_value = MagicMock(text="transcripción de prueba")
+            mock_openai_cls.return_value = mock_client
+
+            result = _extract_text(b"audio_data", "audio")
+
+        assert result == "transcripción de prueba"
+        mock_openai_cls.assert_called_once_with(api_key="gsk-test", base_url="https://api.groq.com/openai/v1")
+        _, kwargs = mock_client.audio.transcriptions.create.call_args
+        assert kwargs["model"] == "whisper-large-v3-turbo"

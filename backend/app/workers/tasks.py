@@ -414,7 +414,8 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
         from app.config import settings
         from sqlalchemy import select
 
-        embed_delay: float = 0.0 if settings.OPENAI_API_KEY else getattr(settings, "VOYAGE_EMBEDDING_DELAY_S", 22.0)
+        using_openai_embeddings = settings.USE_OPENAI_EMBEDDINGS and settings.OPENAI_API_KEY
+        embed_delay: float = 0.0 if using_openai_embeddings else getattr(settings, "VOYAGE_EMBEDDING_DELAY_S", 22.0)
 
         text = _extract_text(file_content, file_type)
         if not text:

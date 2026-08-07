@@ -83,8 +83,16 @@ class Settings(BaseSettings):
     # el agente y uno más fuerte (o viceversa) solo para evaluar.
     OPENROUTER_JUDGE_MODEL: str = ""
 
-    # OpenAI (embeddings + Whisper)
+    # OpenAI (Whisper transcription always; embeddings only if USE_OPENAI_EMBEDDINGS
+    # is explicitly set — see embedding_service.py. Keeping these decoupled means
+    # turning on Whisper (voice-note/audio-KB transcription) can never silently
+    # switch the RAG embedding provider and desync it from already-stored vectors.
     OPENAI_API_KEY: str = ""
+    USE_OPENAI_EMBEDDINGS: bool = False
+
+    # Groq — free Whisper tier (2,000 req/day, no card required) used for
+    # audio transcription: inbound WhatsApp voice notes + Knowledge Base audio.
+    GROQ_API_KEY: str = ""
 
     # Voyage AI (embeddings RAG)
     VOYAGE_API_KEY: str = ""

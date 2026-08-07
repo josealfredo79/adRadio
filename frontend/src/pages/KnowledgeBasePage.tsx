@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
-import { BookOpen, Upload, Trash2, FileText, FileSpreadsheet, File, Eye, X } from 'lucide-react'
+import { BookOpen, Upload, Trash2, FileText, FileSpreadsheet, File, Eye, X, Music } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
 import { useToast } from '@/contexts/ToastContext'
@@ -19,6 +19,7 @@ const FILE_ICONS: Record<string, typeof File> = {
   docx: FileText,
   pdf: FileText,
   xlsx: FileSpreadsheet,
+  audio: Music,
 }
 
 export default function KnowledgeBasePage() {
@@ -82,7 +83,7 @@ export default function KnowledgeBasePage() {
           <input
             ref={fileRef}
             type="file"
-            accept=".docx,.pdf,.xlsx,.txt"
+            accept=".docx,.pdf,.xlsx,.txt,.mp3,.wav,.m4a"
             className="hidden"
             onChange={handleUpload}
           />
@@ -93,7 +94,10 @@ export default function KnowledgeBasePage() {
       <div className="rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/30 px-5 py-4">
         <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Formatos soportados</p>
         <p className="mt-1 text-sm text-blue-600 dark:text-blue-400">
-          Word (.docx), PDF (.pdf), Excel (.xlsx), Texto (.txt) — Máx. 50MB por archivo
+          Word (.docx), PDF (.pdf), Excel (.xlsx), Texto (.txt), Audio (.mp3, .wav, .m4a) — Máx. 50MB por archivo
+        </p>
+        <p className="mt-1 text-xs text-blue-500 dark:text-blue-400/80">
+          ¿No quieres escribir? Graba una nota de voz explicando tu negocio y súbela directo — la transcribimos automáticamente.
         </p>
       </div>
 
