@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff } from 'lucide-react'
+import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
 import SEO from '@/components/SEO'
@@ -30,6 +30,8 @@ interface DashboardData {
   leads_from_bot: number
   plan_requests: number
   leads_unreplied: number
+  engagement: { hot: number; warm: number; cold: number }
+  coupons: { issued: number; redeemed: number; redemption_rate: number }
 }
 
 interface ChartPoint {
@@ -226,6 +228,55 @@ export default function DashboardPage() {
               <p className="mt-2 text-2xl font-bold text-amber-800 dark:text-amber-200">{formatNumber(data?.leads_unreplied ?? 0)}</p>
               <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">Esperando tu primera respuesta</p>
             </Link>
+          </div>
+
+          {/* Salud del negocio — engagement de contactos + redención de cupones */}
+          <div>
+            <h2 className="mb-3 text-base font-semibold text-foreground">Salud del negocio</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-red-100 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-red-700 dark:text-red-300">Leads calientes</p>
+                  <div className="rounded-lg bg-red-500 p-2">
+                    <Flame className="h-4 w-4 text-white" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold text-red-800 dark:text-red-200">{formatNumber(data?.engagement.hot ?? 0)}</p>
+                <p className="mt-0.5 text-xs text-red-600 dark:text-red-400">Alto interés, listos para vender</p>
+              </div>
+              <div className="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Leads tibios</p>
+                  <div className="rounded-lg bg-amber-500 p-2">
+                    <Flame className="h-4 w-4 text-white" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold text-amber-800 dark:text-amber-200">{formatNumber(data?.engagement.warm ?? 0)}</p>
+                <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">Interés moderado, dar seguimiento</p>
+              </div>
+              <div className="rounded-xl border border-blue-100 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Leads fríos</p>
+                  <div className="rounded-lg bg-blue-500 p-2">
+                    <Flame className="h-4 w-4 text-white" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold text-blue-800 dark:text-blue-200">{formatNumber(data?.engagement.cold ?? 0)}</p>
+                <p className="mt-0.5 text-xs text-blue-600 dark:text-blue-400">Bajo interés por ahora</p>
+              </div>
+              <div className="rounded-xl border border-emerald-100 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Cupones canjeados</p>
+                  <div className="rounded-lg bg-emerald-500 p-2">
+                    <Ticket className="h-4 w-4 text-white" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold text-emerald-800 dark:text-emerald-200">{data?.coupons.redemption_rate ?? 0}%</p>
+                <p className="mt-0.5 text-xs text-emerald-600 dark:text-emerald-400">
+                  {formatNumber(data?.coupons.redeemed ?? 0)} de {formatNumber(data?.coupons.issued ?? 0)} emitidos
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Orders bot summary */}

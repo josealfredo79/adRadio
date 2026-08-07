@@ -17,6 +17,7 @@ from app.database import get_db
 from app.models.automation import AutomationFlow
 from app.models.campaign import Campaign
 from app.models.contact import Contact
+from app.models.coupon import Coupon
 from app.models.message import Message
 from app.models.order import Order
 from app.models.user import User
@@ -199,6 +200,36 @@ async def dashboard(
         )
     )
 
+    # Engagement distribution — hot/warm/cold among active contacts.
+    # Thresholds match workers/tasks.py::update_contact_engagement_score.
+    engagement_rows = await db.execute(
+        select(
+            func.count().filter(Contact.engagement_score >= 80).label("hot"),
+            func.count().filter(
+                Contact.engagement_score >= 40, Contact.engagement_score < 80
+            ).label("warm"),
+            func.count().filter(Contact.engagement_score < 40).label("cold"),
+        ).where(
+            Contact.advertiser_id == current_user.id,
+            Contact.status == "active",
+        )
+    )
+    engagement_row = engagement_rows.one()
+
+    # Coupon redemption — closed-loop attribution from campaign to WhatsApp reply.
+    coupon_rows = await db.execute(
+        select(
+            func.count().label("issued"),
+            func.count().filter(Coupon.used_count > 0).label("redeemed"),
+        ).where(Coupon.advertiser_id == current_user.id)
+    )
+    coupon_row = coupon_rows.one()
+    coupons_issued = coupon_row.issued or 0
+    coupons_redeemed = coupon_row.redeemed or 0
+    redemption_rate = (
+        round(coupons_redeemed / coupons_issued * 100, 1) if coupons_issued > 0 else 0.0
+    )
+
     data = {
         "contacts_total": contacts_total.scalar_one(),
         "campaigns_active": campaigns_active.scalar_one(),
@@ -212,6 +243,16 @@ async def dashboard(
         "leads_from_bot": leads_from_bot.scalar_one(),
         "plan_requests": plan_requests.scalar_one(),
         "leads_unreplied": unreplied.scalar_one(),
+        "engagement": {
+            "hot": engagement_row.hot or 0,
+            "warm": engagement_row.warm or 0,
+            "cold": engagement_row.cold or 0,
+        },
+        "coupons": {
+            "issued": coupons_issued,
+            "redeemed": coupons_redeemed,
+            "redemption_rate": redemption_rate,
+        },
     }
 
     if redis:

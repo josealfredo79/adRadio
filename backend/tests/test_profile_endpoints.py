@@ -28,6 +28,7 @@ from app.database import AsyncSessionLocal, engine
 from app.models.automation import AutomationFlow
 from app.models.campaign import Campaign
 from app.models.contact import Contact
+from app.models.coupon import Coupon
 from app.models.message import Message
 from app.models.order import Order
 from app.models.user import User
@@ -49,6 +50,7 @@ async def _seed_user(current_plan: str = "trial", password: str = "old-password-
 async def _cleanup(user_ids):
     await engine.dispose()
     async with AsyncSessionLocal() as db:
+        await db.execute(delete(Coupon).where(Coupon.advertiser_id.in_(user_ids)))
         await db.execute(delete(Message).where(Message.advertiser_id.in_(user_ids)))
         await db.execute(delete(Order).where(Order.advertiser_id.in_(user_ids)))
         await db.execute(delete(Campaign).where(Campaign.advertiser_id.in_(user_ids)))
@@ -233,6 +235,8 @@ class TestDashboard:
             assert data["plan_requests"] == 0
             assert data["leads_unreplied"] == 0
             assert data["plan"] == "growth"
+            assert data["engagement"] == {"hot": 0, "warm": 0, "cold": 0}
+            assert data["coupons"] == {"issued": 0, "redeemed": 0, "redemption_rate": 0.0}
         finally:
             await _cleanup([user_id])
 
@@ -245,14 +249,14 @@ class TestDashboard:
             last_month = first_of_month - timedelta(days=5)
 
             async with AsyncSessionLocal() as db:
-                contact_activo = Contact(advertiser_id=user_id, name="Activo", phone="+521000000001", status="active")
-                contact_unreplied = Contact(advertiser_id=user_id, name="SinRespuesta", phone="+521000000004", status="active")
-                contact_replied = Contact(advertiser_id=user_id, name="Respondido", phone="+521000000005", status="active")
+                contact_activo = Contact(advertiser_id=user_id, name="Activo", phone="+521000000001", status="active", engagement_score=85)
+                contact_unreplied = Contact(advertiser_id=user_id, name="SinRespuesta", phone="+521000000004", status="active", engagement_score=45)
+                contact_replied = Contact(advertiser_id=user_id, name="Respondido", phone="+521000000005", status="active", engagement_score=10)
                 db.add_all([
                     contact_activo,
-                    Contact(advertiser_id=user_id, name="Baja", phone="+521000000002", status="unsubscribed"),
+                    Contact(advertiser_id=user_id, name="Baja", phone="+521000000002", status="unsubscribed", engagement_score=99),
                     Contact(advertiser_id=user_id, name="Lead", phone="+521000000003", status="active",
-                            source="landing", created_at=now),
+                            source="landing", created_at=now),  # engagement_score defaults to 0 -> cold
                     contact_unreplied,
                     contact_replied,
                     Campaign(advertiser_id=user_id, name="Activa", type="promo", message_text="hola", status="running"),
@@ -263,6 +267,8 @@ class TestDashboard:
                     Order(advertiser_id=user_id, state="collecting_name"),
                     Order(advertiser_id=user_id, state="cancelled"),
                     Order(advertiser_id=user_id, state="plan_pending_confirmation"),
+                    Coupon(advertiser_id=user_id, code="ISSUED1", expires_at=now + timedelta(days=30)),
+                    Coupon(advertiser_id=user_id, code="REDEEMED1", expires_at=now + timedelta(days=30), used_count=1),
                 ])
                 await db.commit()
 
@@ -299,6 +305,10 @@ class TestDashboard:
             assert data["leads_from_bot"] == 1
             assert data["plan_requests"] == 1
             assert data["leads_unreplied"] == 1  # only contact_unreplied's latest message is inbound
+            # hot=contact_activo(85), warm=contact_unreplied(45), cold=contact_replied(10)+Lead(0, default)
+            # "Baja" (score 99) excluded — status=unsubscribed, not active.
+            assert data["engagement"] == {"hot": 1, "warm": 1, "cold": 2}
+            assert data["coupons"] == {"issued": 2, "redeemed": 1, "redemption_rate": 50.0}
         finally:
             await _cleanup([user_id])
 
