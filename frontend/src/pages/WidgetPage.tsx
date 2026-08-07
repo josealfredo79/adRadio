@@ -58,9 +58,9 @@ export default function WidgetPage() {
       <SEO title="Widget" description="Panel de control de IaRadio." noIndex />
       <div className="max-w-4xl mx-auto p-6 space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Widget de WhatsApp</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Widget de chat</h1>
         <p className="mt-1 text-gray-500 dark:text-gray-400 text-sm">
-          Agrega un botón flotante de WhatsApp a tu sitio web. Personaliza colores, saludo y posición.
+          Agrega un botón flotante a tu sitio web. Tus visitantes chatean directo ahí con tu bot (usando tu base de conocimiento) sin salir de tu página — no depende de tener WhatsApp conectado. Personaliza colores, saludo y posición.
         </p>
       </div>
 

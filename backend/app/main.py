@@ -122,6 +122,33 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class WidgetCORSMiddleware(BaseHTTPMiddleware):
+    """The main CORSMiddleware below only allows FRONTEND_URL (this app's own
+    dashboard) — but /widget/chat and /widget/preview are meant to be
+    embedded on arbitrary advertiser websites, so they need
+    Access-Control-Allow-Origin: * regardless of that allowlist. Neither
+    route reads cookies or auth headers, so a wildcard origin here doesn't
+    expose any authenticated data. Registered as the outermost middleware
+    (added last) so it can short-circuit the OPTIONS preflight before the
+    stricter CORSMiddleware ever sees it."""
+    WIDGET_PATHS = (f"{settings.API_PREFIX}/widget/chat/", f"{settings.API_PREFIX}/widget/preview/")
+
+    async def dispatch(self, request: Request, call_next):
+        if not request.url.path.startswith(self.WIDGET_PATHS):
+            return await call_next(request)
+        if request.method == "OPTIONS":
+            from starlette.responses import Response as StarletteResponse
+            return StarletteResponse(status_code=200, headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Max-Age": "600",
+            })
+        response = await call_next(request)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -166,6 +193,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(WidgetCORSMiddleware)
 
 # Routers
 app.include_router(auth.router, prefix=settings.API_PREFIX)

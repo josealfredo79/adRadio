@@ -74,8 +74,18 @@
 #iaradio-widget-header .name { font-weight: 700; font-size: 15px; }
 #iaradio-widget-header .sub { font-size: 12px; opacity: 0.85; margin-top: 2px; }
 #iaradio-widget-body {
-  padding: 16px 18px;
+  padding: 0;
   background: #f0f4f8;
+  flex: 1;
+  min-height: 0;
+}
+#iaradio-widget-messages {
+  padding: 16px 18px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .iaradio-bubble {
   background: #fff;
@@ -84,11 +94,59 @@
   font-size: 14px;
   color: #333;
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-  max-width: 90%;
+  max-width: 88%;
   line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
+.iaradio-bubble-user {
+  background: var(--iaradio-color, #25D366);
+  color: #fff;
+  border-radius: 12px 0 12px 12px;
+  align-self: flex-end;
+}
+.iaradio-bubble-typing {
+  opacity: 0.6;
+  font-style: italic;
+}
+#iaradio-widget-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  border-top: 1px solid #eef1f4;
+}
+#iaradio-widget-input {
+  flex: 1;
+  border: 1px solid #e2e6ea;
+  border-radius: 20px;
+  padding: 9px 14px;
+  font-size: 14px;
+  outline: none;
+  font-family: inherit;
+  min-width: 0;
+}
+#iaradio-widget-input:focus {
+  border-color: var(--iaradio-color, #25D366);
+}
+#iaradio-widget-send {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--iaradio-color, #25D366);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+#iaradio-widget-send:hover { opacity: 0.9; }
 #iaradio-widget-footer {
-  padding: 12px 18px 16px;
+  padding: 8px 18px 14px;
   background: #fff;
 }
 #iaradio-widget-footer a {
@@ -96,13 +154,13 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: var(--iaradio-color, #25D366);
-  color: #fff;
+  color: var(--iaradio-color, #25D366);
+  border: 1px solid #e2e6ea;
   border-radius: 10px;
-  padding: 12px;
+  padding: 9px;
   text-decoration: none;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   transition: opacity 0.15s;
 }
-#iaradio-widget-footer a:hover { opacity: 0.9; }
+#iaradio-widget-footer a:hover { opacity: 0.75; }
