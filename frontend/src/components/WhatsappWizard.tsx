@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { launchEmbeddedSignup } from '@/lib/fbSdk'
-import { Check, ChevronDown, ExternalLink, Loader2, MessageCircle, X } from 'lucide-react'
+import { Check, ChevronDown, ExternalLink, Loader2, MessageCircle, Sparkles, X } from 'lucide-react'
 
 // Embedded Signup requiere que la app esté certificada como Tech Provider/BSP
 // ante Meta (bloqueado hasta que se apruebe — ver memoria de sesión 2026-08-04).
@@ -134,6 +135,15 @@ export default function WhatsappWizard() {
       {connection?.status === 'reconnect_required' && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
           El token expiró o ya no es válido — reconecta abajo.
+        </div>
+      )}
+      {!isConnected && connection?.status !== 'reconnect_required' && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800">
+          <Sparkles className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
+          <span>
+            Mientras conectas tu WhatsApp, tu bot ya puede atender a tus clientes desde tu sitio web con el{' '}
+            <Link to="/app/widget" className="font-medium underline hover:no-underline">Widget de chat</Link>.
+          </span>
         </div>
       )}
 

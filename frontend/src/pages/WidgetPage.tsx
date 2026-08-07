@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, MoveHorizontal, Save } from 'lucide-react'
+import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, MoveHorizontal, Save, Sparkles } from 'lucide-react'
 import api from '@/lib/api'
 import SEO from '@/components/SEO'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface SnippetData {
   snippet: string
@@ -19,6 +20,7 @@ const PRESET_COLORS = [
 ]
 
 export default function WidgetPage() {
+  const { user } = useAuth()
   const qc = useQueryClient()
   const [copied, setCopied] = useState(false)
 
@@ -63,6 +65,20 @@ export default function WidgetPage() {
           Agrega un botón flotante a tu sitio web. Tus visitantes chatean directo ahí con tu bot (usando tu base de conocimiento) sin salir de tu página — no depende de tener WhatsApp conectado. Personaliza colores, saludo y posición.
         </p>
       </div>
+
+      {!user?.whatsapp_number && (
+        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-5 py-4">
+          <Sparkles className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+              Aún no conectas WhatsApp — no hay problema, ya puedes operar con el widget
+            </p>
+            <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-300">
+              Tu bot puede empezar a atender a los visitantes de tu sitio hoy mismo, sin esperar a conectar tu número. Cuando conectes WhatsApp, tendrás ambos canales funcionando juntos.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Customization */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

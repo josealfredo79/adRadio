@@ -46,7 +46,7 @@ const navItems = [
   { to: '/app/lab', icon: FlaskConical, label: 'Laboratorio' },
   { to: '/app/team', icon: UserCog, label: 'Equipo' },
   { to: '/app/templates', icon: FileText, label: 'Plantillas' },
-  { to: '/app/widget', icon: MessageCircle, label: 'Widget WA' },
+  { to: '/app/widget', icon: MessageCircle, label: 'Widget de chat' },
   { to: '/app/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/app/plans', icon: CreditCard, label: 'Planes' },
   { to: '/app/settings', icon: Settings, label: 'Configuración' },
