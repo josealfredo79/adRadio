@@ -16,6 +16,18 @@ interface PublicSite {
   tagline: string
 }
 
+interface PublicProduct {
+  id: string
+  name: string
+  description: string
+  price: string | null
+  category: string
+  photo_url: string
+}
+
+const formatPrice = (price: string | null) =>
+  price === null ? 'Cotizar' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(price))
+
 const CATEGORY_EMOJI: Record<string, string> = {
   restaurante: '🍽️', comida: '🍽️', cocina: '🍽️',
   salud: '🩺', clinica: '🩺', clínica: '🩺', dental: '🦷', dentista: '🦷',
@@ -56,6 +68,13 @@ export default function PublicSitePage() {
           throw err
         }),
     enabled: !!slug,
+    retry: false,
+  })
+
+  const { data: products } = useQuery<PublicProduct[]>({
+    queryKey: ['public-site-products', slug],
+    queryFn: () => api.get(`/public/site/${slug}/products`).then((r) => r.data),
+    enabled: !!slug && !!site,
     retry: false,
   })
 
@@ -127,6 +146,35 @@ export default function PublicSitePage() {
             )}
           </div>
         </header>
+
+        {!!products?.length && (
+          <section className="max-w-4xl mx-auto px-6 pb-16">
+            <h2 className="text-xl font-bold text-center mb-6">Nuestro catálogo</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {products.map((p) => (
+                <div key={p.id} className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden text-left">
+                  <div className="h-36 bg-white/5 flex items-center justify-center overflow-hidden">
+                    {p.photo_url ? (
+                      <img src={p.photo_url} alt={p.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-4xl">{categoryEmoji(p.category || site.business_category)}</span>
+                    )}
+                  </div>
+                  <div className="p-4 space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold">{p.name}</h3>
+                      <span className="shrink-0 text-sm font-semibold" style={{ color: site.color }}>
+                        {formatPrice(p.price)}
+                      </span>
+                    </div>
+                    {p.category && <p className="text-xs text-white/50">{p.category}</p>}
+                    {p.description && <p className="text-sm text-white/70 line-clamp-2">{p.description}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <main className="max-w-2xl mx-auto px-6 pb-32 text-center space-y-6">
           {!site.tagline && (
