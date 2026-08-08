@@ -111,7 +111,8 @@
         if (!res.ok) return res.json().then(function (d) { throw new Error(d.detail || 'Error'); });
         return res.json();
       })
-      .then(function () {
+      .then(function (data) {
+        sessionId = data.session_id || sessionId;
         leadWrap.innerHTML = '';
         _appendBubble('¡Gracias, ' + name + '! Un miembro del equipo te contactará pronto. 🙌', 'bot');
       })

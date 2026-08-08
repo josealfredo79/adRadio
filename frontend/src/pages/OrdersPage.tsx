@@ -96,7 +96,7 @@ export default function OrdersPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Pedidos</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pedidos capturados por el bot de WhatsApp
+            Pedidos capturados por el bot, en WhatsApp y en tu página web
           </p>
         </div>
         <PrintButton />
@@ -162,7 +162,7 @@ export default function OrdersPage() {
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <ShoppingBag className="h-12 w-12 mb-3" />
             <p className="text-sm">No hay pedidos todavía</p>
-            <p className="text-xs mt-1">Los pedidos aparecerán cuando el bot los capture por WhatsApp</p>
+            <p className="text-xs mt-1">Los pedidos aparecerán cuando el bot los capture por WhatsApp o tu página web</p>
           </div>
         ) : (
           <ul className="divide-y divide-border">

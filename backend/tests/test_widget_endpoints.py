@@ -269,6 +269,70 @@ class TestWidgetChat:
         finally:
             await _cleanup([user_id])
 
+    @pytest.mark.asyncio
+    async def test_routes_to_order_service_when_session_has_a_linked_contact(self):
+        """A session that already captured a lead (POST /widget/lead) is
+        linked to its Contact in Redis — an order-intent message should be
+        handled by widget_order_service instead of falling through to RAG."""
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                contact = Contact(advertiser_id=user_id, name="Ana", phone="+525511115555", source="widget")
+                db.add(contact)
+                await db.commit()
+                await db.refresh(contact)
+
+            def _get_side_effect(key):
+                if key.startswith("widget_session_contact:"):
+                    return str(contact.id)
+                return None
+
+            fake_redis = AsyncMock()
+            fake_redis.get.side_effect = _get_side_effect
+
+            with patch("app.services.rag_service.answer_with_rag", new_callable=AsyncMock) as mock_rag:
+                async with AsyncSessionLocal() as db:
+                    out = await widget_chat(
+                        request=_request(method="POST"), advertiser_id=user_id,
+                        body={"message": "quiero pedir 2 pizzas", "session_id": "sess-order"},
+                        db=db, redis=fake_redis,
+                    )
+            assert "nombre" in out["reply"].lower()
+            mock_rag.assert_not_called()
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_falls_through_to_rag_when_no_order_intent_despite_linked_contact(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                contact = Contact(advertiser_id=user_id, name="Ana", phone="+525511116666", source="widget")
+                db.add(contact)
+                await db.commit()
+                await db.refresh(contact)
+
+            def _get_side_effect(key):
+                if key.startswith("widget_session_contact:"):
+                    return str(contact.id)
+                return None
+
+            fake_redis = AsyncMock()
+            fake_redis.get.side_effect = _get_side_effect
+
+            with patch("app.services.rag_service.answer_with_rag", new_callable=AsyncMock) as mock_rag:
+                mock_rag.return_value = "Abrimos de 9 a 9."
+                async with AsyncSessionLocal() as db:
+                    out = await widget_chat(
+                        request=_request(method="POST"), advertiser_id=user_id,
+                        body={"message": "¿cuál es su horario?", "session_id": "sess-rag"},
+                        db=db, redis=fake_redis,
+                    )
+            assert out["reply"] == "Abrimos de 9 a 9."
+            mock_rag.assert_awaited_once()
+        finally:
+            await _cleanup([user_id])
+
 
 class TestWidgetCaptureLead:
     """A widget visitor leaves their name/phone — turns the ephemeral chat
@@ -400,6 +464,47 @@ class TestWidgetCaptureLead:
                 assert len(messages) == 2
                 directions = {m.direction for m in messages}
                 assert directions == {"inbound", "outbound"}
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_generates_and_links_session_id_when_visitor_leaves_data_before_chatting(self):
+        """A visitor can click 'Dejar mis datos' before ever sending a chat
+        message — widget.js's own session_id is still null at that point.
+        The endpoint must generate one, return it, and link it, so a
+        follow-up /widget/chat call with that returned session_id resolves
+        to this Contact (see widget.js's sessionId = data.session_id)."""
+        user_id = await _seed_user()
+        try:
+            fake_redis = AsyncMock()
+            fake_redis.get.return_value = None
+            async with AsyncSessionLocal() as db:
+                out = await widget_capture_lead(
+                    request=_request(method="POST"), advertiser_id=user_id,
+                    body={"name": "Luis", "phone": "+525511118888"}, db=db, redis=fake_redis,
+                )
+            assert out["session_id"]
+            fake_redis.setex.assert_any_call(
+                f"widget_session_contact:{user_id}:{out['session_id']}", 1800, out["contact_id"]
+            )
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_links_session_to_contact_in_redis(self):
+        user_id = await _seed_user()
+        try:
+            fake_redis = AsyncMock()
+            fake_redis.get.return_value = None
+            async with AsyncSessionLocal() as db:
+                out = await widget_capture_lead(
+                    request=_request(method="POST"), advertiser_id=user_id,
+                    body={"name": "Luis", "phone": "+525511117777", "session_id": "sess-link"},
+                    db=db, redis=fake_redis,
+                )
+            fake_redis.setex.assert_any_call(
+                f"widget_session_contact:{user_id}:sess-link", 1800, out["contact_id"]
+            )
         finally:
             await _cleanup([user_id])
 

@@ -29,6 +29,10 @@ router = APIRouter(prefix="/widget", tags=["widget"])
 CHAT_REDIS_PREFIX = "widget_chat:"
 CHAT_REDIS_TTL = 1800
 CHAT_MAX_HISTORY = 20
+# Links a widget session to the Contact created via POST /widget/lead, so a
+# later /widget/chat call in the same session (same session_id) knows a real
+# Contact already exists and can hand off to widget_order_service.
+SESSION_CONTACT_REDIS_PREFIX = "widget_session_contact:"
 
 
 @router.get("/snippet")
@@ -99,21 +103,35 @@ async def widget_chat(
             except json.JSONDecodeError:
                 history = []
 
-    from app.services.rag_service import answer_with_rag
+    contact: Contact | None = None
+    if redis:
+        contact_id_raw = await redis.get(f"{SESSION_CONTACT_REDIS_PREFIX}{advertiser_id}:{session_id}")
+        if contact_id_raw:
+            contact_id_str = contact_id_raw.decode() if isinstance(contact_id_raw, bytes) else contact_id_raw
+            contact = await db.get(Contact, UUID(contact_id_str))
 
-    try:
-        reply = await answer_with_rag(
-            advertiser_id=str(advertiser_id),
-            query=message,
-            conversation_history=history,
-            db=db,
-            business_name=user.business_name or "el negocio",
-            bot_name=user.bot_name or "Asistente",
-            bot_personality=user.bot_personality or "amigable y profesional",
-        )
-    except Exception as e:
-        logger.error("[WIDGET-CHAT] advertiser=%s error=%s", advertiser_id, e, exc_info=True)
-        reply = "Gracias por tu mensaje. En breve un asesor te atenderá. 😊"
+    from app.services.widget_order_service import handle_widget_order
+
+    order_reply = await handle_widget_order(db, user, contact, message)
+
+    if order_reply is not None:
+        reply = order_reply
+    else:
+        from app.services.rag_service import answer_with_rag
+
+        try:
+            reply = await answer_with_rag(
+                advertiser_id=str(advertiser_id),
+                query=message,
+                conversation_history=history,
+                db=db,
+                business_name=user.business_name or "el negocio",
+                bot_name=user.bot_name or "Asistente",
+                bot_personality=user.bot_personality or "amigable y profesional",
+            )
+        except Exception as e:
+            logger.error("[WIDGET-CHAT] advertiser=%s error=%s", advertiser_id, e, exc_info=True)
+            reply = "Gracias por tu mensaje. En breve un asesor te atenderá. 😊"
 
     history.append({"role": "user", "content": message})
     history.append({"role": "assistant", "content": reply})
@@ -175,11 +193,15 @@ async def widget_capture_lead(
         db.add(conv)
         await db.flush()
 
+    # A visitor can leave their data before ever sending a chat message —
+    # widget.js's session_id is still null at that point. Generate one here
+    # so we can hand it back and link it to this Contact regardless.
+    session_id = body.get("session_id") or str(uuid_module.uuid4())
+
     # Pull whatever transcript exists in Redis for this session and turn it
     # into real rows — both Conversation.messages (what the Inbox thread view
     # reads) and Message rows (what the Inbox list's count/preview reads).
-    session_id = body.get("session_id")
-    if redis and session_id:
+    if redis and body.get("session_id"):
         raw = await redis.get(f"{CHAT_REDIS_PREFIX}{advertiser_id}:{session_id}")
         if raw:
             try:
@@ -198,6 +220,11 @@ async def widget_capture_lead(
     conv.last_activity = datetime.now(timezone.utc)
     await db.commit()
 
+    if redis and session_id:
+        await redis.setex(
+            f"{SESSION_CONTACT_REDIS_PREFIX}{advertiser_id}:{session_id}", CHAT_REDIS_TTL, str(contact.id)
+        )
+
     if is_new_contact:
         from app.services.webhook_dispatcher import dispatch_webhook_event
         await dispatch_webhook_event(
@@ -207,7 +234,7 @@ async def widget_capture_lead(
             advertiser_id=advertiser_id,
         )
 
-    return {"message": "ok", "contact_id": str(contact.id)}
+    return {"message": "ok", "contact_id": str(contact.id), "session_id": session_id}
 
 
 @router.get("/preview/{advertiser_id}", include_in_schema=False)
