@@ -20,7 +20,7 @@ from app.config import settings
 from app.core.redis import close_redis
 from app.core.rate_limiter import limiter
 from app.services.analytics_service import flush as analytics_flush
-from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, template_seeds, team, automations, widget, analytics, admin, chat_demo
+from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, template_seeds, team, automations, widget, analytics, admin, chat_demo, products
 from app.api.v1 import user_webhooks, public_api, public_api_routes, public_site, meta_whatsapp, lab
 
 logger = logging.getLogger(__name__)
@@ -217,6 +217,7 @@ app.include_router(templates.router, prefix=settings.API_PREFIX)
 app.include_router(template_seeds.router, prefix=settings.API_PREFIX)
 app.include_router(team.router, prefix=settings.API_PREFIX)
 app.include_router(automations.router, prefix=settings.API_PREFIX)
+app.include_router(products.router, prefix=settings.API_PREFIX)
 app.include_router(widget.router, prefix=settings.API_PREFIX)
 app.include_router(analytics.router, prefix=settings.API_PREFIX)
 app.include_router(user_webhooks.router, prefix=settings.API_PREFIX)

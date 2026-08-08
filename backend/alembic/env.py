@@ -16,6 +16,7 @@ from app.models.conversation import Conversation  # noqa: F401
 from app.models.transaction import Transaction  # noqa: F401
 from app.models.appointment import Appointment  # noqa: F401
 from app.models.order import Order  # noqa: F401
+from app.models.product import Product  # noqa: F401
 from app.models.coupon import Coupon  # noqa: F401
 from app.models.customer_story import CustomerStory  # noqa: F401
 from app.models.user_webhook import UserWebhook  # noqa: F401
