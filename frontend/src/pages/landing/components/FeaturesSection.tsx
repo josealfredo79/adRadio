@@ -1,4 +1,4 @@
-import { Bot, MessageCircle, Mic, Gift, BarChart3, Shield } from 'lucide-react'
+import { Bot, MessageCircle, Mic, Gift, BarChart3, Shield, Package } from 'lucide-react'
 
 const FEATURES = [
   {
@@ -6,6 +6,12 @@ const FEATURES = [
     title: 'Bot IA con tu conocimiento',
     desc: 'Responde preguntas 24/7 usando tu catálogo, menú o lista de precios. Entiende contexto, no solo palabras clave.',
     badge: 'IA',
+  },
+  {
+    icon: <Package className="h-5 w-5 text-pink-400" />,
+    title: 'Catálogo de productos y servicios',
+    desc: 'Publica tus productos con foto y precio en tu página y tu bot los recomienda solo por WhatsApp y en el chat de tu sitio.',
+    badge: 'NUEVO',
   },
   {
     icon: <MessageCircle className="h-5 w-5 text-green-400" />,
