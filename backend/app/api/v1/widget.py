@@ -111,12 +111,16 @@ async def widget_chat(
             contact = await db.get(Contact, UUID(contact_id_str))
 
     from app.services.appointment_booking_service import handle_appointment_booking
+    from app.services.catalog_service import handle_catalog_query
     from app.services.widget_order_service import handle_widget_order
 
-    # Appointment intent is checked before order intent — some appointment
-    # keywords ("pedir cita") would otherwise also match the order keyword
-    # "pedir" on its own.
-    channel_reply = await handle_appointment_booking(db, user, contact, message, redis)
+    # Catalog query is checked first — narrowest, read-only, never creates a
+    # row. Appointment intent is checked before order intent — some
+    # appointment keywords ("pedir cita") would otherwise also match the
+    # order keyword "pedir" on its own.
+    channel_reply = await handle_catalog_query(db, user, message)
+    if channel_reply is None:
+        channel_reply = await handle_appointment_booking(db, user, contact, message, redis)
     if channel_reply is None:
         channel_reply = await handle_widget_order(db, user, contact, message)
 

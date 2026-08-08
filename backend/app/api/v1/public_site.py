@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limiter import limiter
 from app.database import get_db
+from app.models.product import Product
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -36,3 +37,30 @@ async def get_public_site(request: Request, slug: str, db: AsyncSession = Depend
         "color": user.widget_color or "#25D366",
         "tagline": user.landing_tagline or "",
     }
+
+
+@router.get("/{slug}/products")
+@limiter.limit("30/minute")
+async def get_public_site_products(request: Request, slug: str, db: AsyncSession = Depends(get_db)) -> list[dict]:
+    """Public-safe active catalog for an advertiser's AdRadio-hosted landing page."""
+    result = await db.execute(select(User).where(User.slug == slug.lower()))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Página no encontrada")
+
+    products_result = await db.execute(
+        select(Product)
+        .where(Product.advertiser_id == user.id, Product.active.is_(True))
+        .order_by(Product.category, Product.name)
+    )
+    return [
+        {
+            "id": str(p.id),
+            "name": p.name,
+            "description": p.description or "",
+            "price": str(p.price) if p.price is not None else None,
+            "category": p.category or "",
+            "photo_url": p.photo_url or "",
+        }
+        for p in products_result.scalars().all()
+    ]

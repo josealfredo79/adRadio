@@ -8,8 +8,9 @@ from fastapi import HTTPException
 from sqlalchemy import delete
 from starlette.requests import Request
 
-from app.api.v1.public_site import get_public_site
+from app.api.v1.public_site import get_public_site, get_public_site_products
 from app.database import AsyncSessionLocal, engine
+from app.models.product import Product
 from app.models.user import User
 
 
@@ -33,6 +34,7 @@ async def _seed_user(**overrides):
 async def _cleanup(user_ids):
     await engine.dispose()
     async with AsyncSessionLocal() as db:
+        await db.execute(delete(Product).where(Product.advertiser_id.in_(user_ids)))
         await db.execute(delete(User).where(User.id.in_(user_ids)))
         await db.commit()
     await engine.dispose()
@@ -101,3 +103,43 @@ class TestGetPublicSite:
             assert out["business_name"] == "Tacos"
         finally:
             await _cleanup([user_id])
+
+
+class TestGetPublicSiteProducts:
+    @pytest.mark.asyncio
+    async def test_unknown_slug_returns_404(self):
+        async with AsyncSessionLocal() as db:
+            with pytest.raises(HTTPException) as exc_info:
+                await get_public_site_products(request=_request(), slug="no-existe", db=db)
+            assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_only_returns_active_products(self):
+        user_id = await _seed_user(business_name="Tacos", slug="con-catalogo")
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add(Product(advertiser_id=user_id, name="Taco al pastor", price=25, active=True))
+                db.add(Product(advertiser_id=user_id, name="Descontinuado", price=10, active=False))
+                await db.commit()
+
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site_products(request=_request(), slug="con-catalogo", db=db)
+            assert [p["name"] for p in out] == ["Taco al pastor"]
+            assert out[0]["price"] == "25.00"
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_never_leaks_other_advertisers_products(self):
+        user_id = await _seed_user(business_name="A", slug="negocio-a")
+        other_id = await _seed_user(business_name="B", slug="negocio-b")
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add(Product(advertiser_id=other_id, name="Ajeno", active=True))
+                await db.commit()
+
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site_products(request=_request(), slug="negocio-a", db=db)
+            assert out == []
+        finally:
+            await _cleanup([user_id, other_id])

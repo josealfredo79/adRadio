@@ -245,6 +245,30 @@ Devuelve solo los 4 episodios separados por "---"."""
     return parts[:4]
 
 
+# ─── Detección de intención de consultar el catálogo ─────────────────────────
+
+# Deliberadamente sin palabras sueltas como "precio"/"productos" — la lección
+# real de detect_plan_purchase_intent (ver abajo) es que palabras sueltas
+# capturan preguntas normales sobre un producto específico ("¿cuánto cuesta
+# el pastel de 4 personas?"), no una petición de ver el catálogo completo.
+_CATALOG_KEYWORDS: frozenset[str] = frozenset([
+    "catálogo", "catalogo", "menú", "menu", "carta de precios",
+    "qué venden", "que venden", "qué productos tienen", "que productos tienen",
+    "qué servicios ofrecen", "que servicios ofrecen", "qué tienen disponible",
+    "lista de precios", "ver catalogo", "ver catálogo", "ver menu", "ver menú",
+])
+
+
+def detect_catalog_intent(message: str) -> bool:
+    """
+    Detecta si el mensaje pide ver el catálogo de productos/servicios usando
+    palabras clave. Función síncrona — costo $0, latencia ~0ms (mismo patrón
+    que detect_order_intent).
+    """
+    text = message.lower().strip()
+    return any(kw in text for kw in _CATALOG_KEYWORDS)
+
+
 # ─── Detección de intención de pedido ────────────────────────────────────────
 
 # Palabras clave para detectar intención de pedido — sin llamada a Claude (costo $0)

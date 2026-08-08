@@ -25,6 +25,7 @@ from app.models.message import Message
 from app.models.order import Order
 from app.models.user import User
 from app.services.appointment_booking_service import handle_appointment_booking
+from app.services.catalog_service import handle_catalog_query
 from app.services.claude_service import (
     detect_order_intent,
     detect_plan_purchase_intent,
@@ -474,6 +475,41 @@ async def process_inbound_message(
                 await send_owner(owner_wa, f"🙋 {contact_name} pidió hablar con una persona — revisa el Inbox.")
             except Exception:
                 logger.warning("[HANDOFF] Failed to notify owner of client-requested handoff", exc_info=True)
+        return {"message": "ok"}
+
+    # Catalog query (channel-agnostic, shared with the widget) — checked
+    # first: narrowest, read-only, never creates a row, so it can't collide
+    # with the appointment/order state machines below.
+    catalog_reply = await handle_catalog_query(db, advertiser, body_text)
+    if catalog_reply is not None:
+        updated_msgs = conv.messages + [
+            {"role": "user", "content": body_text},
+            {"role": "assistant", "content": catalog_reply},
+        ]
+        conv.messages = updated_msgs[-40:]
+        conv.last_activity = func.now()
+
+        out_msg = Message(
+            advertiser_id=advertiser.id,
+            contact_id=contact.id,
+            direction="outbound",
+            content=catalog_reply,
+            status="queued",
+        )
+        db.add(out_msg)
+        await db.commit()
+        await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
+
+        sid_c, err_c = await send(from_number, catalog_reply)
+        if sid_c:
+            out_msg.status = "sent"
+            out_msg.wa_message_id = sid_c
+            out_msg.sent_at = datetime.now(timezone.utc)
+        else:
+            out_msg.status = "failed"
+            out_msg.error_code = err_c
+        await db.commit()
+        await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
         return {"message": "ok"}
 
     # Appointment self-service booking (channel-agnostic, shared with the
