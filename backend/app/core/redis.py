@@ -24,7 +24,10 @@ async def get_redis() -> aioredis.Redis:
     if _redis_pool is not None:
         try:
             await _redis_pool.ping()
-        except (RedisConnectionError, RedisTimeoutError, OSError):
+        except (RedisConnectionError, RedisTimeoutError, OSError, RuntimeError):
+            # RuntimeError also covers "attached to a different event loop"
+            # (close_redis()'s own aclose() already anticipated this — see
+            # below — this just extends the same tolerance to the ping check).
             logger.warning("Pool de Redis perdió conexión, reconectando...")
             await close_redis()
 

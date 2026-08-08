@@ -110,12 +110,18 @@ async def widget_chat(
             contact_id_str = contact_id_raw.decode() if isinstance(contact_id_raw, bytes) else contact_id_raw
             contact = await db.get(Contact, UUID(contact_id_str))
 
+    from app.services.appointment_booking_service import handle_appointment_booking
     from app.services.widget_order_service import handle_widget_order
 
-    order_reply = await handle_widget_order(db, user, contact, message)
+    # Appointment intent is checked before order intent — some appointment
+    # keywords ("pedir cita") would otherwise also match the order keyword
+    # "pedir" on its own.
+    channel_reply = await handle_appointment_booking(db, user, contact, message, redis)
+    if channel_reply is None:
+        channel_reply = await handle_widget_order(db, user, contact, message)
 
-    if order_reply is not None:
-        reply = order_reply
+    if channel_reply is not None:
+        reply = channel_reply
     else:
         from app.services.rag_service import answer_with_rag
 

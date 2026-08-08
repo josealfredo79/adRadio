@@ -24,6 +24,7 @@ from app.models.customer_story import CustomerStory
 from app.models.message import Message
 from app.models.order import Order
 from app.models.user import User
+from app.services.appointment_booking_service import handle_appointment_booking
 from app.services.claude_service import (
     detect_order_intent,
     detect_plan_purchase_intent,
@@ -473,6 +474,51 @@ async def process_inbound_message(
                 await send_owner(owner_wa, f"🙋 {contact_name} pidió hablar con una persona — revisa el Inbox.")
             except Exception:
                 logger.warning("[HANDOFF] Failed to notify owner of client-requested handoff", exc_info=True)
+        return {"message": "ok"}
+
+    # Appointment self-service booking (channel-agnostic, shared with the
+    # widget) — checked before the order state machine so "quiero pedir una
+    # cita" resolves to booking, not to detect_order_intent's bare "pedir".
+    from app.core.redis import get_redis_optional
+
+    _appt_redis = await get_redis_optional()
+    appointment_reply = await handle_appointment_booking(db, advertiser, contact, body_text, _appt_redis)
+    if appointment_reply is not None:
+        updated_msgs = conv.messages + [
+            {"role": "user", "content": body_text},
+            {"role": "assistant", "content": appointment_reply},
+        ]
+        conv.messages = updated_msgs[-40:]
+        conv.last_activity = func.now()
+
+        out_msg = Message(
+            advertiser_id=advertiser.id,
+            contact_id=contact.id,
+            direction="outbound",
+            content=appointment_reply,
+            status="queued",
+        )
+        db.add(out_msg)
+        await db.commit()
+        await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
+
+        from app.workers.tasks import update_contact_engagement_score
+
+        sid_a, err_a = await send(from_number, appointment_reply)
+        if sid_a:
+            out_msg.status = "sent"
+            out_msg.wa_message_id = sid_a
+            out_msg.sent_at = datetime.now(timezone.utc)
+        else:
+            out_msg.status = "failed"
+            out_msg.error_code = err_a
+        await db.commit()
+        await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
+        update_contact_engagement_score.apply_async(
+            args=[str(contact.id)],
+            queue="whatsapp",
+            countdown=10,
+        )
         return {"message": "ok"}
 
     # Order state machine

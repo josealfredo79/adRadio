@@ -271,6 +271,31 @@ async def detect_order_intent_async(message: str) -> bool:
     return detect_order_intent(message)
 
 
+# ─── Detección de intención de agendar cita ──────────────────────────────────
+
+# Deliberadamente sin "pedir"/"reservar"/"apartar" a secas (esas palabras solas
+# ya activan _ORDER_KEYWORDS) — el llamador debe revisar intención de cita
+# ANTES que intención de pedido para que "quiero pedir una cita" resuelva a
+# cita y no a pedido.
+_APPOINTMENT_KEYWORDS: frozenset[str] = frozenset([
+    "agendar", "agenda una cita", "quiero una cita", "quiero cita",
+    "sacar cita", "cita para", "hacer cita", "dar cita", "programar cita",
+    "solicitar cita", "reservar cita", "apartar cita", "cita disponible",
+    "horario disponible", "tienen citas", "necesito una cita", "quiero agendar",
+    "pedir cita", "pedir una cita",
+])
+
+
+def detect_appointment_intent(message: str) -> bool:
+    """
+    Detecta si el mensaje indica intención de agendar una cita usando palabras
+    clave. Función síncrona — costo $0, latencia ~0ms (mismo patrón que
+    detect_order_intent).
+    """
+    text = message.lower().strip()
+    return any(kw in text for kw in _APPOINTMENT_KEYWORDS)
+
+
 # ─── Detección de intención de compra de plan/suscripción ───────
 
 _PLAN_TIERS = ("starter", "growth", "pro", "business", "enterprise")

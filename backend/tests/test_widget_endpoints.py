@@ -333,6 +333,39 @@ class TestWidgetChat:
         finally:
             await _cleanup([user_id])
 
+    @pytest.mark.asyncio
+    async def test_appointment_intent_is_routed_before_order_intent(self):
+        """'pedir cita' contains the bare word 'pedir', which alone would
+        match order-intent keywords — appointment detection must win so this
+        resolves to booking a slot, not to starting an order."""
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                contact = Contact(advertiser_id=user_id, name="Ana", phone="+525511119999", source="widget")
+                db.add(contact)
+                await db.commit()
+                await db.refresh(contact)
+
+            def _get_side_effect(key):
+                if key.startswith("widget_session_contact:"):
+                    return str(contact.id)
+                return None
+
+            fake_redis = AsyncMock()
+            fake_redis.get.side_effect = _get_side_effect
+
+            with patch("app.services.rag_service.answer_with_rag", new_callable=AsyncMock) as mock_rag:
+                async with AsyncSessionLocal() as db:
+                    out = await widget_chat(
+                        request=_request(method="POST"), advertiser_id=user_id,
+                        body={"message": "quiero pedir una cita para corte", "session_id": "sess-appt"},
+                        db=db, redis=fake_redis,
+                    )
+            assert "día" in out["reply"].lower()
+            mock_rag.assert_not_called()
+        finally:
+            await _cleanup([user_id])
+
 
 class TestWidgetCaptureLead:
     """A widget visitor leaves their name/phone — turns the ephemeral chat

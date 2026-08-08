@@ -138,6 +138,58 @@ async def send_new_order_email(
     return await send_email(to, subject, html)
 
 
+async def send_new_appointment_email(
+    to: str,
+    business_name: str,
+    service: str,
+    customer_name: str,
+    customer_phone: str,
+    fecha: str,
+    hora: str,
+) -> bool:
+    """Notify the business owner about a new self-service-booked appointment."""
+    html = f"""
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="background:linear-gradient(135deg,#6366f1,#a855f7);padding:24px 28px">
+        <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800">
+          📅 Nueva cita agendada
+        </h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.8);font-size:14px">{business_name}</p>
+      </div>
+
+      <div style="padding:24px 28px">
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-bottom:16px">
+          <p style="margin:0 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8">Servicio</p>
+          <p style="margin:0;font-size:18px;font-weight:700;color:#1e293b">{service}</p>
+        </div>
+
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <tr>
+            <td style="padding:8px 0;color:#64748b;width:40%">👤 Cliente</td>
+            <td style="padding:8px 0;font-weight:600;color:#1e293b">{customer_name}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;color:#64748b">📱 Teléfono</td>
+            <td style="padding:8px 0;font-weight:600;color:#1e293b">{customer_phone}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;color:#64748b">🕐 Fecha</td>
+            <td style="padding:8px 0;font-weight:600;color:#1e293b">{fecha} a las {hora}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="background:#f8fafc;padding:16px 28px;border-top:1px solid #e2e8f0">
+        <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center">
+          Puedes ver todas tus citas en tu panel de IaRadio.
+        </p>
+      </div>
+    </div>
+    """
+    subject = f"📅 Nueva cita — {business_name}"
+    return await send_email(to, subject, html)
+
+
 async def send_campaign_sent_email(
     to: str,
     business_name: str,

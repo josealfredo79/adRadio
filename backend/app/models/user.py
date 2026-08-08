@@ -40,6 +40,10 @@ class User(Base):
     # Short welcome line shown on that landing page, written via the
     # landing-page setup wizard — separate from widget_greeting (chat opener).
     landing_tagline: Mapped[str | None] = mapped_column(String(140))
+    # Weekly schedule for self-service appointment booking, e.g.
+    # {"mon": ["09:00","18:00"], ..., "sun": null}. Null/missing day = closed.
+    # Falls back to availability_service.DEFAULT_BUSINESS_HOURS when unset.
+    business_hours: Mapped[dict | None] = mapped_column(JSONB)
     country: Mapped[str] = mapped_column(String(10), default="MX", server_default="MX")
     logo_url: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(String(20))
