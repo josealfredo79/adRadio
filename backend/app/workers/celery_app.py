@@ -48,6 +48,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.cleanup_expired_data",
         "schedule": 3600.0,  # every hour
     },
+    "replenish-annual-message-quota": {
+        "task": "app.workers.tasks.replenish_annual_message_quota",
+        "schedule": 3600.0,  # every hour — messages_refill_at is date-precision, hourly is plenty
+    },
     "send-appointment-reminders": {
         "task": "app.workers.tasks.send_appointment_reminders",
         "schedule": 300.0,  # every 5 minutes

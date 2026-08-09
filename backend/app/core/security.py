@@ -62,6 +62,14 @@ def generate_secure_token(length: int = 32) -> str:
     return secrets.token_urlsafe(length)
 
 
+def generate_referral_code(length: int = 6) -> str:
+    """Código corto de referido — mismo alfabeto que generate_coupon_code
+    (sin 0/O/1/I/L, ambiguos al leerlos en voz alta o escritos a mano)."""
+    chars = string.ascii_uppercase + string.digits
+    chars = chars.translate(str.maketrans("", "", "0O1IL"))
+    return "".join(secrets.choice(chars) for _ in range(length))
+
+
 def hash_api_key(key: str) -> str:
     """Hash an API key with bcrypt for storage."""
     salt = bcrypt.gensalt(rounds=10)

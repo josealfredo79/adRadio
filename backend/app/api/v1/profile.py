@@ -51,6 +51,28 @@ async def get_profile(current_user: User = Depends(get_current_user)):
     return UserOut.model_validate(current_user)
 
 
+@router.get("/me/referral")
+async def get_referral_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Código propio de referido + cuántas personas se registraron con él y
+    cuántas de esas ya son clientes de pago (activaron una recompensa)."""
+    referred_result = await db.execute(
+        select(func.count()).select_from(User).where(User.referred_by_id == current_user.id)
+    )
+    paying_result = await db.execute(
+        select(func.count()).select_from(User).where(
+            User.referred_by_id == current_user.id, User.referral_rewarded.is_(True),
+        )
+    )
+    return {
+        "code": current_user.referral_code,
+        "referred_count": referred_result.scalar() or 0,
+        "paying_referrals": paying_result.scalar() or 0,
+    }
+
+
 @router.patch("/me", response_model=UserOut)
 async def update_profile(
     body: ProfileUpdate,

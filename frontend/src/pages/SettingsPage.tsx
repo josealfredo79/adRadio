@@ -6,6 +6,7 @@ import { Settings, Save, Copy, Check, Lock, CreditCard, AlertTriangle, Trash2, P
 import SEO from '@/components/SEO'
 import WhatsappWizard from '@/components/WhatsappWizard'
 import WhatsappHealthCard from '@/components/WhatsappHealthCard'
+import ReferralCard from '@/components/ReferralCard'
 
 const CATEGORIES = [
   { value: 'restaurante', label: 'Restaurante / Bar / Taquería' },
@@ -614,6 +615,7 @@ export default function SettingsPage() {
 
       <WhatsappWizard />
       <WhatsappHealthCard />
+      <ReferralCard />
 
       {/* Bot config */}
       <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">

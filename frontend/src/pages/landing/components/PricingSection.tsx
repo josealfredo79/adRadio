@@ -30,8 +30,12 @@ export default function PricingSection() {
           <p className="text-indigo-400 font-semibold text-sm uppercase tracking-widest mb-3">Precios</p>
           <h2 className="text-4xl font-black text-white sm:text-5xl">Invierte lo que vendes en un día</h2>
           <p className="mt-4 text-gray-500">Sin contratos. Cancela cuando quieras.</p>
+          <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-4 py-1.5 text-xs text-gray-400">
+            <Sparkles className="h-3.5 w-3.5 text-[#674CC4]" />
+            Configuración de tu bot incluida en todos los planes — otros cobran hasta $35,900 MXN aparte solo por el setup
+          </p>
         </div>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4 items-start">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5 items-start">
           {LANDING_PLANS.map(plan => {
             const mxn = planPrice(plan, 'price_mxn')
             const usd = planPrice(plan, 'price_usd')

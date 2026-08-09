@@ -67,7 +67,7 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 # ─── Feature Gating ─────────────────────────────────────────────────────────
 
 # Plan hierarchy (higher = more features)
-PLAN_ORDER = ["trial", "starter", "growth", "pro", "business", "enterprise"]
+PLAN_ORDER = ["trial", "micro", "starter", "growth", "pro", "business", "enterprise"]
 
 # Minimum plan required for each feature
 FEATURE_PLAN = {
@@ -84,6 +84,7 @@ FEATURE_PLAN = {
 # Maximum radio ads per billing period (-1 = unlimited)
 PLAN_RADIO_LIMITS = {
     "trial": 3,
+    "micro": 0,
     "starter": 0,
     "growth": 3,
     "pro": -1,

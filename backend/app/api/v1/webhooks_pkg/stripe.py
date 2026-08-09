@@ -27,6 +27,44 @@ async def _lookup_user(customer_id: str | None, db: AsyncSession) -> User | None
     return result.scalar_one_or_none()
 
 
+async def _reward_referral(db: AsyncSession, referred_user: User, amount_total_cents: int) -> None:
+    """1 mes gratis para quien refirió y para quien llegó referido — se acredita
+    como balance de Stripe (se descuenta de la siguiente factura de cada uno,
+    no reembolsa el cargo que se acaba de hacer). Solo se aplica una vez por
+    usuario referido, controlado por referral_rewarded (no basta con la
+    idempotencia por payment_intent porque este bloque corre dentro del mismo
+    evento checkout.session.completed que ya pasó esa verificación)."""
+    if not referred_user.referred_by_id or referred_user.referral_rewarded or amount_total_cents <= 0:
+        return
+
+    referrer = await db.get(User, referred_user.referred_by_id)
+    if not referrer:
+        return
+
+    import stripe as stripe_lib  # type: ignore
+
+    for target in (referrer, referred_user):
+        if not target.stripe_customer_id:
+            logger.warning("[REFERRAL] Usuario %s sin stripe_customer_id, no se pudo acreditar", target.id)
+            continue
+        try:
+            stripe_lib.Customer.create_balance_transaction(
+                target.stripe_customer_id,
+                amount=-amount_total_cents,
+                currency="usd",
+                description="Recompensa por referido — 1 mes gratis (IARadio)",
+            )
+        except stripe_lib.error.StripeError as e:
+            logger.error("[REFERRAL] Error acreditando balance a usuario %s: %s", target.id, e)
+
+    referred_user.referral_rewarded = True
+    await db.commit()
+    logger.info(
+        "[REFERRAL] Recompensa aplicada — referidor=%s referido=%s monto=%s centavos USD",
+        referrer.id, referred_user.id, amount_total_cents,
+    )
+
+
 async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -60,7 +98,8 @@ async def stripe_webhook(
     logger.info("[WEBHOOK] event=%s id=%s customer=%s", event_type, event_id, customer_id)
 
     if event_type == "checkout.session.completed":
-        plan = data.get("metadata", {}).get("plan")
+        metadata = data.get("metadata", {})
+        plan = metadata.get("plan")
         amount_total = data.get("amount_total", 0)
         currency = data.get("currency", "usd")
         payment_intent = data.get("payment_intent") or data.get("id")
@@ -78,14 +117,23 @@ async def stripe_webhook(
             logger.info("[WEBHOOK] Duplicate checkout event %s, skipped", payment_intent)
             return {"received": True}
 
+        is_founder = metadata.get("founder") == "true"
+        billing_cycle = metadata.get("billing_cycle", "monthly")
+
         user = await _lookup_user(customer_id, db)
         if user and plan:
-            plan_days = PLANS.get(plan, {}).get("days", 30)
+            plan_days = 365 if billing_cycle == "annual" else PLANS.get(plan, {}).get("days", 30)
             user.subscription_status = "active"
             user.current_plan = plan
             user.cancel_at_period_end = False
             user.messages_remaining = (user.messages_remaining or 0) + PLAN_MESSAGES.get(plan, 0)
             user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=plan_days)
+            user.billing_cycle = billing_cycle
+            user.messages_refill_at = (
+                datetime.now(timezone.utc) + timedelta(days=30) if billing_cycle == "annual" else None
+            )
+            if is_founder:
+                user.is_founder = True
 
             txn = Transaction(
                 advertiser_id=user.id,
@@ -99,6 +147,8 @@ async def stripe_webhook(
             await db.commit()
             logger.info("[WEBHOOK] Checkout completed for user %s, plan %s", user.id, plan)
             capture_event("subscription_started", user_id=user.id, properties={"plan": plan, "amount": amount_total / 100})
+
+            await _reward_referral(db, user, amount_total)
 
     elif event_type == "invoice.payment_succeeded":
 
@@ -119,11 +169,15 @@ async def stripe_webhook(
 
         user = await _lookup_user(customer_id, db)
         if user and user.current_plan:
-            plan_days = PLANS.get(user.current_plan, {}).get("days", 30)
+            plan_days = 365 if user.billing_cycle == "annual" else PLANS.get(user.current_plan, {}).get("days", 30)
             user.messages_remaining = (user.messages_remaining or 0) + PLAN_MESSAGES.get(user.current_plan, 0)
             user.subscription_status = "active"
             user.cancel_at_period_end = False
             user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=plan_days)
+            if user.billing_cycle == "annual":
+                # Renovación anual de Stripe — reinicia también el ciclo mensual
+                # interno de recarga de mensajes (ver replenish_annual_message_quota).
+                user.messages_refill_at = datetime.now(timezone.utc) + timedelta(days=30)
 
             txn = Transaction(
                 advertiser_id=user.id,

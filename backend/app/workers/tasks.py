@@ -591,6 +591,40 @@ def cleanup_expired_data():
 
 
 @celery_app.task
+def replenish_annual_message_quota():
+    """Celery Beat: los suscriptores con billing_cycle='annual' solo generan
+    un invoice.payment_succeeded de Stripe una vez al año — sin esta tarea,
+    su cuota de mensajes nunca se recargaría el resto del año. Recarga
+    PLAN_MESSAGES[plan] cada vez que messages_refill_at vence y avanza el
+    ciclo 30 días, igual que haría un invoice mensual normal."""
+    async def _replenish():
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.models.user import User
+        from app.api.v1.payments import PLAN_MESSAGES
+        from sqlalchemy import select
+
+        now = datetime.now(timezone.utc)
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(User).where(
+                    User.billing_cycle == "annual",
+                    User.subscription_status == "active",
+                    User.messages_refill_at != None,
+                    User.messages_refill_at <= now,
+                )
+            )
+            users = result.scalars().all()
+            for user in users:
+                user.messages_remaining = (user.messages_remaining or 0) + PLAN_MESSAGES.get(user.current_plan, 0)
+                user.messages_refill_at = now + timedelta(days=30)
+                logger.info("[ANNUAL] Recarga mensual aplicada a usuario %s, plan %s", user.id, user.current_plan)
+            if users:
+                await db.commit()
+
+    run_async(_replenish())
+
+
+@celery_app.task
 def send_trial_expiry_reminders():
     """Celery Beat: send reminders to expiring users."""
     async def _remind():

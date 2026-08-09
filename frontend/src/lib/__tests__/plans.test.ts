@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { PLANS_CONFIG, PLANS_MAP, LANDING_PLANS } from '../plans'
 
 describe('PLANS_CONFIG', () => {
-  it('has 5 plans', () => {
-    expect(PLANS_CONFIG).toHaveLength(5)
+  it('has 6 plans', () => {
+    expect(PLANS_CONFIG).toHaveLength(6)
   })
 
   it('every plan has required fields', () => {
@@ -22,9 +22,9 @@ describe('PLANS_CONFIG', () => {
     expect(growth?.popular).toBe(true)
   })
 
-  it('starter has lowest price', () => {
+  it('micro has lowest price', () => {
     const prices = PLANS_CONFIG.map((p) => p.price_mxn)
-    expect(Math.min(...prices)).toBe(499)
+    expect(Math.min(...prices)).toBe(299)
   })
 
   it('enterprise has highest price', () => {
@@ -36,7 +36,7 @@ describe('PLANS_CONFIG', () => {
 describe('PLANS_MAP', () => {
   it('maps all keys', () => {
     expect(Object.keys(PLANS_MAP)).toEqual(
-      expect.arrayContaining(['starter', 'growth', 'pro', 'business', 'enterprise']),
+      expect.arrayContaining(['micro', 'starter', 'growth', 'pro', 'business', 'enterprise']),
     )
   })
 
@@ -50,6 +50,6 @@ describe('LANDING_PLANS', () => {
   it('excludes enterprise', () => {
     const keys = LANDING_PLANS.map((p) => p.key)
     expect(keys).not.toContain('enterprise')
-    expect(keys).toHaveLength(4)
+    expect(keys).toHaveLength(5)
   })
 })

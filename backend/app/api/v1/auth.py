@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limiter import limiter
@@ -15,6 +16,7 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    generate_referral_code,
     generate_verification_code,
     generate_secure_token,
     hash_password,
@@ -52,14 +54,34 @@ async def register(
     if result.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="El email ya está registrado")
 
+    referred_by_id = None
+    if body.ref:
+        ref_result = await db.execute(select(User).where(User.referral_code == body.ref.strip().upper()))
+        referrer = ref_result.scalar_one_or_none()
+        if referrer:
+            referred_by_id = referrer.id
+        else:
+            logger.info("[REFERRAL] Código de referido no encontrado en registro: %s", body.ref)
+
     user = User(
         email=body.email,
         password_hash=hash_password(body.password),
         business_name=body.business_name,
         email_verified=False,
+        referred_by_id=referred_by_id,
     )
-    db.add(user)
-    await db.commit()
+    # Reintenta con un nuevo código en el improbable caso de colisión (6
+    # caracteres del alfabeto de generate_referral_code, ~887M combinaciones).
+    for _attempt in range(5):
+        user.referral_code = generate_referral_code()
+        db.add(user)
+        try:
+            await db.commit()
+            break
+        except IntegrityError:
+            await db.rollback()
+    else:
+        raise HTTPException(status_code=500, detail="No se pudo generar tu cuenta, intenta de nuevo")
     await db.refresh(user)
 
     # Generate 6-digit code and store in Redis

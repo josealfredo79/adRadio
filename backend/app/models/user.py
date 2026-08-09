@@ -5,6 +5,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Integer,
     String,
     Text,
@@ -89,6 +90,19 @@ class User(Base):
     messages_remaining: Mapped[int] = mapped_column(Integer, default=50)
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_founder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # "monthly" (default) | "annual" — Stripe solo factura una vez al año en el
+    # segundo caso, así que la recarga mensual de mensajes no puede depender
+    # de invoice.payment_succeeded (ver replenish_annual_message_quota en tasks.py).
+    billing_cycle: Mapped[str] = mapped_column(String(10), default="monthly", server_default="monthly")
+    messages_refill_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Referidos — código propio + quién lo trajo (si vino por referido)
+    referral_code: Mapped[str | None] = mapped_column(String(8), unique=True)
+    referred_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    referral_rewarded: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     # Preferences
     language: Mapped[str] = mapped_column(String(5), default="es")

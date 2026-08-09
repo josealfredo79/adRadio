@@ -19,6 +19,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     business_name: str
+    ref: str | None = None  # código de referido (opcional) — ver /me/referral
 
     _validate_password = field_validator("password")(_validate_password_strength)
 

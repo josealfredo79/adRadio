@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { CheckCircle, Zap, Sparkles } from 'lucide-react'
+import { CheckCircle, Zap, Sparkles, Rocket } from 'lucide-react'
 import { PLANS_CONFIG, type PlanDefinition } from '@/lib/plans'
 import SEO from '@/components/SEO'
 
@@ -15,11 +15,22 @@ interface BackendPlan {
   days: number
 }
 
+interface FounderStatus {
+  available: boolean
+  slots_left: number
+  slots_total: number
+  prices: Record<string, { price_mxn: number; price_usd: number }>
+}
+
+const FOUNDER_ELIGIBLE_PLANS = ['starter', 'growth']
+
 export default function PlansPage() {
   const { user } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState<string | null>(null)
   const [currency, setCurrency] = useState<'MXN' | 'USD'>('MXN')
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
+  const [useFounderPricing, setUseFounderPricing] = useState(false)
 
   // Precios dinámicos desde el backend (fuente de verdad para montos de Stripe)
   const { data: backendPlans } = useQuery<Record<string, BackendPlan>>({
@@ -27,10 +38,21 @@ export default function PlansPage() {
     queryFn: () => api.get('/plans').then((r) => r.data),
   })
 
+  const { data: founderStatus } = useQuery<FounderStatus>({
+    queryKey: ['founder-status'],
+    queryFn: () => api.get('/founder-status').then((r) => r.data),
+    staleTime: 30_000,
+  })
+
   const handleSubscribe = async (planKey: string) => {
     setLoading(planKey)
     try {
-      const { data } = await api.post('/checkout/create-session', { plan: planKey })
+      const founder = useFounderPricing && FOUNDER_ELIGIBLE_PLANS.includes(planKey)
+      const { data } = await api.post('/checkout/create-session', {
+        plan: planKey,
+        founder,
+        billing_cycle: founder ? 'monthly' : billingCycle,
+      })
       window.location.href = data.checkout_url
     } catch (err: unknown) {
       toast({ title: 'Error', description: getApiError(err, 'Error al iniciar pago'), variant: 'error' })
@@ -39,16 +61,34 @@ export default function PlansPage() {
     }
   }
 
-  const formatPrice = (plan: PlanDefinition) => {
-    const bp = backendPlans?.[plan.key]
-    const mxn = bp?.price_mxn ?? plan.price_mxn
-    const usd = bp?.price_usd ?? plan.price_usd
+  const formatAmount = (mxn: number, usd: number) => {
     if (currency === 'MXN') {
       return new Intl.NumberFormat('es-MX', {
         style: 'currency', currency: 'MXN', maximumFractionDigits: 0,
       }).format(mxn)
     }
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(usd)
+  }
+
+  const priceFor = (plan: PlanDefinition) => {
+    const bp = backendPlans?.[plan.key]
+    const baseMxn = bp?.price_mxn ?? plan.price_mxn
+    const baseUsd = bp?.price_usd ?? plan.price_usd
+
+    const isFounderEligible = useFounderPricing && FOUNDER_ELIGIBLE_PLANS.includes(plan.key)
+    const founderPrice = founderStatus?.prices?.[plan.key]
+    if (isFounderEligible && founderPrice) {
+      return { mxn: founderPrice.price_mxn, usd: founderPrice.price_usd, perLabel: '/mes', suffix: '' }
+    }
+    if (billingCycle === 'annual') {
+      return { mxn: baseMxn * 10, usd: baseUsd * 10, perLabel: '/año', suffix: '' }
+    }
+    return { mxn: baseMxn, usd: baseUsd, perLabel: '/mes', suffix: '' }
+  }
+
+  const formatPrice = (plan: PlanDefinition) => {
+    const { mxn, usd } = priceFor(plan)
+    return formatAmount(mxn, usd)
   }
 
   return (
@@ -62,21 +102,73 @@ export default function PlansPage() {
           Sin contratos. Cancela cuando quieras. Cambia de plan en cualquier momento.
         </p>
 
-        {/* Toggle MXN / USD */}
-        <div className="mt-4 inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-1">
-          {(['MXN', 'USD'] as const).map((cur) => (
-            <button
-              key={cur}
-              onClick={() => setCurrency(cur)}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                currency === cur ? 'bg-brand-500 dark:bg-brand-600 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
-            >
-              {cur} $
-            </button>
-          ))}
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+          {/* Toggle MXN / USD */}
+          <div className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-1">
+            {(['MXN', 'USD'] as const).map((cur) => (
+              <button
+                key={cur}
+                onClick={() => setCurrency(cur)}
+                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                  currency === cur ? 'bg-brand-500 dark:bg-brand-600 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {cur} $
+              </button>
+            ))}
+          </div>
+
+          {/* Toggle mensual / anual */}
+          <div className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-1">
+            {(['monthly', 'annual'] as const).map((cycle) => (
+              <button
+                key={cycle}
+                onClick={() => setBillingCycle(cycle)}
+                disabled={useFounderPricing}
+                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+                  billingCycle === cycle ? 'bg-brand-500 dark:bg-brand-600 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {cycle === 'monthly' ? 'Mensual' : 'Anual · 2 meses gratis'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Banner programa Fundadores */}
+      {founderStatus?.available && (
+        <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <Rocket className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                Programa Fundadores — quedan {founderStatus.slots_left} de {founderStatus.slots_total} lugares
+              </p>
+              <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                Precio bloqueado por 12 meses en Starter y Growth, a cambio de un testimonio o caso de estudio.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              // Fundadores es siempre mensual — si el usuario ya tenía "Anual"
+              // seleccionado, los planes no elegibles (Micro/Pro/Business)
+              // quedarían mostrando precio anual aunque el toggle se vea
+              // deshabilitado. Forzar a mensual evita ese estado inconsistente.
+              setUseFounderPricing((v) => !v)
+              setBillingCycle('monthly')
+            }}
+            className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+              useFounderPricing
+                ? 'bg-amber-600 text-white hover:bg-amber-700'
+                : 'border border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+            }`}
+          >
+            {useFounderPricing ? '✔ Precio de Fundador activo' : 'Usar precio de Fundador'}
+          </button>
+        </div>
+      )}
 
       {/* Plan cards */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
@@ -117,8 +209,13 @@ export default function PlansPage() {
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{plan.tagline}</p>
                 <div className="mt-3 flex items-baseline gap-1">
                   <span className="text-3xl font-extrabold text-gray-900 dark:text-gray-100">{formatPrice(plan)}</span>
-                  <span className="text-gray-400 dark:text-gray-500 text-sm">/mes</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-sm">{priceFor(plan).perLabel}</span>
                 </div>
+                {useFounderPricing && FOUNDER_ELIGIBLE_PLANS.includes(plan.key) && founderStatus?.prices?.[plan.key] && (
+                  <p className="mt-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                    🚀 Precio de Fundador, bloqueado 12 meses
+                  </p>
+                )}
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {plan.messages.toLocaleString()} mensajes incluidos
                 </p>

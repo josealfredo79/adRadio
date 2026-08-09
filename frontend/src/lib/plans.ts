@@ -6,7 +6,7 @@
  * Los precios y mensajes deben coincidir con payments.py en el backend.
  */
 
-export type PlanKey = 'starter' | 'growth' | 'pro' | 'business' | 'enterprise'
+export type PlanKey = 'micro' | 'starter' | 'growth' | 'pro' | 'business' | 'enterprise'
 
 export interface PlanDefinition {
   key: PlanKey
@@ -26,6 +26,22 @@ export interface PlanDefinition {
 }
 
 export const PLANS_CONFIG: PlanDefinition[] = [
+  {
+    key: 'micro',
+    name: 'Micro',
+    price_mxn: 299,
+    price_usd: 18,
+    messages: 100,
+    days: 30,
+    popular: false,
+    tagline: 'Para changarros y negocios que apenas empiezan',
+    features: [
+      '100 mensajes/mes',
+      'Bot IA 24/7 (respuestas básicas)',
+      'Campañas masivas WhatsApp',
+      'Importar contactos CSV',
+    ],
+  },
   {
     key: 'starter',
     name: 'Starter',

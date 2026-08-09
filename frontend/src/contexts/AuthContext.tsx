@@ -80,10 +80,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const register = async (email: string, password: string, businessName?: string) => {
+    // Código de referido, si el visitante llegó con un link tipo /register?ref=ABC123
+    const ref = new URLSearchParams(window.location.search).get('ref') || undefined
     await api.post('/auth/register', {
       email,
       password,
       business_name: businessName,
+      ref,
     })
   }
 
