@@ -28,8 +28,15 @@ function LandingPageWizard() {
   const [slug, setSlug] = useState(user?.slug ?? slugify(user?.business_name ?? ''))
   const [tagline, setTagline] = useState(user?.landing_tagline ?? '')
   const [copied, setCopied] = useState(false)
+  const [aiHint, setAiHint] = useState('')
+  const [aiSuggestions, setAiSuggestions] = useState<string[] | null>(null)
 
   const slugValid = SLUG_RE.test(slug)
+
+  const suggestMutation = useMutation({
+    mutationFn: () => api.post('/me/landing-tagline/suggest', { hint: aiHint }, { timeout: 30000 }).then((r) => r.data as { suggestions: string[] }),
+    onSuccess: (data) => setAiSuggestions(data.suggestions),
+  })
 
   const publishMutation = useMutation({
     mutationFn: () => api.patch('/me', { slug, landing_tagline: tagline }).then((r) => r.data),
@@ -43,8 +50,11 @@ function LandingPageWizard() {
   const startEditing = () => {
     setSlug(user?.slug ?? slugify(user?.business_name ?? ''))
     setTagline(user?.landing_tagline ?? '')
+    setAiHint('')
+    setAiSuggestions(null)
     setStep(1)
     publishMutation.reset()
+    suggestMutation.reset()
     setEditing(true)
   }
 
@@ -153,6 +163,48 @@ function LandingPageWizard() {
               className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm bg-transparent text-gray-900 dark:text-gray-100 focus:border-brand-500 dark:focus:border-brand-400 focus:outline-none resize-none"
             />
             <p className="text-xs text-gray-400 dark:text-gray-500 text-right">{tagline.length}/140</p>
+          </div>
+
+          {/* Generar con IA */}
+          <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-3 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">
+              <Sparkles size={13} />
+              ¿No sabes qué escribir? Deja que la IA te sugiera
+            </div>
+            <input
+              type="text"
+              value={aiHint}
+              onChange={(e) => setAiHint(e.target.value)}
+              placeholder="Cuéntame algo de tu negocio (opcional)"
+              maxLength={300}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs bg-transparent text-gray-900 dark:text-gray-100 focus:border-brand-500 dark:focus:border-brand-400 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => suggestMutation.mutate()}
+              disabled={suggestMutation.isPending}
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 dark:bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+            >
+              <Sparkles size={13} />
+              {suggestMutation.isPending ? 'Generando...' : 'Generar con IA'}
+            </button>
+            {suggestMutation.isError && (
+              <p className="text-xs text-red-500">{getApiError(suggestMutation.error, 'No se pudo generar, intenta de nuevo')}</p>
+            )}
+            {aiSuggestions && (
+              <div className="space-y-1.5 pt-1">
+                {aiSuggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setTagline(s)}
+                    className="w-full text-left text-xs px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-brand-500 dark:hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/30 text-gray-700 dark:text-gray-300 transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Mini preview */}

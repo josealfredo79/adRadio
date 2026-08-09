@@ -6,7 +6,7 @@ str/UUID/datetime response-typing bug seen in Admin/Public API/User
 Webhooks — already correctly typed (`id: uuid.UUID`), no bug found."""
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -14,12 +14,14 @@ from sqlalchemy import delete
 
 from app.api.v1.profile import (
     ChangePasswordBody,
+    TaglineSuggestRequest,
     WhiteLabelUpdate,
     change_password,
     dashboard,
     dashboard_chart,
     get_profile,
     get_white_label,
+    suggest_landing_tagline,
     update_profile,
     update_white_label,
 )
@@ -148,6 +150,91 @@ class TestUpdateProfile:
     async def test_rejects_landing_tagline_over_140_chars(self):
         with pytest.raises(ValueError):
             ProfileUpdate(landing_tagline="x" * 141)
+
+
+class TestSuggestLandingTagline:
+    @pytest.mark.asyncio
+    async def test_returns_suggestions_from_llm(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                user.business_name = "Tacos El Primo"
+                user.business_category = "Restaurante"
+                raw = '{"suggestions": ["Frase uno", "Frase dos", "Frase tres"]}'
+                with patch("app.services.llm_client.chat_completion", new=AsyncMock(return_value=raw)):
+                    out = await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
+            assert out.suggestions == ["Frase uno", "Frase dos", "Frase tres"]
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_truncates_to_3_suggestions_and_140_chars(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                raw = f'{{"suggestions": ["a", "b", "c", "d", "{"x" * 200}"]}}'
+                with patch("app.services.llm_client.chat_completion", new=AsyncMock(return_value=raw)):
+                    out = await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
+            assert len(out.suggestions) == 3
+            assert out.suggestions == ["a", "b", "c"]
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_retries_once_when_first_attempt_returns_empty(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                mock = AsyncMock(side_effect=["", '{"suggestions": ["Frase uno"]}'])
+                with patch("app.services.llm_client.chat_completion", new=mock):
+                    out = await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
+            assert out.suggestions == ["Frase uno"]
+            assert mock.call_count == 2
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_malformed_llm_response_returns_502(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with patch("app.services.llm_client.chat_completion", new=AsyncMock(return_value="not json")):
+                    with pytest.raises(HTTPException) as exc_info:
+                        await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
+                assert exc_info.value.status_code == 502
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_empty_suggestions_returns_502(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with patch("app.services.llm_client.chat_completion", new=AsyncMock(return_value='{"suggestions": []}')):
+                    with pytest.raises(HTTPException) as exc_info:
+                        await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
+                assert exc_info.value.status_code == 502
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_hint_is_included_in_prompt(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                mock = AsyncMock(return_value='{"suggestions": ["Frase uno"]}')
+                with patch("app.services.llm_client.chat_completion", new=mock):
+                    await suggest_landing_tagline(body=TaglineSuggestRequest(hint="Somos veganos"), current_user=user)
+            prompt_arg = mock.call_args[0][0][0]["content"]
+            assert "Somos veganos" in prompt_arg
+        finally:
+            await _cleanup([user_id])
 
 
 class TestChangePassword:

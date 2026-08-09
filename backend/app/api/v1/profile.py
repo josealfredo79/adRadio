@@ -68,6 +68,72 @@ async def update_profile(
     return UserOut.model_validate(current_user)
 
 
+class TaglineSuggestRequest(BaseModel):
+    hint: str = ""
+
+
+class TaglineSuggestResponse(BaseModel):
+    suggestions: list[str]
+
+
+@router.post("/me/landing-tagline/suggest", response_model=TaglineSuggestResponse)
+async def suggest_landing_tagline(
+    body: TaglineSuggestRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Sugiere taglines para la landing page usando el perfil del negocio
+    (y opcionalmente una idea libre del cliente) — el cliente elige o edita,
+    nunca se publica nada sin que él confirme."""
+    from app.services.llm_client import chat_completion
+
+    context_lines = [
+        f"Negocio: {current_user.business_name or 'Negocio'}",
+        f"Categoría: {current_user.business_category or 'General'}",
+    ]
+    if current_user.bot_instructions:
+        context_lines.append(f"Contexto adicional: {current_user.bot_instructions[:300]}")
+    if body.hint.strip():
+        context_lines.append(f"Idea del dueño: {body.hint.strip()[:300]}")
+
+    prompt = (
+        "Eres un experto en marketing para pequeños negocios en Latinoamérica.\n"
+        "Genera 3 frases cortas (taglines) para la página web de este negocio.\n\n"
+        + "\n".join(context_lines)
+        + "\n\nReglas: máximo 140 caracteres cada una, en español, sin comillas, "
+        "atractivas para un cliente que visita la página por primera vez.\n\n"
+        'Responde ÚNICAMENTE con un JSON: {"suggestions": ["frase 1", "frase 2", "frase 3"]}'
+    )
+
+    # 600, no 350: algunos modelos gratis de OpenRouter razonan antes de
+    # responder (tokens ocultos que sí cuentan contra max_tokens) y a veces
+    # agotan el budget completo sin llegar a escribir el JSON visible,
+    # devolviendo contenido vacío — verificado empíricamente ~1 de cada 3
+    # intentos con 350. Un reintento adicional es la segunda capa (mismo
+    # patrón sugerido para el bug análogo de TTS).
+    suggestions: list[str] = []
+    last_error: Exception | None = None
+    for _attempt in range(2):
+        try:
+            raw = await chat_completion(
+                [{"role": "user", "content": prompt}],
+                max_tokens=600, temperature=0.8,
+            )
+            data = json.loads(raw)
+            suggestions = [s.strip()[:140] for s in data.get("suggestions", []) if s.strip()][:3]
+            if not suggestions:
+                raise ValueError("empty suggestions")
+            break
+        except Exception as e:
+            last_error = e
+            continue
+
+    if not suggestions:
+        logger.warning("[LANDING] Tagline suggestion failed after retry: %s", last_error)
+        raise HTTPException(status_code=502, detail="No se pudieron generar sugerencias, intenta de nuevo")
+
+    return TaglineSuggestResponse(suggestions=suggestions)
+
+
 class ChangePasswordBody(BaseModel):
     current_password: str
     new_password: str
