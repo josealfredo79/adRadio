@@ -18,7 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
 from app.models.order import Order
+from app.models.order_item import OrderItem
 from app.models.user import User
+from app.services.catalog_service import get_active_products, match_products_in_text
 from app.services.claude_service import detect_order_intent
 
 logger = logging.getLogger(__name__)
@@ -68,6 +70,20 @@ async def _start(db: AsyncSession, advertiser: User, contact: Contact, message: 
         order_number=order_count + 1,
     )
     db.add(order)
+
+    active_products = await get_active_products(db, advertiser.id)
+    matched = match_products_in_text(active_products, message)
+    if matched:
+        db.add_all([
+            OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                product_name_snapshot=product.name,
+                quantity=qty,
+            )
+            for product, qty in matched
+        ])
+
     await db.commit()
     return "¡Con gusto! 🛒 ¿A qué nombre va el pedido?"
 

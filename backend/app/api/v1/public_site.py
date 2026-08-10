@@ -6,11 +6,13 @@ Serves only the same public-safe subset of fields as widget_preview
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limiter import limiter
 from app.database import get_db
+from app.models.order import Order
+from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.user import User
 
@@ -53,6 +55,16 @@ async def get_public_site_products(request: Request, slug: str, db: AsyncSession
         .where(Product.advertiser_id == user.id, Product.active.is_(True))
         .order_by(Product.category, Product.name)
     )
+    products = products_result.scalars().all()
+
+    sales_result = await db.execute(
+        select(OrderItem.product_id, func.count())
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(Order.advertiser_id == user.id, Order.state == "confirmed")
+        .group_by(OrderItem.product_id)
+    )
+    sales_counts = dict(sales_result.all())
+
     return [
         {
             "id": str(p.id),
@@ -61,6 +73,7 @@ async def get_public_site_products(request: Request, slug: str, db: AsyncSession
             "price": str(p.price) if p.price is not None else None,
             "category": p.category or "",
             "photo_url": p.photo_url or "",
+            "sales_count": sales_counts.get(p.id, 0),
         }
-        for p in products_result.scalars().all()
+        for p in products
     ]

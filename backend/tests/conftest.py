@@ -3,6 +3,15 @@ Shared pytest fixtures for IaRadio backend tests.
 Provides mock DB sessions, test settings, and test user factories
 that work WITHOUT a real PostgreSQL database.
 """
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Real-DB tests must never touch production — .env.test points DATABASE_URL at a
+# dedicated Neon branch instead. Loaded here, before any app.* import anywhere in
+# the test session, so it overrides whatever backend/.env (production) would set.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env.test", override=True)
+
 import uuid
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch

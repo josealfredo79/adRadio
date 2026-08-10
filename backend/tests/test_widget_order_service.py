@@ -10,6 +10,8 @@ from sqlalchemy import delete, select
 from app.database import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.models.product import Product
 from app.models.user import User
 from app.services.widget_order_service import NEEDS_CONTACT_REPLY, handle_widget_order
 
@@ -33,10 +35,26 @@ async def _seed_contact(advertiser_id, **overrides):
         return contact.id
 
 
+async def _seed_product(advertiser_id, **overrides):
+    overrides.setdefault("name", "Pizza Pepperoni")
+    overrides.setdefault("active", True)
+    async with AsyncSessionLocal() as db:
+        product = Product(advertiser_id=advertiser_id, **overrides)
+        db.add(product)
+        await db.commit()
+        return product.id
+
+
 async def _cleanup(user_ids):
     await engine.dispose()
     async with AsyncSessionLocal() as db:
+        order_ids = (
+            await db.execute(select(Order.id).where(Order.advertiser_id.in_(user_ids)))
+        ).scalars().all()
+        if order_ids:
+            await db.execute(delete(OrderItem).where(OrderItem.order_id.in_(order_ids)))
         await db.execute(delete(Order).where(Order.advertiser_id.in_(user_ids)))
+        await db.execute(delete(Product).where(Product.advertiser_id.in_(user_ids)))
         await db.execute(delete(Contact).where(Contact.advertiser_id.in_(user_ids)))
         await db.execute(delete(User).where(User.id.in_(user_ids)))
         await db.commit()
@@ -195,5 +213,76 @@ class TestHandleWidgetOrder:
                 await asyncio.sleep(0.05)
                 mock_wa.assert_called_once()
                 assert mock_wa.call_args.args[0] == "+525500001111"
+        finally:
+            await _cleanup([user_id])
+
+
+class TestOrderItemMatching:
+    @pytest.mark.asyncio
+    async def test_start_creates_order_items_for_matched_products(self):
+        user_id = await _seed_user()
+        contact_id = await _seed_contact(user_id)
+        product_id = await _seed_product(user_id, name="Pizza Pepperoni")
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                contact = await db.get(Contact, contact_id)
+                await handle_widget_order(db, user, contact, "quiero pedir 2 pizzas de pepperoni")
+
+            async with AsyncSessionLocal() as db:
+                order = (
+                    (await db.execute(select(Order).where(Order.advertiser_id == user_id))).scalars().first()
+                )
+                items = (
+                    (await db.execute(select(OrderItem).where(OrderItem.order_id == order.id))).scalars().all()
+                )
+            assert len(items) == 1
+            assert items[0].product_id == product_id
+            assert items[0].product_name_snapshot == "Pizza Pepperoni"
+            assert items[0].quantity == 2
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_start_creates_no_order_items_when_nothing_matches(self):
+        user_id = await _seed_user()
+        contact_id = await _seed_contact(user_id)
+        await _seed_product(user_id, name="Pizza Pepperoni")
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                contact = await db.get(Contact, contact_id)
+                await handle_widget_order(db, user, contact, "quiero pedir un corte de cabello")
+
+            async with AsyncSessionLocal() as db:
+                order = (
+                    (await db.execute(select(Order).where(Order.advertiser_id == user_id))).scalars().first()
+                )
+                items = (
+                    (await db.execute(select(OrderItem).where(OrderItem.order_id == order.id))).scalars().all()
+                )
+            assert items == []
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_start_ignores_inactive_products(self):
+        user_id = await _seed_user()
+        contact_id = await _seed_contact(user_id)
+        await _seed_product(user_id, name="Pizza Pepperoni", active=False)
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                contact = await db.get(Contact, contact_id)
+                await handle_widget_order(db, user, contact, "quiero pedir una pizza de pepperoni")
+
+            async with AsyncSessionLocal() as db:
+                order = (
+                    (await db.execute(select(Order).where(Order.advertiser_id == user_id))).scalars().first()
+                )
+                items = (
+                    (await db.execute(select(OrderItem).where(OrderItem.order_id == order.id))).scalars().all()
+                )
+            assert items == []
         finally:
             await _cleanup([user_id])

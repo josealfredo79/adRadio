@@ -23,9 +23,10 @@ from app.models.coupon import Coupon
 from app.models.customer_story import CustomerStory
 from app.models.message import Message
 from app.models.order import Order
+from app.models.order_item import OrderItem
 from app.models.user import User
 from app.services.appointment_booking_service import handle_appointment_booking
-from app.services.catalog_service import handle_catalog_query
+from app.services.catalog_service import get_active_products, handle_catalog_query, match_products_in_text
 from app.services.claude_service import (
     detect_order_intent,
     detect_plan_purchase_intent,
@@ -798,6 +799,21 @@ async def process_inbound_message(
                 )
                 db.add(new_order)
                 await db.flush()
+
+                active_products = await get_active_products(db, advertiser.id)
+                matched = match_products_in_text(active_products, body_text)
+                if matched:
+                    db.add_all([
+                        OrderItem(
+                            order_id=new_order.id,
+                            product_id=product.id,
+                            product_name_snapshot=product.name,
+                            quantity=qty,
+                        )
+                        for product, qty in matched
+                    ])
+                    await db.flush()
+
                 pending_order = new_order
 
                 _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_confirm")

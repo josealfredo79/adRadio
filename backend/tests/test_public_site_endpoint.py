@@ -5,11 +5,13 @@ import uuid
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from starlette.requests import Request
 
 from app.api.v1.public_site import get_public_site, get_public_site_products
 from app.database import AsyncSessionLocal, engine
+from app.models.order import Order
+from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.user import User
 
@@ -34,6 +36,12 @@ async def _seed_user(**overrides):
 async def _cleanup(user_ids):
     await engine.dispose()
     async with AsyncSessionLocal() as db:
+        order_ids = (
+            await db.execute(select(Order.id).where(Order.advertiser_id.in_(user_ids)))
+        ).scalars().all()
+        if order_ids:
+            await db.execute(delete(OrderItem).where(OrderItem.order_id.in_(order_ids)))
+        await db.execute(delete(Order).where(Order.advertiser_id.in_(user_ids)))
         await db.execute(delete(Product).where(Product.advertiser_id.in_(user_ids)))
         await db.execute(delete(User).where(User.id.in_(user_ids)))
         await db.commit()
@@ -143,3 +151,48 @@ class TestGetPublicSiteProducts:
             assert out == []
         finally:
             await _cleanup([user_id, other_id])
+
+    @pytest.mark.asyncio
+    async def test_sales_count_only_counts_confirmed_orders(self):
+        user_id = await _seed_user(business_name="Tacos", slug="con-ventas")
+        try:
+            async with AsyncSessionLocal() as db:
+                product = Product(advertiser_id=user_id, name="Taco al pastor", price=25, active=True)
+                db.add(product)
+                await db.flush()
+
+                confirmed_order = Order(
+                    advertiser_id=user_id, items_raw="2 tacos", state="confirmed", order_number=1,
+                )
+                cancelled_order = Order(
+                    advertiser_id=user_id, items_raw="1 taco", state="cancelled", order_number=2,
+                )
+                db.add_all([confirmed_order, cancelled_order])
+                await db.flush()
+
+                db.add_all([
+                    OrderItem(order_id=confirmed_order.id, product_id=product.id, product_name_snapshot=product.name, quantity=2),
+                    OrderItem(order_id=cancelled_order.id, product_id=product.id, product_name_snapshot=product.name, quantity=1),
+                ])
+                await db.commit()
+
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site_products(request=_request(), slug="con-ventas", db=db)
+            assert len(out) == 1
+            assert out[0]["sales_count"] == 1  # counts confirmed OrderItem rows, not cancelled, not summed quantity
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_sales_count_defaults_to_zero_with_no_orders(self):
+        user_id = await _seed_user(business_name="Tacos", slug="sin-ventas")
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add(Product(advertiser_id=user_id, name="Taco al pastor", price=25, active=True))
+                await db.commit()
+
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site_products(request=_request(), slug="sin-ventas", db=db)
+            assert out[0]["sales_count"] == 0
+        finally:
+            await _cleanup([user_id])

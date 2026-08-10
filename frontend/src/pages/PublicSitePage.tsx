@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
@@ -23,10 +23,35 @@ interface PublicProduct {
   price: string | null
   category: string
   photo_url: string
+  sales_count: number
 }
 
 const formatPrice = (price: string | null) =>
   price === null ? 'Cotizar' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(price))
+
+function ProductCard({ product, categoryFallback, color }: { product: PublicProduct; categoryFallback: string; color: string }) {
+  return (
+    <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden text-left">
+      <div className="h-36 bg-white/5 flex items-center justify-center overflow-hidden">
+        {product.photo_url ? (
+          <img src={product.photo_url} alt={product.name} className="h-full w-full object-cover" />
+        ) : (
+          <span className="text-4xl">{categoryEmoji(product.category || categoryFallback)}</span>
+        )}
+      </div>
+      <div className="p-4 space-y-1">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-semibold">{product.name}</h3>
+          <span className="shrink-0 text-sm font-semibold" style={{ color }}>
+            {formatPrice(product.price)}
+          </span>
+        </div>
+        {product.category && <p className="text-xs text-white/50">{product.category}</p>}
+        {product.description && <p className="text-sm text-white/70 line-clamp-2">{product.description}</p>}
+      </div>
+    </div>
+  )
+}
 
 const CATEGORY_EMOJI: Record<string, string> = {
   restaurante: '🍽️', comida: '🍽️', cocina: '🍽️',
@@ -77,6 +102,15 @@ export default function PublicSitePage() {
     enabled: !!slug && !!site,
     retry: false,
   })
+
+  const bestsellers = useMemo(
+    () =>
+      (products ?? [])
+        .filter((p) => p.sales_count > 0)
+        .sort((a, b) => b.sales_count - a.sales_count)
+        .slice(0, 3),
+    [products]
+  )
 
   useEffect(() => {
     if (!site || widgetMounted.current) return
@@ -147,30 +181,23 @@ export default function PublicSitePage() {
           </div>
         </header>
 
+        {!!bestsellers.length && (
+          <section className="max-w-4xl mx-auto px-6 pb-4">
+            <h2 className="text-xl font-bold text-center mb-6">🔥 Los favoritos de nuestros clientes</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {bestsellers.map((p) => (
+                <ProductCard key={p.id} product={p} categoryFallback={site.business_category} color={site.color} />
+              ))}
+            </div>
+          </section>
+        )}
+
         {!!products?.length && (
           <section className="max-w-4xl mx-auto px-6 pb-16">
             <h2 className="text-xl font-bold text-center mb-6">Nuestro catálogo</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {products.map((p) => (
-                <div key={p.id} className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden text-left">
-                  <div className="h-36 bg-white/5 flex items-center justify-center overflow-hidden">
-                    {p.photo_url ? (
-                      <img src={p.photo_url} alt={p.name} className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="text-4xl">{categoryEmoji(p.category || site.business_category)}</span>
-                    )}
-                  </div>
-                  <div className="p-4 space-y-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold">{p.name}</h3>
-                      <span className="shrink-0 text-sm font-semibold" style={{ color: site.color }}>
-                        {formatPrice(p.price)}
-                      </span>
-                    </div>
-                    {p.category && <p className="text-xs text-white/50">{p.category}</p>}
-                    {p.description && <p className="text-sm text-white/70 line-clamp-2">{p.description}</p>}
-                  </div>
-                </div>
+                <ProductCard key={p.id} product={p} categoryFallback={site.business_category} color={site.color} />
               ))}
             </div>
           </section>
