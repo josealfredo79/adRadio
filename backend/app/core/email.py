@@ -1,37 +1,30 @@
 import asyncio
 import logging
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+
+import httpx
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+RESEND_API_URL = "https://api.resend.com/emails"
+
 
 async def send_email(to: str, subject: str, html_body: str, _retries: int = 3) -> bool:
-    """Send email via SMTP. Non-blocking — runs smtplib in a thread executor."""
-    if not settings.SMTP_HOST:
+    """Send email via Resend's HTTPS API (SMTP outbound is blocked on Railway's Hobby plan)."""
+    if not settings.RESEND_API_KEY:
         logger.debug("[EMAIL DEV] To: %s | Subject: %s", to, subject)
         return True
 
-    def _send() -> bool:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = settings.FROM_EMAIL
-        msg["To"] = to
-        msg.attach(MIMEText(html_body, "html"))
-
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-            server.starttls()
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.sendmail(settings.FROM_EMAIL, to, msg.as_string())
-        return True
+    payload = {"from": settings.FROM_EMAIL, "to": [to], "subject": subject, "html": html_body}
+    headers = {"Authorization": f"Bearer {settings.RESEND_API_KEY}"}
 
     for attempt in range(_retries):
         try:
-            loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, _send)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(RESEND_API_URL, json=payload, headers=headers)
+                response.raise_for_status()
+            return True
         except Exception as e:
             logger.error("[EMAIL ERROR] Attempt %d/%d: %s", attempt + 1, _retries, e)
             if attempt < _retries - 1:

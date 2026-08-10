@@ -31,12 +31,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Email
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    FROM_EMAIL: str = "noreply@iaradio.app"
+    # Email (Resend — SMTP outbound is blocked on Railway's Hobby plan)
+    RESEND_API_KEY: str = ""
+    FROM_EMAIL: str = "IaRadio <noreply@iaradio.online>"
 
     # WhatsApp Cloud API de Meta — conexión directa
     # Clave de cifrado en reposo para tokens de Meta (AES-256-GCM).
