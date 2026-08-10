@@ -54,6 +54,7 @@ async def chat_completion(
     temperature: float = 0.3,
     anthropic_model: str | None = None,
     judge: bool = False,
+    force_anthropic: bool = False,
 ) -> str:
     """Genera una respuesta de chat con el proveedor configurado.
 
@@ -69,8 +70,13 @@ async def chat_completion(
     del patrón: un solo modelo configurado, no uno hardcodeado por caso de
     uso). `judge=True` usa OPENROUTER_JUDGE_MODEL si está configurado
     (si no, cae en OPENROUTER_MODEL) — solo aplica con OpenRouter activo.
+
+    `force_anthropic=True` salta la rama OpenRouter aunque esté configurado
+    — para un call site puntual que necesita un fallback confiable (no
+    gratis) cuando el modelo gratis de OpenRouter falla, sin cambiar el
+    proveedor default de todo el proyecto.
     """
-    if is_openrouter_configured():
+    if is_openrouter_configured() and not force_anthropic:
         client = _get_openrouter_client()
         model = (settings.OPENROUTER_JUDGE_MODEL or settings.OPENROUTER_MODEL) if judge else settings.OPENROUTER_MODEL
         or_messages = ([{"role": "system", "content": system}] if system else []) + messages

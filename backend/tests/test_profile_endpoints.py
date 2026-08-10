@@ -197,6 +197,36 @@ class TestSuggestLandingTagline:
             await _cleanup([user_id])
 
     @pytest.mark.asyncio
+    async def test_falls_back_to_anthropic_after_2_openrouter_failures(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                mock = AsyncMock(side_effect=["", "", '{"suggestions": ["Frase de respaldo"]}'])
+                with patch("app.services.llm_client.chat_completion", new=mock):
+                    out = await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
+            assert out.suggestions == ["Frase de respaldo"]
+            assert mock.call_count == 3
+            assert mock.call_args_list[2].kwargs["force_anthropic"] is True
+            assert mock.call_args_list[0].kwargs["force_anthropic"] is False
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_strips_markdown_code_fence_from_anthropic_fallback(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                fenced = '```json\n{"suggestions": ["Frase con fence"]}\n```'
+                mock = AsyncMock(side_effect=["", "", fenced])
+                with patch("app.services.llm_client.chat_completion", new=mock):
+                    out = await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
+            assert out.suggestions == ["Frase con fence"]
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
     async def test_malformed_llm_response_returns_502(self):
         user_id = await _seed_user()
         try:

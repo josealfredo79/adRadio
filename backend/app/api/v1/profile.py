@@ -3,6 +3,7 @@ Profile & Dashboard router — /api/v1/me, /api/v1/dashboard
 """
 import json
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis
@@ -132,15 +133,33 @@ async def suggest_landing_tagline(
     # devolviendo contenido vacío — verificado empíricamente ~1 de cada 3
     # intentos con 350. Un reintento adicional es la segunda capa (mismo
     # patrón sugerido para el bug análogo de TTS).
+    #
+    # Verificado en vivo 2026-08-09: el modelo gratis también puede pegarle
+    # a un 429 de rate-limit del pool compartido de OpenRouter, no solo
+    # devolver vacío — los 2 intentos gratis fallaron seguidos en una prueba
+    # real. Como este endpoint es de bajo volumen (un dueño de negocio
+    # generando tagline, no tráfico de bot), un 3er intento con Claude
+    # Haiku directo (force_anthropic=True) es un fallback confiable barato
+    # en vez de dejar al usuario con un 502.
     suggestions: list[str] = []
     last_error: Exception | None = None
-    for _attempt in range(2):
+    for _attempt in range(3):
         try:
             raw = await chat_completion(
                 [{"role": "user", "content": prompt}],
                 max_tokens=600, temperature=0.8,
+                anthropic_model="claude-haiku-4-5-20251001",
+                force_anthropic=(_attempt == 2),
             )
-            data = json.loads(raw)
+            # Claude (rama Anthropic) a veces envuelve el JSON en un code
+            # fence de markdown (```json ... ```) aunque se le pida "solo
+            # JSON" — verificado en vivo probando el fallback de este mismo
+            # endpoint. El modelo gratis de OpenRouter no lo hizo en las
+            # pruebas, pero quitar el fence es inofensivo si no hay ninguno.
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned)
+            data = json.loads(cleaned)
             suggestions = [s.strip()[:140] for s in data.get("suggestions", []) if s.strip()][:3]
             if not suggestions:
                 raise ValueError("empty suggestions")
@@ -150,7 +169,7 @@ async def suggest_landing_tagline(
             continue
 
     if not suggestions:
-        logger.warning("[LANDING] Tagline suggestion failed after retry: %s", last_error)
+        logger.warning("[LANDING] Tagline suggestion failed after retry+Anthropic fallback: %s", last_error)
         raise HTTPException(status_code=502, detail="No se pudieron generar sugerencias, intenta de nuevo")
 
     return TaglineSuggestResponse(suggestions=suggestions)
