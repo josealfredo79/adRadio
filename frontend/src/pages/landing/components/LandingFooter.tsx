@@ -17,6 +17,10 @@ export default function LandingFooter() {
             <strong>Contacto:</strong> <a href="mailto:iaradio@iaradio.online" className="hover:text-indigo-400 underline">iaradio@iaradio.online</a>
           </div>
           <div>
+            <strong>Titular:</strong> Jose Alfredo Roman Cruz<br />
+            RFC: ROCA791011UJA
+          </div>
+          <div>
             <strong>Dirección fiscal:</strong><br />
             Callejón del Bohemio No. 8A, Depto. 7 Altos, Col. Ricardo Flores Magón,<br />
             Heroica Ciudad de Tlaxiaco, Oaxaca, C.P. 69800<br />
