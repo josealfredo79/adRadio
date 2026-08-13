@@ -27,6 +27,28 @@ class TestRealFalsePositiveIsFixed:
         assert detect_plan_purchase_intent(text) is None
 
 
+class TestPlatformNameQuestionIsNotPurchaseIntent:
+    """Real production false positive, 2026-08-13: a customer (Laurencio,
+    talking to the account's own IaRadio sales-demo bot) asked "que es IA
+    radio" — a plain question — and the bot replied "¿Confirmas que quieres
+    el Plan Starter?" and fired a real "Nueva solicitud de plan" WhatsApp
+    notification to the owner, because the platform-name branch had zero
+    intent-verb check (unlike the tier-name branch, which already required
+    one after the 2026-07-31 fix above)."""
+
+    @pytest.mark.parametrize("text", [
+        "que es IA radio",
+        "¿qué es IARadio?",
+        "explícame que es IA radio",
+        "para yo entender",
+        "como funciona iaradio",
+        "iaradio no me contesta",
+        "tengo un problema con adradio",
+    ])
+    def test_platform_name_without_intent_verb_does_not_match(self, text):
+        assert detect_plan_purchase_intent(text) is None
+
+
 class TestGenuinePlanIntentStillMatches:
     @pytest.mark.parametrize("text,expected", [
         ("quiero el plan growth", "growth"),

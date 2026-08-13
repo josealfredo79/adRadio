@@ -397,15 +397,20 @@ def detect_plan_purchase_intent(message: str) -> str | None:
     "comprar", "contratar" o "pagar", sin importar el contexto.
     """
     text = message.lower().strip()
+    has_intent_verb = any(v in text for v in _PLAN_INTENT_VERBS)
 
-    if "iaradio" in text or "ia radio" in text or "adradio" in text:
+    # Mentioning the platform name alone is NOT enough — found in production
+    # 2026-08-13: "¿qué es IA radio?" (a plain question) matched this branch
+    # with zero intent-verb check and got read as "quiere el Plan Starter",
+    # firing a real "Nueva solicitud de plan" notification to the owner.
+    if ("iaradio" in text or "ia radio" in text or "adradio" in text) and has_intent_verb:
         for tier, pattern in _PLAN_TIER_PATTERNS.items():
             if pattern.search(text):
                 return tier
         return "starter"
 
     for tier, pattern in _PLAN_TIER_PATTERNS.items():
-        if pattern.search(text) and any(v in text for v in _PLAN_INTENT_VERBS):
+        if pattern.search(text) and has_intent_verb:
             return tier
 
     if any(p in text for p in _ADVERTISING_INTENT_PATTERNS):
