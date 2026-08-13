@@ -1,13 +1,45 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { MessageCircle, X, Send, Bot } from 'lucide-react'
 
+interface ProductCard {
+  url: string
+  name: string
+  price: string | null
+  photo_url: string
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  cards?: ProductCard[]
 }
 
 const STORAGE_KEY = 'iaradio_demo_session'
 const API_BASE = `${import.meta.env.VITE_API_URL ?? ''}/api/v1`
+const SITE_ORIGIN = typeof window !== 'undefined' ? window.location.origin : ''
+
+function ProductCardPreview({ card }: { card: ProductCard }) {
+  return (
+    <a
+      href={`${SITE_ORIGIN}${card.url}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2.5 rounded-lg bg-gray-800 border border-gray-700 p-2 hover:border-indigo-500 transition-colors w-full"
+    >
+      <div className="h-11 w-11 shrink-0 rounded-md bg-gray-700 overflow-hidden flex items-center justify-center">
+        {card.photo_url ? (
+          <img src={card.photo_url} alt={card.name} className="h-full w-full object-cover" />
+        ) : (
+          <span className="text-lg">🎙️</span>
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-white truncate">{card.name}</div>
+        {card.price && <div className="text-xs text-indigo-300">{card.price}</div>}
+      </div>
+    </a>
+  )
+}
 
 function getSessionId(): string {
   try {
@@ -78,7 +110,7 @@ export default function ChatWidget() {
       })
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }])
+      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply, cards: data.cards }])
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -121,14 +153,19 @@ export default function ChatWidget() {
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 style={{ animation: 'fadeUp 0.3s ease' }}
               >
-                <div
-                  className={`max-w-[85%] rounded-xl px-3 py-2 text-sm shadow-sm whitespace-pre-wrap ${
-                    msg.role === 'user'
-                      ? 'rounded-tr-none bg-indigo-600 text-white'
-                      : 'rounded-tl-none bg-gray-800 text-gray-100'
-                  }`}
-                >
-                  {msg.content}
+                <div className={`flex flex-col gap-1.5 max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <div
+                    className={`rounded-xl px-3 py-2 text-sm shadow-sm whitespace-pre-wrap ${
+                      msg.role === 'user'
+                        ? 'rounded-tr-none bg-indigo-600 text-white'
+                        : 'rounded-tl-none bg-gray-800 text-gray-100'
+                    }`}
+                  >
+                    {msg.content}
+                  </div>
+                  {msg.cards?.map((card) => (
+                    <ProductCardPreview key={card.url} card={card} />
+                  ))}
                 </div>
               </div>
             ))}

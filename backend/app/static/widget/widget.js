@@ -138,6 +138,7 @@
         sessionId = data.session_id || sessionId;
         typingEl.textContent = data.reply || 'Gracias por tu mensaje.';
         typingEl.classList.remove('iaradio-bubble-typing');
+        _appendProductCards(data.cards);
       })
       .catch(function () {
         typingEl.textContent = 'No pudimos enviar tu mensaje. Intenta de nuevo en un momento.';
@@ -153,6 +154,28 @@
     messagesEl.appendChild(b);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return b;
+  }
+
+  function _appendProductCards(cards) {
+    if (!cards || !cards.length) return;
+    for (var i = 0; i < cards.length; i++) {
+      var card = cards[i];
+      var a = document.createElement('a');
+      a.className = 'iaradio-product-card';
+      a.href = card.url.indexOf('http') === 0 ? card.url : (window.location.origin + card.url);
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.innerHTML =
+        '<span class="iaradio-product-card-img">' +
+        (card.photo_url ? '<img src="' + _esc(card.photo_url) + '" alt="' + _esc(card.name) + '">' : '🎙️') +
+        '</span>' +
+        '<span class="iaradio-product-card-info">' +
+        '<span class="iaradio-product-card-name">' + _esc(card.name) + '</span>' +
+        (card.price ? '<span class="iaradio-product-card-price">' + _esc(card.price) + '</span>' : '') +
+        '</span>';
+      messagesEl.appendChild(a);
+    }
+    messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
   function _esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }

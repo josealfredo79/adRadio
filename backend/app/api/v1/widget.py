@@ -150,7 +150,14 @@ async def widget_chat(
     if redis:
         await redis.setex(redis_key, CHAT_REDIS_TTL, json.dumps(history))
 
-    return {"reply": reply, "session_id": session_id}
+    from app.services.product_card_service import extract_product_cards
+    try:
+        cards = await extract_product_cards(reply, db)
+    except Exception:
+        logger.warning("[WIDGET-CHAT] Failed to extract product cards", exc_info=True)
+        cards = []
+
+    return {"reply": reply, "session_id": session_id, "cards": cards}
 
 
 @router.post("/lead/{advertiser_id}")

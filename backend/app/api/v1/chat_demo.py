@@ -164,4 +164,11 @@ async def demo_chat(
         history = history[-MAX_HISTORY:]
         await redis.setex(key, REDIS_TTL, json.dumps(history))
 
-    return {"reply": reply, "session_id": session_id}
+    from app.services.product_card_service import extract_product_cards
+    try:
+        cards = await extract_product_cards(reply, db)
+    except Exception:
+        logger.warning("[DEMO_CHAT] Failed to extract product cards", exc_info=True)
+        cards = []
+
+    return {"reply": reply, "session_id": session_id, "cards": cards}
