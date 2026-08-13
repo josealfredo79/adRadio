@@ -275,6 +275,43 @@ async def delete_campaign(
     await db.commit()
 
 
+@router.get("/send-blocks")
+async def list_send_blocks(
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Single place to answer "why didn't this send" — every anti-ban/
+    compliance gate (segment cooldown, per-contact cooldown, recipient cap,
+    unconfirmed consent, no template configured, etc.) logs here instead of
+    only to server logs. Built 2026-08-13 after repeatedly having to grep
+    logs across 4+ separate gates to explain a blocked send."""
+    from app.models.contact import Contact
+    from app.models.send_block_log import SendBlockLog
+
+    result = await db.execute(
+        select(SendBlockLog, Contact.name, Contact.phone, Campaign.name)
+        .outerjoin(Contact, SendBlockLog.contact_id == Contact.id)
+        .outerjoin(Campaign, SendBlockLog.campaign_id == Campaign.id)
+        .where(SendBlockLog.advertiser_id == current_user.id)
+        .order_by(SendBlockLog.created_at.desc())
+        .limit(limit)
+    )
+    items = [
+        {
+            "id": str(log.id),
+            "reason": log.reason,
+            "detail": log.detail,
+            "contact_name": contact_name,
+            "contact_phone": contact_phone,
+            "campaign_name": campaign_name,
+            "created_at": log.created_at.isoformat(),
+        }
+        for log, contact_name, contact_phone, campaign_name in result.all()
+    ]
+    return {"items": items}
+
+
 @router.get("/{campaign_id}/stats")
 async def campaign_stats(
     campaign_id: uuid.UUID,

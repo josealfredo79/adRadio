@@ -17,6 +17,7 @@ from app.models.customer_story import CustomerStory
 from app.models.user_webhook import UserWebhook
 from app.models.api_key import ApiKey
 from app.models.lab import LabRun, LabConversation
+from app.models.send_block_log import SendBlockLog
 
 __all__ = [
     "User",
@@ -41,4 +42,5 @@ __all__ = [
     "ApiKey",
     "LabRun",
     "LabConversation",
+    "SendBlockLog",
 ]

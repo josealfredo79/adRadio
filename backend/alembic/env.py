@@ -24,6 +24,7 @@ from app.models.user_webhook import UserWebhook  # noqa: F401
 from app.models.api_key import ApiKey  # noqa: F401
 from app.models.lab import LabRun, LabConversation  # noqa: F401
 from app.models.founder_program import FounderProgram  # noqa: F401
+from app.models.send_block_log import SendBlockLog  # noqa: F401
 from app.database import Base, _set_search_path
 from app.config import settings
 

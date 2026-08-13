@@ -11,6 +11,14 @@ from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import func, select
 
+from app.models.send_block_log import (
+    REASON_CONSENT_UNCONFIRMED,
+    REASON_HIGH_FAILURE_RATE,
+    REASON_NO_UTILITY_TEMPLATE,
+    REASON_RECIPIENT_CAP,
+)
+from app.services.send_block_log_service import log_send_block
+
 logger = logging.getLogger(__name__)
 
 _ACTIVE_CUTOFF_DAYS = 90
@@ -111,18 +119,26 @@ async def get_recipient_cap_state(db, advertiser) -> RecipientCapState:
     return RecipientCapState(limit=limit, count=count)
 
 
-def _is_contact_active(contact) -> bool:
+def _is_contact_active(contact) -> tuple[bool, str | None]:
     """Skip inactive contacts to reduce ban risk.
     New contacts (never interacted) are always considered active.
-    """
+    Returns (is_active, reason_code_if_blocked) — the reason feeds
+    send_block_log_service.log_send_block so a blocked send is traceable
+    instead of just a generic "Skipping inactive contact" log line."""
+    from app.models.send_block_log import (
+        REASON_CONTACT_COOLDOWN,
+        REASON_CONTACT_INACTIVE,
+        REASON_CONTACT_SUPPRESSED,
+    )
+
     now = datetime.now(timezone.utc)
 
     if contact.status != "active":
-        return False
+        return False, REASON_CONTACT_INACTIVE
 
     # Suppressed due to repeated failures
     if contact.suppressed_until and now < contact.suppressed_until:
-        return False
+        return False, REASON_CONTACT_SUPPRESSED
     # Reset suppression after period expires
     if contact.suppressed_until and now >= contact.suppressed_until:
         contact.failed_send_count = 0
@@ -132,17 +148,17 @@ def _is_contact_active(contact) -> bool:
     if contact.last_campaign_sent_at:
         hours_since = (now - contact.last_campaign_sent_at).total_seconds() / 3600
         if hours_since < _CAMPAIGN_COOLDOWN_HOURS:
-            return False
+            return False, REASON_CONTACT_COOLDOWN
 
     # New contact: no interaction history yet, allow through
     if contact.last_interaction is None:
-        return True
+        return True, None
     if (contact.engagement_score or 0) >= _MIN_ENGAGEMENT_SCORE:
-        return True
+        return True, None
     cutoff = now - timedelta(days=_ACTIVE_CUTOFF_DAYS)
     if contact.last_interaction < cutoff:
-        return False
-    return True
+        return False, REASON_CONTACT_INACTIVE
+    return True, None
 
 
 async def _ensure_conversation_window(
@@ -151,6 +167,7 @@ async def _ensure_conversation_window(
     contact,
     _convs: dict[str, object] | None = None,
     _cap: "RecipientCapState | None" = None,
+    _campaign_id=None,
 ) -> int | None:
     """Send the advertiser's approved utility template if the 24h window is closed.
     Returns extra delay (seconds) if it's safe to send now (window open, or an
@@ -190,6 +207,10 @@ async def _ensure_conversation_window(
         # reported/restricted by Meta. They become reachable normally as soon
         # as they reply once (see inbound_pipeline.process_inbound_message).
         logger.info("[CONSENT] Contact %s has unconfirmed consent — blocking cold-window send", contact.id)
+        log_send_block(
+            db, advertiser.id, REASON_CONSENT_UNCONFIRMED,
+            campaign_id=_campaign_id, contact_id=contact.id,
+        )
         return None
 
     template_name = advertiser.meta_utility_template_name
@@ -198,6 +219,10 @@ async def _ensure_conversation_window(
         # can't reopen the window outside it. Known limitation until they
         # set one in Configuración → WhatsApp.
         logger.info("[TEMPLATE] No meta_utility_template_name for advertiser=%s — blocking send, window closed", advertiser.id)
+        log_send_block(
+            db, advertiser.id, REASON_NO_UTILITY_TEMPLATE,
+            campaign_id=_campaign_id, contact_id=contact.id,
+        )
         return None
 
     # Capa 10: a punto de abrir una ventana NUEVA — esto es exactamente lo
@@ -208,6 +233,11 @@ async def _ensure_conversation_window(
         logger.warning(
             "[TIER CAP] advertiser=%s alcanzó el tope messaging_limit_tier (%d/%d) — bloqueando ventana nueva a contact=%s",
             advertiser.id, _cap.count, _cap.limit, contact.id,
+        )
+        log_send_block(
+            db, advertiser.id, REASON_RECIPIENT_CAP,
+            campaign_id=_campaign_id, contact_id=contact.id,
+            detail=f"{_cap.count}/{_cap.limit}",
         )
         return None
 
@@ -298,15 +328,22 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         if advertiser.messages_remaining <= 0:
             break
 
-        if not _is_contact_active(contact):
+        active, block_reason = _is_contact_active(contact)
+        if not active:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
+            log_send_block(
+                db, advertiser.id, block_reason,
+                campaign_id=getattr(campaign, "id", None), contact_id=contact.id,
+            )
             continue
 
         if idx_b > 0 and idx_b % MAX_PER_HOUR == 0:
             ban_delay = int(idx_b / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs, _cap=_cap)
+        extra = await _ensure_conversation_window(
+            db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),
+        )
         if extra is None:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
@@ -362,6 +399,10 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         campaign.status = "paused"
         logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
                        campaign.id, skipped_count / total_attempted * 100, skipped_count, total_attempted)
+        log_send_block(
+            db, advertiser.id, REASON_HIGH_FAILURE_RATE, campaign_id=campaign.id,
+            detail=f"{skipped_count}/{total_attempted} ({skipped_count / total_attempted * 100:.0f}%)",
+        )
 
     await db.commit()
 
@@ -386,15 +427,22 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         if advertiser.messages_remaining <= 0:
             break
 
-        if not _is_contact_active(contact):
+        active, block_reason = _is_contact_active(contact)
+        if not active:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
+            log_send_block(
+                db, advertiser.id, block_reason,
+                campaign_id=getattr(campaign, "id", None), contact_id=contact.id,
+            )
             continue
 
         if idx_r > 0 and idx_r % MAX_PER_HOUR == 0:
             ban_delay = int(idx_r / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs, _cap=_cap)
+        extra = await _ensure_conversation_window(
+            db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),
+        )
         if extra is None:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
@@ -429,6 +477,10 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         campaign.status = "paused"
         logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
                        campaign.id, skipped_count / total_attempted * 100, skipped_count, total_attempted)
+        log_send_block(
+            db, advertiser.id, REASON_HIGH_FAILURE_RATE, campaign_id=campaign.id,
+            detail=f"{skipped_count}/{total_attempted} ({skipped_count / total_attempted * 100:.0f}%)",
+        )
 
     await db.commit()
 
@@ -470,15 +522,22 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         if advertiser.messages_remaining <= 0:
             break
 
-        if not _is_contact_active(contact):
+        active, block_reason = _is_contact_active(contact)
+        if not active:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
+            log_send_block(
+                db, advertiser.id, block_reason,
+                campaign_id=getattr(campaign, "id", None), contact_id=contact.id,
+            )
             continue
 
         if i > 0 and i % MAX_PER_HOUR == 0:
             ban_delay = int(i / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs, _cap=_cap)
+        extra = await _ensure_conversation_window(
+            db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),
+        )
         if extra is None:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
@@ -577,6 +636,10 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         campaign.status = "paused"
         logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
                        campaign.id, skipped_count / total_attempted * 100, skipped_count, total_attempted)
+        log_send_block(
+            db, advertiser.id, REASON_HIGH_FAILURE_RATE, campaign_id=campaign.id,
+            detail=f"{skipped_count}/{total_attempted} ({skipped_count / total_attempted * 100:.0f}%)",
+        )
 
     if ab_enabled:
         new_ab = dict(campaign.ab_test)
@@ -673,15 +736,22 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
         if advertiser.messages_remaining <= 0:
             break
 
-        if not _is_contact_active(contact):
+        active, block_reason = _is_contact_active(contact)
+        if not active:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping inactive contact %s", contact.id)
+            log_send_block(
+                db, advertiser.id, block_reason,
+                campaign_id=getattr(campaign, "id", None), contact_id=contact.id,
+            )
             continue
 
         if idx > 0 and idx % MAX_PER_HOUR == 0:
             ban_delay = int(idx / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(db, advertiser, contact, _convs=_convs, _cap=_cap)
+        extra = await _ensure_conversation_window(
+            db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),
+        )
         if extra is None:
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
@@ -716,6 +786,10 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
             campaign.status = "paused"
             logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
                            campaign.id, skipped_count / total_attempted * 100, skipped_count, total_attempted)
+            log_send_block(
+                db, advertiser.id, REASON_HIGH_FAILURE_RATE, campaign_id=campaign.id,
+                detail=f"{skipped_count}/{total_attempted} ({skipped_count / total_attempted * 100:.0f}%)",
+            )
 
     return sent
 

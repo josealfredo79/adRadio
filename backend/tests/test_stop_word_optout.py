@@ -153,8 +153,12 @@ class TestStopWordOptOut:
 class TestUnsubscribedContactsExcludedFromCampaigns:
     def test_unsubscribed_contact_is_not_active(self):
         contact = MagicMock(status="unsubscribed", suppressed_until=None, last_campaign_sent_at=None, last_interaction=None)
-        assert _is_contact_active(contact) is False
+        active, reason = _is_contact_active(contact)
+        assert active is False
+        assert reason is not None
 
     def test_active_contact_with_no_history_is_active(self):
         contact = MagicMock(status="active", suppressed_until=None, last_campaign_sent_at=None, last_interaction=None)
-        assert _is_contact_active(contact) is True
+        active, reason = _is_contact_active(contact)
+        assert active is True
+        assert reason is None

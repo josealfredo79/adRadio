@@ -15,6 +15,12 @@ from app.workers.task_helpers import (
     get_recipient_cap_state,
 )
 from app.workers.task_helpers.common import suppress_contact_on_error
+from app.models.send_block_log import (
+    REASON_NO_MESSAGES_REMAINING,
+    REASON_RECIPIENT_CAP,
+    REASON_SEGMENT_COOLDOWN,
+)
+from app.services.send_block_log_service import log_send_block
 
 logger = logging.getLogger(__name__)
 
@@ -335,12 +341,18 @@ def schedule_campaign(self, campaign_id: str):
             advertiser = adv_result.scalar_one_or_none()
             if not advertiser or advertiser.messages_remaining <= 0:
                 campaign.status = "paused"
+                log_send_block(
+                    db, campaign.advertiser_id, REASON_NO_MESSAGES_REMAINING, campaign_id=campaign.id,
+                )
                 await db.commit()
                 return
 
             fingerprint = segment_fingerprint(campaign.segment or {})
             if await is_segment_on_cooldown(db, campaign.advertiser_id, fingerprint):
                 campaign.status = "paused"
+                log_send_block(
+                    db, campaign.advertiser_id, REASON_SEGMENT_COOLDOWN, campaign_id=campaign.id,
+                )
                 await db.commit()
                 logger.warning(
                     "[CAMPAIGN] Auto-paused %s — same list relaunched within the cooldown window",
@@ -351,6 +363,10 @@ def schedule_campaign(self, campaign_id: str):
             cap_state = await get_recipient_cap_state(db, advertiser)
             if cap_state.limit is not None and cap_state.count >= cap_state.limit:
                 campaign.status = "paused"
+                log_send_block(
+                    db, campaign.advertiser_id, REASON_RECIPIENT_CAP, campaign_id=campaign.id,
+                    detail=f"{cap_state.count}/{cap_state.limit}",
+                )
                 await db.commit()
                 logger.warning(
                     "[CAMPAIGN] Auto-paused %s — advertiser=%s ya está en el tope messaging_limit_tier (%d/%d)",

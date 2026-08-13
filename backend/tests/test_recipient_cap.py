@@ -228,7 +228,12 @@ class TestEnsureConversationWindowRespectsCap:
         assert extra is None
         assert cap.count == 5  # sin cambios
         mock_send.assert_not_called()  # nunca intenta la plantilla
-        db.add.assert_not_called()
+        # db.add IS called once now — to record the block in send_block_logs
+        # (built 2026-08-13) — but nothing else (no RecipientSend/Conversation).
+        db.add.assert_called_once()
+        from app.models.send_block_log import REASON_RECIPIENT_CAP
+        logged = db.add.call_args.args[0]
+        assert logged.reason == REASON_RECIPIENT_CAP
 
     @pytest.mark.asyncio
     async def test_unlimited_tier_never_blocks(self):

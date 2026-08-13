@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
-import { Activity, AlertTriangle, Clock, PauseCircle } from 'lucide-react'
+import { Activity, AlertTriangle, Clock, PauseCircle, ShieldAlert } from 'lucide-react'
 
 interface Connection {
   status: string
@@ -33,6 +33,28 @@ const RATING_LABELS: Record<string, string> = {
   NA: 'Sin datos aún',
 }
 
+interface SendBlock {
+  id: string
+  reason: string
+  detail: string | null
+  contact_name: string | null
+  contact_phone: string | null
+  campaign_name: string | null
+  created_at: string
+}
+
+const BLOCK_REASON_LABELS: Record<string, string> = {
+  segment_cooldown: 'Misma lista de contactos relanzada antes de 7 días',
+  contact_cooldown: 'Este contacto ya recibió una campaña en las últimas 48h',
+  contact_suppressed: 'Contacto suspendido por fallos de envío repetidos',
+  contact_inactive: 'Contacto inactivo o dado de baja',
+  recipient_cap: 'Tope de destinatarios nuevos de Meta alcanzado',
+  no_messages_remaining: 'Sin mensajes disponibles en el plan',
+  high_failure_rate: 'Campaña pausada por alta tasa de fallos',
+  consent_unconfirmed: 'Contacto sin consentimiento confirmado',
+  no_utility_template: 'Sin plantilla de utilidad aprobada para reabrir la conversación',
+}
+
 export default function WhatsappHealthCard() {
   const { data: connection } = useQuery<Connection>({
     queryKey: ['whatsapp-connection'],
@@ -44,6 +66,13 @@ export default function WhatsappHealthCard() {
   const { data: health } = useQuery<Health>({
     queryKey: ['whatsapp-health'],
     queryFn: () => api.get('/me/whatsapp-health').then((r) => r.data),
+    enabled: isConnected,
+    refetchInterval: 60_000,
+  })
+
+  const { data: blocksData } = useQuery<{ items: SendBlock[] }>({
+    queryKey: ['send-blocks'],
+    queryFn: () => api.get('/campaigns/send-blocks', { params: { limit: 8 } }).then((r) => r.data),
     enabled: isConnected,
     refetchInterval: 60_000,
   })
@@ -126,6 +155,29 @@ export default function WhatsappHealthCard() {
         <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-800">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           Meta marcó tu número con calidad crítica — tus campañas activas se pausaron automáticamente.
+        </div>
+      )}
+
+      {blocksData && blocksData.items.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <ShieldAlert className="h-4 w-4" />
+            Envíos bloqueados por protección anti-baneo
+          </div>
+          <ul className="space-y-1.5">
+            {blocksData.items.map((b) => (
+              <li key={b.id} className="rounded-lg border border-border px-3 py-2 text-xs">
+                <div className="text-foreground">
+                  {BLOCK_REASON_LABELS[b.reason] ?? b.reason}
+                </div>
+                <div className="text-muted-foreground mt-0.5">
+                  {b.contact_name && <>{b.contact_name} · </>}
+                  {b.campaign_name && <>{b.campaign_name} · </>}
+                  {new Date(b.created_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
