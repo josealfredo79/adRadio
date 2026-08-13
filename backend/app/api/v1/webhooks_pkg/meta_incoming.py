@@ -27,7 +27,7 @@ from app.services.inbound_pipeline import InboundMessage, process_inbound_messag
 from app.services.message_status_service import apply_status_update
 from app.services.meta_client import download_media
 from app.services.meta_quality_service import apply_quality_signal
-from app.services.meta_service import send_whatsapp
+from app.services.meta_service import send_typing_indicator, send_whatsapp
 from app.services.storage_service import upload_bytes
 from app.services.whisper_service import transcribe_audio_bytes
 
@@ -198,6 +198,17 @@ async def meta_incoming(
             for msg in messages:
                 from_number = f"+{msg.get('from', '')}"
                 wamid = msg.get("id")
+
+                if wamid:
+                    # Fired as early as possible (before the potentially-slow
+                    # media download/transcription and RAG/Claude call below)
+                    # to maximize how much of Meta's 25s typing-indicator
+                    # window is actually visible to the customer.
+                    try:
+                        await send_typing_indicator(wamid, advertiser=advertiser)
+                    except Exception:
+                        logger.warning("[META WEBHOOK] Failed to send typing indicator", exc_info=True)
+
                 body_text, media_id = _extract_body_text(msg)
                 audio_transcription: str | None = None
                 media_url: str | None = None

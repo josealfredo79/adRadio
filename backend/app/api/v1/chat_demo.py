@@ -5,9 +5,12 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_optional
 from app.core.rate_limiter import limiter
+from app.database import get_db
 from app.services.claude_service import generate_bot_response
 from app.api.v1.payments import PLANS
 
@@ -24,6 +27,15 @@ DEMO_BOT_PERSONALITY = (
     "IaRadio puede transformar la forma en que atienden clientes."
 )
 
+# This account holds IaRadio's own plans as real Product rows (added
+# 2026-08-13, see product-catalog work same day) — reused here so this demo
+# bot can share real, working /p/{advertiser_id}/{product_id} links instead
+# of saying "no tengo ese dato a la mano" when a prospect asks for one,
+# which is exactly what happened before this fix (confirmed live: a real
+# visitor asked for a service link and got refused, even though a real
+# link existed for every plan).
+DEMO_PLANS_ADVERTISER_EMAIL = "tecnologicotlaxiaco@gmail.com"
+
 
 def _format_plans() -> str:
     """PLANS (app.api.v1.payments) es la fuente única de verdad de precios."""
@@ -36,11 +48,43 @@ def _format_plans() -> str:
     return "\n".join(lines)
 
 
-DEMO_CONTEXT = f"""
+async def _format_plan_links(db: AsyncSession) -> str:
+    """Real, live links to each plan's shareable product page — see
+    DEMO_PLANS_ADVERTISER_EMAIL above for why this account specifically."""
+    from app.config import settings
+    from app.models.product import Product
+    from app.models.user import User
+
+    user_result = await db.execute(select(User).where(User.email == DEMO_PLANS_ADVERTISER_EMAIL))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        return ""
+
+    products_result = await db.execute(
+        select(Product)
+        .where(Product.advertiser_id == user.id, Product.category == "Planes IaRadio", Product.active.is_(True))
+        .order_by(Product.price)
+    )
+    products = products_result.scalars().all()
+    if not products:
+        return ""
+
+    lines = [f"- {p.name}: {settings.BASE_URL}/p/{user.id}/{p.id}" for p in products]
+    return "\n".join(lines)
+
+
+def _build_demo_context(plan_links: str) -> str:
+    links_block = (
+        f"\n\nLINKS REALES DE CADA PLAN (usa EXACTAMENTE estos si te piden un link — nunca inventes uno):\n{plan_links}"
+        if plan_links
+        else ""
+    )
+    return f"""
 IaRadio es una plataforma SaaS para pequeños negocios y anunciantes.
 
 PLANES:
 {_format_plans()}
+{links_block}
 
 CARACTERÍSTICAS PRINCIPALES:
 - Chatbot IA con Claude que atiende clientes 24/7
@@ -69,6 +113,7 @@ async def demo_chat(
     request: Request,
     body: dict,
     redis: AsyncRedis | None = Depends(get_redis_optional),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     message = (body.get("message") or "").strip()
     if not message:
@@ -89,8 +134,14 @@ async def demo_chat(
                 history = []
 
     try:
+        plan_links = await _format_plan_links(db)
+    except Exception:
+        logger.warning("[DEMO_CHAT] Failed to load real plan links", exc_info=True)
+        plan_links = ""
+
+    try:
         reply = await generate_bot_response(
-            advertiser_context=DEMO_CONTEXT,
+            advertiser_context=_build_demo_context(plan_links),
             conversation_history=history,
             user_message=message,
             business_name=DEMO_BUSINESS_NAME,

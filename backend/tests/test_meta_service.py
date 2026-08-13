@@ -5,6 +5,7 @@ import pytest
 
 from app.services.meta_client import MetaApiError
 from app.services.meta_service import (
+    send_typing_indicator,
     send_whatsapp,
     send_whatsapp_buttons,
     send_whatsapp_media,
@@ -165,6 +166,43 @@ class TestSendWhatsappTemplate:
             assert body["template"]["name"] == "utility_template"
             assert body["template"]["language"] == {"code": "es_MX"}
             assert body["template"]["components"] == components
+
+
+class TestSendTypingIndicator:
+    """Real Meta Cloud API feature (not simulated): POST .../messages with
+    status=read + typing_indicator marks the customer's message read and
+    shows "escribiendo..." for up to 25s or until the real reply is sent.
+    Built 2026-08-13. https://developers.facebook.com/docs/whatsapp/cloud-api/typing-indicators"""
+
+    @pytest.mark.asyncio
+    async def test_sends_read_status_and_typing_indicator(self, test_user):
+        token = _connect(test_user)
+        with patch("app.services.meta_service.decrypt_secret", return_value=token), \
+             patch("app.services.meta_service.graph_request", new=AsyncMock(return_value={})) as mock_gr:
+            await send_typing_indicator("wamid.INCOMING123", advertiser=test_user)
+            assert mock_gr.call_args.args[0] == "phone-1/messages"
+            body = mock_gr.call_args.kwargs["body"]
+            assert body["status"] == "read"
+            assert body["message_id"] == "wamid.INCOMING123"
+            assert body["typing_indicator"] == {"type": "text"}
+
+    @pytest.mark.asyncio
+    async def test_not_connected_is_a_silent_noop(self, test_user):
+        with patch("app.services.meta_service.settings") as mock_settings:
+            mock_settings.DEBUG = False
+            # Must not raise — this is a best-effort UX nicety, never worth
+            # failing the real reply over.
+            await send_typing_indicator("wamid.X", advertiser=test_user)
+
+    @pytest.mark.asyncio
+    async def test_meta_api_error_is_swallowed(self, test_user):
+        token = _connect(test_user)
+        with patch("app.services.meta_service.decrypt_secret", return_value=token), \
+             patch("app.services.meta_service.graph_request", new=AsyncMock(
+                 side_effect=MetaApiError("boom", status=500)
+             )):
+            # Must not raise.
+            await send_typing_indicator("wamid.X", advertiser=test_user)
 
 
 class TestSendWhatsappButtons:

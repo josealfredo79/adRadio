@@ -39,6 +39,33 @@ def _connection(advertiser: User) -> tuple[str, str] | None:
     return advertiser.meta_phone_number_id, token
 
 
+async def send_typing_indicator(incoming_wamid: str, *, advertiser: User) -> None:
+    """Shows "escribiendo..." to the customer and marks their message as
+    read, via Meta's real typing-indicator API (not a UI trick — a documented
+    Cloud API feature: https://developers.facebook.com/docs/whatsapp/cloud-api/typing-indicators).
+    Persists up to 25s or until the real reply is sent, whichever is first.
+    Best-effort: this is a UX nicety, never worth failing the actual reply
+    over, so any error is swallowed and logged, not raised."""
+    conn = _connection(advertiser)
+    if conn is None:
+        return
+    phone_number_id, token = conn
+    try:
+        await graph_request(
+            f"{phone_number_id}/messages",
+            token=token,
+            method="POST",
+            body={
+                "messaging_product": "whatsapp",
+                "status": "read",
+                "message_id": incoming_wamid,
+                "typing_indicator": {"type": "text"},
+            },
+        )
+    except MetaApiError as e:
+        logger.warning("[META] Failed to send typing indicator for advertiser=%s: %s", advertiser.id, e)
+
+
 async def send_whatsapp(to: str, body: str, *, advertiser: User) -> tuple[str | None, str | None]:
     """Send a plain-text WhatsApp message via the advertiser's Meta connection."""
     conn = _connection(advertiser)
