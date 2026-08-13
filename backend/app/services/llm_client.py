@@ -5,12 +5,14 @@ src/lib/ai/index.ts). Todo el código que antes llamaba a
 anthropic.AsyncAnthropic().messages.create(...) directamente ahora pasa por
 chat_completion() aquí.
 
-Si OPENROUTER_API_KEY y OPENROUTER_MODEL están configurados, se usa
-OpenRouter (compatible con el formato de chat completions de OpenAI, así
-que reutiliza el cliente `openai` que el proyecto ya trae para Whisper) —
-esto permite cambiar de modelo, incluyendo modelos gratis, con solo una
-variable de entorno. Si no, cae en Anthropic directo — el comportamiento
-que este proyecto tuvo siempre, sin cambios de default.
+Cadena de proveedores (cada uno opcional vía variables de entorno): Groq →
+OpenRouter → Anthropic. Groq y OpenRouter comparten el formato de chat
+completions de OpenAI, así que reutilizan el cliente `openai` que el
+proyecto ya trae para Whisper. Si un proveedor gratis falla (cuota agotada,
+error de red, etc.) se intenta el siguiente automáticamente — Anthropic es
+el fallback pagado final y confiable. Si ninguno de Groq/OpenRouter está
+configurado, cae directo en Anthropic — el comportamiento que este proyecto
+tuvo siempre, sin cambios de default.
 """
 import logging
 
@@ -23,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 _anthropic_client: anthropic.AsyncAnthropic | None = None
 _openrouter_client: AsyncOpenAI | None = None
+_groq_client: AsyncOpenAI | None = None
 
 
 def _get_anthropic_client() -> anthropic.AsyncAnthropic:
@@ -42,8 +45,36 @@ def _get_openrouter_client() -> AsyncOpenAI:
     return _openrouter_client
 
 
+def _get_groq_client() -> AsyncOpenAI:
+    global _groq_client
+    if _groq_client is None:
+        _groq_client = AsyncOpenAI(
+            api_key=settings.GROQ_API_KEY,
+            base_url=settings.GROQ_CHAT_BASE_URL,
+        )
+    return _groq_client
+
+
 def is_openrouter_configured() -> bool:
     return bool(settings.OPENROUTER_API_KEY and settings.OPENROUTER_MODEL)
+
+
+def is_groq_configured() -> bool:
+    return bool(settings.GROQ_API_KEY and settings.GROQ_CHAT_MODEL)
+
+
+async def _openai_compatible_completion(
+    client: AsyncOpenAI, model: str, messages: list[dict],
+    system: str | None, max_tokens: int, temperature: float,
+) -> str:
+    or_messages = ([{"role": "system", "content": system}] if system else []) + messages
+    response = await client.chat.completions.create(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        messages=or_messages,
+    )
+    return (response.choices[0].message.content or "").strip()
 
 
 async def chat_completion(
@@ -65,28 +96,41 @@ async def chat_completion(
 
     `anthropic_model` sobreescribe el modelo SOLO en la rama Anthropic (ej.
     Haiku para el bot por costo, en vez del ANTHROPIC_MODEL default) — no
-    aplica si OpenRouter está activo, porque ahí el modelo se elige por
-    variable de entorno, no por función que llama (esa es la simplicidad
-    del patrón: un solo modelo configurado, no uno hardcodeado por caso de
-    uso). `judge=True` usa OPENROUTER_JUDGE_MODEL si está configurado
-    (si no, cae en OPENROUTER_MODEL) — solo aplica con OpenRouter activo.
+    aplica en Groq/OpenRouter, porque ahí el modelo se elige por variable de
+    entorno, no por función que llama (esa es la simplicidad del patrón: un
+    solo modelo configurado, no uno hardcodeado por caso de uso). `judge=True`
+    usa OPENROUTER_JUDGE_MODEL si está configurado (si no, cae en
+    OPENROUTER_MODEL) — solo aplica en la rama OpenRouter.
 
-    `force_anthropic=True` salta la rama OpenRouter aunque esté configurado
-    — para un call site puntual que necesita un fallback confiable (no
-    gratis) cuando el modelo gratis de OpenRouter falla, sin cambiar el
-    proveedor default de todo el proyecto.
+    `force_anthropic=True` salta las ramas Groq y OpenRouter aunque estén
+    configuradas — para un call site puntual que necesita un fallback
+    confiable (no gratis), sin cambiar el proveedor default de todo el
+    proyecto.
+
+    Cadena: si no se pidió `force_anthropic`, se intenta primero Groq (si
+    está configurado) y luego OpenRouter (si está configurado) — un error de
+    cualquiera de los dos (cuota agotada, red, etc.) cae automáticamente al
+    siguiente en la cadena, terminando en Anthropic si ambos fallan.
     """
-    if is_openrouter_configured() and not force_anthropic:
-        client = _get_openrouter_client()
-        model = (settings.OPENROUTER_JUDGE_MODEL or settings.OPENROUTER_MODEL) if judge else settings.OPENROUTER_MODEL
-        or_messages = ([{"role": "system", "content": system}] if system else []) + messages
-        response = await client.chat.completions.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=or_messages,
-        )
-        return (response.choices[0].message.content or "").strip()
+    if not force_anthropic:
+        if is_groq_configured():
+            try:
+                return await _openai_compatible_completion(
+                    _get_groq_client(), settings.GROQ_CHAT_MODEL,
+                    messages, system, max_tokens, temperature,
+                )
+            except Exception as e:
+                logger.warning("[LLM] Groq falló, probando siguiente proveedor: %s", e)
+
+        if is_openrouter_configured():
+            model = (settings.OPENROUTER_JUDGE_MODEL or settings.OPENROUTER_MODEL) if judge else settings.OPENROUTER_MODEL
+            try:
+                return await _openai_compatible_completion(
+                    _get_openrouter_client(), model,
+                    messages, system, max_tokens, temperature,
+                )
+            except Exception as e:
+                logger.warning("[LLM] OpenRouter falló, usando Anthropic: %s", e)
 
     client = _get_anthropic_client()
     response = await client.messages.create(

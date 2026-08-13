@@ -90,6 +90,14 @@ class Settings(BaseSettings):
     # Groq — free Whisper tier (2,000 req/day, no card required) used for
     # audio transcription: inbound WhatsApp voice notes + Knowledge Base audio.
     GROQ_API_KEY: str = ""
+    # Groq también sirve chat completions (mismo API key, endpoint OpenAI-
+    # compatible) con cuota gratis mucho mayor que el free tier de OpenRouter
+    # (~14,400 req/día vs ~50/día) — ver app/services/llm_client.py. Si
+    # GROQ_CHAT_MODEL está configurado, chat_completion() lo intenta primero,
+    # antes de OpenRouter y de Anthropic. Vacío = comportamiento anterior sin
+    # cambios (salta directo a OpenRouter/Anthropic).
+    GROQ_CHAT_BASE_URL: str = "https://api.groq.com/openai/v1"
+    GROQ_CHAT_MODEL: str = ""
 
     # Voyage AI (embeddings RAG)
     VOYAGE_API_KEY: str = ""

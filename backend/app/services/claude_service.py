@@ -153,12 +153,15 @@ Tu personalidad es: {bot_personality}.
     ]
 
     try:
+        # chat_completion() ya encadena Groq → OpenRouter → Anthropic
+        # internamente (ver llm_client.py) — un solo call site cubre los 3
+        # proveedores, cayendo al pagado solo si ambos gratis fallan.
         return await chat_completion(
             messages, system=system, max_tokens=500, temperature=0.3,
             anthropic_model="claude-haiku-4-5-20251001",
         )
     except Exception as e:
-        logger.warning("[CLAUDE] generate_bot_response failed: %s", e, exc_info=True)
+        logger.warning("[CLAUDE] generate_bot_response failed on every provider: %s", e, exc_info=True)
         return (
             f"Hola! Soy {bot_name} de {business_name}. "
             f"{bot_personality}. "
