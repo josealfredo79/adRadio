@@ -414,6 +414,14 @@ async def process_inbound_message(
         )
     )
     conv = conv_result.scalar_one_or_none()
+    # Captured before conv.last_activity gets overwritten to "now" below —
+    # this is the real previous-message timestamp used for the time-gap note.
+    # Also sidesteps a real MissingGreenlet crash found in production
+    # 2026-08-13: reading an ORM attribute later in this function (after other
+    # commits may have expired it) requires an async reload that a bare
+    # attribute access can't do — a plain Python value captured here has no
+    # such problem.
+    previous_last_activity = conv.last_activity if conv else None
     if not conv:
         conv = Conversation(
             advertiser_id=advertiser.id,
@@ -863,9 +871,7 @@ async def process_inbound_message(
 
     # Build conversation history
     history = conv.messages[-40:] if conv.messages else []
-    # Captured before this turn's append overwrites conv.last_activity below —
-    # this is genuinely "when did this contact last write", not "now".
-    time_gap_note = format_time_gap_note(conv.last_activity) if conv.messages else ""
+    time_gap_note = format_time_gap_note(previous_last_activity)
 
     rag_query = body_text
     if audio_transcription:
