@@ -86,7 +86,13 @@ async def send_whatsapp(to: str, body: str, *, advertiser: User) -> tuple[str | 
                 "messaging_product": "whatsapp",
                 "to": normalize_recipient(to),
                 "type": "text",
-                "text": {"body": body},
+                # preview_url must be explicitly true or the WhatsApp client
+                # renders any URL in body as plain clickable text with no
+                # thumbnail card — off by default, confirmed against Meta's
+                # docs 2026-08-13. Only the FIRST URL in the body gets a
+                # preview (true for WhatsApp generally, not special-cased
+                # here) — relevant for catalog_service.py's multi-link reply.
+                "text": {"body": body, "preview_url": True},
             },
         )
         wamid = (data.get("messages") or [{}])[0].get("id")

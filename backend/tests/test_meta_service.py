@@ -73,6 +73,21 @@ class TestSendWhatsapp:
             assert call_args.kwargs["body"]["text"]["body"] == "hola mundo"
 
     @pytest.mark.asyncio
+    async def test_sets_preview_url_true_so_links_get_a_thumbnail(self, test_user):
+        """Meta docs (confirmed 2026-08-13): preview_url must be explicitly
+        true or a URL in the message body shows as plain clickable text with
+        no rich-preview thumbnail — it is NOT the default. Real bug found
+        live: the catalog reply's product links showed with no thumbnail
+        until this was set."""
+        token = _connect(test_user)
+        with patch("app.services.meta_service.decrypt_secret", return_value=token), \
+             patch("app.services.meta_service.graph_request", new=AsyncMock(
+                 return_value={"messages": [{"id": "wamid.X"}]}
+             )) as mock_gr:
+            await send_whatsapp("+521234567890", "mira: https://x/p/1/2", advertiser=test_user)
+            assert mock_gr.call_args.kwargs["body"]["text"]["preview_url"] is True
+
+    @pytest.mark.asyncio
     async def test_normalizes_mx_recipient(self, test_user):
         token = _connect(test_user)
         with patch("app.services.meta_service.decrypt_secret", return_value=token), \
