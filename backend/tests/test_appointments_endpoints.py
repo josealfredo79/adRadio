@@ -50,16 +50,19 @@ async def _cleanup(user_ids):
 
 class TestStateTokenSigning:
     """_sign_state/_verify_state — the CSRF guard on the Google OAuth
-    callback. Pure functions, no DB needed."""
+    callback. Pure functions, no DB needed. Since 2026-08-13 also carries
+    the PKCE code_verifier through the round trip (see calendar_service.py
+    docstrings for why) — signature is now (user_id, code_verifier) ->
+    (user_id, code_verifier) instead of a bare user_id string."""
 
-    def test_valid_token_round_trips_to_same_user_id(self):
+    def test_valid_token_round_trips_to_same_user_id_and_verifier(self):
         user_id = str(uuid.uuid4())
-        token = _sign_state(user_id)
-        assert _verify_state(token) == user_id
+        token = _sign_state(user_id, "verifier-abc")
+        assert _verify_state(token) == (user_id, "verifier-abc")
 
     def test_tampered_signature_is_rejected(self):
         user_id = str(uuid.uuid4())
-        token = _sign_state(user_id)
+        token = _sign_state(user_id, "verifier-abc")
         tampered = token[:-2] + ("aa" if token[-2:] != "aa" else "bb")
         assert _verify_state(tampered) is None
 
@@ -68,19 +71,19 @@ class TestStateTokenSigning:
         must fail, or an attacker could redirect the OAuth grant to any
         account by editing the state param."""
         real_user_id = str(uuid.uuid4())
-        token = _sign_state(real_user_id)
+        token = _sign_state(real_user_id, "verifier-abc")
         import base64
         raw = base64.urlsafe_b64decode(token.encode()).decode()
         payload_with_ts, sig = raw.rsplit(":", 1)
         _, ts = payload_with_ts.rsplit(":", 1)
-        forged_raw = f"{uuid.uuid4()}:{ts}:{sig}"
+        forged_raw = f"{uuid.uuid4()}:verifier-abc:{ts}:{sig}"
         forged_token = base64.urlsafe_b64encode(forged_raw.encode()).decode()
         assert _verify_state(forged_token) is None
 
     def test_expired_token_is_rejected(self):
         user_id = str(uuid.uuid4())
         with patch("app.api.v1.appointments.time.time", return_value=time.time() - 400):
-            token = _sign_state(user_id)
+            token = _sign_state(user_id, "verifier-abc")
         assert _verify_state(token) is None
 
     def test_garbage_token_does_not_raise(self):

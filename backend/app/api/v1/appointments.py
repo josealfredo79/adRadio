@@ -25,16 +25,25 @@ from app.schemas.appointment import AppointmentCreate, AppointmentOut, Appointme
 logger = logging.getLogger(__name__)
 
 
-def _sign_state(user_id: str) -> str:
-    """Create a signed, time-limited state token for OAuth."""
-    payload = f"{user_id}:{int(time.time())}"
+def _sign_state(user_id: str, code_verifier: str) -> str:
+    """Create a signed, time-limited state token for OAuth.
+
+    Carries the PKCE code_verifier alongside the user_id — Google echoes
+    `state` back verbatim in the callback, so this round-trips the verifier
+    through the redirect without needing separate server-side storage (see
+    calendar_service.py's get_auth_url/exchange_code docstrings for why a
+    verifier can't just be regenerated fresh in the callback). Safe to
+    concatenate with ":" since code_verifier's charset (RFC 7636: A-Za-z0-9
+    plus "-._~") never contains ":"."""
+    payload = f"{user_id}:{code_verifier}:{int(time.time())}"
     sig = hmac.new(settings.SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
     token = base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
     return token
 
 
-def _verify_state(token: str) -> str | None:
-    """Verify and decode state token. Returns user_id or None if invalid/expired."""
+def _verify_state(token: str) -> tuple[str, str] | None:
+    """Verify and decode state token. Returns (user_id, code_verifier) or
+    None if invalid/expired."""
     try:
         raw = base64.urlsafe_b64decode(token.encode()).decode()
         parts = raw.rsplit(":", 1)
@@ -44,15 +53,19 @@ def _verify_state(token: str) -> str | None:
         ts_parts = payload_with_ts.rsplit(":", 1)
         if len(ts_parts) != 2:
             return None
-        user_id, ts_str = ts_parts
+        user_id_and_verifier, ts_str = ts_parts
+        uv_parts = user_id_and_verifier.split(":", 1)
+        if len(uv_parts) != 2:
+            return None
+        user_id, code_verifier = uv_parts
         ts = int(ts_str)
         if abs(int(time.time()) - ts) > 300:
             return None
-        payload = f"{user_id}:{ts}"
+        payload = f"{user_id}:{code_verifier}:{ts}"
         expected_sig = hmac.new(settings.SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
         if not hmac.compare_digest(received_sig, expected_sig):
             return None
-        return user_id
+        return user_id, code_verifier
     except Exception:
         logger.warning("[APPOINTMENTS] Failed to verify state token", exc_info=True)
         return None
@@ -245,11 +258,14 @@ async def google_connect(
     if not settings.GOOGLE_CALENDAR_CLIENT_ID:
         raise HTTPException(status_code=503, detail="Google Calendar no configurado")
 
+    import secrets
+
     from app.services.calendar_service import get_auth_url
 
     redirect_uri = f"{settings.BASE_URL}/api/v1/appointments/google/callback"
-    state = _sign_state(str(current_user.id))
-    url = get_auth_url(redirect_uri, state)
+    code_verifier = secrets.token_urlsafe(96)  # RFC 7636: 43-128 chars
+    state = _sign_state(str(current_user.id), code_verifier)
+    url = get_auth_url(redirect_uri, state, code_verifier)
     return {"auth_url": url}
 
 
@@ -265,12 +281,13 @@ async def google_callback(
     redirect_uri = f"{settings.BASE_URL}/api/v1/appointments/google/callback"
 
     try:
-        user_id = _verify_state(state)
-        if not user_id:
+        verified = _verify_state(state)
+        if not verified:
             logger.warning("[GCAL] Invalid state token: %s", state)
             return RedirectResponse(f"{settings.FRONTEND_URL}/app/appointments?error=invalid_state")
+        user_id, code_verifier = verified
 
-        refresh_token = exchange_code(code, redirect_uri)
+        refresh_token = exchange_code(code, redirect_uri, code_verifier)
     except Exception as e:
         logger.error("[GCAL] OAuth exchange failed: %s", e, exc_info=True)
         error_detail = str(e)[:200] if str(e) else "unknown"

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
 
-def _get_flow(redirect_uri: str):
+def _get_flow(redirect_uri: str, code_verifier: str | None = None):
     """Create Google OAuth2 flow for Calendar access."""
     from google_auth_oauthlib.flow import Flow  # type: ignore
 
@@ -30,14 +30,27 @@ def _get_flow(redirect_uri: str):
             "redirect_uris": [redirect_uri],
         }
     }
-    flow = Flow.from_client_config(client_config, scopes=SCOPES)
+    flow = Flow.from_client_config(client_config, scopes=SCOPES, code_verifier=code_verifier)
     flow.redirect_uri = redirect_uri
     return flow
 
 
-def get_auth_url(redirect_uri: str, state: str) -> str:
-    """Generate the Google OAuth consent URL."""
-    flow = _get_flow(redirect_uri)
+def get_auth_url(redirect_uri: str, state: str, code_verifier: str) -> str:
+    """Generate the Google OAuth consent URL.
+
+    Must be called with an explicit `code_verifier` (not auto-generated here)
+    — found in production 2026-08-13: the library auto-generates one on
+    `authorization_url()`, but that value only lives on this one `Flow`
+    instance. Since get_auth_url() and exchange_code() below run in two
+    separate HTTP requests (necessarily two separate Flow objects), an
+    auto-generated verifier is lost by the time exchange_code() needs it,
+    and Google rejects the token exchange with "(invalid_grant) Missing
+    code verifier." The caller is responsible for generating one verifier
+    per attempt and threading it through both calls (see appointments.py,
+    which embeds it in the signed `state` token so it round-trips through
+    Google's redirect without needing separate storage).
+    """
+    flow = _get_flow(redirect_uri, code_verifier=code_verifier)
     url, _ = flow.authorization_url(
         access_type="offline",
         prompt="consent",
@@ -47,9 +60,10 @@ def get_auth_url(redirect_uri: str, state: str) -> str:
     return url
 
 
-def exchange_code(code: str, redirect_uri: str) -> str:
-    """Exchange authorization code for refresh_token."""
-    flow = _get_flow(redirect_uri)
+def exchange_code(code: str, redirect_uri: str, code_verifier: str) -> str:
+    """Exchange authorization code for refresh_token. `code_verifier` must be
+    the exact same value passed to get_auth_url() for this same attempt."""
+    flow = _get_flow(redirect_uri, code_verifier=code_verifier)
     flow.fetch_token(code=code)
     credentials = flow.credentials
     if not credentials.refresh_token:

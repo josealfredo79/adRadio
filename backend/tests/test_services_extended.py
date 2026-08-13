@@ -396,6 +396,47 @@ class TestStorageService:
             mock_client.put_object.assert_called_once()
 
 
+class TestCalendarServicePkceVerifierConsistency:
+    """Real production bug, 2026-08-13: get_auth_url() and exchange_code()
+    each built their own Flow via _get_flow() with no code_verifier passed,
+    so the library auto-generated a DIFFERENT one in each — Google's token
+    exchange then failed with "(invalid_grant) Missing code verifier."
+    because the verifier used in the auth request never matched the one
+    (or lack thereof) sent back in the exchange. The account's Google
+    Calendar connection silently never worked despite completing the full
+    consent screen. This confirms the actual real Flow object (not a mock)
+    carries the SAME explicit code_verifier through both calls, using no
+    google_auth_oauthlib mocking so the real library's own code_verifier
+    handling is exercised, not bypassed."""
+
+    @patch("app.services.calendar_service.settings")
+    def test_same_verifier_produces_matching_flow_state(self, mock_settings):
+        mock_settings.GOOGLE_CALENDAR_CLIENT_ID = "client-123"
+        mock_settings.GOOGLE_CALENDAR_CLIENT_SECRET = "secret-456"
+
+        from app.services.calendar_service import _get_flow
+
+        verifier = "a-real-pkce-verifier-1234567890"
+        flow_for_auth = _get_flow("https://example.com/callback", code_verifier=verifier)
+        flow_for_exchange = _get_flow("https://example.com/callback", code_verifier=verifier)
+
+        assert flow_for_auth.code_verifier == verifier
+        assert flow_for_exchange.code_verifier == verifier
+
+    @patch("app.services.calendar_service.settings")
+    def test_no_verifier_passed_leaves_flow_without_one(self, mock_settings):
+        """The old, buggy call shape — confirms the library really does
+        leave code_verifier unset (None) rather than silently reusing a
+        prior value some other way, which is exactly what caused the bug."""
+        mock_settings.GOOGLE_CALENDAR_CLIENT_ID = "client-123"
+        mock_settings.GOOGLE_CALENDAR_CLIENT_SECRET = "secret-456"
+
+        from app.services.calendar_service import _get_flow
+
+        flow = _get_flow("https://example.com/callback")
+        assert flow.code_verifier is None
+
+
 class TestCalendarService:
     """Tests para el servicio de Google Calendar."""
 
@@ -418,9 +459,9 @@ class TestCalendarService:
             mock_flow.authorization_url.return_value = ("https://accounts.google.com/o/oauth2/auth?foo=bar", None)
             mock_get_flow.return_value = mock_flow
 
-            url = get_auth_url("https://example.com/callback", "state123")
+            url = get_auth_url("https://example.com/callback", "state123", "verifier-abc")
             assert "https://" in url
-            mock_get_flow.assert_called_once()
+            mock_get_flow.assert_called_once_with("https://example.com/callback", code_verifier="verifier-abc")
 
     @patch("app.services.calendar_service.settings")
     def test_exchange_code_returns_token(self, mock_settings):
@@ -436,8 +477,9 @@ class TestCalendarService:
             mock_flow.credentials = mock_creds
             mock_get_flow.return_value = mock_flow
 
-            token = exchange_code("auth-code", "https://example.com/callback")
+            token = exchange_code("auth-code", "https://example.com/callback", "verifier-abc")
             assert token == "rtoken789"
+            mock_get_flow.assert_called_once_with("https://example.com/callback", code_verifier="verifier-abc")
 
     @patch("app.services.calendar_service.settings")
     def test_exchange_code_no_token_raises(self, mock_settings):
@@ -453,7 +495,7 @@ class TestCalendarService:
             mock_get_flow.return_value = mock_flow
 
             with pytest.raises(ValueError, match="No refresh token"):
-                exchange_code("code", "https://example.com/callback")
+                exchange_code("code", "https://example.com/callback", "verifier-abc")
 
     @patch("app.services.calendar_service.settings")
     def test_create_event(self, mock_settings):

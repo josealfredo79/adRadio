@@ -54,16 +54,55 @@ export default function AppointmentsPage() {
   })
   const [error, setError] = useState('')
 
-  // Read OAuth callback errors from URL query params
+  // Google OAuth runs in a popup window (connectGoogle below). When it lands
+  // back here with ?connected=true or ?error=..., THIS page instance is the
+  // popup — the main tab never sees these params, since the redirect never
+  // touches it. Found in production 2026-08-13: the popup just re-rendered
+  // the whole app inside its own tiny window (looking like "it worked")
+  // while the real dashboard tab's button stayed stale/gray forever, with
+  // no way to know the connection actually succeeded (or failed) without
+  // manually reloading the main tab. Fix: notify the opener via
+  // postMessage and close the popup instead of rendering inside it.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const oauthError = params.get('error')
+    const connected = params.get('connected')
+    if (!oauthError && !connected) return
+
+    if (window.opener) {
+      const detail = params.get('detail')
+      window.opener.postMessage(
+        oauthError
+          ? { type: 'google-calendar-oauth', ok: false, detail: detail ? decodeURIComponent(detail) : null }
+          : { type: 'google-calendar-oauth', ok: true },
+        window.location.origin,
+      )
+      window.close()
+      return
+    }
+
+    // Fallback: not actually opened as a popup (e.g. link opened directly).
     if (oauthError) {
       const detail = params.get('detail')
       setError(detail ? `Error de Google Calendar: ${decodeURIComponent(detail)}` : 'Error al conectar Google Calendar')
-      window.history.replaceState({}, '', window.location.pathname)
     }
+    window.history.replaceState({}, '', window.location.pathname)
   }, [])
+
+  // Parent-side listener: reacts when the popup above posts back.
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      if (event.data?.type !== 'google-calendar-oauth') return
+      if (event.data.ok) {
+        qc.invalidateQueries({ queryKey: ['appointment-stats'] })
+      } else {
+        setError(event.data.detail ? `Error de Google Calendar: ${event.data.detail}` : 'Error al conectar Google Calendar')
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [qc])
 
   const { data: stats } = useQuery<AppointmentStats>({
     queryKey: ['appointment-stats'],
