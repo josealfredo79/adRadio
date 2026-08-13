@@ -227,6 +227,7 @@ app.include_router(admin.router, prefix=settings.API_PREFIX)
 app.include_router(public_api.router, prefix=settings.API_PREFIX)
 app.include_router(public_api_routes.router, prefix=settings.API_PREFIX)
 app.include_router(public_site.router, prefix=settings.API_PREFIX)
+app.include_router(public_site.product_router, prefix=settings.API_PREFIX)
 app.include_router(chat_demo.router, prefix=settings.API_PREFIX)
 
 # Serve WhatsApp widget static files publicly
@@ -294,25 +295,34 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Serve built React SPA (only present in production / Railway build)
 _SPA_DIR = Path(__file__).parent / "static" / "dist"
 
-# Matches /sitio/{slug}/producto/{product_id} — the shareable individual
-# product page. iaradio.online is a 100%-client-rendered SPA (no SSR), so
-# the dynamic <meta property="og:*"> tags PublicSitePage/ProductDetailPage
-# set via react-helmet-async are invisible to link-preview crawlers that
-# don't execute JS (WhatsApp's own crawler notably doesn't) — they only
-# ever see raw index.html, which has one fixed og:image for the whole site.
-# This regex + the crawler check below intercept exactly that one route
-# shape for known crawler User-Agents and hand back real per-product HTML
+# Two shapes both point at an individual shareable product page:
+# /sitio/{slug}/producto/{product_id} (business published a landing page) and
+# /p/{advertiser_id}/{product_id} (works regardless — see public_site.py's
+# product_router docstring: WhatsApp adoption and landing-page adoption
+# don't overlap reliably enough to make either a hard dependency of the
+# other). iaradio.online is a 100%-client-rendered SPA (no SSR), so the
+# dynamic <meta property="og:*"> tags ProductDetailPage sets via
+# react-helmet-async are invisible to link-preview crawlers that don't
+# execute JS (WhatsApp's own crawler notably doesn't) — they only ever see
+# raw index.html, which has one fixed og:image for the whole site. These
+# regexes + the crawler check below intercept exactly those two route
+# shapes for known crawler User-Agents and hand back real per-product HTML
 # instead, so pasting a product link into WhatsApp shows that product's
 # actual photo/name, not the generic site preview. Real browsers (and any
 # UA not in the crawler list) fall through to the normal SPA unchanged.
 _PRODUCT_PAGE_RE = re.compile(r"^sitio/([^/]+)/producto/([0-9a-fA-F-]{36})$")
+_PRODUCT_PAGE_BY_ID_RE = re.compile(r"^p/([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})$")
 _CRAWLER_UA_RE = re.compile(
     r"facebookexternalhit|WhatsApp|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot",
     re.IGNORECASE,
 )
 
 
-async def _render_product_og_html(slug: str, product_id: str, base_url: str) -> str | None:
+async def _render_product_og_html(
+    product_id: str, base_url: str, *, slug: str | None = None, advertiser_id: str | None = None,
+) -> str | None:
+    """Exactly one of slug/advertiser_id must be given — whichever route
+    shape matched in serve_spa below."""
     from sqlalchemy import select
 
     from app.database import AsyncSessionLocal
@@ -320,7 +330,10 @@ async def _render_product_og_html(slug: str, product_id: str, base_url: str) -> 
     from app.models.user import User
 
     async with AsyncSessionLocal() as db:
-        user_result = await db.execute(select(User).where(User.slug == slug.lower()))
+        if slug is not None:
+            user_result = await db.execute(select(User).where(User.slug == slug.lower()))
+        else:
+            user_result = await db.execute(select(User).where(User.id == uuid.UUID(advertiser_id)))
         user = user_result.scalar_one_or_none()
         if not user:
             return None
@@ -338,7 +351,8 @@ async def _render_product_og_html(slug: str, product_id: str, base_url: str) -> 
     title = html.escape(f"{product.name} — {user.business_name or 'IaRadio'}")
     description = html.escape(product.description or f"{product.name} en {user.business_name or ''}".strip())
     image = html.escape(product.photo_url) if product.photo_url else f"{base_url}/og-image.png"
-    page_url = html.escape(f"{base_url}/sitio/{slug}/producto/{product_id}")
+    path = f"sitio/{slug}/producto/{product_id}" if slug is not None else f"p/{advertiser_id}/{product_id}"
+    page_url = html.escape(f"{base_url}/{path}")
 
     return f"""<!doctype html>
 <html lang="es">
@@ -362,11 +376,20 @@ if _SPA_DIR.is_dir():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str, request: Request):
+        is_crawler = _CRAWLER_UA_RE.search(request.headers.get("user-agent", ""))
         product_match = _PRODUCT_PAGE_RE.match(full_path)
-        if product_match and _CRAWLER_UA_RE.search(request.headers.get("user-agent", "")):
-            og_html = await _render_product_og_html(
-                product_match.group(1), product_match.group(2), str(request.base_url).rstrip("/")
-            )
+        product_by_id_match = _PRODUCT_PAGE_BY_ID_RE.match(full_path) if not product_match else None
+
+        if (product_match or product_by_id_match) and is_crawler:
+            base_url = str(request.base_url).rstrip("/")
+            if product_match:
+                og_html = await _render_product_og_html(
+                    product_match.group(2), base_url, slug=product_match.group(1),
+                )
+            else:
+                og_html = await _render_product_og_html(
+                    product_by_id_match.group(2), base_url, advertiser_id=product_by_id_match.group(1),
+                )
             if og_html:
                 return HTMLResponse(og_html)
 

@@ -10,6 +10,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.product import Product
 from app.models.user import User
 from app.services.claude_service import detect_catalog_intent
@@ -33,7 +34,13 @@ def _format_price(price) -> str:
     return f"${price:,.2f}" if price is not None else "Cotizar"
 
 
-def format_catalog_text(products: list[Product]) -> str:
+def format_catalog_text(products: list[Product], advertiser_id) -> str:
+    """Each line links to that product's individual shareable page (with
+    photo) — keyed by advertiser_id (not slug), so the link works whether
+    or not this advertiser ever published a landing page (see
+    public_site.py's product_router docstring). Built 2026-08-13: before
+    this, the WhatsApp catalog reply was text-only and never showed photos
+    even when the advertiser had uploaded one for every product."""
     lines = ["📋 *Nuestro catálogo:*\n"]
     current_category: str | None = "__unset__"
     for p in products:
@@ -42,7 +49,8 @@ def format_catalog_text(products: list[Product]) -> str:
             if category:
                 lines.append(f"\n*{category}*")
             current_category = category
-        lines.append(f"• {p.name} — {_format_price(p.price)}")
+        link = f"{settings.BASE_URL}/p/{advertiser_id}/{p.id}"
+        lines.append(f"• {p.name} — {_format_price(p.price)}\n  {link}")
     return "\n".join(lines)
 
 
@@ -54,7 +62,7 @@ async def handle_catalog_query(db: AsyncSession, advertiser: User, message: str)
     products = await get_active_products(db, advertiser.id)
     if not products:
         return NO_CATALOG_REPLY
-    return format_catalog_text(products)
+    return format_catalog_text(products, advertiser.id)
 
 
 def _significant_words(name: str) -> list[str]:

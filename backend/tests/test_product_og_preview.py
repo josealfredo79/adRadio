@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import delete
 
 from app.database import AsyncSessionLocal, engine
-from app.main import _CRAWLER_UA_RE, _PRODUCT_PAGE_RE, _render_product_og_html
+from app.main import _CRAWLER_UA_RE, _PRODUCT_PAGE_BY_ID_RE, _PRODUCT_PAGE_RE, _render_product_og_html
 from app.models.product import Product
 from app.models.user import User
 
@@ -59,6 +59,21 @@ class TestProductPageRegex:
         assert _PRODUCT_PAGE_RE.match(path) is None
 
 
+class TestProductPageByIdRegex:
+    def test_matches_real_shape(self):
+        path = "p/12345678-1234-1234-1234-123456789012/87654321-4321-4321-4321-210987654321"
+        assert _PRODUCT_PAGE_BY_ID_RE.match(path) is not None
+
+    @pytest.mark.parametrize("path", [
+        "p/not-a-uuid/87654321-4321-4321-4321-210987654321",
+        "p/12345678-1234-1234-1234-123456789012",
+        "sitio/tacos-el-primo/producto/12345678-1234-1234-1234-123456789012",
+        "",
+    ])
+    def test_does_not_match_other_shapes(self, path):
+        assert _PRODUCT_PAGE_BY_ID_RE.match(path) is None
+
+
 class TestCrawlerUserAgentRegex:
     @pytest.mark.parametrize("ua", [
         "facebookexternalhit/1.1",
@@ -78,11 +93,13 @@ class TestCrawlerUserAgentRegex:
 
 
 class TestRenderProductOgHtml:
+    """slug-based lookup — the /sitio/{slug}/producto/{id} route shape."""
+
     @pytest.mark.asyncio
     async def test_real_product_renders_name_and_image(self):
         user_id, product_id = await _seed_user_and_product(photo_url="https://x/taco.jpg")
         try:
-            out = await _render_product_og_html("tacos-og", str(product_id), "https://www.iaradio.online")
+            out = await _render_product_og_html(str(product_id), "https://www.iaradio.online", slug="tacos-og")
             assert out is not None
             assert "Taco al pastor" in out
             assert "https://x/taco.jpg" in out
@@ -94,7 +111,7 @@ class TestRenderProductOgHtml:
     async def test_missing_photo_falls_back_to_site_og_image(self):
         user_id, product_id = await _seed_user_and_product(photo_url=None)
         try:
-            out = await _render_product_og_html("tacos-og", str(product_id), "https://www.iaradio.online")
+            out = await _render_product_og_html(str(product_id), "https://www.iaradio.online", slug="tacos-og")
             assert "https://www.iaradio.online/og-image.png" in out
         finally:
             await _cleanup([user_id])
@@ -103,7 +120,7 @@ class TestRenderProductOgHtml:
     async def test_inactive_product_returns_none(self):
         user_id, product_id = await _seed_user_and_product(active=False)
         try:
-            out = await _render_product_og_html("tacos-og", str(product_id), "https://www.iaradio.online")
+            out = await _render_product_og_html(str(product_id), "https://www.iaradio.online", slug="tacos-og")
             assert out is None
         finally:
             await _cleanup([user_id])
@@ -111,7 +128,8 @@ class TestRenderProductOgHtml:
     @pytest.mark.asyncio
     async def test_unknown_slug_returns_none(self):
         await engine.dispose()
-        assert await _render_product_og_html("no-existe", str(uuid.uuid4()), "https://www.iaradio.online") is None
+        out = await _render_product_og_html(str(uuid.uuid4()), "https://www.iaradio.online", slug="no-existe")
+        assert out is None
         await engine.dispose()
 
     @pytest.mark.asyncio
@@ -120,8 +138,41 @@ class TestRenderProductOgHtml:
         of the meta tag attributes (basic XSS/markup-injection guard)."""
         user_id, product_id = await _seed_user_and_product(name='Taco <script>alert(1)</script>"')
         try:
-            out = await _render_product_og_html("tacos-og", str(product_id), "https://www.iaradio.online")
+            out = await _render_product_og_html(str(product_id), "https://www.iaradio.online", slug="tacos-og")
             assert "<script>" not in out
             assert "&lt;script&gt;" in out
         finally:
             await _cleanup([user_id])
+
+
+class TestRenderProductOgHtmlByAdvertiserId:
+    """advertiser_id-based lookup — the /p/{advertiser_id}/{id} route shape,
+    which works even when the advertiser never published a landing page
+    (slug is None) — built specifically to not depend on slug adoption."""
+
+    @pytest.mark.asyncio
+    async def test_real_product_renders_even_without_a_slug(self):
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x", business_name="Sin Landing")
+            db.add(user)
+            await db.flush()
+            product = Product(advertiser_id=user.id, name="Corte de cabello", price=150, active=True, photo_url="https://x/corte.jpg")
+            db.add(product)
+            await db.commit()
+            user_id, product_id = user.id, product.id
+        try:
+            out = await _render_product_og_html(str(product_id), "https://www.iaradio.online", advertiser_id=str(user_id))
+            assert out is not None
+            assert "Corte de cabello" in out
+            assert "https://x/corte.jpg" in out
+            assert f"p/{user_id}/{product_id}" in out
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_unknown_advertiser_id_returns_none(self):
+        await engine.dispose()
+        out = await _render_product_og_html(str(uuid.uuid4()), "https://www.iaradio.online", advertiser_id=str(uuid.uuid4()))
+        assert out is None
+        await engine.dispose()

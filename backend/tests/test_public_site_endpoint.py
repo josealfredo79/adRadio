@@ -8,7 +8,12 @@ from fastapi import HTTPException
 from sqlalchemy import delete, select
 from starlette.requests import Request
 
-from app.api.v1.public_site import get_public_site, get_public_site_product, get_public_site_products
+from app.api.v1.public_site import (
+    get_public_product_by_advertiser,
+    get_public_site,
+    get_public_site_product,
+    get_public_site_products,
+)
 from app.database import AsyncSessionLocal, engine
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -283,3 +288,63 @@ class TestGetPublicSiteProduct:
             assert out["sales_count"] == 0
         finally:
             await _cleanup([user_id])
+
+
+class TestGetPublicProductByAdvertiser:
+    """GET /api/v1/public/product/{advertiser_id}/{product_id} — same
+    product detail, keyed by advertiser_id instead of slug so it works for
+    advertisers who never published a landing page. Built 2026-08-13 to
+    back the WhatsApp catalog reply's per-product link."""
+
+    @pytest.mark.asyncio
+    async def test_unknown_advertiser_id_returns_404(self):
+        async with AsyncSessionLocal() as db:
+            with pytest.raises(HTTPException) as exc_info:
+                await get_public_product_by_advertiser(
+                    request=_request(), advertiser_id=uuid.uuid4(), product_id=uuid.uuid4(), db=db,
+                )
+            assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_works_without_a_published_slug(self):
+        """The whole point of this endpoint — the advertiser has NO slug set
+        at all, and it still returns the product correctly."""
+        user_id = await _seed_user(business_name="Sin Landing")  # no slug=
+        try:
+            async with AsyncSessionLocal() as db:
+                product = Product(
+                    advertiser_id=user_id, name="Corte de cabello", price=150, active=True,
+                )
+                db.add(product)
+                await db.commit()
+                product_id = product.id
+
+            async with AsyncSessionLocal() as db:
+                out = await get_public_product_by_advertiser(
+                    request=_request(), advertiser_id=user_id, product_id=product_id, db=db,
+                )
+            assert out["name"] == "Corte de cabello"
+            assert out["business_name"] == "Sin Landing"
+            assert out["slug"] == ""  # no landing page — frontend must handle this gracefully
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_never_leaks_another_advertisers_product(self):
+        user_id = await _seed_user(business_name="A")
+        other_id = await _seed_user(business_name="B")
+        try:
+            async with AsyncSessionLocal() as db:
+                product = Product(advertiser_id=other_id, name="Ajeno", price=99, active=True)
+                db.add(product)
+                await db.commit()
+                product_id = product.id
+
+            async with AsyncSessionLocal() as db:
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_public_product_by_advertiser(
+                        request=_request(), advertiser_id=user_id, product_id=product_id, db=db,
+                    )
+                assert exc_info.value.status_code == 404
+        finally:
+            await _cleanup([user_id, other_id])

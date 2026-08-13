@@ -21,21 +21,29 @@ const formatPrice = (price: string | null) =>
   price === null ? 'Cotizar' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(price))
 
 export default function ProductDetailPage() {
-  const { slug, productId } = useParams<{ slug: string; productId: string }>()
+  // Two route shapes point here: /sitio/:slug/producto/:productId (business
+  // has published a landing page) and /p/:advertiserId/:productId (works
+  // for every advertiser regardless — see public_site.py's product_router
+  // docstring for why the slug can't be a hard dependency here).
+  const { slug, advertiserId, productId } = useParams<{ slug?: string; advertiserId?: string; productId: string }>()
   const [notFound, setNotFound] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  const apiPath = slug
+    ? `/public/site/${slug}/products/${productId}`
+    : `/public/product/${advertiserId}/${productId}`
+
   const { data: product, isLoading } = useQuery<ProductDetail>({
-    queryKey: ['public-site-product', slug, productId],
+    queryKey: ['public-product', slug ?? advertiserId, productId],
     queryFn: () =>
       api
-        .get(`/public/site/${slug}/products/${productId}`)
+        .get(apiPath)
         .then((r) => r.data)
         .catch((err) => {
           if (err?.response?.status === 404) setNotFound(true)
           throw err
         }),
-    enabled: !!slug && !!productId,
+    enabled: !!(slug || advertiserId) && !!productId,
     retry: false,
   })
 
@@ -47,14 +55,18 @@ export default function ProductDetailPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-[#06060f] text-white">
         <p className="text-2xl font-bold">Producto no encontrado</p>
-        <Link to={`/sitio/${slug}`} className="text-white/60 underline">
-          Volver al catálogo
-        </Link>
+        {slug && (
+          <Link to={`/sitio/${slug}`} className="text-white/60 underline">
+            Volver al catálogo
+          </Link>
+        )}
       </div>
     )
   }
 
-  const pageUrl = `${window.location.origin}/sitio/${slug}/producto/${product.id}`
+  const pageUrl = slug
+    ? `${window.location.origin}/sitio/${slug}/producto/${product.id}`
+    : `${window.location.origin}/p/${advertiserId}/${product.id}`
   const waMessage = encodeURIComponent(`Hola, me interesa: ${product.name}`)
 
   const handleShare = async () => {
@@ -82,10 +94,12 @@ export default function ProductDetailPage() {
       />
       <div className="min-h-screen bg-[#06060f] text-white font-sans">
         <div className="max-w-2xl mx-auto px-6 py-8">
-          <Link to={`/sitio/${slug}`} className="inline-flex items-center gap-1.5 text-white/60 hover:text-white text-sm mb-6">
-            <ArrowLeft size={16} />
-            Volver a {product.business_name}
-          </Link>
+          {product.slug && (
+            <Link to={`/sitio/${product.slug}`} className="inline-flex items-center gap-1.5 text-white/60 hover:text-white text-sm mb-6">
+              <ArrowLeft size={16} />
+              Volver a {product.business_name}
+            </Link>
+          )}
 
           <div className="rounded-2xl overflow-hidden bg-white/5 border border-white/10">
             <div className="aspect-square bg-white/5 flex items-center justify-center overflow-hidden">

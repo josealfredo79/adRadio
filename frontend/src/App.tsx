@@ -68,6 +68,7 @@ export default function App() {
             <Route path="/customer-stories" element={<CustomerStoriesPage />} />
             <Route path="/sitio/:slug" element={<PublicSitePage />} />
             <Route path="/sitio/:slug/producto/:productId" element={<ProductDetailPage />} />
+            <Route path="/p/:advertiserId/:productId" element={<ProductDetailPage />} />
 
             {/* Public */}
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />

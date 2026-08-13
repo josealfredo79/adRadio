@@ -81,21 +81,9 @@ async def get_public_site_products(request: Request, slug: str, db: AsyncSession
     return [_product_out(p, sales_counts.get(p.id, 0)) for p in products]
 
 
-@router.get("/{slug}/products/{product_id}")
-@limiter.limit("30/minute")
-async def get_public_site_product(
-    request: Request, slug: str, product_id: uuid.UUID, db: AsyncSession = Depends(get_db)
-) -> dict:
-    """Single-product detail — powers the shareable individual product page
-    (/sitio/{slug}/producto/{id}) and the crawler-facing OG preview route in
-    main.py's serve_spa. Same public-safe shape as the list endpoint above,
-    plus the business name/slug so the detail page doesn't need a second
-    round-trip just to show "de {business_name}"."""
-    result = await db.execute(select(User).where(User.slug == slug.lower()))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="Página no encontrada")
-
+async def _get_product_detail(db: AsyncSession, user: User, product_id: uuid.UUID, slug_fallback: str) -> dict:
+    """Shared by both product-detail routes below (slug-based and
+    advertiser_id-based) — same public-safe shape, same 404 behavior."""
     product_result = await db.execute(
         select(Product).where(
             Product.id == product_id,
@@ -115,5 +103,46 @@ async def get_public_site_product(
 
     out = _product_out(product, sales_count or 0)
     out["business_name"] = user.business_name or ""
-    out["slug"] = user.slug or slug
+    out["slug"] = user.slug or slug_fallback
     return out
+
+
+@router.get("/{slug}/products/{product_id}")
+@limiter.limit("30/minute")
+async def get_public_site_product(
+    request: Request, slug: str, product_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Single-product detail — powers the shareable individual product page
+    (/sitio/{slug}/producto/{id}) and the crawler-facing OG preview route in
+    main.py's serve_spa. Same public-safe shape as the list endpoint above,
+    plus the business name/slug so the detail page doesn't need a second
+    round-trip just to show "de {business_name}"."""
+    result = await db.execute(select(User).where(User.slug == slug.lower()))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Página no encontrada")
+
+    return await _get_product_detail(db, user, product_id, slug)
+
+
+product_router = APIRouter(prefix="/public/product", tags=["public-product"])
+
+
+@product_router.get("/{advertiser_id}/{product_id}")
+@limiter.limit("30/minute")
+async def get_public_product_by_advertiser(
+    request: Request, advertiser_id: uuid.UUID, product_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Same single-product detail as get_public_site_product above, but
+    keyed by advertiser_id (always exists) instead of slug (opt-in, many
+    advertisers never publish a landing page). Built 2026-08-13 so a
+    product-with-photo link sent via the WhatsApp catalog reply works for
+    every advertiser regardless of whether they've set up /sitio/{slug} —
+    adoption of the two features (WhatsApp vs. landing page) doesn't overlap
+    reliably enough to make either a hard dependency of the other."""
+    result = await db.execute(select(User).where(User.id == advertiser_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Negocio no encontrado")
+
+    return await _get_product_detail(db, user, product_id, "")

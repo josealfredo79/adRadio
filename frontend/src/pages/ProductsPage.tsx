@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
-import { Package, Plus, Trash2, Pencil, ImageUp, ImageOff } from 'lucide-react'
+import { Package, Plus, Trash2, Pencil, ImageUp, ImageOff, Link2, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import SEO from '@/components/SEO'
 import { useToast } from '@/contexts/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Product {
   id: string
@@ -27,11 +28,21 @@ const formatPrice = (price: string | null) =>
 export default function ProductsPage() {
   const qc = useQueryClient()
   const { toast } = useToast()
+  const { user } = useAuth()
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const photoInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  const copyProductLink = async (productId: string) => {
+    if (!user) return
+    const url = `${window.location.origin}/p/${user.id}/${productId}`
+    await navigator.clipboard.writeText(url)
+    setCopiedId(productId)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
 
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: ['products'],
@@ -242,6 +253,13 @@ export default function ProductsPage() {
                       if (file) handlePhotoUpload(p.id, file)
                     }}
                   />
+                  <button
+                    onClick={() => copyProductLink(p.id)}
+                    className="rounded-lg p-2 text-muted-foreground hover:bg-muted transition-colors"
+                    title="Copiar link para compartir"
+                  >
+                    {copiedId === p.id ? <Check size={16} className="text-green-500" /> : <Link2 size={16} />}
+                  </button>
                   <button
                     onClick={() => photoInputRefs.current[p.id]?.click()}
                     disabled={uploadingPhotoFor === p.id}

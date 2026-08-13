@@ -19,13 +19,29 @@ const mockProduct = {
 
 function renderPage(product: unknown) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } })
-  queryClient.setQueryData(['public-site-product', 'tacos-el-primo', 'p1'], product)
+  queryClient.setQueryData(['public-product', 'tacos-el-primo', 'p1'], product)
   return render(
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={['/sitio/tacos-el-primo/producto/p1']}>
           <Routes>
             <Route path="/sitio/:slug/producto/:productId" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </HelmetProvider>
+  )
+}
+
+function renderPageWithoutSlug(product: unknown) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } })
+  queryClient.setQueryData(['public-product', 'adv-1', 'p1'], product)
+  return render(
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/p/adv-1/p1']}>
+          <Routes>
+            <Route path="/p/:advertiserId/:productId" element={<ProductDetailPage />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>
@@ -50,5 +66,12 @@ describe('ProductDetailPage', () => {
   it('shows "Cotizar" when price is null', () => {
     renderPage({ ...mockProduct, price: null })
     expect(screen.getByText('Cotizar')).toBeDefined()
+  })
+
+  it('renders correctly via /p/:advertiserId/:productId when the advertiser has no published landing page', () => {
+    renderPageWithoutSlug({ ...mockProduct, slug: '' })
+    expect(screen.getByText('Taco al pastor')).toBeDefined()
+    // no slug -> no "volver a {business_name}" link to a landing page that doesn't exist
+    expect(screen.queryByText(/Volver a/)).toBeNull()
   })
 })
