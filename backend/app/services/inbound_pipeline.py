@@ -30,6 +30,7 @@ from app.services.catalog_service import get_active_products, handle_catalog_que
 from app.services.claude_service import (
     detect_order_intent,
     detect_plan_purchase_intent,
+    format_time_gap_note,
     personalize_message,
 )
 from app.services.coupon_service import is_expired, is_redeem_intent
@@ -862,6 +863,9 @@ async def process_inbound_message(
 
     # Build conversation history
     history = conv.messages[-40:] if conv.messages else []
+    # Captured before this turn's append overwrites conv.last_activity below —
+    # this is genuinely "when did this contact last write", not "now".
+    time_gap_note = format_time_gap_note(conv.last_activity) if conv.messages else ""
 
     rag_query = body_text
     if audio_transcription:
@@ -876,6 +880,7 @@ async def process_inbound_message(
             business_name=advertiser.business_name or "el negocio",
             bot_name=advertiser.bot_name or "Asistente",
             bot_personality=advertiser.bot_personality or "amigable y profesional",
+            time_gap_note=time_gap_note,
         )
     except Exception as e:
         logger.error("[PIPELINE] RAG/Claude error: %s", e, exc_info=True)

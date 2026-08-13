@@ -31,6 +31,7 @@ async def answer_with_rag(
     business_name: str = "el negocio",
     bot_name: str = "Asistente",
     bot_personality: str = "amigable y profesional",
+    time_gap_note: str = "",
 ) -> str:
     """
     1. Generate embedding for the user query.
@@ -82,6 +83,7 @@ async def answer_with_rag(
             bot_name=bot_name,
             bot_personality=bot_personality,
             bot_instructions=bot_instructions,
+            time_gap_note=time_gap_note,
         )
 
     # Pure fallback — no instructions, no context

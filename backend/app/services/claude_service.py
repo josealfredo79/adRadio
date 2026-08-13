@@ -4,8 +4,40 @@ Generación de contenido publicitario — llama al proveedor LLM configurado
 """
 import logging
 import re
+from datetime import datetime, timedelta, timezone
 
 from app.services.llm_client import chat_completion
+
+
+def format_time_gap_note(last_activity: datetime | None) -> str:
+    """Returns a system-prompt note when there's a meaningful gap since the
+    contact's last message, so the bot doesn't treat a months-old exchange as
+    if it just happened. conversation_history strips each message's timestamp
+    entirely before it reaches the model (Claude's API rejects that field —
+    see generate_bot_response below), so this is the only time signal the
+    model gets."""
+    if not last_activity:
+        return ""
+    now = datetime.now(timezone.utc)
+    if last_activity.tzinfo is None:
+        last_activity = last_activity.replace(tzinfo=timezone.utc)
+    gap = now - last_activity
+    if gap < timedelta(hours=24):
+        return ""
+    days = gap.days
+    if days < 30:
+        return (
+            f"\n\nNOTA IMPORTANTE: Han pasado {days} día(s) desde el último mensaje de este "
+            "cliente. No asumas que la conversación anterior sigue \"fresca\" — si es relevante, "
+            "confirma detalles en vez de darlos por hecho."
+        )
+    months = days // 30
+    return (
+        f"\n\nNOTA IMPORTANTE: Han pasado aproximadamente {months} mes(es) desde el último "
+        "mensaje de este cliente. Trata esto como una posible reactivación — saluda de nuevo si "
+        "es apropiado y no asumas que algo mencionado hace tiempo (citas, pedidos, promociones) "
+        "sigue vigente."
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +88,7 @@ async def generate_bot_response(
     bot_name: str = "Asistente",
     bot_personality: str = "amigable y profesional",
     bot_instructions: str | None = None,
+    time_gap_note: str = "",
 ) -> str:
     """Generate a RAG-based bot response."""
     custom_block = ""
@@ -67,6 +100,7 @@ async def generate_bot_response(
 
     system = f"""Eres {bot_name}, el asistente virtual de {business_name}.
 Tu personalidad es: {bot_personality}.
+{time_gap_note}
 
 {custom_block}CONTEXTO DEL NEGOCIO (tu única fuente de verdad):
 {advertiser_context}
