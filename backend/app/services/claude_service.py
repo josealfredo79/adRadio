@@ -306,7 +306,7 @@ _APPOINTMENT_KEYWORDS: frozenset[str] = frozenset([
     "sacar cita", "cita para", "hacer cita", "dar cita", "programar cita",
     "solicitar cita", "reservar cita", "apartar cita", "cita disponible",
     "horario disponible", "tienen citas", "necesito una cita", "quiero agendar",
-    "pedir cita", "pedir una cita",
+    "pedir cita", "pedir una cita", "una cita",
 ])
 
 

@@ -13,6 +13,22 @@ from app.services.claude_service import (
 )
 
 
+class TestAppointmentIntentMatches:
+    """"una cita" a secas (sin "quiero"/"agendar"/etc.) no hacía match antes
+    — un caso real encontrado en producción 2026-08-12: el usuario escribió
+    solo "Una cita" y el mensaje cayó al chat genérico en vez del flujo real
+    de citas, que alucinó una confirmación falsa sin crear ningún Appointment."""
+
+    @pytest.mark.parametrize("text", [
+        "una cita",
+        "Una cita",
+        "quiero una cita",
+        "necesito una cita para mañana",
+    ])
+    def test_appointment_phrases_match(self, text):
+        assert detect_appointment_intent(text) is True
+
+
 class TestCatalogIntentMatches:
     @pytest.mark.parametrize("text", [
         "¿qué venden?",
