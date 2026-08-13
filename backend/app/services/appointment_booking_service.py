@@ -135,18 +135,21 @@ async def _save_state(redis, key: str, state: dict) -> None:
 
 
 async def handle_appointment_booking(
-    db: AsyncSession, advertiser: User, contact: Contact | None, message: str, redis
+    db: AsyncSession, advertiser: User, contact: Contact | None, message: str, redis,
+    channel: str = "whatsapp",
 ) -> str | None:
     """Returns a reply to send instead of the RAG bot / order flow, or None if
     this message isn't appointment-related and the caller should fall through.
     *redis* is the caller's own client (each channel already resolves one) —
     passed in rather than fetched here so both channels share one connection
-    and the booking state is trivially mockable in tests."""
+    and the booking state is trivially mockable in tests. *channel* is
+    "whatsapp" or "widget" — only used to label the owner notification
+    correctly, since this flow is shared between both."""
     key = f"{BOOKING_REDIS_PREFIX}{advertiser.id}:{contact.id}" if contact else None
 
     state = await _load_state(redis, key) if key else None
     if state:
-        return await _advance(db, redis, key, advertiser, contact, state, message)
+        return await _advance(db, redis, key, advertiser, contact, state, message, channel)
 
     if not detect_appointment_intent(message):
         return None
@@ -163,7 +166,8 @@ async def handle_appointment_booking(
 
 
 async def _advance(
-    db: AsyncSession, redis, key: str, advertiser: User, contact: Contact, state: dict, message: str
+    db: AsyncSession, redis, key: str, advertiser: User, contact: Contact, state: dict, message: str,
+    channel: str = "whatsapp",
 ) -> str:
     step = state.get("step")
 
@@ -238,7 +242,7 @@ async def _advance(
     if redis:
         await redis.delete(key)
 
-    await _notify_owner(advertiser, appointment)
+    await _notify_owner(advertiser, appointment, channel)
 
     fecha = format_spanish_date(chosen_slot)
     hora = _format_slot_time(chosen_slot)
@@ -250,7 +254,7 @@ async def _advance(
     )
 
 
-async def _notify_owner(advertiser: User, appointment: Appointment) -> None:
+async def _notify_owner(advertiser: User, appointment: Appointment, channel: str = "whatsapp") -> None:
     from app.core.email import send_new_appointment_email
 
     fecha = format_spanish_date(appointment.scheduled_at.astimezone(TZ))
@@ -272,8 +276,9 @@ async def _notify_owner(advertiser: User, appointment: Appointment) -> None:
         from app.services.meta_service import send_whatsapp
 
         owner_number = advertiser.whatsapp_number or advertiser.phone
+        origen = "desde tu página web" if channel == "widget" else "desde WhatsApp"
         wa_notify = (
-            f"📅 *NUEVA CITA* (desde tu página web)\n"
+            f"📅 *NUEVA CITA* ({origen})\n"
             f"────────────────\n"
             f"📌 {appointment.service}\n"
             f"👤 Cliente: {appointment.customer_name}\n"

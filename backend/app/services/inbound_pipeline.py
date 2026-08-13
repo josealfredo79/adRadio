@@ -519,7 +519,7 @@ async def process_inbound_message(
     from app.core.redis import get_redis_optional
 
     _appt_redis = await get_redis_optional()
-    appointment_reply = await handle_appointment_booking(db, advertiser, contact, body_text, _appt_redis)
+    appointment_reply = await handle_appointment_booking(db, advertiser, contact, body_text, _appt_redis, channel="whatsapp")
     if appointment_reply is not None:
         updated_msgs = conv.messages + [
             {"role": "user", "content": body_text},

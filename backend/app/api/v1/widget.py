@@ -120,7 +120,7 @@ async def widget_chat(
     # order keyword "pedir" on its own.
     channel_reply = await handle_catalog_query(db, user, message)
     if channel_reply is None:
-        channel_reply = await handle_appointment_booking(db, user, contact, message, redis)
+        channel_reply = await handle_appointment_booking(db, user, contact, message, redis, channel="widget")
     if channel_reply is None:
         channel_reply = await handle_widget_order(db, user, contact, message)
 

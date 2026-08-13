@@ -290,3 +290,35 @@ class TestHandleAppointmentBooking:
                 assert mock_wa.call_args.args[0] == "+525500001111"
         finally:
             await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_owner_notification_labels_the_real_channel(self, fake_redis):
+        """Found in production 2026-08-12: the notification always said "(desde
+        tu página web)" even for a booking made via WhatsApp — misleading the
+        owner about where the customer actually came from."""
+        user_id = await _seed_user(
+            whatsapp_number="+525500001111",
+            business_hours={
+                "mon": ["09:00", "11:00"], "tue": ["09:00", "11:00"], "wed": ["09:00", "11:00"],
+                "thu": ["09:00", "11:00"], "fri": ["09:00", "11:00"], "sat": ["09:00", "11:00"],
+                "sun": ["09:00", "11:00"],
+            },
+        )
+        contact_id = await _seed_contact(user_id)
+        try:
+            with patch("app.core.email.send_new_appointment_email", new_callable=AsyncMock), \
+                 patch("app.services.meta_service.send_whatsapp", new_callable=AsyncMock) as mock_wa:
+                mock_wa.return_value = ("wamid.x", None)
+                for msg in ["quiero agendar una cita", "mañana", "1", "Ana"]:
+                    async with AsyncSessionLocal() as db:
+                        user = await db.get(User, user_id)
+                        contact = await db.get(Contact, contact_id)
+                        await handle_appointment_booking(db, user, contact, msg, fake_redis, channel="whatsapp")
+
+                import asyncio
+                await asyncio.sleep(0.05)
+                body = mock_wa.call_args.args[1]
+                assert "desde WhatsApp" in body
+                assert "página web" not in body
+        finally:
+            await _cleanup([user_id])
