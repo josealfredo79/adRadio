@@ -1,7 +1,9 @@
 """
 IaRadio — FastAPI application entry point.
 """
+import html
 import logging
+import re
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -9,7 +11,7 @@ from pathlib import Path
 import sentry_sdk
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -291,11 +293,83 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Serve built React SPA (only present in production / Railway build)
 _SPA_DIR = Path(__file__).parent / "static" / "dist"
+
+# Matches /sitio/{slug}/producto/{product_id} — the shareable individual
+# product page. iaradio.online is a 100%-client-rendered SPA (no SSR), so
+# the dynamic <meta property="og:*"> tags PublicSitePage/ProductDetailPage
+# set via react-helmet-async are invisible to link-preview crawlers that
+# don't execute JS (WhatsApp's own crawler notably doesn't) — they only
+# ever see raw index.html, which has one fixed og:image for the whole site.
+# This regex + the crawler check below intercept exactly that one route
+# shape for known crawler User-Agents and hand back real per-product HTML
+# instead, so pasting a product link into WhatsApp shows that product's
+# actual photo/name, not the generic site preview. Real browsers (and any
+# UA not in the crawler list) fall through to the normal SPA unchanged.
+_PRODUCT_PAGE_RE = re.compile(r"^sitio/([^/]+)/producto/([0-9a-fA-F-]{36})$")
+_CRAWLER_UA_RE = re.compile(
+    r"facebookexternalhit|WhatsApp|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot",
+    re.IGNORECASE,
+)
+
+
+async def _render_product_og_html(slug: str, product_id: str, base_url: str) -> str | None:
+    from sqlalchemy import select
+
+    from app.database import AsyncSessionLocal
+    from app.models.product import Product
+    from app.models.user import User
+
+    async with AsyncSessionLocal() as db:
+        user_result = await db.execute(select(User).where(User.slug == slug.lower()))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            return None
+        product_result = await db.execute(
+            select(Product).where(
+                Product.id == uuid.UUID(product_id),
+                Product.advertiser_id == user.id,
+                Product.active.is_(True),
+            )
+        )
+        product = product_result.scalar_one_or_none()
+        if not product:
+            return None
+
+    title = html.escape(f"{product.name} — {user.business_name or 'IaRadio'}")
+    description = html.escape(product.description or f"{product.name} en {user.business_name or ''}".strip())
+    image = html.escape(product.photo_url) if product.photo_url else f"{base_url}/og-image.png"
+    page_url = html.escape(f"{base_url}/sitio/{slug}/producto/{product_id}")
+
+    return f"""<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>{title}</title>
+<meta property="og:type" content="product">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{description}">
+<meta property="og:image" content="{image}">
+<meta property="og:url" content="{page_url}">
+<meta name="twitter:card" content="summary_large_image">
+<meta http-equiv="refresh" content="0;url={page_url}">
+</head>
+<body>Redirigiendo…</body>
+</html>"""
+
+
 if _SPA_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(_SPA_DIR / "assets")), name="spa-assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str):
+    async def serve_spa(full_path: str, request: Request):
+        product_match = _PRODUCT_PAGE_RE.match(full_path)
+        if product_match and _CRAWLER_UA_RE.search(request.headers.get("user-agent", "")):
+            og_html = await _render_product_og_html(
+                product_match.group(1), product_match.group(2), str(request.base_url).rstrip("/")
+            )
+            if og_html:
+                return HTMLResponse(og_html)
+
         # Serve a real file if it exists (favicon, og-image, etc.)
         candidate = _SPA_DIR / full_path
         if candidate.is_file():

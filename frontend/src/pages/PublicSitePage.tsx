@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import SEO from '@/components/SEO'
@@ -29,9 +29,22 @@ interface PublicProduct {
 const formatPrice = (price: string | null) =>
   price === null ? 'Cotizar' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(price))
 
-function ProductCard({ product, categoryFallback, color }: { product: PublicProduct; categoryFallback: string; color: string }) {
+function ProductCard({
+  product,
+  categoryFallback,
+  color,
+  slug,
+}: {
+  product: PublicProduct
+  categoryFallback: string
+  color: string
+  slug: string
+}) {
   return (
-    <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden text-left">
+    <Link
+      to={`/sitio/${slug}/producto/${product.id}`}
+      className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden text-left block hover:border-white/25 transition-colors"
+    >
       <div className="h-36 bg-white/5 flex items-center justify-center overflow-hidden">
         {product.photo_url ? (
           <img src={product.photo_url} alt={product.name} className="h-full w-full object-cover" />
@@ -49,7 +62,7 @@ function ProductCard({ product, categoryFallback, color }: { product: PublicProd
         {product.category && <p className="text-xs text-white/50">{product.category}</p>}
         {product.description && <p className="text-sm text-white/70 line-clamp-2">{product.description}</p>}
       </div>
-    </div>
+    </Link>
   )
 }
 
@@ -186,7 +199,7 @@ export default function PublicSitePage() {
             <h2 className="text-xl font-bold text-center mb-6">🔥 Los favoritos de nuestros clientes</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {bestsellers.map((p) => (
-                <ProductCard key={p.id} product={p} categoryFallback={site.business_category} color={site.color} />
+                <ProductCard key={p.id} product={p} categoryFallback={site.business_category} color={site.color} slug={slug ?? ''} />
               ))}
             </div>
           </section>
@@ -197,7 +210,7 @@ export default function PublicSitePage() {
             <h2 className="text-xl font-bold text-center mb-6">Nuestro catálogo</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {products.map((p) => (
-                <ProductCard key={p.id} product={p} categoryFallback={site.business_category} color={site.color} />
+                <ProductCard key={p.id} product={p} categoryFallback={site.business_category} color={site.color} slug={slug ?? ''} />
               ))}
             </div>
           </section>

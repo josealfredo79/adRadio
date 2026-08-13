@@ -4,6 +4,7 @@ Serves only the same public-safe subset of fields as widget_preview
 (app/api/v1/widget.py) — no auth, embedded on the public internet.
 """
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
@@ -19,6 +20,18 @@ from app.models.user import User
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/public/site", tags=["public-site"])
+
+
+def _product_out(p: Product, sales_count: int) -> dict:
+    return {
+        "id": str(p.id),
+        "name": p.name,
+        "description": p.description or "",
+        "price": str(p.price) if p.price is not None else None,
+        "category": p.category or "",
+        "photo_url": p.photo_url or "",
+        "sales_count": sales_count,
+    }
 
 
 @router.get("/{slug}")
@@ -65,15 +78,42 @@ async def get_public_site_products(request: Request, slug: str, db: AsyncSession
     )
     sales_counts = dict(sales_result.all())
 
-    return [
-        {
-            "id": str(p.id),
-            "name": p.name,
-            "description": p.description or "",
-            "price": str(p.price) if p.price is not None else None,
-            "category": p.category or "",
-            "photo_url": p.photo_url or "",
-            "sales_count": sales_counts.get(p.id, 0),
-        }
-        for p in products
-    ]
+    return [_product_out(p, sales_counts.get(p.id, 0)) for p in products]
+
+
+@router.get("/{slug}/products/{product_id}")
+@limiter.limit("30/minute")
+async def get_public_site_product(
+    request: Request, slug: str, product_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Single-product detail — powers the shareable individual product page
+    (/sitio/{slug}/producto/{id}) and the crawler-facing OG preview route in
+    main.py's serve_spa. Same public-safe shape as the list endpoint above,
+    plus the business name/slug so the detail page doesn't need a second
+    round-trip just to show "de {business_name}"."""
+    result = await db.execute(select(User).where(User.slug == slug.lower()))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Página no encontrada")
+
+    product_result = await db.execute(
+        select(Product).where(
+            Product.id == product_id,
+            Product.advertiser_id == user.id,
+            Product.active.is_(True),
+        )
+    )
+    product = product_result.scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    sales_count = await db.scalar(
+        select(func.count(OrderItem.id))
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(OrderItem.product_id == product.id, Order.state == "confirmed")
+    )
+
+    out = _product_out(product, sales_count or 0)
+    out["business_name"] = user.business_name or ""
+    out["slug"] = user.slug or slug
+    return out

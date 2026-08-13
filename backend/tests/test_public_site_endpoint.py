@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, select
 from starlette.requests import Request
 
-from app.api.v1.public_site import get_public_site, get_public_site_products
+from app.api.v1.public_site import get_public_site, get_public_site_product, get_public_site_products
 from app.database import AsyncSessionLocal, engine
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -194,5 +194,92 @@ class TestGetPublicSiteProducts:
             async with AsyncSessionLocal() as db:
                 out = await get_public_site_products(request=_request(), slug="sin-ventas", db=db)
             assert out[0]["sales_count"] == 0
+        finally:
+            await _cleanup([user_id])
+
+
+class TestGetPublicSiteProduct:
+    """GET /api/v1/public/site/{slug}/products/{product_id} — the individual
+    shareable product page's data source, built 2026-08-13."""
+
+    @pytest.mark.asyncio
+    async def test_unknown_slug_returns_404(self):
+        async with AsyncSessionLocal() as db:
+            with pytest.raises(HTTPException) as exc_info:
+                await get_public_site_product(
+                    request=_request(), slug="no-existe", product_id=uuid.uuid4(), db=db,
+                )
+            assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_unknown_product_id_returns_404(self):
+        user_id = await _seed_user(business_name="Tacos", slug="sin-ese-producto")
+        try:
+            async with AsyncSessionLocal() as db:
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_public_site_product(
+                        request=_request(), slug="sin-ese-producto", product_id=uuid.uuid4(), db=db,
+                    )
+                assert exc_info.value.status_code == 404
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_inactive_product_returns_404(self):
+        user_id = await _seed_user(business_name="Tacos", slug="inactivo")
+        try:
+            async with AsyncSessionLocal() as db:
+                product = Product(advertiser_id=user_id, name="Descontinuado", price=10, active=False)
+                db.add(product)
+                await db.commit()
+                product_id = product.id
+
+            async with AsyncSessionLocal() as db:
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_public_site_product(request=_request(), slug="inactivo", product_id=product_id, db=db)
+                assert exc_info.value.status_code == 404
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_never_leaks_another_advertisers_product(self):
+        user_id = await _seed_user(business_name="A", slug="dueno-a")
+        other_id = await _seed_user(business_name="B", slug="dueno-b")
+        try:
+            async with AsyncSessionLocal() as db:
+                product = Product(advertiser_id=other_id, name="Ajeno", price=99, active=True)
+                db.add(product)
+                await db.commit()
+                product_id = product.id
+
+            async with AsyncSessionLocal() as db:
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_public_site_product(request=_request(), slug="dueno-a", product_id=product_id, db=db)
+                assert exc_info.value.status_code == 404
+        finally:
+            await _cleanup([user_id, other_id])
+
+    @pytest.mark.asyncio
+    async def test_returns_full_detail_with_business_name(self):
+        user_id = await _seed_user(business_name="Tacos El Primo", slug="tacos-detalle")
+        try:
+            async with AsyncSessionLocal() as db:
+                product = Product(
+                    advertiser_id=user_id, name="Taco al pastor", description="Con piña",
+                    price=25, category="Tacos", photo_url="https://x/taco.jpg", active=True,
+                )
+                db.add(product)
+                await db.commit()
+                product_id = product.id
+
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site_product(request=_request(), slug="tacos-detalle", product_id=product_id, db=db)
+            assert out["name"] == "Taco al pastor"
+            assert out["description"] == "Con piña"
+            assert out["price"] == "25.00"
+            assert out["photo_url"] == "https://x/taco.jpg"
+            assert out["business_name"] == "Tacos El Primo"
+            assert out["slug"] == "tacos-detalle"
+            assert out["sales_count"] == 0
         finally:
             await _cleanup([user_id])
