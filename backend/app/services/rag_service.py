@@ -65,7 +65,7 @@ async def answer_with_rag(
                 },
             )
             rows = result.fetchall()
-            context_parts = [row.chunk_text for row in rows if row.similarity > 0.5]
+            context_parts = [row.chunk_text for row in rows if row.similarity > 0.35]
             context = "\n\n".join(context_parts) if context_parts else ""
         except Exception as e:
             logger.warning("[RAG] Vector search failed: %s", e)
