@@ -14,19 +14,21 @@ const mockSite = {
   greeting: 'Hola, bienvenido',
   color: '#ff5500',
   tagline: '',
+  logo_url: '',
+  site_theme: 'medianoche',
 }
 
-function setupQueryClient(products: unknown[]) {
+function setupQueryClient(products: unknown[], siteOverrides: Partial<typeof mockSite> = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
   })
-  queryClient.setQueryData(['public-site', 'tacos-el-primo'], mockSite)
+  queryClient.setQueryData(['public-site', 'tacos-el-primo'], { ...mockSite, ...siteOverrides })
   queryClient.setQueryData(['public-site-products', 'tacos-el-primo'], products)
   return queryClient
 }
 
-function renderPage(products: unknown[]) {
-  const queryClient = setupQueryClient(products)
+function renderPage(products: unknown[], siteOverrides: Partial<typeof mockSite> = {}) {
+  const queryClient = setupQueryClient(products, siteOverrides)
   return render(
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
@@ -68,5 +70,27 @@ describe('PublicSitePage — bestsellers section', () => {
   it('does not show the bestsellers section when there are no products at all', () => {
     renderPage([])
     expect(screen.queryByText('🔥 Los favoritos de nuestros clientes')).toBeNull()
+  })
+})
+
+describe('PublicSitePage — logo and theme', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders unknown/unset site_theme without crashing, falling back to the default look', () => {
+    renderPage([], { site_theme: 'claro' })
+    expect(screen.getByText('Tacos El Primo')).toBeDefined()
+  })
+
+  it('renders the logo image instead of the category emoji when logo_url is set', () => {
+    renderPage([], { logo_url: 'https://cdn.example.com/logos/foo.jpg' })
+    const img = screen.getByAltText('Tacos El Primo') as HTMLImageElement
+    expect(img.src).toBe('https://cdn.example.com/logos/foo.jpg')
+  })
+
+  it('falls back to the category emoji when no logo_url is set', () => {
+    renderPage([])
+    expect(screen.queryByAltText('Tacos El Primo')).toBeNull()
   })
 })

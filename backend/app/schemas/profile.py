@@ -1,6 +1,8 @@
 from pydantic import BaseModel, field_validator
 import re
 
+SITE_THEME_KEYS = {"medianoche", "pizarra", "esmeralda", "claro", "crema"}
+
 
 class ProfileUpdate(BaseModel):
     business_name: str | None = None
@@ -18,6 +20,7 @@ class ProfileUpdate(BaseModel):
     widget_position: str | None = None
     slug: str | None = None
     landing_tagline: str | None = None
+    site_theme: str | None = None
 
     @field_validator("phone")
     @classmethod
@@ -67,6 +70,15 @@ class ProfileUpdate(BaseModel):
                 "El link solo puede tener letras minúsculas, números y guiones "
                 "(sin empezar/terminar en guión), entre 2 y 50 caracteres"
             )
+        return v
+
+    @field_validator("site_theme")
+    @classmethod
+    def validate_site_theme(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if v not in SITE_THEME_KEYS:
+            raise ValueError(f"Tema no soportado. Opciones: {', '.join(sorted(SITE_THEME_KEYS))}")
         return v
 
     @field_validator("landing_tagline")

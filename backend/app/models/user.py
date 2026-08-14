@@ -119,6 +119,9 @@ class User(Base):
     widget_greeting: Mapped[str] = mapped_column(String(200), default="¡Hola! ¿En qué puedo ayudarte?", server_default="¡Hola! ¿En qué puedo ayudarte?")
     widget_position: Mapped[str] = mapped_column(String(10), default="right", server_default="right")
 
+    # Public landing page (/sitio/{slug}) background theme preset key
+    site_theme: Mapped[str] = mapped_column(String(30), default="medianoche", server_default="medianoche")
+
     # White-label settings
     white_label: Mapped[dict] = mapped_column(JSONB, default=dict)
 

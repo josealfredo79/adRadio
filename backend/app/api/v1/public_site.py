@@ -51,6 +51,8 @@ async def get_public_site(request: Request, slug: str, db: AsyncSession = Depend
         "greeting": user.widget_greeting or "¡Hola! ¿En qué puedo ayudarte?",
         "color": user.widget_color or "#25D366",
         "tagline": user.landing_tagline or "",
+        "logo_url": user.logo_url or "",
+        "site_theme": user.site_theme or "medianoche",
     }
 
 

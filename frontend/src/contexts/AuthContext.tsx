@@ -27,6 +27,7 @@ interface User {
   widget_position: string
   slug: string | null
   landing_tagline: string | null
+  site_theme: string
 }
 
 interface AuthContextType {

@@ -80,5 +80,6 @@ class UserOut(BaseModel):
     widget_position: str = "right"
     slug: str | None = None
     landing_tagline: str | None = None
+    site_theme: str = "medianoche"
 
     model_config = {"from_attributes": True}

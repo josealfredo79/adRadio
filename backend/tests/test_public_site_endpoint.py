@@ -86,10 +86,27 @@ class TestGetPublicSite:
             assert out["business_category"] == "restaurante"
             assert out["city"] == "Tlaxiaco"
             assert out["agent"] == "Sofia"
+            # Default theme/logo when not configured.
+            assert out["logo_url"] == ""
+            assert out["site_theme"] == "medianoche"
             # Nothing sensitive (email, tokens, phone) leaks into the public payload.
             assert "email" not in out
             assert "meta_token_cipher" not in out
             assert "phone" not in out
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_logo_and_site_theme_passthrough(self):
+        user_id = await _seed_user(
+            business_name="Con logo", slug="con-logo",
+            logo_url="https://cdn.example.com/logos/foo.jpg", site_theme="claro",
+        )
+        try:
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site(request=_request(), slug="con-logo", db=db)
+            assert out["logo_url"] == "https://cdn.example.com/logos/foo.jpg"
+            assert out["site_theme"] == "claro"
         finally:
             await _cleanup([user_id])
 

@@ -14,6 +14,29 @@ interface PublicSite {
   greeting: string
   color: string
   tagline: string
+  logo_url: string
+  site_theme: string
+}
+
+export interface SiteThemeDef {
+  name: string
+  bg: string
+  text: string
+  muted: string
+  cardBg: string
+  cardBorder: string
+}
+
+export const SITE_THEMES: Record<string, SiteThemeDef> = {
+  medianoche: { name: 'Medianoche', bg: '#06060f', text: '#ffffff', muted: 'rgba(255,255,255,.65)', cardBg: 'rgba(255,255,255,.05)', cardBorder: 'rgba(255,255,255,.1)' },
+  pizarra: { name: 'Pizarra', bg: '#0f172a', text: '#f1f5f9', muted: 'rgba(241,245,249,.65)', cardBg: 'rgba(255,255,255,.04)', cardBorder: 'rgba(255,255,255,.08)' },
+  esmeralda: { name: 'Esmeralda', bg: '#06120d', text: '#eafff5', muted: 'rgba(234,255,245,.65)', cardBg: 'rgba(255,255,255,.05)', cardBorder: 'rgba(255,255,255,.1)' },
+  claro: { name: 'Claro', bg: '#f8fafc', text: '#0f172a', muted: '#64748b', cardBg: '#ffffff', cardBorder: '#e2e8f0' },
+  crema: { name: 'Crema', bg: '#fdf6ec', text: '#2b2118', muted: '#8a7862', cardBg: '#ffffff', cardBorder: '#eee0cc' },
+}
+
+function getSiteTheme(key: string): SiteThemeDef {
+  return SITE_THEMES[key] ?? SITE_THEMES.medianoche
 }
 
 interface PublicProduct {
@@ -34,18 +57,21 @@ function ProductCard({
   categoryFallback,
   color,
   slug,
+  theme,
 }: {
   product: PublicProduct
   categoryFallback: string
   color: string
   slug: string
+  theme: SiteThemeDef
 }) {
   return (
     <Link
       to={`/sitio/${slug}/producto/${product.id}`}
-      className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden text-left block hover:border-white/25 transition-colors"
+      className="rounded-2xl overflow-hidden text-left block transition-opacity hover:opacity-90"
+      style={{ background: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}
     >
-      <div className="h-36 bg-white/5 flex items-center justify-center overflow-hidden">
+      <div className="h-36 flex items-center justify-center overflow-hidden" style={{ background: theme.cardBg }}>
         {product.photo_url ? (
           <img src={product.photo_url} alt={product.name} className="h-full w-full object-cover" />
         ) : (
@@ -59,8 +85,8 @@ function ProductCard({
             {formatPrice(product.price)}
           </span>
         </div>
-        {product.category && <p className="text-xs text-white/50">{product.category}</p>}
-        {product.description && <p className="text-sm text-white/70 line-clamp-2">{product.description}</p>}
+        {product.category && <p className="text-xs" style={{ color: theme.muted }}>{product.category}</p>}
+        {product.description && <p className="text-sm line-clamp-2" style={{ color: theme.muted }}>{product.description}</p>}
       </div>
     </Link>
   )
@@ -169,21 +195,27 @@ export default function PublicSitePage() {
     )
   }
 
+  const theme = getSiteTheme(site.site_theme)
+
   return (
     <>
       <SEO
         title={site.business_name}
         description={`${site.business_name}${site.city ? ` — ${site.city}` : ''}. Chatea con nosotros.`}
       />
-      <div className="min-h-screen bg-[#06060f] text-white font-sans">
+      <div className="min-h-screen font-sans" style={{ background: theme.bg, color: theme.text }}>
         <header
           className="px-6 py-20 text-center"
           style={{ background: `linear-gradient(180deg, ${site.color}33 0%, transparent 100%)` }}
         >
-          <div className="text-6xl mb-4">{categoryEmoji(site.business_category)}</div>
+          {site.logo_url ? (
+            <img src={site.logo_url} alt={site.business_name} className="h-20 w-20 rounded-2xl object-cover mx-auto mb-4" />
+          ) : (
+            <div className="text-6xl mb-4">{categoryEmoji(site.business_category)}</div>
+          )}
           <h1 className="text-3xl sm:text-4xl font-bold">{site.business_name}</h1>
-          {site.tagline && <p className="mt-3 text-white/80 text-lg">{site.tagline}</p>}
-          <div className="mt-3 flex items-center justify-center gap-3 text-white/60 text-sm flex-wrap">
+          {site.tagline && <p className="mt-3 text-lg" style={{ color: theme.muted }}>{site.tagline}</p>}
+          <div className="mt-3 flex items-center justify-center gap-3 text-sm flex-wrap" style={{ color: theme.muted }}>
             {site.business_category && <span>{site.business_category}</span>}
             {site.city && (
               <span className="flex items-center gap-1">
@@ -199,7 +231,7 @@ export default function PublicSitePage() {
             <h2 className="text-xl font-bold text-center mb-6">🔥 Los favoritos de nuestros clientes</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {bestsellers.map((p) => (
-                <ProductCard key={p.id} product={p} categoryFallback={site.business_category} color={site.color} slug={slug ?? ''} />
+                <ProductCard key={p.id} product={p} categoryFallback={site.business_category} color={site.color} slug={slug ?? ''} theme={theme} />
               ))}
             </div>
           </section>
@@ -210,7 +242,7 @@ export default function PublicSitePage() {
             <h2 className="text-xl font-bold text-center mb-6">Nuestro catálogo</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {products.map((p) => (
-                <ProductCard key={p.id} product={p} categoryFallback={site.business_category} color={site.color} slug={slug ?? ''} />
+                <ProductCard key={p.id} product={p} categoryFallback={site.business_category} color={site.color} slug={slug ?? ''} theme={theme} />
               ))}
             </div>
           </section>
@@ -218,7 +250,7 @@ export default function PublicSitePage() {
 
         <main className="max-w-2xl mx-auto px-6 pb-32 text-center space-y-6">
           {!site.tagline && (
-            <p className="text-white/70 leading-relaxed">
+            <p className="leading-relaxed" style={{ color: theme.muted }}>
               Bienvenido a {site.business_name}. Escríbenos por el chat en la esquina de tu pantalla y {site.agent}{' '}
               te va a atender al instante.
             </p>

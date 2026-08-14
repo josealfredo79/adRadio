@@ -24,6 +24,7 @@ from app.api.v1.profile import (
     suggest_landing_tagline,
     update_profile,
     update_white_label,
+    upload_logo,
 )
 from app.core.security import hash_password
 from app.database import AsyncSessionLocal, engine
@@ -507,3 +508,80 @@ class TestDashboardChart:
             assert today_entry["mensajes"] == 2  # only the 2 outbound today; inbound and 10-days-ago excluded
         finally:
             await _cleanup([user_id])
+
+
+def _upload_file(content: bytes, content_type: str, filename: str = "logo.jpg"):
+    f = MagicMock()
+    f.content_type = content_type
+    f.filename = filename
+    f.read = AsyncMock(return_value=content)
+    return f
+
+
+class TestUploadLogo:
+    @pytest.mark.asyncio
+    async def test_rejects_unsupported_mime_type(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with pytest.raises(HTTPException) as exc_info:
+                    await upload_logo(file=_upload_file(b"x", "application/pdf"), db=db, current_user=user)
+                assert exc_info.value.status_code == 400
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_rejects_file_over_5mb(self):
+        user_id = await _seed_user()
+        oversized = b"x" * (5 * 1024 * 1024 + 1)
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with pytest.raises(HTTPException) as exc_info:
+                    await upload_logo(file=_upload_file(oversized, "image/jpeg"), db=db, current_user=user)
+                assert exc_info.value.status_code == 413
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_uploads_and_sets_logo_url(self):
+        user_id = await _seed_user()
+        try:
+            with patch("app.api.v1.profile.upload_bytes", new=AsyncMock(return_value="https://cdn.example.com/logos/foo.jpg")):
+                async with AsyncSessionLocal() as db:
+                    user = await db.get(User, user_id)
+                    updated = await upload_logo(file=_upload_file(b"imgbytes", "image/jpeg"), db=db, current_user=user)
+            assert updated.logo_url == "https://cdn.example.com/logos/foo.jpg"
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_returns_502_when_storage_fails(self):
+        user_id = await _seed_user()
+        try:
+            with patch("app.api.v1.profile.upload_bytes", new=AsyncMock(return_value=None)):
+                async with AsyncSessionLocal() as db:
+                    user = await db.get(User, user_id)
+                    with pytest.raises(HTTPException) as exc_info:
+                        await upload_logo(file=_upload_file(b"imgbytes", "image/jpeg"), db=db, current_user=user)
+                    assert exc_info.value.status_code == 502
+        finally:
+            await _cleanup([user_id])
+
+
+class TestUpdateProfileSiteTheme:
+    @pytest.mark.asyncio
+    async def test_accepts_valid_theme_key(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                updated = await update_profile(body=ProfileUpdate(site_theme="claro"), db=db, current_user=user)
+            assert updated.site_theme == "claro"
+        finally:
+            await _cleanup([user_id])
+
+    def test_rejects_unknown_theme_key(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(site_theme="no-existe")

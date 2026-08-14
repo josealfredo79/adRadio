@@ -4,8 +4,9 @@ Profile & Dashboard router — /api/v1/me, /api/v1/dashboard
 import json
 import logging
 import re
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from redis.asyncio import Redis as AsyncRedis
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -23,6 +24,7 @@ from app.models.coupon import Coupon
 from app.models.message import Message
 from app.models.order import Order
 from app.models.user import User
+from app.services.storage_service import upload_bytes
 from app.schemas.auth import UserOut
 from app.schemas.profile import ProfileUpdate
 
@@ -87,6 +89,40 @@ async def update_profile(
     except IntegrityError:
         await db.rollback()
         raise HTTPException(status_code=409, detail="Ese link ya está en uso, elige otro")
+    await db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
+ALLOWED_LOGO_MIME_TYPES = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+MAX_LOGO_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+@router.post("/me/logo", response_model=UserOut)
+async def upload_logo(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserOut:
+    """Sube el logo del negocio, usado en la landing page pública (/sitio/{slug})."""
+    if file.content_type not in ALLOWED_LOGO_MIME_TYPES:
+        raise HTTPException(status_code=400, detail=f"Tipo de archivo no soportado: {file.content_type}")
+
+    content = await file.read()
+    if len(content) > MAX_LOGO_SIZE:
+        raise HTTPException(status_code=413, detail="La imagen supera el límite de 5MB")
+
+    ext = ALLOWED_LOGO_MIME_TYPES[file.content_type]
+    key = f"logos/{current_user.id}/{uuid.uuid4()}.{ext}"
+    url = await upload_bytes(content, key, file.content_type)
+    if not url:
+        raise HTTPException(status_code=502, detail="No se pudo guardar el logo")
+
+    current_user.logo_url = url
+    await db.commit()
     await db.refresh(current_user)
     return UserOut.model_validate(current_user)
 

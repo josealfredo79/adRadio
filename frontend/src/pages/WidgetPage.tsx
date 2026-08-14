@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, MoveHorizontal, Save, Sparkles, Globe, ArrowRight, ArrowLeft, Pencil } from 'lucide-react'
+import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, MoveHorizontal, Save, Sparkles, Globe, ArrowRight, ArrowLeft, Pencil, Image as ImageIcon } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 import { useAuth } from '@/contexts/AuthContext'
+import { SITE_THEMES } from '@/pages/PublicSitePage'
 
 const SITE_URL = (import.meta.env.VITE_SITE_URL as string | undefined) ?? (typeof window !== 'undefined' ? window.location.origin : '')
 
@@ -27,9 +28,13 @@ function LandingPageWizard() {
   const [step, setStep] = useState<1 | 2>(1)
   const [slug, setSlug] = useState(user?.slug ?? slugify(user?.business_name ?? ''))
   const [tagline, setTagline] = useState(user?.landing_tagline ?? '')
+  const [siteTheme, setSiteTheme] = useState(user?.site_theme ?? 'medianoche')
   const [copied, setCopied] = useState(false)
   const [aiHint, setAiHint] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState<string[] | null>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [logoError, setLogoError] = useState('')
 
   const slugValid = SLUG_RE.test(slug)
 
@@ -39,7 +44,7 @@ function LandingPageWizard() {
   })
 
   const publishMutation = useMutation({
-    mutationFn: () => api.patch('/me', { slug, landing_tagline: tagline }).then((r) => r.data),
+    mutationFn: () => api.patch('/me', { slug, landing_tagline: tagline, site_theme: siteTheme }).then((r) => r.data),
     onSuccess: (updated) => {
       if (setUser) setUser(updated)
       setEditing(false)
@@ -47,11 +52,29 @@ function LandingPageWizard() {
     },
   })
 
+  const handleLogoUpload = async (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    setUploadingLogo(true)
+    setLogoError('')
+    try {
+      const r = await api.post('/me/logo', fd)
+      if (setUser) setUser(r.data)
+    } catch (err: unknown) {
+      setLogoError(getApiError(err, 'No se pudo subir el logo'))
+    } finally {
+      setUploadingLogo(false)
+      if (logoInputRef.current) logoInputRef.current.value = ''
+    }
+  }
+
   const startEditing = () => {
     setSlug(user?.slug ?? slugify(user?.business_name ?? ''))
     setTagline(user?.landing_tagline ?? '')
+    setSiteTheme(user?.site_theme ?? 'medianoche')
     setAiHint('')
     setAiSuggestions(null)
+    setLogoError('')
     setStep(1)
     publishMutation.reset()
     suggestMutation.reset()
@@ -152,6 +175,58 @@ function LandingPageWizard() {
 
       {step === 2 && (
         <div className="space-y-3">
+          {/* Logo */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Logo de tu negocio (opcional)</label>
+            <div className="flex items-center gap-3">
+              {user?.logo_url ? (
+                <img src={user.logo_url} alt="Logo" className="h-12 w-12 rounded-lg object-cover border border-gray-200 dark:border-gray-800" />
+              ) : (
+                <div className="h-12 w-12 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center text-gray-300 dark:text-gray-600">
+                  <ImageIcon size={18} />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={uploadingLogo}
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 dark:bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+              >
+                {uploadingLogo ? 'Subiendo...' : user?.logo_url ? 'Cambiar logo' : 'Subir logo'}
+              </button>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleLogoUpload(file)
+                }}
+              />
+            </div>
+            {logoError && <p className="text-xs text-red-500">{logoError}</p>}
+          </div>
+
+          {/* Tema de color */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Estilo de tu página</label>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(SITE_THEMES).map(([key, t]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSiteTheme(key)}
+                  title={t.name}
+                  className={`w-12 h-9 rounded-lg overflow-hidden border-2 transition-all ${siteTheme === key ? 'border-brand-500 scale-105' : 'border-transparent'}`}
+                  style={{ background: t.bg }}
+                >
+                  <span className="block w-4 h-4 m-1 rounded" style={{ background: t.cardBg, border: `1px solid ${t.cardBorder}` }} />
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Una frase corta para tus visitantes (opcional)</label>
             <textarea
