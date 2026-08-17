@@ -15,7 +15,9 @@ const mockSite = {
   color: '#ff5500',
   tagline: '',
   logo_url: '',
+  hero_image_url: '',
   site_theme: 'medianoche',
+  whatsapp_number: '',
 }
 
 function setupQueryClient(products: unknown[], siteOverrides: Partial<typeof mockSite> = {}) {
@@ -92,5 +94,40 @@ describe('PublicSitePage — logo and theme', () => {
   it('falls back to the category emoji when no logo_url is set', () => {
     renderPage([])
     expect(screen.queryByAltText('Tacos El Primo')).toBeNull()
+  })
+})
+
+describe('PublicSitePage — hero image and footer', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders the hero image as the header background when hero_image_url is set', () => {
+    renderPage([], { hero_image_url: 'https://cdn.example.com/hero-images/foo.jpg' })
+    const header = screen.getByText('Tacos El Primo').closest('header') as HTMLElement
+    expect(header.style.backgroundImage).toContain('https://cdn.example.com/hero-images/foo.jpg')
+  })
+
+  it('falls back to the plain gradient header when no hero_image_url is set', () => {
+    renderPage([])
+    const header = screen.getByText('Tacos El Primo').closest('header') as HTMLElement
+    expect(header.style.background).toContain('linear-gradient')
+    expect(header.style.backgroundImage).not.toContain('cdn.example.com')
+  })
+
+  it('shows a WhatsApp contact link in the footer when whatsapp_number is set', () => {
+    renderPage([], { whatsapp_number: '+52 1 443 786 4292' })
+    const link = screen.getByText('+52 1 443 786 4292').closest('a') as HTMLAnchorElement
+    expect(link.href).toBe('https://wa.me/5214437864292')
+  })
+
+  it('hides the WhatsApp contact link when whatsapp_number is empty (not connected)', () => {
+    renderPage([])
+    expect(screen.queryByText(/wa.me/)).toBeNull()
+  })
+
+  it('always shows the copyright line in the footer', () => {
+    renderPage([])
+    expect(screen.getByText(/Todos los derechos reservados/)).toBeDefined()
   })
 })

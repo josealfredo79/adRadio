@@ -52,8 +52,20 @@ async def get_public_site(request: Request, slug: str, db: AsyncSession = Depend
         "color": user.widget_color or "#25D366",
         "tagline": user.landing_tagline or "",
         "logo_url": user.logo_url or "",
+        "hero_image_url": user.hero_image_url or "",
         "site_theme": user.site_theme or "medianoche",
+        "whatsapp_number": _public_whatsapp_number(user),
     }
+
+
+def _public_whatsapp_number(user: User) -> str:
+    """Only surface the real, connected Meta WhatsApp Business number — never
+    User.whatsapp_number (the owner's personal notification number, a
+    different field entirely) — so the public footer never invites customers
+    to message the owner directly."""
+    if user.meta_connection_status == "connected" and user.meta_display_phone_number:
+        return user.meta_display_phone_number
+    return ""
 
 
 @router.get("/{slug}/products")
@@ -106,6 +118,7 @@ async def _get_product_detail(db: AsyncSession, user: User, product_id: uuid.UUI
     out = _product_out(product, sales_count or 0)
     out["business_name"] = user.business_name or ""
     out["slug"] = user.slug or slug_fallback
+    out["whatsapp_number"] = _public_whatsapp_number(user)
     return out
 
 

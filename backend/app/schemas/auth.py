@@ -65,6 +65,7 @@ class UserOut(BaseModel):
     city: str | None
     country: str
     logo_url: str | None
+    hero_image_url: str | None = None
     phone: str | None
     whatsapp_number: str | None
     meta_connection_status: str = "not_connected"

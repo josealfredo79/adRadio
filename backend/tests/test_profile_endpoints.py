@@ -24,6 +24,7 @@ from app.api.v1.profile import (
     suggest_landing_tagline,
     update_profile,
     update_white_label,
+    upload_hero_image,
     upload_logo,
 )
 from app.core.security import hash_password
@@ -565,6 +566,58 @@ class TestUploadLogo:
                     user = await db.get(User, user_id)
                     with pytest.raises(HTTPException) as exc_info:
                         await upload_logo(file=_upload_file(b"imgbytes", "image/jpeg"), db=db, current_user=user)
+                    assert exc_info.value.status_code == 502
+        finally:
+            await _cleanup([user_id])
+
+
+class TestUploadHeroImage:
+    @pytest.mark.asyncio
+    async def test_rejects_unsupported_mime_type(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with pytest.raises(HTTPException) as exc_info:
+                    await upload_hero_image(file=_upload_file(b"x", "application/pdf"), db=db, current_user=user)
+                assert exc_info.value.status_code == 400
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_rejects_file_over_8mb(self):
+        user_id = await _seed_user()
+        oversized = b"x" * (8 * 1024 * 1024 + 1)
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with pytest.raises(HTTPException) as exc_info:
+                    await upload_hero_image(file=_upload_file(oversized, "image/jpeg"), db=db, current_user=user)
+                assert exc_info.value.status_code == 413
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_uploads_and_sets_hero_image_url(self):
+        user_id = await _seed_user()
+        try:
+            with patch("app.api.v1.profile.upload_bytes", new=AsyncMock(return_value="https://cdn.example.com/hero-images/foo.jpg")):
+                async with AsyncSessionLocal() as db:
+                    user = await db.get(User, user_id)
+                    updated = await upload_hero_image(file=_upload_file(b"imgbytes", "image/jpeg"), db=db, current_user=user)
+            assert updated.hero_image_url == "https://cdn.example.com/hero-images/foo.jpg"
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_returns_502_when_storage_fails(self):
+        user_id = await _seed_user()
+        try:
+            with patch("app.api.v1.profile.upload_bytes", new=AsyncMock(return_value=None)):
+                async with AsyncSessionLocal() as db:
+                    user = await db.get(User, user_id)
+                    with pytest.raises(HTTPException) as exc_info:
+                        await upload_hero_image(file=_upload_file(b"imgbytes", "image/jpeg"), db=db, current_user=user)
                     assert exc_info.value.status_code == 502
         finally:
             await _cleanup([user_id])

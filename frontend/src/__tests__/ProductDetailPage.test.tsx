@@ -15,6 +15,7 @@ const mockProduct = {
   sales_count: 3,
   business_name: 'Tacos El Primo',
   slug: 'tacos-el-primo',
+  whatsapp_number: '+52 1 443 786 4292',
 }
 
 function renderPage(product: unknown) {
@@ -57,10 +58,16 @@ describe('ProductDetailPage', () => {
     expect(screen.getByText('$25.00')).toBeDefined()
   })
 
-  it('shows a WhatsApp link pre-filled with the product name', () => {
+  it('shows a WhatsApp link pre-filled with the product name, addressed to the connected number', () => {
     renderPage(mockProduct)
     const link = screen.getByText('Preguntar por WhatsApp').closest('a')
     expect(link?.getAttribute('href')).toContain(encodeURIComponent('Taco al pastor'))
+    expect(link?.getAttribute('href')).toContain('https://wa.me/5214437864292')
+  })
+
+  it('hides the WhatsApp button when no number is connected (wa.me/?text= with no recipient is broken)', () => {
+    renderPage({ ...mockProduct, whatsapp_number: '' })
+    expect(screen.queryByText('Preguntar por WhatsApp')).toBeNull()
   })
 
   it('shows "Cotizar" when price is null', () => {

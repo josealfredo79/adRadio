@@ -15,7 +15,10 @@ interface ProductDetail {
   sales_count: number
   business_name: string
   slug: string
+  whatsapp_number: string
 }
+
+const waDigits = (n: string) => n.replace(/\D/g, '')
 
 const formatPrice = (price: string | null) =>
   price === null ? 'Cotizar' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(price))
@@ -68,6 +71,10 @@ export default function ProductDetailPage() {
     ? `${window.location.origin}/sitio/${slug}/producto/${product.id}`
     : `${window.location.origin}/p/${advertiserId}/${product.id}`
   const waMessage = encodeURIComponent(`Hola, me interesa: ${product.name}`)
+  // Sin número conectado, wa.me/?text= abre WhatsApp sin destinatario — no
+  // hay forma de "arreglarlo" del todo sin un número real, así que el botón
+  // solo se muestra cuando sí existe uno.
+  const waHref = product.whatsapp_number ? `https://wa.me/${waDigits(product.whatsapp_number)}?text=${waMessage}` : null
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -118,15 +125,17 @@ export default function ProductDetailPage() {
               {product.description && <p className="text-white/70 leading-relaxed">{product.description}</p>}
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                <a
-                  href={`https://wa.me/?text=${waMessage}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
-                >
-                  <MessageCircle size={18} />
-                  Preguntar por WhatsApp
-                </a>
+                {waHref && (
+                  <a
+                    href={waHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+                  >
+                    <MessageCircle size={18} />
+                    Preguntar por WhatsApp
+                  </a>
+                )}
                 <button
                   onClick={handleShare}
                   className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 px-5 py-3 text-sm font-semibold text-white hover:bg-white/5 transition-colors"

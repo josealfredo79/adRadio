@@ -127,6 +127,35 @@ async def upload_logo(
     return UserOut.model_validate(current_user)
 
 
+MAX_HERO_IMAGE_SIZE = 8 * 1024 * 1024  # 8MB — foto de portada, más grande que el logo
+
+
+@router.post("/me/hero-image", response_model=UserOut)
+async def upload_hero_image(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserOut:
+    """Sube la foto de portada del header de la landing pública (/sitio/{slug})."""
+    if file.content_type not in ALLOWED_LOGO_MIME_TYPES:
+        raise HTTPException(status_code=400, detail=f"Tipo de archivo no soportado: {file.content_type}")
+
+    content = await file.read()
+    if len(content) > MAX_HERO_IMAGE_SIZE:
+        raise HTTPException(status_code=413, detail="La imagen supera el límite de 8MB")
+
+    ext = ALLOWED_LOGO_MIME_TYPES[file.content_type]
+    key = f"hero-images/{current_user.id}/{uuid.uuid4()}.{ext}"
+    url = await upload_bytes(content, key, file.content_type)
+    if not url:
+        raise HTTPException(status_code=502, detail="No se pudo guardar la foto de portada")
+
+    current_user.hero_image_url = url
+    await db.commit()
+    await db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
 class TaglineSuggestRequest(BaseModel):
     hint: str = ""
 

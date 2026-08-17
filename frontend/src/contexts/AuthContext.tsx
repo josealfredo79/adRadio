@@ -22,6 +22,7 @@ interface User {
   messages_remaining: number
   email_verified: boolean
   logo_url: string | null
+  hero_image_url: string | null
   widget_color: string
   widget_greeting: string
   widget_position: string

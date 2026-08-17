@@ -35,6 +35,9 @@ function LandingPageWizard() {
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [logoError, setLogoError] = useState('')
+  const heroInputRef = useRef<HTMLInputElement>(null)
+  const [uploadingHero, setUploadingHero] = useState(false)
+  const [heroError, setHeroError] = useState('')
 
   const slugValid = SLUG_RE.test(slug)
 
@@ -68,6 +71,22 @@ function LandingPageWizard() {
     }
   }
 
+  const handleHeroUpload = async (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    setUploadingHero(true)
+    setHeroError('')
+    try {
+      const r = await api.post('/me/hero-image', fd)
+      if (setUser) setUser(r.data)
+    } catch (err: unknown) {
+      setHeroError(getApiError(err, 'No se pudo subir la foto de portada'))
+    } finally {
+      setUploadingHero(false)
+      if (heroInputRef.current) heroInputRef.current.value = ''
+    }
+  }
+
   const startEditing = () => {
     setSlug(user?.slug ?? slugify(user?.business_name ?? ''))
     setTagline(user?.landing_tagline ?? '')
@@ -75,6 +94,7 @@ function LandingPageWizard() {
     setAiHint('')
     setAiSuggestions(null)
     setLogoError('')
+    setHeroError('')
     setStep(1)
     publishMutation.reset()
     suggestMutation.reset()
@@ -206,6 +226,39 @@ function LandingPageWizard() {
               />
             </div>
             {logoError && <p className="text-xs text-red-500">{logoError}</p>}
+          </div>
+
+          {/* Foto de portada */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Foto de portada (opcional)</label>
+            <div className="flex items-center gap-3">
+              {user?.hero_image_url ? (
+                <img src={user.hero_image_url} alt="Portada" className="h-12 w-20 rounded-lg object-cover border border-gray-200 dark:border-gray-800" />
+              ) : (
+                <div className="h-12 w-20 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center text-gray-300 dark:text-gray-600">
+                  <ImageIcon size={18} />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => heroInputRef.current?.click()}
+                disabled={uploadingHero}
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 dark:bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+              >
+                {uploadingHero ? 'Subiendo...' : user?.hero_image_url ? 'Cambiar foto' : 'Subir foto'}
+              </button>
+              <input
+                ref={heroInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleHeroUpload(file)
+                }}
+              />
+            </div>
+            {heroError && <p className="text-xs text-red-500">{heroError}</p>}
           </div>
 
           {/* Tema de color */}

@@ -86,9 +86,12 @@ class TestGetPublicSite:
             assert out["business_category"] == "restaurante"
             assert out["city"] == "Tlaxiaco"
             assert out["agent"] == "Sofia"
-            # Default theme/logo when not configured.
+            # Default theme/logo/hero when not configured.
             assert out["logo_url"] == ""
+            assert out["hero_image_url"] == ""
             assert out["site_theme"] == "medianoche"
+            # No WhatsApp number shown when nothing is actually connected.
+            assert out["whatsapp_number"] == ""
             # Nothing sensitive (email, tokens, phone) leaks into the public payload.
             assert "email" not in out
             assert "meta_token_cipher" not in out
@@ -100,13 +103,49 @@ class TestGetPublicSite:
     async def test_logo_and_site_theme_passthrough(self):
         user_id = await _seed_user(
             business_name="Con logo", slug="con-logo",
-            logo_url="https://cdn.example.com/logos/foo.jpg", site_theme="claro",
+            logo_url="https://cdn.example.com/logos/foo.jpg",
+            hero_image_url="https://cdn.example.com/hero-images/foo.jpg",
+            site_theme="claro",
         )
         try:
             async with AsyncSessionLocal() as db:
                 out = await get_public_site(request=_request(), slug="con-logo", db=db)
             assert out["logo_url"] == "https://cdn.example.com/logos/foo.jpg"
+            assert out["hero_image_url"] == "https://cdn.example.com/hero-images/foo.jpg"
             assert out["site_theme"] == "claro"
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_whatsapp_number_only_shown_when_meta_connected(self):
+        """The public footer must only ever surface the real, connected Meta
+        WhatsApp Business number (meta_display_phone_number) — never
+        User.whatsapp_number, which is a different field entirely (the
+        owner's personal notification number, not customer-facing)."""
+        user_id = await _seed_user(
+            business_name="Sin conectar", slug="sin-conectar",
+            whatsapp_number="+529531953182",  # personal notification number — must NOT leak
+            meta_connection_status="not_connected",
+        )
+        try:
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site(request=_request(), slug="sin-conectar", db=db)
+            assert out["whatsapp_number"] == ""
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_whatsapp_number_shown_when_meta_connected(self):
+        user_id = await _seed_user(
+            business_name="Conectado", slug="conectado",
+            whatsapp_number="+529531953182",
+            meta_connection_status="connected",
+            meta_display_phone_number="+52 1 443 786 4292",
+        )
+        try:
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site(request=_request(), slug="conectado", db=db)
+            assert out["whatsapp_number"] == "+52 1 443 786 4292"
         finally:
             await _cleanup([user_id])
 
@@ -283,7 +322,10 @@ class TestGetPublicSiteProduct:
 
     @pytest.mark.asyncio
     async def test_returns_full_detail_with_business_name(self):
-        user_id = await _seed_user(business_name="Tacos El Primo", slug="tacos-detalle")
+        user_id = await _seed_user(
+            business_name="Tacos El Primo", slug="tacos-detalle",
+            meta_connection_status="connected", meta_display_phone_number="+52 1 443 786 4292",
+        )
         try:
             async with AsyncSessionLocal() as db:
                 product = Product(
@@ -303,6 +345,7 @@ class TestGetPublicSiteProduct:
             assert out["business_name"] == "Tacos El Primo"
             assert out["slug"] == "tacos-detalle"
             assert out["sales_count"] == 0
+            assert out["whatsapp_number"] == "+52 1 443 786 4292"
         finally:
             await _cleanup([user_id])
 

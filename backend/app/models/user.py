@@ -47,6 +47,9 @@ class User(Base):
     business_hours: Mapped[dict | None] = mapped_column(JSONB)
     country: Mapped[str] = mapped_column(String(10), default="MX", server_default="MX")
     logo_url: Mapped[str | None] = mapped_column(Text)
+    # Foto de portada opcional del header de la landing pública — distinta del
+    # logo (logo_url), que sigue siendo el ícono redondo.
+    hero_image_url: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(String(20))
     # Número personal del dueño del negocio para notificaciones (pedido nuevo,
     # cita agendada, etc.) — independiente del número de WhatsApp Business

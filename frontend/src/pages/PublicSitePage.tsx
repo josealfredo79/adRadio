@@ -15,8 +15,12 @@ interface PublicSite {
   color: string
   tagline: string
   logo_url: string
+  hero_image_url: string
   site_theme: string
+  whatsapp_number: string
 }
+
+const waDigits = (n: string) => n.replace(/\D/g, '')
 
 export interface SiteThemeDef {
   name: string
@@ -205,24 +209,43 @@ export default function PublicSitePage() {
       />
       <div className="min-h-screen font-sans" style={{ background: theme.bg, color: theme.text }}>
         <header
-          className="px-6 py-20 text-center"
-          style={{ background: `linear-gradient(180deg, ${site.color}33 0%, transparent 100%)` }}
+          className="px-6 py-20 text-center relative overflow-hidden"
+          style={
+            site.hero_image_url
+              ? { backgroundImage: `url(${site.hero_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              : { background: `linear-gradient(180deg, ${site.color}33 0%, transparent 100%)` }
+          }
         >
-          {site.logo_url ? (
-            <img src={site.logo_url} alt={site.business_name} className="h-20 w-20 rounded-2xl object-cover mx-auto mb-4" />
-          ) : (
-            <div className="text-6xl mb-4">{categoryEmoji(site.business_category)}</div>
+          {/* Con foto de portada el texto siempre es blanco sobre un velo oscuro,
+              sin importar el tema elegido — necesario para que se lea encima de
+              cualquier foto real, no solo de los gradientes planos curados. */}
+          {site.hero_image_url && (
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,.65) 100%)' }} />
           )}
-          <h1 className="text-3xl sm:text-4xl font-bold">{site.business_name}</h1>
-          {site.tagline && <p className="mt-3 text-lg" style={{ color: theme.muted }}>{site.tagline}</p>}
-          <div className="mt-3 flex items-center justify-center gap-3 text-sm flex-wrap" style={{ color: theme.muted }}>
-            {site.business_category && <span>{site.business_category}</span>}
-            {site.city && (
-              <span className="flex items-center gap-1">
-                <MapPin size={14} />
-                {site.city}
-              </span>
+          <div className="relative" style={site.hero_image_url ? { color: '#fff' } : undefined}>
+            {site.logo_url ? (
+              <img src={site.logo_url} alt={site.business_name} className="h-20 w-20 rounded-2xl object-cover mx-auto mb-4 shadow-lg" />
+            ) : (
+              <div className="text-6xl mb-4">{categoryEmoji(site.business_category)}</div>
             )}
+            <h1 className="text-3xl sm:text-4xl font-bold">{site.business_name}</h1>
+            {site.tagline && (
+              <p className="mt-3 text-lg" style={site.hero_image_url ? { color: 'rgba(255,255,255,.85)' } : { color: theme.muted }}>
+                {site.tagline}
+              </p>
+            )}
+            <div
+              className="mt-3 flex items-center justify-center gap-3 text-sm flex-wrap"
+              style={site.hero_image_url ? { color: 'rgba(255,255,255,.75)' } : { color: theme.muted }}
+            >
+              {site.business_category && <span>{site.business_category}</span>}
+              {site.city && (
+                <span className="flex items-center gap-1">
+                  <MapPin size={14} />
+                  {site.city}
+                </span>
+              )}
+            </div>
           </div>
         </header>
 
@@ -248,7 +271,7 @@ export default function PublicSitePage() {
           </section>
         )}
 
-        <main className="max-w-2xl mx-auto px-6 pb-32 text-center space-y-6">
+        <main className="max-w-2xl mx-auto px-6 pb-16 text-center space-y-6">
           {!site.tagline && (
             <p className="leading-relaxed" style={{ color: theme.muted }}>
               Bienvenido a {site.business_name}. Escríbenos por el chat en la esquina de tu pantalla y {site.agent}{' '}
@@ -263,6 +286,24 @@ export default function PublicSitePage() {
             Chatea con {site.agent}
           </div>
         </main>
+
+        <footer className="border-t px-6 py-8 pb-32 text-center text-sm" style={{ borderColor: theme.cardBorder, color: theme.muted }}>
+          {site.whatsapp_number && (
+            <a
+              href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 font-medium hover:opacity-80 transition-opacity"
+              style={{ color: theme.text }}
+            >
+              <MessageCircle size={14} />
+              {site.whatsapp_number}
+            </a>
+          )}
+          <p className="mt-3">
+            © {new Date().getFullYear()} {site.business_name}. Todos los derechos reservados.
+          </p>
+        </footer>
       </div>
     </>
   )
