@@ -163,6 +163,8 @@ async def _get_product_detail(db: AsyncSession, user: User, product_id: uuid.UUI
     out["business_name"] = user.business_name or ""
     out["slug"] = user.slug or slug_fallback
     out["whatsapp_number"] = _public_whatsapp_number(user)
+    out["site_theme"] = user.site_theme or "medianoche"
+    out["color"] = user.widget_color or "#25D366"
     return out
 
 

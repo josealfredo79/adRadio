@@ -16,6 +16,8 @@ const mockProduct = {
   business_name: 'Tacos El Primo',
   slug: 'tacos-el-primo',
   whatsapp_number: '+52 1 443 786 4292',
+  site_theme: 'medianoche',
+  color: '#ff5500',
 }
 
 function renderPage(product: unknown) {

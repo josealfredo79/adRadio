@@ -421,6 +421,7 @@ class TestGetPublicSiteProduct:
         user_id = await _seed_user(
             business_name="Tacos El Primo", slug="tacos-detalle",
             meta_connection_status="connected", meta_display_phone_number="+52 1 443 786 4292",
+            site_theme="claro", widget_color="#ff5500",
         )
         try:
             async with AsyncSessionLocal() as db:
@@ -442,6 +443,8 @@ class TestGetPublicSiteProduct:
             assert out["slug"] == "tacos-detalle"
             assert out["sales_count"] == 0
             assert out["whatsapp_number"] == "+52 1 443 786 4292"
+            assert out["site_theme"] == "claro"
+            assert out["color"] == "#ff5500"
         finally:
             await _cleanup([user_id])
 

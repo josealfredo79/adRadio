@@ -151,7 +151,7 @@ describe('PublicSitePage — testimonials', () => {
     renderPage([], {}, [
       { id: 's1', contact_name: null, transcription: 'Muy buena atención', media_url: 'https://x/anon.mp3', sentiment: 'positivo' },
     ])
-    expect(screen.getByText(/— Cliente real/)).toBeDefined()
+    expect(screen.getByText(/Cliente real/)).toBeDefined()
   })
 
   it('does not show the testimonials section when there are no stories', () => {

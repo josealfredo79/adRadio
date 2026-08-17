@@ -4,7 +4,7 @@ import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, Mov
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 import { useAuth } from '@/contexts/AuthContext'
-import { SITE_THEMES } from '@/pages/PublicSitePage'
+import { SITE_THEMES } from '@/pages/publicSite/theme'
 
 const SITE_URL = (import.meta.env.VITE_SITE_URL as string | undefined) ?? (typeof window !== 'undefined' ? window.location.origin : '')
 

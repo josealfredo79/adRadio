@@ -4,6 +4,10 @@ import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import SEO from '@/components/SEO'
 import { ArrowLeft, Check, Copy, MessageCircle, Share2 } from 'lucide-react'
+import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
+import { waDigits, formatPrice } from '@/pages/publicSite/utils'
+import { MeshBackground, cardElevationStyle } from '@/pages/publicSite/components'
+import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
 
 interface ProductDetail {
   id: string
@@ -16,12 +20,9 @@ interface ProductDetail {
   business_name: string
   slug: string
   whatsapp_number: string
+  site_theme: string
+  color: string
 }
-
-const waDigits = (n: string) => n.replace(/\D/g, '')
-
-const formatPrice = (price: string | null) =>
-  price === null ? 'Cotizar' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(price))
 
 export default function ProductDetailPage() {
   // Two route shapes point here: /sitio/:slug/producto/:productId (business
@@ -67,6 +68,9 @@ export default function ProductDetailPage() {
     )
   }
 
+  const theme = getSiteTheme(product.site_theme)
+  const dark = isDarkTheme(theme)
+
   const pageUrl = slug
     ? `${window.location.origin}/sitio/${slug}/producto/${product.id}`
     : `${window.location.origin}/p/${advertiserId}/${product.id}`
@@ -99,17 +103,27 @@ export default function ProductDetailPage() {
         ogUrl={pageUrl}
         canonical={pageUrl}
       />
-      <div className="min-h-screen bg-[#06060f] text-white font-sans">
-        <div className="max-w-2xl mx-auto px-6 py-8">
+      <style>{PUBLIC_SITE_STYLES}</style>
+      <div className="min-h-screen font-sans" style={{ background: theme.bg, color: theme.text }}>
+        <MeshBackground color={product.color} dark={dark} />
+
+        <div className="relative z-10 max-w-2xl mx-auto px-6 py-8">
           {product.slug && (
-            <Link to={`/sitio/${product.slug}`} className="inline-flex items-center gap-1.5 text-white/60 hover:text-white text-sm mb-6">
+            <Link
+              to={`/sitio/${product.slug}`}
+              className="inline-flex items-center gap-1.5 text-sm mb-6 hover:opacity-80 transition-opacity"
+              style={{ color: theme.muted }}
+            >
               <ArrowLeft size={16} />
               Volver a {product.business_name}
             </Link>
           )}
 
-          <div className="rounded-2xl overflow-hidden bg-white/5 border border-white/10">
-            <div className="aspect-square bg-white/5 flex items-center justify-center overflow-hidden">
+          <div
+            className="rounded-2xl overflow-hidden"
+            style={{ background: theme.cardBg, border: `1px solid ${theme.cardBorder}`, ...cardElevationStyle(theme) }}
+          >
+            <div className="aspect-square flex items-center justify-center overflow-hidden" style={{ background: theme.cardBg }}>
               {product.photo_url ? (
                 <img src={product.photo_url} alt={product.name} className="h-full w-full object-cover" />
               ) : (
@@ -119,10 +133,12 @@ export default function ProductDetailPage() {
             <div className="p-6 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <h1 className="text-2xl font-bold">{product.name}</h1>
-                <span className="shrink-0 text-xl font-bold text-brand-400">{formatPrice(product.price)}</span>
+                <span className="shrink-0 text-xl font-bold" style={{ color: product.color }}>
+                  {formatPrice(product.price)}
+                </span>
               </div>
-              {product.category && <p className="text-sm text-white/50">{product.category}</p>}
-              {product.description && <p className="text-white/70 leading-relaxed">{product.description}</p>}
+              {product.category && <p className="text-sm" style={{ color: theme.muted }}>{product.category}</p>}
+              {product.description && <p className="leading-relaxed" style={{ color: theme.muted }}>{product.description}</p>}
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 {waHref && (
@@ -130,7 +146,7 @@ export default function ProductDetailPage() {
                     href={waHref}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#25D366]/20 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300"
                   >
                     <MessageCircle size={18} />
                     Preguntar por WhatsApp
@@ -138,7 +154,8 @@ export default function ProductDetailPage() {
                 )}
                 <button
                   onClick={handleShare}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 px-5 py-3 text-sm font-semibold text-white hover:bg-white/5 transition-colors"
+                  className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-colors hover:opacity-80"
+                  style={{ border: `1px solid ${theme.cardBorder}`, color: theme.text }}
                 >
                   {copied ? <Check size={18} /> : <Share2 size={18} />}
                   {copied ? 'Link copiado' : 'Compartir'}
@@ -149,7 +166,8 @@ export default function ProductDetailPage() {
 
           <button
             onClick={() => navigator.clipboard.writeText(pageUrl)}
-            className="mt-4 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/60 mx-auto"
+            className="mt-4 flex items-center gap-1.5 text-xs mx-auto hover:opacity-80"
+            style={{ color: theme.muted }}
           >
             <Copy size={12} />
             {pageUrl}
