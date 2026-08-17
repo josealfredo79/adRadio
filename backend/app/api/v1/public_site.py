@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limiter import limiter
 from app.database import get_db
+from app.models.customer_story import CustomerStory
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.product import Product
@@ -66,6 +67,49 @@ def _public_whatsapp_number(user: User) -> str:
     if user.meta_connection_status == "connected" and user.meta_display_phone_number:
         return user.meta_display_phone_number
     return ""
+
+
+def _first_name(full_name: str | None) -> str | None:
+    if not full_name:
+        return None
+    return full_name.strip().split(" ")[0] or None
+
+
+@router.get("/{slug}/stories")
+@limiter.limit("30/minute")
+async def get_public_site_stories(request: Request, slug: str, db: AsyncSession = Depends(get_db)) -> list[dict]:
+    """Public-safe, advertiser-scoped approved testimonials for this
+    business's own landing page — distinct from GET /campaigns/stories/public
+    (campaigns.py), which is the platform-wide feed used on IaRadio's own
+    marketing site, not scoped to a single advertiser."""
+    from sqlalchemy.orm import selectinload
+
+    result = await db.execute(select(User).where(User.slug == slug.lower()))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Página no encontrada")
+
+    stories_result = await db.execute(
+        select(CustomerStory)
+        .options(selectinload(CustomerStory.contact))
+        .where(CustomerStory.advertiser_id == user.id, CustomerStory.approved.is_(True))
+        .order_by(CustomerStory.created_at.desc())
+        .limit(6)
+    )
+    stories = stories_result.scalars().all()
+
+    return [
+        {
+            "id": str(s.id),
+            # Solo el primer nombre — suficiente para dar autenticidad sin
+            # exponer el nombre completo/teléfono de un contacto real.
+            "contact_name": _first_name(s.contact.name if s.contact else None),
+            "transcription": s.transcription,
+            "media_url": s.media_url,
+            "sentiment": s.sentiment,
+        }
+        for s in stories
+    ]
 
 
 @router.get("/{slug}/products")

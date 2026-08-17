@@ -20,17 +20,18 @@ const mockSite = {
   whatsapp_number: '',
 }
 
-function setupQueryClient(products: unknown[], siteOverrides: Partial<typeof mockSite> = {}) {
+function setupQueryClient(products: unknown[], siteOverrides: Partial<typeof mockSite> = {}, stories: unknown[] = []) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
   })
   queryClient.setQueryData(['public-site', 'tacos-el-primo'], { ...mockSite, ...siteOverrides })
   queryClient.setQueryData(['public-site-products', 'tacos-el-primo'], products)
+  queryClient.setQueryData(['public-site-stories', 'tacos-el-primo'], stories)
   return queryClient
 }
 
-function renderPage(products: unknown[], siteOverrides: Partial<typeof mockSite> = {}) {
-  const queryClient = setupQueryClient(products, siteOverrides)
+function renderPage(products: unknown[], siteOverrides: Partial<typeof mockSite> = {}, stories: unknown[] = []) {
+  const queryClient = setupQueryClient(products, siteOverrides, stories)
   return render(
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
@@ -129,5 +130,32 @@ describe('PublicSitePage — hero image and footer', () => {
   it('always shows the copyright line in the footer', () => {
     renderPage([])
     expect(screen.getByText(/Todos los derechos reservados/)).toBeDefined()
+  })
+})
+
+describe('PublicSitePage — testimonials', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('shows the testimonials section with an audio player when stories exist', () => {
+    renderPage([], {}, [
+      { id: 's1', contact_name: 'Laura', transcription: 'Excelente servicio', media_url: 'https://x/laura.mp3', sentiment: 'positivo' },
+    ])
+    expect(screen.getByText('Lo que dicen nuestros clientes')).toBeDefined()
+    expect(screen.getByText('"Excelente servicio"')).toBeDefined()
+    expect(screen.getByText(/Laura, cliente real/)).toBeDefined()
+  })
+
+  it('falls back to "Cliente real" when contact_name is null', () => {
+    renderPage([], {}, [
+      { id: 's1', contact_name: null, transcription: 'Muy buena atención', media_url: 'https://x/anon.mp3', sentiment: 'positivo' },
+    ])
+    expect(screen.getByText(/— Cliente real/)).toBeDefined()
+  })
+
+  it('does not show the testimonials section when there are no stories', () => {
+    renderPage([])
+    expect(screen.queryByText('Lo que dicen nuestros clientes')).toBeNull()
   })
 })

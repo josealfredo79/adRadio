@@ -53,6 +53,16 @@ interface PublicProduct {
   sales_count: number
 }
 
+interface PublicStory {
+  id: string
+  contact_name: string | null
+  transcription: string
+  media_url: string
+  sentiment: string
+}
+
+const SENTIMENT_EMOJI: Record<string, string> = { positivo: '😊', negativo: '😕', neutro: '🙂' }
+
 const formatPrice = (price: string | null) =>
   price === null ? 'Cotizar' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(price))
 
@@ -142,6 +152,13 @@ export default function PublicSitePage() {
   const { data: products } = useQuery<PublicProduct[]>({
     queryKey: ['public-site-products', slug],
     queryFn: () => api.get(`/public/site/${slug}/products`).then((r) => r.data),
+    enabled: !!slug && !!site,
+    retry: false,
+  })
+
+  const { data: stories } = useQuery<PublicStory[]>({
+    queryKey: ['public-site-stories', slug],
+    queryFn: () => api.get(`/public/site/${slug}/stories`).then((r) => r.data),
     enabled: !!slug && !!site,
     retry: false,
   })
@@ -248,6 +265,29 @@ export default function PublicSitePage() {
             </div>
           </div>
         </header>
+
+        {!!stories?.length && (
+          <section className="max-w-4xl mx-auto px-6 pt-16 pb-4">
+            <h2 className="text-xl font-bold text-center mb-6">Lo que dicen nuestros clientes</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {stories.map((s) => (
+                <div
+                  key={s.id}
+                  className="rounded-2xl p-5 space-y-3"
+                  style={{ background: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}
+                >
+                  <p className="text-sm leading-relaxed" style={{ color: theme.text }}>
+                    "{s.transcription}"
+                  </p>
+                  <audio controls src={s.media_url} className="w-full h-9" />
+                  <p className="text-xs" style={{ color: theme.muted }}>
+                    {SENTIMENT_EMOJI[s.sentiment] ?? '🙂'} {s.contact_name ? `— ${s.contact_name}, cliente real` : '— Cliente real'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {!!bestsellers.length && (
           <section className="max-w-4xl mx-auto px-6 pb-4">

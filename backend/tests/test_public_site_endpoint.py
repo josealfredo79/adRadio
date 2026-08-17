@@ -13,8 +13,11 @@ from app.api.v1.public_site import (
     get_public_site,
     get_public_site_product,
     get_public_site_products,
+    get_public_site_stories,
 )
 from app.database import AsyncSessionLocal, engine
+from app.models.contact import Contact
+from app.models.customer_story import CustomerStory
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.product import Product
@@ -170,6 +173,99 @@ class TestGetPublicSite:
             async with AsyncSessionLocal() as db:
                 out = await get_public_site(request=_request(), slug="MI-NEGOCIO", db=db)
             assert out["business_name"] == "Tacos"
+        finally:
+            await _cleanup([user_id])
+
+
+class TestGetPublicSiteStories:
+    @pytest.mark.asyncio
+    async def test_unknown_slug_returns_404(self):
+        async with AsyncSessionLocal() as db:
+            with pytest.raises(HTTPException) as exc_info:
+                await get_public_site_stories(request=_request(), slug="no-existe", db=db)
+            assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_only_returns_approved_stories(self):
+        user_id = await _seed_user(business_name="Con historias", slug="con-historias")
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add_all([
+                    CustomerStory(
+                        advertiser_id=user_id, media_url="https://x/aprobada.mp3",
+                        transcription="Excelente servicio", sentiment="positivo", approved=True,
+                    ),
+                    CustomerStory(
+                        advertiser_id=user_id, media_url="https://x/pendiente.mp3",
+                        transcription="Aún sin aprobar", sentiment="positivo", approved=False,
+                    ),
+                ])
+                await db.commit()
+
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site_stories(request=_request(), slug="con-historias", db=db)
+            assert len(out) == 1
+            assert out[0]["transcription"] == "Excelente servicio"
+            assert out[0]["media_url"] == "https://x/aprobada.mp3"
+            assert out[0]["sentiment"] == "positivo"
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_never_leaks_another_advertisers_stories(self):
+        user_id = await _seed_user(business_name="A", slug="dueno-a-stories")
+        other_id = await _seed_user(business_name="B", slug="dueno-b-stories")
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add(CustomerStory(
+                    advertiser_id=other_id, media_url="https://x/ajena.mp3",
+                    transcription="No es mía", sentiment="positivo", approved=True,
+                ))
+                await db.commit()
+
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site_stories(request=_request(), slug="dueno-a-stories", db=db)
+            assert out == []
+        finally:
+            await _cleanup([user_id, other_id])
+
+    @pytest.mark.asyncio
+    async def test_only_exposes_first_name_of_contact(self):
+        user_id = await _seed_user(business_name="Con contacto", slug="con-contacto-story")
+        try:
+            async with AsyncSessionLocal() as db:
+                contact = Contact(advertiser_id=user_id, name="Laura Gómez Hernández", phone="+529531953182")
+                db.add(contact)
+                await db.flush()
+                db.add(CustomerStory(
+                    advertiser_id=user_id, contact_id=contact.id, media_url="https://x/laura.mp3",
+                    transcription="Muy contenta", sentiment="positivo", approved=True,
+                ))
+                await db.commit()
+
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site_stories(request=_request(), slug="con-contacto-story", db=db)
+            assert out[0]["contact_name"] == "Laura"
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_limits_to_6_most_recent(self):
+        user_id = await _seed_user(business_name="Muchas historias", slug="muchas-historias")
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add_all([
+                    CustomerStory(
+                        advertiser_id=user_id, media_url=f"https://x/{i}.mp3",
+                        transcription=f"Historia {i}", sentiment="positivo", approved=True,
+                    )
+                    for i in range(8)
+                ])
+                await db.commit()
+
+            async with AsyncSessionLocal() as db:
+                out = await get_public_site_stories(request=_request(), slug="muchas-historias", db=db)
+            assert len(out) == 6
         finally:
             await _cleanup([user_id])
 
