@@ -71,6 +71,10 @@ class User(Base):
     # refrescar el token) no reinicia la rampa de warm-up (ver Capa 11 en
     # meta_quality_service.py).
     meta_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Nombre de cualquier plantilla ya aprobada por Meta, usada para reabrir
+    # una ventana de 24h cerrada — pese al nombre del campo, NO necesita ser
+    # categoría Utility específicamente (Marketing/Utility ambas sirven para
+    # esto; Meta reclasifica el contenido a su criterio de todos modos).
     # 'not_configured' | 'pending_review' | 'approved' | 'rejected'
     meta_utility_template_status: Mapped[str] = mapped_column(String(20), default="not_configured", server_default="not_configured")
     meta_utility_template_name: Mapped[str | None] = mapped_column(String(255))

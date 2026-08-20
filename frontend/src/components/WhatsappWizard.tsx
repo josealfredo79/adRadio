@@ -350,13 +350,13 @@ export default function WhatsappWizard() {
         <div className="border-t border-border pt-4 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Plantillas aprobadas (opcional)</h3>
           <p className="text-xs text-muted-foreground">
-            Pega el nombre exacto de las plantillas ya aprobadas en tu WhatsApp Manager. Sin esto, los
-            mensajes fuera de la ventana de 24h (recordatorios, reapertura de conversación) se degradan a
-            texto plano.
+            Pega el nombre exacto de las plantillas ya aprobadas en tu WhatsApp Manager (cualquier
+            categoría aprobada sirve, no tiene que ser "Utility"). Sin esto, los mensajes fuera de la
+            ventana de 24h (recordatorios, reapertura de conversación) se degradan a texto plano.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Plantilla de utilidad</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Plantilla de reapertura</label>
               <input
                 type="text"
                 value={utilityTemplate}

@@ -52,7 +52,7 @@ const BLOCK_REASON_LABELS: Record<string, string> = {
   no_messages_remaining: 'Sin mensajes disponibles en el plan',
   high_failure_rate: 'Campaña pausada por alta tasa de fallos',
   consent_unconfirmed: 'Contacto sin consentimiento confirmado',
-  no_utility_template: 'Sin plantilla de utilidad aprobada para reabrir la conversación',
+  no_utility_template: 'Sin plantilla aprobada para reabrir la conversación',
 }
 
 export default function WhatsappHealthCard() {
