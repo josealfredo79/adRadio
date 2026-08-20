@@ -203,6 +203,15 @@ export default function WhatsappWizard() {
                 <span className="font-medium">WhatsApp</span> →{' '}
                 <span className="font-medium">Empezar a usar</span>. Esto crea tu WhatsApp Business Account (WABA) gratis.
               </p>
+              <a
+                href="https://business.facebook.com/settings/whatsapp-business-accounts"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 underline hover:no-underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Ver mis cuentas de WhatsApp (ahí se ve tu WABA ID directamente)
+              </a>
             </div>
           </li>
           <li className="flex gap-3">
@@ -214,6 +223,15 @@ export default function WhatsappWizard() {
                 <span className="font-medium">Agregar número</span>. Usa un número <span className="font-medium">libre de WhatsApp</span> (otro chip).
                 Verifícalo con el código por SMS o llamada que te llega a ese número.
               </p>
+              <a
+                href="https://business.facebook.com/wa/manage/phone-numbers"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 underline hover:no-underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Administrador de WhatsApp — números de teléfono
+              </a>
             </div>
           </li>
           <li className="flex gap-3">
@@ -230,6 +248,15 @@ export default function WhatsappWizard() {
                 <span className="font-medium">WABA ID</span> y <span className="font-medium">Phone Number ID</span> en la sección{' '}
                 <span className="font-medium">API Setup</span>.
               </p>
+              <a
+                href="https://developers.facebook.com/apps"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 underline hover:no-underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Ir a Mis apps (Meta for Developers)
+              </a>
             </div>
           </li>
           <li className="flex gap-3">
