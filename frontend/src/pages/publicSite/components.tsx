@@ -91,7 +91,7 @@ export function NavBar({
         </a>
 
         {!!links.length && (
-          <div className="hidden sm:flex items-center gap-6">
+          <div className="psite-nav-links">
             {links.map((l) => (
               <a key={l.href} href={l.href} className="psite-nav-link text-sm font-medium" style={{ color: theme.text }}>
                 {l.label}
@@ -106,7 +106,7 @@ export function NavBar({
               href={waHref}
               target="_blank"
               rel="noreferrer"
-              className="psite-btn-primary hidden sm:inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold shadow"
+              className="psite-btn-primary psite-nav-cta items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold shadow"
               style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)`, color: '#fff', ...glowVar(color, theme) }}
             >
               <MessageCircle size={13} />

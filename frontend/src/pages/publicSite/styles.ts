@@ -12,6 +12,25 @@ html {
 .psite-nav-link:hover {
   opacity: 1;
 }
+.psite-nav-links {
+  display: none;
+  align-items: center;
+  gap: 24px;
+}
+.psite-nav-cta {
+  display: none;
+}
+@media (min-width: 640px) {
+  /* the embedded WhatsApp widget ships its own global ".hidden { display: none !important }"
+     rule with no scoping, which clobbers Tailwind's "hidden sm:*" pattern on this page —
+     these two classes exist to sidestep that collision by never being named "hidden". */
+  .psite-nav-links {
+    display: flex;
+  }
+  .psite-nav-cta {
+    display: inline-flex;
+  }
+}
 .psite-mobile-link {
   transition: background-color .15s ease;
 }
