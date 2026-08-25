@@ -168,10 +168,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         csp_parts = ["default-src 'self'"]
         if widget_url:
             csp_parts.append(f"script-src 'self' {widget_url} https://js.stripe.com https://connect.facebook.net")
-            csp_parts.append(f"style-src 'self' 'unsafe-inline' {widget_url}")
+            csp_parts.append(f"style-src 'self' 'unsafe-inline' {widget_url} https://fonts.googleapis.com")
         else:
             csp_parts.append("script-src 'self' https://js.stripe.com https://connect.facebook.net")
-            csp_parts.append("style-src 'self' 'unsafe-inline'")
+            csp_parts.append("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com")
+        csp_parts.append("font-src 'self' https://fonts.gstatic.com")
         csp_parts.append("img-src 'self' data: blob: https:")
         csp_parts.append("frame-src 'self' https://js.stripe.com https://www.facebook.com https://facebook.com")
         connect_src = ["'self'"]

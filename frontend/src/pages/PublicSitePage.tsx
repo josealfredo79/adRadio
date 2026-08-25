@@ -5,9 +5,11 @@ import api from '@/lib/api'
 import SEO from '@/components/SEO'
 import { MapPin, MessageCircle } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
-import { waDigits, categoryEmoji } from '@/pages/publicSite/utils'
-import { MeshBackground, Badge, SectionHeading, Avatar, ProductCard, cardElevationStyle, glowVar } from '@/pages/publicSite/components'
+import { waDigits, categoryEmoji, type BusinessHours } from '@/pages/publicSite/utils'
+import { MeshBackground, Badge, SectionHeading, Avatar, ProductCard, BusinessHoursCard, cardElevationStyle, glowVar, SITE_SERIF } from '@/pages/publicSite/components'
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
+
+const SITE_FONT_HREF = 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap'
 
 interface PublicSite {
   advertiser_id: string
@@ -22,6 +24,7 @@ interface PublicSite {
   hero_image_url: string
   site_theme: string
   whatsapp_number: string
+  business_hours: BusinessHours | null
 }
 
 interface PublicProduct {
@@ -87,6 +90,14 @@ export default function PublicSitePage() {
         .slice(0, 3),
     [products]
   )
+
+  useEffect(() => {
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = SITE_FONT_HREF
+    document.head.appendChild(link)
+    return () => { link.remove() }
+  }, [])
 
   useEffect(() => {
     if (!site || widgetMounted.current) return
@@ -166,7 +177,7 @@ export default function PublicSitePage() {
               ) : (
                 <div className="text-6xl mb-4">{categoryEmoji(site.business_category)}</div>
               )}
-              <h1 className="text-3xl sm:text-4xl font-bold">{site.business_name}</h1>
+              <h1 className="text-3xl sm:text-4xl font-medium" style={{ fontFamily: SITE_SERIF }}>{site.business_name}</h1>
               {site.tagline && (
                 <p className="mt-3 text-lg" style={site.hero_image_url ? { color: 'rgba(255,255,255,.85)' } : { color: theme.muted }}>
                   {site.tagline}
@@ -184,6 +195,18 @@ export default function PublicSitePage() {
                   </Badge>
                 )}
               </div>
+              {site.whatsapp_number && (
+                <a
+                  href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="psite-btn-primary mt-6 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-lg"
+                  style={{ background: `linear-gradient(135deg, ${site.color}, ${site.color}cc)`, color: '#fff', ...glowVar(site.color, theme) }}
+                >
+                  <MessageCircle size={16} />
+                  Chatea con {site.agent}
+                </a>
+              )}
             </div>
           </header>
 
@@ -258,25 +281,43 @@ export default function PublicSitePage() {
             </section>
           )}
 
-          <main className="max-w-2xl mx-auto px-6 pb-16 text-center space-y-6">
-            {!site.tagline && (
-              <p className="leading-relaxed" style={{ color: theme.muted }}>
-                Bienvenido a {site.business_name}. Escríbenos por el chat en la esquina de tu pantalla y {site.agent}{' '}
+          <section className="max-w-4xl mx-auto px-6 pb-16 grid grid-cols-1 sm:grid-cols-2 gap-8 items-start">
+            <div>
+              <SectionHeading eyebrow="Sobre nosotros" title={`Conoce a ${site.business_name}`} color={site.color} />
+              <p className="leading-relaxed text-center sm:text-left" style={{ color: theme.muted }}>
+                Bienvenido a {site.business_name}
+                {site.city ? ` en ${site.city}` : ''}. Escríbenos por el chat en la esquina de tu pantalla y {site.agent}{' '}
                 te va a atender al instante.
               </p>
-            )}
-            <div
-              className="psite-btn-primary inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-lg cursor-default"
-              style={{
-                background: `linear-gradient(135deg, ${site.color}, ${site.color}cc)`,
-                color: '#fff',
-                ...glowVar(site.color, theme),
-              }}
-            >
-              <MessageCircle size={16} />
-              Chatea con {site.agent}
             </div>
-          </main>
+            <BusinessHoursCard hours={site.business_hours} color={site.color} theme={theme} />
+          </section>
+
+          <section className="max-w-2xl mx-auto px-6 pb-16 text-center">
+            <div
+              className="rounded-3xl p-10"
+              style={{ background: `linear-gradient(135deg, ${site.color}, ${site.color}cc)`, ...glowVar(site.color, theme) }}
+            >
+              <p className="font-medium text-white text-xl mb-1" style={{ fontFamily: SITE_SERIF }}>
+                ¿Listo para escribirnos?
+              </p>
+              <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,.85)' }}>
+                Un mensaje y {site.agent} te responde al instante.
+              </p>
+              {site.whatsapp_number && (
+                <a
+                  href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="psite-btn-primary inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-lg"
+                  style={{ background: '#fff', color: site.color }}
+                >
+                  <MessageCircle size={16} />
+                  Chatea con {site.agent}
+                </a>
+              )}
+            </div>
+          </section>
 
           <footer className="border-t px-6 py-8 pb-32 text-center text-sm" style={{ borderColor: theme.cardBorder, color: theme.muted }}>
             {site.whatsapp_number && (
