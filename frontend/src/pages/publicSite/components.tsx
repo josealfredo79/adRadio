@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Menu, MessageCircle, X } from 'lucide-react'
+import { Clock, Menu, MessageCircle, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { categoryEmoji, formatBusinessHours, formatPrice, waDigits } from './utils'
 import type { BusinessHours } from './utils'
 import type { SiteThemeDef } from './theme'
@@ -156,6 +156,77 @@ export function NavBar({
         </div>
       )}
     </div>
+  )
+}
+
+export function BenefitsSection({
+  businessName,
+  agent,
+  color,
+  theme,
+}: {
+  businessName: string
+  agent: string
+  color: string
+  theme: SiteThemeDef
+}) {
+  const benefits = [
+    {
+      icon: MessageCircle,
+      title: 'Respuesta inmediata',
+      text: `Escríbenos por WhatsApp y ${agent} te contesta al instante, sin esperas ni filas.`,
+    },
+    {
+      icon: Clock,
+      title: 'Siempre disponibles',
+      text: 'Puedes escribirnos cuando gustes — atendemos tu mensaje en cuanto llega.',
+    },
+    {
+      icon: ShieldCheck,
+      title: 'Atención personalizada',
+      text: `Cada conversación con ${businessName} se atiende de forma directa, no con respuestas genéricas.`,
+    },
+    {
+      icon: Sparkles,
+      title: 'Confianza real',
+      text: 'Conoce las experiencias de quienes ya nos eligieron, más abajo en esta página.',
+    },
+  ]
+
+  return (
+    <section id="beneficios" className="psite-anchor max-w-4xl mx-auto px-6 pt-16 pb-4">
+      <SectionHeading eyebrow="Beneficios" title={`¿Por qué elegir a ${businessName}?`} color={color} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {benefits.map((b, idx) => (
+          <div
+            key={b.title}
+            className="psite-hover-lift rounded-2xl p-5 flex items-start gap-4"
+            style={{
+              background: theme.cardBg,
+              border: `1px solid ${theme.cardBorder}`,
+              animation: `psiteFadeUp 0.5s ease ${idx * 0.07}s both`,
+              ...cardElevationStyle(theme),
+              ...glowVar(color, theme),
+            }}
+          >
+            <div
+              className="h-11 w-11 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: `${color}1a`, color }}
+            >
+              <b.icon size={20} strokeWidth={2} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm" style={{ color: theme.text }}>
+                {b.title}
+              </h3>
+              <p className="text-sm mt-1 leading-relaxed" style={{ color: theme.muted }}>
+                {b.text}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

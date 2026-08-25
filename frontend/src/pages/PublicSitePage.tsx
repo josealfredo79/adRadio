@@ -6,7 +6,7 @@ import SEO from '@/components/SEO'
 import { MapPin, MessageCircle } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
 import { waDigits, categoryEmoji, type BusinessHours } from '@/pages/publicSite/utils'
-import { MeshBackground, NavBar, Badge, SectionHeading, Avatar, ProductCard, BusinessHoursCard, cardElevationStyle, glowVar, SITE_SERIF } from '@/pages/publicSite/components'
+import { MeshBackground, NavBar, BenefitsSection, Badge, SectionHeading, Avatar, ProductCard, BusinessHoursCard, cardElevationStyle, glowVar, SITE_SERIF } from '@/pages/publicSite/components'
 import type { NavLink } from '@/pages/publicSite/components'
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
 
@@ -148,6 +148,7 @@ export default function PublicSitePage() {
   const dark = isDarkTheme(theme)
 
   const navLinks: NavLink[] = [
+    { label: 'Beneficios', href: '#beneficios' },
     ...(stories?.length ? [{ label: 'Opiniones', href: '#opiniones' }] : []),
     ...(products?.length ? [{ label: 'Catálogo', href: '#catalogo' }] : []),
     { label: 'Nosotros', href: '#nosotros' },
@@ -228,6 +229,8 @@ export default function PublicSitePage() {
               )}
             </div>
           </header>
+
+          <BenefitsSection businessName={site.business_name} agent={site.agent} color={site.color} theme={theme} />
 
           {!!stories?.length && (
             <section id="opiniones" className="psite-anchor max-w-4xl mx-auto px-6 pt-16 pb-4">
