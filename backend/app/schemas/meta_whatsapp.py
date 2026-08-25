@@ -33,6 +33,7 @@ class MetaWhatsappConnectionOut(BaseModel):
     utility_template_status: str
     utility_template_name: str | None = None
     appointment_template_name: str | None = None
+    radio_invite_template_name: str | None = None
 
 
 class MetaWhatsappHealthOut(BaseModel):
