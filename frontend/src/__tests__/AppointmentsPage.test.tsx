@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AppointmentsPage from '@/pages/AppointmentsPage'
 
+vi.mock('@/contexts/AuthContext', () => {
+  const u = { id: '1', email: 'admin@test.com', business_name: 'Mi Negocio', business_hours: null }
+  return { useAuth: () => ({ user: u, setUser: vi.fn(), loading: false }) }
+})
+
 const mockStats = { total: 10, upcoming: 3, today: 2, google_connected: false }
 const mockAppointments = [
   { id: '1', customer_name: 'Maria Lopez', customer_phone: '+521234567890', service: 'Corte de cabello', scheduled_at: '2026-06-04T14:00:00Z', duration_min: 30, notes: null, status: 'confirmed', google_event_id: null, contact_id: 'c1', created_at: '2025-01-01T00:00:00Z' },
@@ -94,5 +99,20 @@ describe('AppointmentsPage', () => {
       </HelmetProvider>
     )
     expect(screen.getByText('No hay citas todavía')).toBeDefined()
+  })
+
+  it('shows the hours editor toggle collapsed by default', () => {
+    renderPage()
+    expect(screen.getByText('Horario en que se pueden agendar citas')).toBeDefined()
+    expect(screen.queryByText('Guardar horario')).toBeNull()
+  })
+
+  it('expands the hours editor and shows a save button', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event')
+    renderPage()
+    await userEvent.click(screen.getByText('Horario en que se pueden agendar citas'))
+    expect(screen.getByText('Guardar horario')).toBeDefined()
+    // 7 days rendered (one per weekday label)
+    expect(screen.getAllByText('Cerrado').length).toBe(7)
   })
 })

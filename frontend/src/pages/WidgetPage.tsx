@@ -6,7 +6,6 @@ import SEO from '@/components/SEO'
 import { useAuth } from '@/contexts/AuthContext'
 import { SITE_THEMES } from '@/pages/publicSite/theme'
 import {
-  DAY_LABELS,
   DAY_ORDER,
   DEFAULT_BUSINESS_HOURS,
   DEFAULT_LANDING_SECTIONS,
@@ -15,6 +14,7 @@ import {
   type BusinessHours,
   type LandingSectionId,
 } from '@/pages/publicSite/utils'
+import BusinessHoursEditor from '@/components/BusinessHoursEditor'
 
 const SITE_URL = (import.meta.env.VITE_SITE_URL as string | undefined) ?? (typeof window !== 'undefined' ? window.location.origin : '')
 
@@ -115,14 +115,6 @@ function LandingPageWizard({ config, openSignal }: { config?: { color: string; g
 
   const toggleSectionVisible = (index: number) => {
     setSectionOrder((prev) => prev.map((s, i) => (i === index ? { ...s, visible: !s.visible } : s)))
-  }
-
-  const toggleDayClosed = (day: string) => {
-    setBusinessHours((prev) => ({ ...prev, [day]: prev[day] ? null : ['09:00', '18:00'] }))
-  }
-
-  const setDayRange = (day: string, range: [string, string]) => {
-    setBusinessHours((prev) => ({ ...prev, [day]: range }))
   }
 
   const suggestMutation = useMutation({
@@ -511,43 +503,13 @@ function LandingPageWizard({ config, openSignal }: { config?: { color: string; g
             </div>
           </div>
 
-          {/* Horario de atención */}
+          {/* Horario de atención — también controla qué horarios de cita
+              ofrece el bot (ver BusinessHoursEditor.tsx); ese mismo editor
+              está duplicado en AppointmentsPage.tsx para que sea
+              descubrible desde ahí también. */}
           <div className="space-y-2">
             <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Horario de atención</label>
-            <div className="space-y-1.5">
-              {DAY_ORDER.map((day) => {
-                const val = businessHours[day] ?? null
-                return (
-                  <div key={day} className="flex items-center gap-2 text-sm">
-                    <span className="w-9 text-xs text-gray-500 dark:text-gray-400 shrink-0">{DAY_LABELS[day]}</span>
-                    <label className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                      <input type="checkbox" checked={val === null} onChange={() => toggleDayClosed(day)} />
-                      Cerrado
-                    </label>
-                    {val && (
-                      <>
-                        <input
-                          type="time"
-                          value={val[0]}
-                          onChange={(e) => setDayRange(day, [e.target.value, val[1]])}
-                          className="rounded-lg border border-gray-300 dark:border-gray-700 px-2 py-1 text-xs bg-background text-foreground"
-                        />
-                        <span className="text-gray-400 dark:text-gray-500">-</span>
-                        <input
-                          type="time"
-                          value={val[1]}
-                          onChange={(e) => setDayRange(day, [val[0], e.target.value])}
-                          className="rounded-lg border border-gray-300 dark:border-gray-700 px-2 py-1 text-xs bg-background text-foreground"
-                        />
-                      </>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            {!hoursValid && (
-              <p className="text-xs text-red-500">La hora de apertura debe ser antes que la de cierre.</p>
-            )}
+            <BusinessHoursEditor value={businessHours} onChange={setBusinessHours} />
           </div>
 
           {/* Color de acento */}

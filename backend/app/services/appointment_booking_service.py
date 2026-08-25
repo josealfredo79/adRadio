@@ -117,6 +117,19 @@ def _format_slot_time(dt: datetime) -> str:
     return dt.strftime("%I:%M %p").lstrip("0").lower()
 
 
+def _format_slots_page(all_slots: list[datetime], offset: int) -> tuple[list[datetime], str, bool]:
+    """One page of up to MAX_SLOTS_SHOWN slots starting at *offset*, plus
+    whether there are more beyond this page. Previously the bot silently
+    truncated to the first MAX_SLOTS_SHOWN slots of the day and never showed
+    the rest — a customer wanting an afternoon slot could never even see one
+    was available. Paginating (instead of just raising the cap) keeps each
+    WhatsApp message short and readable while still surfacing everything."""
+    page = all_slots[offset:offset + MAX_SLOTS_SHOWN]
+    options = "\n".join(f"{i}) {_format_slot_time(s)}" for i, s in enumerate(page, start=1))
+    has_more = offset + MAX_SLOTS_SHOWN < len(all_slots)
+    return page, options, has_more
+
+
 async def _load_state(redis, key: str) -> dict | None:
     if not redis:
         return None
@@ -182,24 +195,40 @@ async def _advance(
         if not slots:
             return f"No tenemos horarios disponibles ese día 😕 ¿Quieres intentar con otra fecha?"
 
-        shown = slots[:MAX_SLOTS_SHOWN]
-        options = "\n".join(f"{i}) {_format_slot_time(s)}" for i, s in enumerate(shown, start=1))
+        _, options, has_more = _format_slots_page(slots, 0)
         state["step"] = "collecting_time"
         state["day"] = parsed.isoformat()
+        state["offset"] = 0
         await _save_state(redis, key, state)
-        return f"Estos son los horarios disponibles:\n{options}\n\nResponde con el número de la opción que prefieras."
+        more_hint = "\n\nEscribe *MAS* para ver más horarios." if has_more else ""
+        return f"Estos son los horarios disponibles:\n{options}\n\nResponde con el número de la opción que prefieras.{more_hint}"
 
     if step == "collecting_time":
         day = date.fromisoformat(state["day"])
-        slots = (await get_available_slots(db, advertiser, day))[:MAX_SLOTS_SHOWN]
-        choice = message.strip()
-        if not choice.isdigit() or not (1 <= int(choice) <= len(slots)):
-            if not slots:
-                return "Ese horario ya no está disponible 😕 ¿Quieres intentar con otra fecha?"
-            options = "\n".join(f"{i}) {_format_slot_time(s)}" for i, s in enumerate(slots, start=1))
-            return f"Elige un número válido de la lista:\n{options}"
+        all_slots = await get_available_slots(db, advertiser, day)
+        offset = state.get("offset", 0)
+        choice = message.strip().lower()
 
-        chosen = slots[int(choice) - 1]
+        if choice in ("mas", "más", "more"):
+            next_offset = offset + MAX_SLOTS_SHOWN
+            new_offset = next_offset if next_offset < len(all_slots) else 0
+            state["offset"] = new_offset
+            await _save_state(redis, key, state)
+            page, options, has_more = _format_slots_page(all_slots, new_offset)
+            if not page:
+                return "Ese día ya no tiene horarios disponibles 😕 ¿Quieres intentar con otra fecha?"
+            more_hint = "\n\nEscribe *MAS* para ver más horarios." if has_more else ""
+            wrap_note = " (de nuevo desde el inicio)" if new_offset == 0 and offset != 0 else ""
+            return f"Horarios disponibles{wrap_note}:\n{options}\n\nResponde con el número de la opción que prefieras.{more_hint}"
+
+        page, options, has_more = _format_slots_page(all_slots, offset)
+        if not choice.isdigit() or not (1 <= int(choice) <= len(page)):
+            if not page:
+                return "Ese horario ya no está disponible 😕 ¿Quieres intentar con otra fecha?"
+            more_hint = "\n\nEscribe *MAS* para ver más horarios." if has_more else ""
+            return f"Elige un número válido de la lista:\n{options}{more_hint}"
+
+        chosen = page[int(choice) - 1]
         state["step"] = "collecting_name"
         state["chosen_slot"] = chosen.isoformat()
         await _save_state(redis, key, state)

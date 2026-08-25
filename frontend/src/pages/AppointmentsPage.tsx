@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
-import { CalendarDays, Plus, Trash2, Check, X, Clock, ExternalLink, Unplug } from 'lucide-react'
+import { CalendarDays, Plus, Trash2, Check, X, Clock, ExternalLink, Unplug, Settings2, ChevronDown } from 'lucide-react'
 import SEO from '@/components/SEO'
+import { useAuth } from '@/contexts/AuthContext'
+import BusinessHoursEditor from '@/components/BusinessHoursEditor'
+import { DEFAULT_BUSINESS_HOURS, type BusinessHours } from '@/pages/publicSite/utils'
 
 interface Appointment {
   id: string
@@ -43,6 +46,9 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function AppointmentsPage() {
   const qc = useQueryClient()
+  const { user, setUser } = useAuth()
+  const [showHours, setShowHours] = useState(false)
+  const [businessHours, setBusinessHours] = useState<BusinessHours>(user?.business_hours ?? DEFAULT_BUSINESS_HOURS)
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({
     customer_name: '',
@@ -88,6 +94,12 @@ export default function AppointmentsPage() {
     }
     window.history.replaceState({}, '', window.location.pathname)
   }, [])
+
+  // Keeps the hours editor in sync if `user` loads/updates after mount
+  // (context can populate asynchronously) or after a save round-trips.
+  useEffect(() => {
+    setBusinessHours(user?.business_hours ?? DEFAULT_BUSINESS_HOURS)
+  }, [user?.business_hours])
 
   // Parent-side listener: reacts when the popup above posts back.
   useEffect(() => {
@@ -138,6 +150,15 @@ export default function AppointmentsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
       qc.invalidateQueries({ queryKey: ['appointment-stats'] })
+    },
+  })
+
+  const hoursValid = Object.values(businessHours).every((v) => !v || v[0] < v[1])
+  const saveHoursMutation = useMutation({
+    mutationFn: () => api.patch('/me', { business_hours: businessHours }),
+    onSuccess: (res) => {
+      if (setUser) setUser(res.data)
+      setShowHours(false)
     },
   })
 
@@ -238,6 +259,37 @@ export default function AppointmentsPage() {
           <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
           <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{stats?.total ?? 0}</p>
         </div>
+      </div>
+
+      {/* Horario de citas — mismo campo business_hours que controla el
+          horario mostrado en el sitio público (ver BusinessHoursEditor.tsx);
+          el bot de WhatsApp solo ofrece citas dentro de estas horas. */}
+      <div className="rounded-xl bg-white border border-gray-100 shadow-sm dark:bg-gray-950 dark:border-gray-800">
+        <button
+          onClick={() => setShowHours((v) => !v)}
+          className="flex w-full items-center justify-between p-4 text-left"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+            <Settings2 className="h-4 w-4" />
+            Horario en que se pueden agendar citas
+          </span>
+          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showHours ? 'rotate-180' : ''}`} />
+        </button>
+        {showHours && (
+          <div className="space-y-3 border-t border-gray-100 p-4 dark:border-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              El bot solo ofrece horarios de cita dentro de este rango — también es el horario que se muestra en tu página pública.
+            </p>
+            <BusinessHoursEditor value={businessHours} onChange={setBusinessHours} />
+            <button
+              onClick={() => saveHoursMutation.mutate()}
+              disabled={saveHoursMutation.isPending || !hoursValid}
+              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 dark:bg-brand-600 dark:hover:bg-brand-700 transition-colors"
+            >
+              {saveHoursMutation.isPending ? 'Guardando…' : 'Guardar horario'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Appointments list */}

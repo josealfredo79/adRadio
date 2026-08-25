@@ -264,6 +264,67 @@ class TestHandleAppointmentBooking:
             await _cleanup([user_id])
 
     @pytest.mark.asyncio
+    async def test_more_than_one_page_shows_mas_hint_and_paginates(self, fake_redis):
+        """9am-6pm at 30-min steps is 18 slots — more than MAX_SLOTS_SHOWN (6).
+        Previously the bot silently cut this to the first 6 (9:00-11:30am)
+        and never showed the afternoon at all."""
+        user_id = await _seed_user(business_hours={
+            "mon": ["09:00", "18:00"], "tue": ["09:00", "18:00"], "wed": ["09:00", "18:00"],
+            "thu": ["09:00", "18:00"], "fri": ["09:00", "18:00"], "sat": ["09:00", "18:00"],
+            "sun": ["09:00", "18:00"],
+        })
+        contact_id = await _seed_contact(user_id)
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                contact = await db.get(Contact, contact_id)
+                await handle_appointment_booking(db, user, contact, "quiero agendar una cita", fake_redis)
+
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                contact = await db.get(Contact, contact_id)
+                reply_day = await handle_appointment_booking(db, user, contact, "mañana", fake_redis)
+            assert "6)" in reply_day
+            assert "7)" not in reply_day  # only the first page
+            assert "MAS" in reply_day
+
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                contact = await db.get(Contact, contact_id)
+                reply_more = await handle_appointment_booking(db, user, contact, "mas", fake_redis)
+            # Second page shows the next 6 (afternoon) slots, not a repeat of the first
+            assert reply_more != reply_day
+            assert "MAS" in reply_more  # 18 slots / 6 per page = 3 pages, more after page 2
+
+            import json
+            state = json.loads(next(iter(fake_redis.store.values())))
+            assert state["offset"] == 6
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_single_page_has_no_mas_hint(self, fake_redis):
+        user_id = await _seed_user(business_hours={
+            "mon": ["09:00", "11:00"], "tue": ["09:00", "11:00"], "wed": ["09:00", "11:00"],
+            "thu": ["09:00", "11:00"], "fri": ["09:00", "11:00"], "sat": ["09:00", "11:00"],
+            "sun": ["09:00", "11:00"],
+        })
+        contact_id = await _seed_contact(user_id)
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                contact = await db.get(Contact, contact_id)
+                await handle_appointment_booking(db, user, contact, "quiero agendar una cita", fake_redis)
+
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                contact = await db.get(Contact, contact_id)
+                reply = await handle_appointment_booking(db, user, contact, "mañana", fake_redis)
+            assert "MAS" not in reply
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
     async def test_notifies_owner_via_whatsapp_only_when_connected(self, fake_redis):
         user_id = await _seed_user(
             whatsapp_number="+525500001111",
