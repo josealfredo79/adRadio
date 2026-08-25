@@ -1,4 +1,23 @@
 export const PUBLIC_SITE_STYLES = `
+html {
+  scroll-behavior: smooth;
+}
+.psite-anchor {
+  scroll-margin-top: 84px;
+}
+.psite-nav-link {
+  opacity: .7;
+  transition: opacity .15s ease;
+}
+.psite-nav-link:hover {
+  opacity: 1;
+}
+.psite-mobile-link {
+  transition: background-color .15s ease;
+}
+.psite-mobile-link:hover {
+  background-color: rgba(127,127,127,.1);
+}
 @keyframes psiteFadeUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }

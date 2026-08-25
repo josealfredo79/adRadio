@@ -6,7 +6,8 @@ import SEO from '@/components/SEO'
 import { MapPin, MessageCircle } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
 import { waDigits, categoryEmoji, type BusinessHours } from '@/pages/publicSite/utils'
-import { MeshBackground, Badge, SectionHeading, Avatar, ProductCard, BusinessHoursCard, cardElevationStyle, glowVar, SITE_SERIF } from '@/pages/publicSite/components'
+import { MeshBackground, NavBar, Badge, SectionHeading, Avatar, ProductCard, BusinessHoursCard, cardElevationStyle, glowVar, SITE_SERIF } from '@/pages/publicSite/components'
+import type { NavLink } from '@/pages/publicSite/components'
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
 
 const SITE_FONT_HREF = 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap'
@@ -146,6 +147,13 @@ export default function PublicSitePage() {
   const theme = getSiteTheme(site.site_theme)
   const dark = isDarkTheme(theme)
 
+  const navLinks: NavLink[] = [
+    ...(stories?.length ? [{ label: 'Opiniones', href: '#opiniones' }] : []),
+    ...(products?.length ? [{ label: 'Catálogo', href: '#catalogo' }] : []),
+    { label: 'Nosotros', href: '#nosotros' },
+    ...(site.business_hours ? [{ label: 'Horario', href: '#horario' }] : []),
+  ]
+
   return (
     <>
       <SEO
@@ -157,6 +165,17 @@ export default function PublicSitePage() {
         <MeshBackground color={site.color} dark={dark} />
 
         <div className="relative z-10">
+          <NavBar
+            businessName={site.business_name}
+            logoUrl={site.logo_url}
+            categoryFallback={site.business_category}
+            whatsappNumber={site.whatsapp_number}
+            agent={site.agent}
+            color={site.color}
+            theme={theme}
+            links={navLinks}
+          />
+
           <header
             className="px-6 py-20 text-center relative overflow-hidden"
             style={
@@ -211,7 +230,7 @@ export default function PublicSitePage() {
           </header>
 
           {!!stories?.length && (
-            <section className="max-w-4xl mx-auto px-6 pt-16 pb-4">
+            <section id="opiniones" className="psite-anchor max-w-4xl mx-auto px-6 pt-16 pb-4">
               <SectionHeading eyebrow="Historias reales" title="Lo que dicen nuestros clientes" color={site.color} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {stories.map((s, idx) => (
@@ -263,7 +282,7 @@ export default function PublicSitePage() {
           )}
 
           {!!products?.length && (
-            <section className="max-w-4xl mx-auto px-6 pb-16">
+            <section id="catalogo" className="psite-anchor max-w-4xl mx-auto px-6 pb-16">
               <SectionHeading eyebrow="Catálogo" title="Nuestro catálogo" color={site.color} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {products.map((p, idx) => (
@@ -282,7 +301,7 @@ export default function PublicSitePage() {
           )}
 
           <section className="max-w-4xl mx-auto px-6 pb-16 grid grid-cols-1 sm:grid-cols-2 gap-8 items-start">
-            <div>
+            <div id="nosotros" className="psite-anchor">
               <SectionHeading eyebrow="Sobre nosotros" title={`Conoce a ${site.business_name}`} color={site.color} />
               <p className="leading-relaxed text-center sm:text-left" style={{ color: theme.muted }}>
                 Bienvenido a {site.business_name}
@@ -290,7 +309,9 @@ export default function PublicSitePage() {
                 te va a atender al instante.
               </p>
             </div>
-            <BusinessHoursCard hours={site.business_hours} color={site.color} theme={theme} />
+            <div id="horario" className="psite-anchor">
+              <BusinessHoursCard hours={site.business_hours} color={site.color} theme={theme} />
+            </div>
           </section>
 
           <section className="max-w-2xl mx-auto px-6 pb-16 text-center">

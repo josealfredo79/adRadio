@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { categoryEmoji, formatBusinessHours, formatPrice } from './utils'
+import { Menu, MessageCircle, X } from 'lucide-react'
+import { categoryEmoji, formatBusinessHours, formatPrice, waDigits } from './utils'
 import type { BusinessHours } from './utils'
 import type { SiteThemeDef } from './theme'
 import { isDarkTheme } from './theme'
@@ -41,6 +43,119 @@ export function Badge({
       {icon}
       {children}
     </span>
+  )
+}
+
+export interface NavLink {
+  label: string
+  href: string
+}
+
+export function NavBar({
+  businessName,
+  logoUrl,
+  categoryFallback,
+  whatsappNumber,
+  agent,
+  color,
+  theme,
+  links,
+}: {
+  businessName: string
+  logoUrl: string
+  categoryFallback: string
+  whatsappNumber: string
+  agent: string
+  color: string
+  theme: SiteThemeDef
+  links: NavLink[]
+}) {
+  const [open, setOpen] = useState(false)
+  const waHref = whatsappNumber ? `https://wa.me/${waDigits(whatsappNumber)}` : null
+
+  return (
+    <div
+      className="sticky top-0 z-40"
+      style={{ background: `${theme.bg}ee`, backdropFilter: 'blur(8px)', borderBottom: `1px solid ${theme.cardBorder}` }}
+    >
+      <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between gap-6">
+        <a href="#" className="flex items-center gap-2.5 min-w-0">
+          {logoUrl ? (
+            <img src={logoUrl} alt={businessName} className="h-9 w-9 rounded-lg object-cover shrink-0" />
+          ) : (
+            <span className="text-xl shrink-0">{categoryEmoji(categoryFallback)}</span>
+          )}
+          <span className="font-semibold text-[15px] truncate" style={{ color: theme.text }}>
+            {businessName}
+          </span>
+        </a>
+
+        {!!links.length && (
+          <div className="hidden sm:flex items-center gap-6">
+            {links.map((l) => (
+              <a key={l.href} href={l.href} className="psite-nav-link text-sm font-medium" style={{ color: theme.text }}>
+                {l.label}
+              </a>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 shrink-0">
+          {waHref && (
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noreferrer"
+              className="psite-btn-primary hidden sm:inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold shadow"
+              style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)`, color: '#fff', ...glowVar(color, theme) }}
+            >
+              <MessageCircle size={13} />
+              Chatea con {agent}
+            </a>
+          )}
+          {!!links.length && (
+            <button
+              type="button"
+              aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
+              onClick={() => setOpen((v) => !v)}
+              className="sm:hidden -m-2 p-2"
+              style={{ color: theme.text }}
+            >
+              {open ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {open && !!links.length && (
+        <div className="sm:hidden px-4 pb-3 flex flex-col gap-1" style={{ borderTop: `1px solid ${theme.cardBorder}` }}>
+          {links.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="psite-mobile-link rounded-lg px-3 py-2.5 text-[15px] font-medium"
+              style={{ color: theme.text }}
+            >
+              {l.label}
+            </a>
+          ))}
+          {waHref && (
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setOpen(false)}
+              className="psite-btn-primary mt-1 flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold"
+              style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)`, color: '#fff' }}
+            >
+              <MessageCircle size={15} />
+              Chatea con {agent}
+            </a>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

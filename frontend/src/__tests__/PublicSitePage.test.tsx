@@ -83,13 +83,15 @@ describe('PublicSitePage — logo and theme', () => {
 
   it('renders unknown/unset site_theme without crashing, falling back to the default look', () => {
     renderPage([], { site_theme: 'claro' })
-    expect(screen.getByText('Tacos El Primo')).toBeDefined()
+    expect(screen.getByRole('heading', { level: 1, name: 'Tacos El Primo' })).toBeDefined()
   })
 
   it('renders the logo image instead of the category emoji when logo_url is set', () => {
     renderPage([], { logo_url: 'https://cdn.example.com/logos/foo.jpg' })
-    const img = screen.getByAltText('Tacos El Primo') as HTMLImageElement
-    expect(img.src).toBe('https://cdn.example.com/logos/foo.jpg')
+    // logo appears twice: once in the sticky nav, once in the hero header
+    const imgs = screen.getAllByAltText('Tacos El Primo') as HTMLImageElement[]
+    expect(imgs.length).toBe(2)
+    imgs.forEach((img) => expect(img.src).toBe('https://cdn.example.com/logos/foo.jpg'))
   })
 
   it('falls back to the category emoji when no logo_url is set', () => {
@@ -105,13 +107,13 @@ describe('PublicSitePage — hero image and footer', () => {
 
   it('renders the hero image as the header background when hero_image_url is set', () => {
     renderPage([], { hero_image_url: 'https://cdn.example.com/hero-images/foo.jpg' })
-    const header = screen.getByText('Tacos El Primo').closest('header') as HTMLElement
+    const header = screen.getByRole('heading', { level: 1, name: 'Tacos El Primo' }).closest('header') as HTMLElement
     expect(header.style.backgroundImage).toContain('https://cdn.example.com/hero-images/foo.jpg')
   })
 
   it('falls back to the plain gradient header when no hero_image_url is set', () => {
     renderPage([])
-    const header = screen.getByText('Tacos El Primo').closest('header') as HTMLElement
+    const header = screen.getByRole('heading', { level: 1, name: 'Tacos El Primo' }).closest('header') as HTMLElement
     expect(header.style.background).toContain('linear-gradient')
     expect(header.style.backgroundImage).not.toContain('cdn.example.com')
   })
