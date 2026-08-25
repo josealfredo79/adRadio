@@ -82,5 +82,7 @@ class UserOut(BaseModel):
     slug: str | None = None
     landing_tagline: str | None = None
     site_theme: str = "medianoche"
+    landing_sections: list[str] | None = None
+    business_hours: dict | None = None
 
     model_config = {"from_attributes": True}

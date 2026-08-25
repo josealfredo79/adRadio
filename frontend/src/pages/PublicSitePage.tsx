@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import SEO from '@/components/SEO'
 import { MapPin, MessageCircle } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
-import { waDigits, categoryEmoji, type BusinessHours } from '@/pages/publicSite/utils'
+import { waDigits, categoryEmoji, DEFAULT_LANDING_SECTIONS, type BusinessHours, type LandingSectionId } from '@/pages/publicSite/utils'
 import { MeshBackground, NavBar, BenefitsSection, Badge, SectionHeading, Avatar, ProductCard, BusinessHoursCard, cardElevationStyle, glowVar, SITE_SERIF } from '@/pages/publicSite/components'
 import type { NavLink } from '@/pages/publicSite/components'
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
@@ -26,6 +26,7 @@ interface PublicSite {
   site_theme: string
   whatsapp_number: string
   business_hours: BusinessHours | null
+  landing_sections: LandingSectionId[] | null
 }
 
 interface PublicProduct {
@@ -147,13 +148,25 @@ export default function PublicSitePage() {
   const theme = getSiteTheme(site.site_theme)
   const dark = isDarkTheme(theme)
 
-  const navLinks: NavLink[] = [
-    { label: 'Beneficios', href: '#beneficios' },
-    ...(stories?.length ? [{ label: 'Opiniones', href: '#opiniones' }] : []),
-    ...(products?.length ? [{ label: 'Catálogo', href: '#catalogo' }] : []),
-    { label: 'Nosotros', href: '#nosotros' },
-    ...(site.business_hours ? [{ label: 'Horario', href: '#horario' }] : []),
-  ]
+  const sections: LandingSectionId[] = site.landing_sections?.length ? site.landing_sections : DEFAULT_LANDING_SECTIONS
+
+  const navLinks: NavLink[] = sections.flatMap((id): NavLink[] => {
+    switch (id) {
+      case 'beneficios':
+        return [{ label: 'Beneficios', href: '#beneficios' }]
+      case 'opiniones':
+        return stories?.length ? [{ label: 'Opiniones', href: '#opiniones' }] : []
+      case 'catalogo':
+        return products?.length ? [{ label: 'Catálogo', href: '#catalogo' }] : []
+      case 'nosotros_horario':
+        return [
+          { label: 'Nosotros', href: '#nosotros' },
+          ...(site.business_hours ? [{ label: 'Horario', href: '#horario' }] : []),
+        ]
+      default:
+        return []
+    }
+  })
 
   return (
     <>
@@ -230,92 +243,108 @@ export default function PublicSitePage() {
             </div>
           </header>
 
-          <BenefitsSection businessName={site.business_name} agent={site.agent} color={site.color} theme={theme} />
+          {sections.map((id) => {
+            switch (id) {
+              case 'beneficios':
+                return <BenefitsSection key={id} businessName={site.business_name} agent={site.agent} color={site.color} theme={theme} />
 
-          {!!stories?.length && (
-            <section id="opiniones" className="psite-anchor max-w-4xl mx-auto px-6 pt-16 pb-4">
-              <SectionHeading eyebrow="Historias reales" title="Lo que dicen nuestros clientes" color={site.color} />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {stories.map((s, idx) => (
-                  <div
-                    key={s.id}
-                    className="psite-hover-lift rounded-2xl p-5 space-y-3"
-                    style={{
-                      background: theme.cardBg,
-                      border: `1px solid ${theme.cardBorder}`,
-                      animation: `psiteFadeUp 0.5s ease ${idx * 0.07}s both`,
-                      ...cardElevationStyle(theme),
-                      ...glowVar(site.color, theme),
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar name={s.contact_name} color={site.color} />
-                      <p className="text-xs" style={{ color: theme.muted }}>
-                        {SENTIMENT_EMOJI[s.sentiment] ?? '🙂'} {s.contact_name ? `${s.contact_name}, cliente real` : 'Cliente real'}
+              case 'opiniones':
+                return stories?.length ? (
+                  <section key={id} id="opiniones" className="psite-anchor max-w-4xl mx-auto px-6 pt-16 pb-4">
+                    <SectionHeading eyebrow="Historias reales" title="Lo que dicen nuestros clientes" color={site.color} />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {stories.map((s, idx) => (
+                        <div
+                          key={s.id}
+                          className="psite-hover-lift rounded-2xl p-5 space-y-3"
+                          style={{
+                            background: theme.cardBg,
+                            border: `1px solid ${theme.cardBorder}`,
+                            animation: `psiteFadeUp 0.5s ease ${idx * 0.07}s both`,
+                            ...cardElevationStyle(theme),
+                            ...glowVar(site.color, theme),
+                          }}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Avatar name={s.contact_name} color={site.color} />
+                            <p className="text-xs" style={{ color: theme.muted }}>
+                              {SENTIMENT_EMOJI[s.sentiment] ?? '🙂'} {s.contact_name ? `${s.contact_name}, cliente real` : 'Cliente real'}
+                            </p>
+                          </div>
+                          <p className="text-sm leading-relaxed" style={{ color: theme.text }}>
+                            "{s.transcription}"
+                          </p>
+                          <audio controls src={s.media_url} className="w-full h-9" />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null
+
+              case 'catalogo':
+                return (
+                  <Fragment key={id}>
+                    {!!bestsellers.length && (
+                      <section className="max-w-4xl mx-auto px-6 pb-4">
+                        <SectionHeading eyebrow="Tendencia" title="🔥 Los favoritos de nuestros clientes" color={site.color} />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {bestsellers.map((p, idx) => (
+                            <ProductCard
+                              key={p.id}
+                              product={p}
+                              categoryFallback={site.business_category}
+                              color={site.color}
+                              slug={slug ?? ''}
+                              theme={theme}
+                              promoted={idx === 0}
+                              style={{ animation: `psiteFadeUp 0.5s ease ${idx * 0.07}s both` }}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                    {!!products?.length && (
+                      <section id="catalogo" className="psite-anchor max-w-4xl mx-auto px-6 pb-16">
+                        <SectionHeading eyebrow="Catálogo" title="Nuestro catálogo" color={site.color} />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {products.map((p, idx) => (
+                            <ProductCard
+                              key={p.id}
+                              product={p}
+                              categoryFallback={site.business_category}
+                              color={site.color}
+                              slug={slug ?? ''}
+                              theme={theme}
+                              style={{ animation: `psiteFadeUp 0.5s ease ${Math.min(idx, 6) * 0.05}s both` }}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                  </Fragment>
+                )
+
+              case 'nosotros_horario':
+                return (
+                  <section key={id} className="max-w-4xl mx-auto px-6 pb-16 grid grid-cols-1 sm:grid-cols-2 gap-8 items-start">
+                    <div id="nosotros" className="psite-anchor">
+                      <SectionHeading eyebrow="Sobre nosotros" title={`Conoce a ${site.business_name}`} color={site.color} />
+                      <p className="leading-relaxed text-center sm:text-left" style={{ color: theme.muted }}>
+                        Bienvenido a {site.business_name}
+                        {site.city ? ` en ${site.city}` : ''}. Escríbenos por el chat en la esquina de tu pantalla y {site.agent}{' '}
+                        te va a atender al instante.
                       </p>
                     </div>
-                    <p className="text-sm leading-relaxed" style={{ color: theme.text }}>
-                      "{s.transcription}"
-                    </p>
-                    <audio controls src={s.media_url} className="w-full h-9" />
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+                    <div id="horario" className="psite-anchor">
+                      <BusinessHoursCard hours={site.business_hours} color={site.color} theme={theme} />
+                    </div>
+                  </section>
+                )
 
-          {!!bestsellers.length && (
-            <section className="max-w-4xl mx-auto px-6 pb-4">
-              <SectionHeading eyebrow="Tendencia" title="🔥 Los favoritos de nuestros clientes" color={site.color} />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {bestsellers.map((p, idx) => (
-                  <ProductCard
-                    key={p.id}
-                    product={p}
-                    categoryFallback={site.business_category}
-                    color={site.color}
-                    slug={slug ?? ''}
-                    theme={theme}
-                    promoted={idx === 0}
-                    style={{ animation: `psiteFadeUp 0.5s ease ${idx * 0.07}s both` }}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {!!products?.length && (
-            <section id="catalogo" className="psite-anchor max-w-4xl mx-auto px-6 pb-16">
-              <SectionHeading eyebrow="Catálogo" title="Nuestro catálogo" color={site.color} />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {products.map((p, idx) => (
-                  <ProductCard
-                    key={p.id}
-                    product={p}
-                    categoryFallback={site.business_category}
-                    color={site.color}
-                    slug={slug ?? ''}
-                    theme={theme}
-                    style={{ animation: `psiteFadeUp 0.5s ease ${Math.min(idx, 6) * 0.05}s both` }}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          <section className="max-w-4xl mx-auto px-6 pb-16 grid grid-cols-1 sm:grid-cols-2 gap-8 items-start">
-            <div id="nosotros" className="psite-anchor">
-              <SectionHeading eyebrow="Sobre nosotros" title={`Conoce a ${site.business_name}`} color={site.color} />
-              <p className="leading-relaxed text-center sm:text-left" style={{ color: theme.muted }}>
-                Bienvenido a {site.business_name}
-                {site.city ? ` en ${site.city}` : ''}. Escríbenos por el chat en la esquina de tu pantalla y {site.agent}{' '}
-                te va a atender al instante.
-              </p>
-            </div>
-            <div id="horario" className="psite-anchor">
-              <BusinessHoursCard hours={site.business_hours} color={site.color} theme={theme} />
-            </div>
-          </section>
+              default:
+                return null
+            }
+          })}
 
           <section className="max-w-2xl mx-auto px-6 pb-16 text-center">
             <div

@@ -638,3 +638,86 @@ class TestUpdateProfileSiteTheme:
     def test_rejects_unknown_theme_key(self):
         with pytest.raises(ValueError):
             ProfileUpdate(site_theme="no-existe")
+
+
+class TestUpdateProfileLandingSections:
+    @pytest.mark.asyncio
+    async def test_accepts_valid_ordered_subset(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                updated = await update_profile(
+                    body=ProfileUpdate(landing_sections=["catalogo", "beneficios"]),
+                    db=db, current_user=user,
+                )
+            assert updated.landing_sections == ["catalogo", "beneficios"]
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_accepts_empty_list_hides_everything(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                updated = await update_profile(body=ProfileUpdate(landing_sections=[]), db=db, current_user=user)
+            assert updated.landing_sections == []
+        finally:
+            await _cleanup([user_id])
+
+    def test_rejects_unknown_section_id(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(landing_sections=["beneficios", "no-existe"])
+
+    def test_rejects_duplicate_section_id(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(landing_sections=["beneficios", "beneficios"])
+
+
+class TestUpdateProfileBusinessHours:
+    @pytest.mark.asyncio
+    async def test_accepts_valid_hours(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                updated = await update_profile(
+                    body=ProfileUpdate(business_hours={"mon": ["09:00", "18:00"], "sun": None}),
+                    db=db, current_user=user,
+                )
+            assert updated.business_hours == {"mon": ["09:00", "18:00"], "sun": None}
+        finally:
+            await _cleanup([user_id])
+
+    def test_rejects_unknown_day(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(business_hours={"lunes": ["09:00", "18:00"]})
+
+    def test_rejects_malformed_time(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(business_hours={"mon": ["9am", "18:00"]})
+
+    def test_rejects_open_after_close(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(business_hours={"mon": ["18:00", "09:00"]})
+
+    def test_rejects_open_equal_close(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(business_hours={"mon": ["09:00", "09:00"]})
+
+
+class TestUpdateProfileWidgetColor:
+    def test_accepts_6_digit_hex(self):
+        assert ProfileUpdate(widget_color="#25D366").widget_color == "#25D366"
+
+    def test_accepts_3_digit_hex(self):
+        assert ProfileUpdate(widget_color="#abc").widget_color == "#abc"
+
+    def test_rejects_malformed_color(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(widget_color="not-a-color")
+
+    def test_rejects_wrong_length(self):
+        with pytest.raises(ValueError):
+            ProfileUpdate(widget_color="#1234")

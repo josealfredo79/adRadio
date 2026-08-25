@@ -29,6 +29,8 @@ interface User {
   slug: string | null
   landing_tagline: string | null
   site_theme: string
+  landing_sections: string[] | null
+  business_hours: Record<string, [string, string] | null> | null
 }
 
 interface AuthContextType {

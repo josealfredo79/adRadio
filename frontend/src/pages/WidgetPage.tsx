@@ -1,10 +1,20 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, MoveHorizontal, Save, Sparkles, Globe, ArrowRight, ArrowLeft, Pencil, Image as ImageIcon } from 'lucide-react'
+import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, MoveHorizontal, Save, Sparkles, Globe, ArrowRight, ArrowLeft, ArrowUp, ArrowDown, Pencil, Image as ImageIcon } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 import { useAuth } from '@/contexts/AuthContext'
 import { SITE_THEMES } from '@/pages/publicSite/theme'
+import {
+  DAY_LABELS,
+  DAY_ORDER,
+  DEFAULT_BUSINESS_HOURS,
+  DEFAULT_LANDING_SECTIONS,
+  LANDING_SECTION_IDS,
+  LANDING_SECTION_LABELS,
+  type BusinessHours,
+  type LandingSectionId,
+} from '@/pages/publicSite/utils'
 
 const SITE_URL = (import.meta.env.VITE_SITE_URL as string | undefined) ?? (typeof window !== 'undefined' ? window.location.origin : '')
 
@@ -20,15 +30,63 @@ function slugify(text: string): string {
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])?$/
 
-function LandingPageWizard() {
+const PRESET_COLORS = [
+  '#25D366', '#674CC4', '#3B82F6', '#EC4899', '#F59E0B', '#EF4444',
+]
+
+function ColorPickerRow({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {PRESET_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChange(c)}
+            className={`w-9 h-9 rounded-full border-2 transition-all ${value === c ? 'border-gray-800 dark:border-gray-200 scale-110' : 'border-transparent'}`}
+            style={{ background: c }}
+          />
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-400 dark:text-gray-500">o hex:</span>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-24 rounded-lg border border-gray-300 dark:border-gray-700 px-2 py-1.5 text-xs font-mono bg-background text-foreground focus:border-brand-500 dark:focus:border-brand-400 focus:outline-none"
+          maxLength={7}
+        />
+      </div>
+    </div>
+  )
+}
+
+interface SectionRow {
+  id: LandingSectionId
+  visible: boolean
+}
+
+function seedSectionOrder(saved: LandingSectionId[] | null | undefined): SectionRow[] {
+  if (!saved?.length) return DEFAULT_LANDING_SECTIONS.map((id) => ({ id, visible: true }))
+  const visibleSet = new Set(saved)
+  const ordered = [...saved, ...LANDING_SECTION_IDS.filter((id) => !saved.includes(id))]
+  return ordered.map((id) => ({ id, visible: visibleSet.has(id) }))
+}
+
+function LandingPageWizard({ config, openSignal }: { config?: { color: string; greeting: string; position: 'left' | 'right' }; openSignal?: number }) {
   const { user, setUser } = useAuth()
+  const qc = useQueryClient()
   const published = !!user?.slug
 
   const [editing, setEditing] = useState(false)
-  const [step, setStep] = useState<1 | 2>(1)
+  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [slug, setSlug] = useState(user?.slug ?? slugify(user?.business_name ?? ''))
   const [tagline, setTagline] = useState(user?.landing_tagline ?? '')
   const [siteTheme, setSiteTheme] = useState(user?.site_theme ?? 'medianoche')
+  const [accentColor, setAccentColor] = useState(user?.widget_color ?? '#25D366')
+  const [sectionOrder, setSectionOrder] = useState<SectionRow[]>(() => seedSectionOrder(user?.landing_sections as LandingSectionId[] | undefined))
+  const [businessHours, setBusinessHours] = useState<BusinessHours>(user?.business_hours ?? DEFAULT_BUSINESS_HOURS)
   const [copied, setCopied] = useState(false)
   const [aiHint, setAiHint] = useState('')
   const [aiSuggestions, setAiSuggestions] = useState<string[] | null>(null)
@@ -40,6 +98,32 @@ function LandingPageWizard() {
   const [heroError, setHeroError] = useState('')
 
   const slugValid = SLUG_RE.test(slug)
+  const hoursValid = DAY_ORDER.every((day) => {
+    const v = businessHours[day]
+    return !v || v[0] < v[1]
+  })
+
+  const moveSection = (index: number, dir: -1 | 1) => {
+    setSectionOrder((prev) => {
+      const next = [...prev]
+      const target = index + dir
+      if (target < 0 || target >= next.length) return prev
+      ;[next[index], next[target]] = [next[target], next[index]]
+      return next
+    })
+  }
+
+  const toggleSectionVisible = (index: number) => {
+    setSectionOrder((prev) => prev.map((s, i) => (i === index ? { ...s, visible: !s.visible } : s)))
+  }
+
+  const toggleDayClosed = (day: string) => {
+    setBusinessHours((prev) => ({ ...prev, [day]: prev[day] ? null : ['09:00', '18:00'] }))
+  }
+
+  const setDayRange = (day: string, range: [string, string]) => {
+    setBusinessHours((prev) => ({ ...prev, [day]: range }))
+  }
 
   const suggestMutation = useMutation({
     mutationFn: () => api.post('/me/landing-tagline/suggest', { hint: aiHint }, { timeout: 30000 }).then((r) => r.data as { suggestions: string[] }),
@@ -47,9 +131,26 @@ function LandingPageWizard() {
   })
 
   const publishMutation = useMutation({
-    mutationFn: () => api.patch('/me', { slug, landing_tagline: tagline, site_theme: siteTheme }).then((r) => r.data),
+    mutationFn: async () => {
+      const [profileRes] = await Promise.all([
+        api.patch('/me', {
+          slug,
+          landing_tagline: tagline,
+          site_theme: siteTheme,
+          landing_sections: sectionOrder.filter((s) => s.visible).map((s) => s.id),
+          business_hours: businessHours,
+        }),
+        api.put('/widget/config', {
+          color: accentColor,
+          greeting: config?.greeting ?? '¡Hola! ¿En qué puedo ayudarte?',
+          position: config?.position ?? 'right',
+        }),
+      ])
+      return profileRes.data
+    },
     onSuccess: (updated) => {
       if (setUser) setUser(updated)
+      qc.invalidateQueries({ queryKey: ['widget-config'] })
       setEditing(false)
       setStep(1)
     },
@@ -87,19 +188,27 @@ function LandingPageWizard() {
     }
   }
 
-  const startEditing = () => {
+  const startEditing = (openToStep: 1 | 2 | 3 = 1) => {
     setSlug(user?.slug ?? slugify(user?.business_name ?? ''))
     setTagline(user?.landing_tagline ?? '')
     setSiteTheme(user?.site_theme ?? 'medianoche')
+    setAccentColor(user?.widget_color ?? '#25D366')
+    setSectionOrder(seedSectionOrder(user?.landing_sections as LandingSectionId[] | undefined))
+    setBusinessHours(user?.business_hours ?? DEFAULT_BUSINESS_HOURS)
     setAiHint('')
     setAiSuggestions(null)
     setLogoError('')
     setHeroError('')
-    setStep(1)
+    setStep(openToStep)
     publishMutation.reset()
     suggestMutation.reset()
     setEditing(true)
   }
+
+  useEffect(() => {
+    if (openSignal) startEditing(3)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal])
 
   const siteLink = `${SITE_URL}/sitio/${user?.slug}`
 
@@ -136,7 +245,7 @@ function LandingPageWizard() {
             {copied ? 'Copiado!' : 'Copiar link'}
           </button>
           <button
-            onClick={startEditing}
+            onClick={() => startEditing()}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition"
           >
             <Pencil size={14} />
@@ -154,7 +263,7 @@ function LandingPageWizard() {
           <Globe size={16} />
           {published ? 'Editar tu página' : 'Crea tu página web'}
         </div>
-        <span className="text-xs text-gray-400 dark:text-gray-500">Paso {step} de 2</span>
+        <span className="text-xs text-gray-400 dark:text-gray-500">Paso {step} de 3</span>
       </div>
 
       {!published && step === 1 && (
@@ -342,10 +451,6 @@ function LandingPageWizard() {
             {tagline && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{tagline}</p>}
           </div>
 
-          {publishMutation.isError && (
-            <p className="text-xs text-red-500">{getApiError(publishMutation.error, 'No se pudo publicar')}</p>
-          )}
-
           <div className="flex gap-2">
             <button
               onClick={() => setStep(1)}
@@ -355,8 +460,117 @@ function LandingPageWizard() {
               Atrás
             </button>
             <button
+              onClick={() => setStep(3)}
+              className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-brand-500 dark:bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 dark:hover:bg-brand-500 transition-colors"
+            >
+              Siguiente
+              <ArrowRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="space-y-4">
+          {/* Secciones de la página */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Secciones de tu página (ordena y muestra/oculta)</label>
+            <div className="space-y-1.5">
+              {sectionOrder.map((s, i) => (
+                <div
+                  key={s.id}
+                  className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={s.visible}
+                    onChange={() => toggleSectionVisible(i)}
+                    className="shrink-0"
+                  />
+                  <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">{LANDING_SECTION_LABELS[s.id]}</span>
+                  <button
+                    type="button"
+                    onClick={() => moveSection(i, -1)}
+                    disabled={i === 0}
+                    aria-label="Subir sección"
+                    className="p-1 rounded text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30"
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveSection(i, 1)}
+                    disabled={i === sectionOrder.length - 1}
+                    aria-label="Bajar sección"
+                    className="p-1 rounded text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30"
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Horario de atención */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Horario de atención</label>
+            <div className="space-y-1.5">
+              {DAY_ORDER.map((day) => {
+                const val = businessHours[day] ?? null
+                return (
+                  <div key={day} className="flex items-center gap-2 text-sm">
+                    <span className="w-9 text-xs text-gray-500 dark:text-gray-400 shrink-0">{DAY_LABELS[day]}</span>
+                    <label className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                      <input type="checkbox" checked={val === null} onChange={() => toggleDayClosed(day)} />
+                      Cerrado
+                    </label>
+                    {val && (
+                      <>
+                        <input
+                          type="time"
+                          value={val[0]}
+                          onChange={(e) => setDayRange(day, [e.target.value, val[1]])}
+                          className="rounded-lg border border-gray-300 dark:border-gray-700 px-2 py-1 text-xs bg-background text-foreground"
+                        />
+                        <span className="text-gray-400 dark:text-gray-500">-</span>
+                        <input
+                          type="time"
+                          value={val[1]}
+                          onChange={(e) => setDayRange(day, [val[0], e.target.value])}
+                          className="rounded-lg border border-gray-300 dark:border-gray-700 px-2 py-1 text-xs bg-background text-foreground"
+                        />
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {!hoursValid && (
+              <p className="text-xs text-red-500">La hora de apertura debe ser antes que la de cierre.</p>
+            )}
+          </div>
+
+          {/* Color de acento */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Color de acento de tu página</label>
+            <ColorPickerRow value={accentColor} onChange={setAccentColor} />
+          </div>
+
+          {publishMutation.isError && (
+            <p className="text-xs text-red-500">{getApiError(publishMutation.error, 'No se pudo publicar')}</p>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setStep(2)}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+            >
+              <ArrowLeft size={14} />
+              Atrás
+            </button>
+            <button
               onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
+              disabled={publishMutation.isPending || !hoursValid}
               className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-brand-500 dark:bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 dark:hover:bg-brand-500 disabled:opacity-50 transition-colors"
             >
               <Save size={14} />
@@ -387,14 +601,11 @@ interface WidgetConfig {
   position: 'left' | 'right'
 }
 
-const PRESET_COLORS = [
-  '#25D366', '#674CC4', '#3B82F6', '#EC4899', '#F59E0B', '#EF4444',
-]
-
 export default function WidgetPage() {
   const { user } = useAuth()
   const qc = useQueryClient()
   const [copied, setCopied] = useState(false)
+  const [openWizardSignal, setOpenWizardSignal] = useState(0)
 
   const { data: snippet, isLoading } = useQuery<SnippetData>({
     queryKey: ['widget-snippet'],
@@ -452,7 +663,7 @@ export default function WidgetPage() {
         </div>
       )}
 
-      <LandingPageWizard />
+      <LandingPageWizard config={config} openSignal={openWizardSignal} />
 
       {/* Customization */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -511,32 +722,25 @@ export default function WidgetPage() {
 
         {/* Controls */}
         <div className="space-y-5 order-1 lg:order-2">
-          {/* Color */}
+          {/* Color — editable desde el wizard de tu página web (Paso 3), este
+              color se comparte entre la burbuja del widget y el acento del
+              sitio público, así que aquí solo se muestra de lectura. */}
           <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
               <Palette size={16} />
               Color del widget
             </div>
-            <div className="flex flex-wrap gap-2">
-              {PRESET_COLORS.map(c => (
-                <button
-                  key={c}
-                  onClick={() => setForm(prev => ({ ...(prev ?? configData), color: c }))}
-                  className={`w-9 h-9 rounded-full border-2 transition-all ${configData.color === c ? 'border-gray-800 scale-110' : 'border-transparent'}`}
-                  style={{ background: c }}
-                />
-              ))}
+            <div className="flex items-center gap-3">
+              <span className="w-9 h-9 rounded-full border border-gray-200 dark:border-gray-800 shrink-0" style={{ background: configData.color }} />
+              <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{configData.color}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400 dark:text-gray-500">o hex:</span>
-              <input
-                type="text"
-                value={configData.color}
-                onChange={e => setForm(prev => ({ ...(prev ?? configData), color: e.target.value }))}
-                className="w-24 rounded-lg border border-gray-300 dark:border-gray-700 px-2 py-1.5 text-xs font-mono focus:border-brand-500 dark:focus:border-brand-400 focus:outline-none"
-                maxLength={7}
-              />
-            </div>
+            <button
+              type="button"
+              onClick={() => setOpenWizardSignal((n) => n + 1)}
+              className="text-xs text-brand-600 dark:text-brand-400 hover:underline"
+            >
+              Edita el color en tu página web →
+            </button>
           </div>
 
           {/* Greeting */}

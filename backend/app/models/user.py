@@ -128,6 +128,11 @@ class User(Base):
 
     # Public landing page (/sitio/{slug}) background theme preset key
     site_theme: Mapped[str] = mapped_column(String(30), default="medianoche", server_default="medianoche")
+    # Ordered, filtered list of visible landing-page section ids (e.g.
+    # ["beneficios", "opiniones", "catalogo", "nosotros_horario"]) — null means
+    # "use the default order, all sections visible" (see
+    # app/services/landing_sections.py::DEFAULT_LANDING_SECTIONS).
+    landing_sections: Mapped[list[str] | None] = mapped_column(JSONB)
 
     # White-label settings
     white_label: Mapped[dict] = mapped_column(JSONB, default=dict)

@@ -1,7 +1,12 @@
 from pydantic import BaseModel, field_validator
 import re
 
+from app.services.landing_sections import LANDING_SECTION_IDS
+
 SITE_THEME_KEYS = {"medianoche", "pizarra", "esmeralda", "claro", "crema"}
+_VALID_WEEKDAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+_HOUR_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+_WIDGET_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{3}$|^#[0-9a-fA-F]{6}$")
 
 
 class ProfileUpdate(BaseModel):
@@ -21,6 +26,8 @@ class ProfileUpdate(BaseModel):
     slug: str | None = None
     landing_tagline: str | None = None
     site_theme: str | None = None
+    landing_sections: list[str] | None = None
+    business_hours: dict[str, list[str] | None] | None = None
 
     @field_validator("phone")
     @classmethod
@@ -91,6 +98,47 @@ class ProfileUpdate(BaseModel):
             return None
         if len(v) > 140:
             raise ValueError("La frase no puede tener más de 140 caracteres")
+        return v
+
+    @field_validator("widget_color")
+    @classmethod
+    def validate_widget_color(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if not _WIDGET_COLOR_RE.match(v):
+            raise ValueError("El color debe ser hex válido (ej. #25D366)")
+        return v
+
+    @field_validator("landing_sections")
+    @classmethod
+    def validate_landing_sections(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        unknown = set(v) - set(LANDING_SECTION_IDS)
+        if unknown:
+            raise ValueError(f"Sección(es) desconocida(s): {', '.join(sorted(unknown))}")
+        if len(v) != len(set(v)):
+            raise ValueError("No puede repetir una sección")
+        return v
+
+    @field_validator("business_hours")
+    @classmethod
+    def validate_business_hours(cls, v: dict[str, list[str] | None] | None) -> dict[str, list[str] | None] | None:
+        if v is None:
+            return None
+        unknown = set(v) - _VALID_WEEKDAYS
+        if unknown:
+            raise ValueError(f"Día(s) desconocido(s): {', '.join(sorted(unknown))}")
+        for day, rng in v.items():
+            if rng is None:
+                continue
+            if not (isinstance(rng, list) and len(rng) == 2):
+                raise ValueError(f"{day}: debe ser null o [apertura, cierre]")
+            open_s, close_s = rng
+            if not (_HOUR_RE.match(open_s) and _HOUR_RE.match(close_s)):
+                raise ValueError(f"{day}: las horas deben tener formato HH:MM")
+            if open_s >= close_s:
+                raise ValueError(f"{day}: la apertura debe ser antes del cierre")
         return v
 
 

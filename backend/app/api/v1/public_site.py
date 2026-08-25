@@ -18,6 +18,7 @@ from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.user import User
 from app.services.availability_service import DEFAULT_BUSINESS_HOURS
+from app.services.landing_sections import DEFAULT_LANDING_SECTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ async def get_public_site(request: Request, slug: str, db: AsyncSession = Depend
         "site_theme": user.site_theme or "medianoche",
         "whatsapp_number": _public_whatsapp_number(user),
         "business_hours": user.business_hours or DEFAULT_BUSINESS_HOURS,
+        "landing_sections": user.landing_sections or DEFAULT_LANDING_SECTIONS,
     }
 
 
