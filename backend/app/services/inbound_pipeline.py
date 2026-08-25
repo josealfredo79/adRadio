@@ -276,6 +276,75 @@ async def process_inbound_message(
 
             return {"message": "ok"}
 
+    # Capa 16 anti-baneo: confirmación de cuña de radio ofrecida vía
+    # plantilla (ver `_offer_or_send_radio_audio` en campaign_ops.py). Una
+    # plantilla enviada por el negocio NO reabre la ventana de 24h por sí
+    # sola — solo lo hace una respuesta real del cliente — así que en vez de
+    # asumir que la ventana ya está abierta después de mandar la plantilla,
+    # se le pregunta al cliente y el audio solo se envía tras su respuesta
+    # real (un tap en el botón cuenta como respuesta real ante Meta). Se
+    # revisa aquí, antes que cualquier otro estado, pero solo actúa si de
+    # verdad hay un audio pendiente para este contacto — si no lo hay, un
+    # "sí"/"no" cualquiera sigue de largo a los demás manejadores.
+    normalized_audio_reply = body_text.strip().lower().rstrip(".!¡¿? ")
+    audio_confirm_words = {"si, escuchalo", "sí, escúchalo", "si", "sí", "s", "yes", "escuchar", "escúchalo", "escuchalo"}
+    audio_decline_words = {"ahora no", "no", "no gracias", "despues", "después"}
+    if normalized_audio_reply in audio_confirm_words or normalized_audio_reply in audio_decline_words:
+        audio_contact_result = await db.execute(
+            select(Contact).where(
+                Contact.advertiser_id == advertiser.id,
+                Contact.phone.in_(from_candidates),
+            )
+        )
+        audio_contact = audio_contact_result.scalar_one_or_none()
+        if audio_contact:
+            pending_result = await db.execute(
+                select(Message).where(
+                    Message.advertiser_id == advertiser.id,
+                    Message.contact_id == audio_contact.id,
+                    Message.status == "queued",
+                    Message.content.like("[AUDIO-PENDING]%"),
+                ).order_by(Message.created_at.desc()).limit(1)
+            )
+            pending_msg = pending_result.scalar_one_or_none()
+            if pending_msg:
+                if normalized_audio_reply in audio_confirm_words:
+                    from app.services.meta_service import send_whatsapp_media
+
+                    pending_audio_url = pending_msg.content.removeprefix("[AUDIO-PENDING] ")
+                    pending_script = None
+                    if pending_msg.campaign_id:
+                        camp_result = await db.execute(
+                            select(Campaign).where(Campaign.id == pending_msg.campaign_id)
+                        )
+                        camp = camp_result.scalar_one_or_none()
+                        if camp:
+                            pending_script = (camp.ab_test or {}).get("radio_script")
+
+                    sid_au, err_au = await send_whatsapp_media(
+                        from_number, pending_audio_url, body=pending_script or "", advertiser=advertiser,
+                    )
+                    pending_msg.status = "sent" if sid_au else "failed"
+                    pending_msg.wa_message_id = sid_au
+                    pending_msg.error_code = err_au
+                    pending_msg.sent_at = datetime.now(timezone.utc) if sid_au else None
+                    if sid_au:
+                        advertiser.messages_remaining -= 1
+                        audio_contact.last_campaign_sent_at = datetime.now(timezone.utc)
+                        confirm_reply = "¡Aquí tienes! 🎙️"
+                    else:
+                        confirm_reply = "Uy, tuvimos un problema enviándolo. Lo reintentamos en breve 🙏"
+                else:
+                    pending_msg.status = "failed"
+                    pending_msg.error_code = "declined_by_contact"
+                    confirm_reply = "Entendido 👍 Aquí estamos si cambias de opinión."
+                await db.commit()
+                try:
+                    await send(from_number, confirm_reply)
+                except Exception:
+                    logger.warning("[RADIO-OPTIN] Failed to send confirmation reply to %s", from_number, exc_info=True)
+                return {"message": "ok"}
+
     # Coupon redemption intent
     if is_redeem_intent(body_text):
         contact_result = await db.execute(

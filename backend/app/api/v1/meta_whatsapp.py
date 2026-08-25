@@ -57,6 +57,7 @@ async def get_whatsapp_connection(current_user: User = Depends(get_current_user)
         utility_template_status=current_user.meta_utility_template_status,
         utility_template_name=current_user.meta_utility_template_name,
         appointment_template_name=current_user.meta_appointment_template_name,
+        radio_invite_template_name=current_user.meta_radio_invite_template_name,
     )
 
 
@@ -228,6 +229,7 @@ async def save_whatsapp_connection(
 class MetaTemplatesUpdate(BaseModel):
     utility_template_name: str | None = None
     appointment_template_name: str | None = None
+    radio_invite_template_name: str | None = None
 
 
 @router.patch("/me/whatsapp-templates", response_model=MetaWhatsappConnectionOut)
@@ -247,6 +249,8 @@ async def update_whatsapp_templates(
         current_user.meta_utility_template_status = "approved" if name else "not_configured"
     if body.appointment_template_name is not None:
         current_user.meta_appointment_template_name = body.appointment_template_name.strip() or None
+    if body.radio_invite_template_name is not None:
+        current_user.meta_radio_invite_template_name = body.radio_invite_template_name.strip() or None
     await db.commit()
     await db.refresh(current_user)
     return await get_whatsapp_connection(current_user)

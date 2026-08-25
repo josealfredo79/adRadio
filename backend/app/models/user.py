@@ -79,6 +79,13 @@ class User(Base):
     meta_utility_template_status: Mapped[str] = mapped_column(String(20), default="not_configured", server_default="not_configured")
     meta_utility_template_name: Mapped[str | None] = mapped_column(String(255))
     meta_appointment_template_name: Mapped[str | None] = mapped_column(String(255))
+    # Plantilla de invitación con botones (Si/No) para ofrecer una cuña de
+    # radio a un contacto con ventana cerrada — ver Capa 16 en campaign_ops.py.
+    # A diferencia de meta_utility_template_name, esta SÍ requiere botones
+    # QUICK_REPLY porque el envío del audio depende de una respuesta real del
+    # cliente (una plantilla enviada por el negocio no reabre la ventana por
+    # sí sola, solo una respuesta del cliente lo hace).
+    meta_radio_invite_template_name: Mapped[str | None] = mapped_column(String(255))
     # meta_quality_rating/meta_messaging_tier: se actualizan tanto por el
     # webhook (phone_number_quality_update, solo FLAGGED/UNFLAGGED) como por
     # el polling periódico al Graph API (trae el rating real GREEN/YELLOW/RED).

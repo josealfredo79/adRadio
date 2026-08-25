@@ -19,6 +19,7 @@ REASON_NO_MESSAGES_REMAINING = "no_messages_remaining"  # plan quota exhausted
 REASON_HIGH_FAILURE_RATE = "high_failure_rate"  # campaign auto-paused mid-send
 REASON_CONSENT_UNCONFIRMED = "consent_unconfirmed"  # cold bulk-imported contact, no verified opt-in
 REASON_NO_UTILITY_TEMPLATE = "no_utility_template"  # closed window, no approved template configured
+REASON_NO_RADIO_INVITE_TEMPLATE = "no_radio_invite_template"  # Capa 16: closed window, no opt-in audio-invite template configured
 
 
 class SendBlockLog(Base):
