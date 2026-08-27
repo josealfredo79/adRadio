@@ -60,7 +60,7 @@ class InboundMessage:
 
 # Respuestas de puro "sí / ok / gracias" a una invitación opt-in: no traen
 # pregunta ni intención, así que tras disparar el contenido diferido basta un
-# acuse corto — mandar al bot RAG a "responder" un "sí" pelón sale confuso.
+# acuse corto — mandar al bot RAG a "responder" un "sí" a secas sale confuso.
 _ACK_EXACT = {
     "si", "sí", "s", "yes", "ya", "ok", "oka", "okay", "okey", "va", "vale",
     "sale", "dale", "claro", "listo", "perfecto", "bien", "gracias",
@@ -330,7 +330,7 @@ async def process_inbound_message(
     # `pending_resume` queda en "resumed"/"declined" si esta respuesta
     # gatilló (o canceló) un envío diferido y NO traía intención accionable
     # — en ese caso, más abajo, se responde con un acuse corto en vez de
-    # mandar al bot a "adivinar" sobre un "sí" pelón. Si la respuesta sí
+    # mandar al bot a "adivinar" sobre un "sí" a secas. Si la respuesta sí
     # traía intención, algún handler (cita/pedido/catálogo) la atiende antes
     # de llegar a ese punto y este flag no aplica.
     pending_resume: str | None = None
@@ -1029,7 +1029,7 @@ async def process_inbound_message(
     elif pending_resume == "resumed" and _is_bare_ack(body_text):
         # El contenido diferido ya va en camino y la respuesta fue un puro
         # "sí/ok/gracias" — un acuse corto, no un turno de RAG que sale
-        # confuso adivinando sobre un "sí" pelón. Si la respuesta trae una
+        # confuso adivinando sobre un "sí" a secas. Si la respuesta trae una
         # pregunta o intención real, no entra aquí: la atiende un handler de
         # arriba, o cae al bot normal abajo.
         reply = "¡Perfecto! 🙌"
