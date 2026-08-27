@@ -8,6 +8,7 @@ fallback, message persistence, follow-up jobs) lives here.
 """
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
@@ -55,6 +56,34 @@ class InboundMessage:
     audio_transcription: str | None = None
     media_url: str | None = None
     external_message_id: str | None = None
+
+
+# Respuestas de puro "sí / ok / gracias" a una invitación opt-in: no traen
+# pregunta ni intención, así que tras disparar el contenido diferido basta un
+# acuse corto — mandar al bot RAG a "responder" un "sí" pelón sale confuso.
+_ACK_EXACT = {
+    "si", "sí", "s", "yes", "ya", "ok", "oka", "okay", "okey", "va", "vale",
+    "sale", "dale", "claro", "listo", "perfecto", "bien", "gracias",
+    "muchas gracias", "esta bien", "está bien", "de acuerdo", "por favor",
+    "porfa", "porfis", "simon", "simón", "obvio", "yes please", "escuchar",
+    "escuchalo", "escúchalo", "escucharla", "escucharlo", "quiero", "lo quiero",
+    "si quiero", "sí quiero", "claro que si", "claro que sí", "va que va",
+}
+_ACK_FIRST = {"si", "sí", "s", "ok", "okey", "okay", "claro", "dale", "va",
+              "vale", "sale", "listo", "perfecto", "gracias", "simon", "simón"}
+
+
+def _is_bare_ack(text: str) -> bool:
+    """True si la respuesta es un asentimiento sin pregunta ni contenido real
+    ("sí", "ok gracias", "sí quiero escucharla"). Una pregunta ("¿tienen
+    envío?") o cualquier frase con "?" NO cuenta — esa sí va al bot."""
+    if "?" in text or "¿" in text:
+        return False
+    t = re.sub(r"\s+", " ", re.sub(r"[^\w\sáéíóúñ]+", " ", text.strip().lower())).strip()
+    if t in _ACK_EXACT:
+        return True
+    words = t.split()
+    return 1 <= len(words) <= 4 and words[0] in _ACK_FIRST
 
 
 def _phone_candidates(from_number: str) -> list[str]:
@@ -297,6 +326,14 @@ async def process_inbound_message(
     # abierta, y atiende la intención real si la trae ("quiero una cita",
     # "cuánto cuesta", etc.). El propio contenido diferido que se envía aquí
     # es el acuse; no se manda un texto "¡Aquí tienes!" extra.
+    #
+    # `pending_resume` queda en "resumed"/"declined" si esta respuesta
+    # gatilló (o canceló) un envío diferido y NO traía intención accionable
+    # — en ese caso, más abajo, se responde con un acuse corto en vez de
+    # mandar al bot a "adivinar" sobre un "sí" pelón. Si la respuesta sí
+    # traía intención, algún handler (cita/pedido/catálogo) la atiende antes
+    # de llegar a ese punto y este flag no aplica.
+    pending_resume: str | None = None
     pending_contact_result = await db.execute(
         select(Contact).where(
             Contact.advertiser_id == advertiser.id,
@@ -334,6 +371,7 @@ async def process_inbound_message(
             elif normalized_reply in decline_words:
                 pending_msg.status = "failed"
                 pending_msg.error_code = "declined_by_contact"
+                pending_resume = "declined"
             else:
                 # La ventana ya está abierta de verdad (estamos dentro del
                 # webhook de la respuesta genuina del cliente). Se despacha
@@ -376,6 +414,9 @@ async def process_inbound_message(
                     pending_msg.status = "failed"
                     pending_msg.error_code = f"unknown_pending_kind:{kind}"
                     logger.warning("[PENDING-OPTIN] Unknown pending kind %r for contact %s", kind, pending_contact.id)
+
+                if pending_msg.status == "queued":
+                    pending_resume = "resumed"
                 # pending_msg.status queda "queued": la task lo pasa a
                 # sent/failed y descuenta la cuota cuando el envío ocurre.
 
@@ -982,38 +1023,50 @@ async def process_inbound_message(
     history = conv.messages[-40:] if conv.messages else []
     time_gap_note = format_time_gap_note(previous_last_activity)
 
-    rag_query = body_text
-    if audio_transcription:
-        rag_query = f"[El cliente envió un mensaje de voz. Transcripción: {audio_transcription}]"
+    reply: str | None = None
+    if pending_resume == "declined":
+        reply = "Entendido 👍 Si cambias de opinión, aquí estamos."
+    elif pending_resume == "resumed" and _is_bare_ack(body_text):
+        # El contenido diferido ya va en camino y la respuesta fue un puro
+        # "sí/ok/gracias" — un acuse corto, no un turno de RAG que sale
+        # confuso adivinando sobre un "sí" pelón. Si la respuesta trae una
+        # pregunta o intención real, no entra aquí: la atiende un handler de
+        # arriba, o cae al bot normal abajo.
+        reply = "¡Perfecto! 🙌"
 
-    try:
-        reply = await answer_with_rag(
-            advertiser_id=str(advertiser.id),
-            query=rag_query,
-            conversation_history=history,
-            db=db,
-            business_name=advertiser.business_name or "el negocio",
-            bot_name=advertiser.bot_name or "Asistente",
-            bot_personality=advertiser.bot_personality or "amigable y profesional",
-            time_gap_note=time_gap_note,
-        )
-    except Exception as e:
-        logger.error("[PIPELINE] RAG/Claude error: %s", e, exc_info=True)
-        # Escalar en vez de arriesgarse a que el bot siga "adivinando" sin
-        # el modelo funcionando — un genérico repetido en cada turno se
-        # siente peor que admitir el problema y pasar a un humano.
-        biz = advertiser.business_name or "el negocio"
-        conv.status = "escalated"
-        reply = (
-            f"Disculpa, tuve un problema técnico. Ya avisé al equipo de {biz} "
-            "para que te atienda directamente en un momento 🙏"
-        )
-        if advertiser.whatsapp_number or advertiser.phone:
-            owner_wa = advertiser.whatsapp_number or advertiser.phone
-            try:
-                await send_owner(owner_wa, f"⚠️ El bot falló respondiéndole a {contact_name} — revisa el Inbox.")
-            except Exception:
-                logger.warning("[HANDOFF] Failed to notify owner of bot-error handoff", exc_info=True)
+    if reply is None:
+        rag_query = body_text
+        if audio_transcription:
+            rag_query = f"[El cliente envió un mensaje de voz. Transcripción: {audio_transcription}]"
+
+        try:
+            reply = await answer_with_rag(
+                advertiser_id=str(advertiser.id),
+                query=rag_query,
+                conversation_history=history,
+                db=db,
+                business_name=advertiser.business_name or "el negocio",
+                bot_name=advertiser.bot_name or "Asistente",
+                bot_personality=advertiser.bot_personality or "amigable y profesional",
+                time_gap_note=time_gap_note,
+            )
+        except Exception as e:
+            logger.error("[PIPELINE] RAG/Claude error: %s", e, exc_info=True)
+            # Escalar en vez de arriesgarse a que el bot siga "adivinando" sin
+            # el modelo funcionando — un genérico repetido en cada turno se
+            # siente peor que admitir el problema y pasar a un humano.
+            biz = advertiser.business_name or "el negocio"
+            conv.status = "escalated"
+            reply = (
+                f"Disculpa, tuve un problema técnico. Ya avisé al equipo de {biz} "
+                "para que te atienda directamente en un momento 🙏"
+            )
+            if advertiser.whatsapp_number or advertiser.phone:
+                owner_wa = advertiser.whatsapp_number or advertiser.phone
+                try:
+                    await send_owner(owner_wa, f"⚠️ El bot falló respondiéndole a {contact_name} — revisa el Inbox.")
+                except Exception:
+                    logger.warning("[HANDOFF] Failed to notify owner of bot-error handoff", exc_info=True)
 
     updated_msgs = conv.messages + [
         {"role": "user", "content": body_text},

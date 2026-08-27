@@ -120,7 +120,7 @@ class TestPendingAudioConfirm:
             send = AsyncMock(return_value=(f"sid.{run_id}.out", None))
             send_owner = AsyncMock(return_value=(f"sid.{run_id}.owner", None))
 
-            with patch(_VOICE_TASK) as mock_task, patch(_RAG_PATCH, new=AsyncMock(return_value=_RAG_REPLY)):
+            with patch(_VOICE_TASK) as mock_task, patch(_RAG_PATCH, new=AsyncMock(return_value=_RAG_REPLY)) as mock_rag:
                 result = await process_inbound_message(db, msg, send=send, send_owner=send_owner)
 
         try:
@@ -143,6 +143,11 @@ class TestPendingAudioConfirm:
             assert [m.content for m in inbound] == ["Si, escuchalo"]
             contact = await _get_contact(contact_id)
             assert contact.consent_status == "confirmed"
+
+            # A bare "Si, escuchalo" is an acknowledgment — short ack, no
+            # confused RAG turn on top of the audio.
+            mock_rag.assert_not_awaited()
+            assert any("Perfecto" in c.args[1] for c in send.call_args_list)
         finally:
             await _cleanup(advertiser_id)
 
@@ -211,9 +216,35 @@ class TestPendingAudioConfirm:
             assert pending_msg.status == "failed"
             assert pending_msg.error_code == "declined_by_contact"
 
-            # The decline is still a real reply — recorded, not swallowed.
+            # The decline is still a real reply — recorded, not swallowed —
+            # and gets a short, non-confusing acknowledgment.
             inbound = await _inbound_messages(advertiser_id, contact_id)
             assert [m.content for m in inbound] == ["Ahora no"]
+            assert any("cambias de opinión" in c.args[1] for c in send.call_args_list)
+        finally:
+            await _cleanup(advertiser_id)
+
+    @pytest.mark.asyncio
+    async def test_bare_yes_gets_short_ack_not_a_confused_bot_turn(self):
+        run_id = uuid.uuid4().hex[:8]
+        advertiser_id, contact_id, pending_msg_id, phone = await _seed_with_pending(
+            f"8{run_id[:6]}", "audio", {"audio_url": "https://example.com/cuna.ogg", "script": "s"},
+        )
+        async with AsyncSessionLocal() as db:
+            advertiser = await db.get(User, advertiser_id)
+            msg = InboundMessage(
+                advertiser=advertiser, from_number=phone,
+                body_text="sí", external_message_id=f"wamid.{run_id}.in",
+            )
+            send = AsyncMock(return_value=(f"sid.{run_id}.out", None))
+            send_owner = AsyncMock(return_value=(f"sid.{run_id}.owner", None))
+            with patch(_VOICE_TASK) as mock_task, patch(_RAG_PATCH, new=AsyncMock(return_value=_RAG_REPLY)) as mock_rag:
+                result = await process_inbound_message(db, msg, send=send, send_owner=send_owner)
+        try:
+            assert result == {"message": "ok"}
+            mock_task.assert_called_once()      # audio still dispatched
+            mock_rag.assert_not_awaited()       # no RAG turn on a bare "sí"
+            assert send.call_args_list and "Perfecto" in send.call_args_list[-1].args[1]
         finally:
             await _cleanup(advertiser_id)
 
