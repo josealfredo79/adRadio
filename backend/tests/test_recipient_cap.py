@@ -13,7 +13,7 @@ import pytest
 from app.services.meta_quality_service import resolve_tier_limit, _DEFAULT_TIER_LIMIT
 from app.workers.task_helpers.campaign_ops import (
     RecipientCapState,
-    _ensure_conversation_window,
+    _offer_or_queue,
     get_recipient_cap_state,
 )
 
@@ -148,15 +148,16 @@ class TestGetRecipientCapState:
         assert state.limit == _DEFAULT_TIER_LIMIT
 
 
-class TestEnsureConversationWindowRespectsCap:
+class TestOfferOrQueueRespectsCap:
     """Usa un db completamente mockeado (como test_meta_quality_service.py)
-    para aislar la lógica de _ensure_conversation_window de la capa 10 sin
-    tocar una base de datos real."""
+    para aislar la lógica de _offer_or_queue de la capa 10 sin tocar una
+    base de datos real."""
 
     def _advertiser(self, template_name="utility_template"):
         adv = MagicMock()
         adv.id = uuid.uuid4()
         adv.meta_utility_template_name = template_name
+        adv.meta_radio_invite_template_name = None
         adv.business_name = "Test Business"
         return adv
 
@@ -179,11 +180,11 @@ class TestEnsureConversationWindowRespectsCap:
 
         open_conv = MagicMock()
         with patch("app.services.whatsapp_window.is_window_open", return_value=True):
-            extra = await _ensure_conversation_window(
+            outcome, _detail = await _offer_or_queue(
                 db, advertiser, contact, _convs={str(contact.id): open_conv}, _cap=cap,
             )
 
-        assert extra == 0
+        assert outcome == "open"
         assert cap.count == 1  # sin cambios
         db.add.assert_not_called()
 
@@ -196,15 +197,15 @@ class TestEnsureConversationWindowRespectsCap:
 
         with patch("app.services.whatsapp_window.is_window_open", return_value=False), \
              patch("app.services.meta_service.send_whatsapp_template", new=AsyncMock(return_value=("sid-123", None))):
-            extra = await _ensure_conversation_window(
+            outcome, _detail = await _offer_or_queue(
                 db, advertiser, contact, _convs={}, _cap=cap,
             )
 
-        assert extra is not None
+        assert outcome == "invited"
         assert cap.count == 4  # incrementado
         # db.add se llama dos veces en este flujo: una para el RecipientSend
         # nuevo (capa 10) y otra para el Conversation nuevo (lógica previa
-        # de _ensure_conversation_window) — no es un doble-conteo del tier.
+        # de _offer_or_queue) — no es un doble-conteo del tier.
         from app.models.recipient_send import RecipientSend
         recipient_send_calls = [
             call for call in db.add.call_args_list if isinstance(call.args[0], RecipientSend)
@@ -221,11 +222,11 @@ class TestEnsureConversationWindowRespectsCap:
 
         with patch("app.services.whatsapp_window.is_window_open", return_value=False), \
              patch("app.services.meta_service.send_whatsapp_template", new=AsyncMock()) as mock_send:
-            extra = await _ensure_conversation_window(
+            outcome, _detail = await _offer_or_queue(
                 db, advertiser, contact, _convs={}, _cap=cap,
             )
 
-        assert extra is None
+        assert outcome == "blocked"
         assert cap.count == 5  # sin cambios
         mock_send.assert_not_called()  # nunca intenta la plantilla
         # db.add IS called once now — to record the block in send_block_logs
@@ -244,11 +245,11 @@ class TestEnsureConversationWindowRespectsCap:
 
         with patch("app.services.whatsapp_window.is_window_open", return_value=False), \
              patch("app.services.meta_service.send_whatsapp_template", new=AsyncMock(return_value=("sid-123", None))):
-            extra = await _ensure_conversation_window(
+            outcome, _detail = await _offer_or_queue(
                 db, advertiser, contact, _convs={}, _cap=cap,
             )
 
-        assert extra is not None
+        assert outcome == "invited"
 
 
 class TestScheduleCampaignRespectsRecipientCap:

@@ -1,7 +1,7 @@
 """
 Tests for consent_status on CSV-imported contacts — the anti-ban guard that
 blocks cold-window template sends to bulk lists the advertiser hasn't vouched
-for (see app.workers.task_helpers.campaign_ops._ensure_conversation_window).
+for (see app.workers.task_helpers.campaign_ops._offer_or_queue).
 """
 import asyncio
 import uuid

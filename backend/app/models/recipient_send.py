@@ -14,7 +14,7 @@ class RecipientSend(Base):
     por advertiser. Append-only — se usa para contar destinatarios únicos
     distintos tocados en las últimas 24h y hacer cumplir el
     messaging_limit_tier oficial de Meta. NO se escribe en cada mensaje —
-    solo cuando _ensure_conversation_window realmente abre/reabre una
+    solo cuando _offer_or_queue (campaign_ops.py) realmente abre/reabre una
     ventana (re-mensajear una ventana ya abierta no cuenta)."""
 
     __tablename__ = "recipient_sends"

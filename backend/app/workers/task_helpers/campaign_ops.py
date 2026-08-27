@@ -9,12 +9,11 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update as sa_update
 
 from app.models.send_block_log import (
     REASON_CONSENT_UNCONFIRMED,
     REASON_HIGH_FAILURE_RATE,
-    REASON_NO_RADIO_INVITE_TEMPLATE,
     REASON_NO_UTILITY_TEMPLATE,
     REASON_RECIPIENT_CAP,
 )
@@ -162,22 +161,39 @@ def _is_contact_active(contact) -> tuple[bool, str | None]:
     return True, None
 
 
-async def _ensure_conversation_window(
+async def _offer_or_queue(
     db,
     advertiser,
     contact,
     _convs: dict[str, object] | None = None,
     _cap: "RecipientCapState | None" = None,
     _campaign_id=None,
-) -> int | None:
-    """Send the advertiser's approved utility template if the 24h window is closed.
-    Returns extra delay (seconds) if it's safe to send now (window open, or an
-    approved template just reopened it), or None if the send must be SKIPPED —
-    window closed and no approved template available. This is a hard block:
-    WhatsApp policy prohibits free-text outside the window, so unlike before
-    there is no silent fallback to plain text here.
-    Accepts optional preloaded conversations dict {contact_id: conv} to avoid N+1.
-    Accepts optional _cap (Capa 10): if provided and the advertiser is
+) -> tuple[str, str | None]:
+    """Gate before any send that needs an open 24h customer-service window.
+
+    Real-world finding (2026-08-25, verified against Meta's own docs and live
+    test sends): sending an approved template does NOT itself reopen the
+    window for a same-turn follow-up free-form message — only a genuine
+    reply from the contact does. Meta rejects that follow-up with error
+    131047 ("re-engagement message"). This replaces the old
+    `_ensure_conversation_window`, which incorrectly treated "template just
+    sent" as "window now open" and let the real content through in the same
+    breath — every one of the 4 send paths (banner/regular/parrilla/radio)
+    shared this bug until this fix.
+
+    Returns (outcome, detail):
+      "open"    — window already open; caller sends the real content now.
+      "invited" — window was closed; an approved template was just sent
+                  asking the contact to reply. Caller must NOT send the real
+                  content yet — store it as a `[PENDING:<kind>] <json>`
+                  Message instead (status="queued") so
+                  `inbound_pipeline.py` can fire it once the contact's reply
+                  genuinely reopens the window.
+      "blocked" — consent/cap/no-template/send-failure. Don't send anything;
+                  `detail` may hold an error string.
+
+    Accepts optional preloaded conversations dict {contact_id: conv} to avoid
+    N+1. Accepts optional _cap (Capa 10): if provided and the advertiser is
     already at Meta's messaging_limit_tier cap of unique recipients in the
     rolling 24h window, a NEW window is refused (re-engaging an already-open
     window above is unaffected — that's returned before this check runs).
@@ -199,7 +215,7 @@ async def _ensure_conversation_window(
         )
         conv = result.scalar_one_or_none()
     if is_window_open(conv):
-        return 0
+        return "open", None
 
     if contact.consent_status == "unconfirmed":
         # Cold, bulk-imported contact with no verified consent and no open
@@ -212,24 +228,28 @@ async def _ensure_conversation_window(
             db, advertiser.id, REASON_CONSENT_UNCONFIRMED,
             campaign_id=_campaign_id, contact_id=contact.id,
         )
-        return None
+        return "blocked", None
 
-    template_name = advertiser.meta_utility_template_name
+    # Prefer a dedicated opt-in template (button copy tailored to "reply to
+    # get your content") when one's configured; fall back to whatever
+    # reopen/utility template is on file — Configuración → WhatsApp only
+    # exposes that one today, so it's what's actually set for most
+    # advertisers. Either way, ANY approved category works (see
+    # WhatsappWizard.tsx copy) — Meta only requires the category the content
+    # actually matches, and reclassifies mismatches automatically.
+    template_name = advertiser.meta_radio_invite_template_name or advertiser.meta_utility_template_name
     if not template_name:
-        # No approved utility template configured yet for this advertiser —
-        # can't reopen the window outside it. Known limitation until they
-        # set one in Configuración → WhatsApp.
-        logger.info("[TEMPLATE] No meta_utility_template_name for advertiser=%s — blocking send, window closed", advertiser.id)
+        logger.info("[TEMPLATE] No reopen template configured for advertiser=%s — blocking send, window closed", advertiser.id)
         log_send_block(
             db, advertiser.id, REASON_NO_UTILITY_TEMPLATE,
             campaign_id=_campaign_id, contact_id=contact.id,
         )
-        return None
+        return "blocked", None
 
     # Capa 10: a punto de abrir una ventana NUEVA — esto es exactamente lo
     # que Meta limita con messaging_limit_tier (destinatarios únicos nuevos
     # por ventana móvil de 24h). Re-mensajear una ventana ya abierta no pasa
-    # por aquí (ver el `return 0` de is_window_open arriba).
+    # por aquí (ver el `return "open"` de is_window_open arriba).
     if _cap is not None and _cap.limit is not None and _cap.count >= _cap.limit:
         logger.warning(
             "[TIER CAP] advertiser=%s alcanzó el tope messaging_limit_tier (%d/%d) — bloqueando ventana nueva a contact=%s",
@@ -240,7 +260,7 @@ async def _ensure_conversation_window(
             campaign_id=_campaign_id, contact_id=contact.id,
             detail=f"{_cap.count}/{_cap.limit}",
         )
-        return None
+        return "blocked", None
 
     contact_name = (contact.name or "Cliente").split()[0] if contact.name else "Cliente"
     business_name = advertiser.business_name or "IARadio"
@@ -258,8 +278,8 @@ async def _ensure_conversation_window(
         advertiser=advertiser,
     )
     if not sid:
-        logger.warning("[TEMPLATE] Utility template failed for %s: %s — blocking send", contact.phone, error)
-        return None
+        logger.warning("[TEMPLATE] Reopen template failed for %s: %s — blocking send", contact.phone, error)
+        return "blocked", error
 
     if _cap is not None:
         db.add(RecipientSend(advertiser_id=advertiser.id, contact_id=contact.id))
@@ -275,155 +295,30 @@ async def _ensure_conversation_window(
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     conv.messages = (conv.messages + [entry])[-40:]
-    conv.last_activity = datetime.now(timezone.utc)
     conv.status = "active"
-    return random.randint(10, 20)
+    # Deliberately NOT setting conv.last_activity here — the window genuinely
+    # isn't open yet, only the contact's real reply (see inbound_pipeline.py)
+    # opens it.
+    return "invited", None
 
 
-async def _offer_or_send_radio_audio(
-    db, advertiser, contact, audio_url: str, radio_script: str, campaign, ban_delay: int,
-    _convs: dict[str, object] | None = None,
-    _cap: "RecipientCapState | None" = None,
-) -> tuple[str, str | None, str | None]:
-    """Capa 16 anti-baneo: send a radio cuña if the window is open, or offer
-    it via an opt-in template (Sí/Ahora no buttons) if it's closed.
-
-    Real-world finding (2026-08-25, verified against Meta's own docs and two
-    live test sends): sending an approved template does NOT reopen the 24h
-    customer-service window for a follow-up free-form message — only a real
-    reply from the customer does. `_ensure_conversation_window` above assumes
-    otherwise (a documented approximation, see whatsapp_window.py) and lets a
-    follow-up free-form audio send through right after the template — Meta
-    rejects that with error 131047 ("re-engagement message"). This function
-    is the fix for the radio/audio path specifically: when the window is
-    closed, it sends an opt-in template and stops — the actual audio is only
-    sent later, from inbound_pipeline.py, once the contact replies for real
-    (a button tap is a genuine customer-initiated message, which does open
-    the window). The other 3 send paths (banner/regular/capsula) still use
-    the old `_ensure_conversation_window` and share this same latent bug —
-    out of scope here, flagged for a follow-up.
-
-    The window-open branch still dispatches via the same
-    `send_whatsapp_voice_note` Celery task + `ban_delay` countdown as before
-    (not a direct synchronous send) — preserves the existing anti-ban pacing
-    (MAX_PER_HOUR / anti_ban_delay) instead of firing every send back-to-back.
-
-    Returns (outcome, sid, error) where outcome is one of:
-      "sent"    — window was already open, audio dispatched (via Celery)
-      "invited" — window closed, opt-in template sent; audio deferred
-      "blocked" — consent/cap/no-template gate stopped it entirely
-    """
-    from app.models.conversation import Conversation
+async def _supersede_stale_pending(db, advertiser_id, contact_id) -> None:
+    """Mark any older still-queued [PENDING:*] rows for this contact as
+    superseded before queuing a new one. inbound_pipeline.py only ever
+    fulfills the most recent pending row on the contact's next reply, so
+    without this the rest pile up forever as dead `queued` rows (and show as
+    raw JSON previews in the Inbox)."""
     from app.models.message import Message
-    from app.models.recipient_send import RecipientSend
-    from app.services.meta_service import send_whatsapp_template
-    from app.services.whatsapp_window import is_window_open
-    from app.workers.tasks import send_whatsapp_voice_note
-
-    if _convs is not None:
-        conv = _convs.get(str(contact.id))
-    else:
-        result = await db.execute(
-            select(Conversation).where(
-                Conversation.advertiser_id == advertiser.id,
-                Conversation.contact_id == contact.id,
-                Conversation.status == "active",
-            )
+    await db.execute(
+        sa_update(Message)
+        .where(
+            Message.advertiser_id == advertiser_id,
+            Message.contact_id == contact_id,
+            Message.status == "queued",
+            Message.content.like("[PENDING:%"),
         )
-        conv = result.scalar_one_or_none()
-
-    if is_window_open(conv):
-        msg = Message(
-            campaign_id=campaign.id, contact_id=contact.id, advertiser_id=advertiser.id,
-            direction="outbound", content=f"[AUDIO] {audio_url}",
-            status="queued", scheduled_for=datetime.now(timezone.utc),
-        )
-        db.add(msg)
-        await db.flush()
-        send_whatsapp_voice_note.apply_async(
-            args=[str(msg.id), contact.phone, audio_url, radio_script],
-            countdown=ban_delay,
-            queue="whatsapp",
-        )
-        return ("sent", str(msg.id), None)
-
-    if contact.consent_status == "unconfirmed":
-        logger.info("[CONSENT] Contact %s has unconfirmed consent — blocking cold-window audio offer", contact.id)
-        log_send_block(
-            db, advertiser.id, REASON_CONSENT_UNCONFIRMED,
-            campaign_id=getattr(campaign, "id", None), contact_id=contact.id,
-        )
-        return ("blocked", None, None)
-
-    template_name = advertiser.meta_radio_invite_template_name
-    if not template_name:
-        logger.info(
-            "[TEMPLATE] No meta_radio_invite_template_name for advertiser=%s — blocking radio offer, window closed",
-            advertiser.id,
-        )
-        log_send_block(
-            db, advertiser.id, REASON_NO_RADIO_INVITE_TEMPLATE,
-            campaign_id=getattr(campaign, "id", None), contact_id=contact.id,
-        )
-        return ("blocked", None, None)
-
-    if _cap is not None and _cap.limit is not None and _cap.count >= _cap.limit:
-        logger.warning(
-            "[TIER CAP] advertiser=%s alcanzó el tope messaging_limit_tier (%d/%d) — bloqueando invitación nueva a contact=%s",
-            advertiser.id, _cap.count, _cap.limit, contact.id,
-        )
-        log_send_block(
-            db, advertiser.id, REASON_RECIPIENT_CAP,
-            campaign_id=getattr(campaign, "id", None), contact_id=contact.id,
-            detail=f"{_cap.count}/{_cap.limit}",
-        )
-        return ("blocked", None, None)
-
-    contact_name = (contact.name or "Cliente").split()[0] if contact.name else "Cliente"
-    business_name = advertiser.business_name or "IARadio"
-
-    sid, error = await send_whatsapp_template(
-        to=contact.phone,
-        template_name=template_name,
-        components=[{
-            "type": "body",
-            "parameters": [
-                {"type": "text", "text": contact_name},
-                {"type": "text", "text": business_name},
-            ],
-        }],
-        advertiser=advertiser,
+        .values(status="failed", error_code="superseded")
     )
-    if not sid:
-        logger.warning("[TEMPLATE] Radio invite template failed for %s: %s — blocking", contact.phone, error)
-        return ("blocked", None, error)
-
-    if _cap is not None:
-        db.add(RecipientSend(advertiser_id=advertiser.id, contact_id=contact.id))
-        _cap.count += 1
-
-    if not conv:
-        conv = Conversation(advertiser_id=advertiser.id, contact_id=contact.id, messages=[], lead_score="cold")
-        db.add(conv)
-        await db.flush()
-    entry = {
-        "role": "assistant",
-        "content": f"[TEMPLATE:{template_name}] Hola {contact_name}, …",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-    conv.messages = (conv.messages + [entry])[-40:]
-    conv.status = "active"
-    # Deliberately NOT setting conv.last_activity here — unlike
-    # _ensure_conversation_window above, this does not pretend the window is
-    # now open. It genuinely isn't yet; only the contact's real reply (see
-    # inbound_pipeline.py) opens it.
-
-    db.add(Message(
-        campaign_id=campaign.id, contact_id=contact.id, advertiser_id=advertiser.id,
-        direction="outbound", content=f"[AUDIO-PENDING] {audio_url}",
-        status="queued", scheduled_for=datetime.now(timezone.utc),
-    ))
-    return ("invited", sid, None)
 
 
 async def _preload_conversations(db, advertiser_id: uuid.UUID, contacts) -> dict[str, object]:
@@ -469,6 +364,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     layout = layout_override or design.layout
 
     sent_count = 0
+    invited_count = 0
     skipped_count = 0
 
     for idx_b, contact in enumerate(contacts):
@@ -488,14 +384,13 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         if idx_b > 0 and idx_b % MAX_PER_HOUR == 0:
             ban_delay = int(idx_b / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(
+        outcome, _err = await _offer_or_queue(
             db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),
         )
-        if extra is None:
+        if outcome == "blocked":
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
             continue
-        ban_delay += extra
 
         contact_name = (contact.name or "").split()[0] if contact.name else "Cliente"
 
@@ -518,6 +413,28 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
 
         body_text = caption or f"¡Hola {contact_name}! Mira lo que tenemos para ti 👆"
 
+        if outcome == "invited":
+            # Window's still closed — the opt-in template only asked the
+            # contact to reply. Defer the real banner until they actually do
+            # (see inbound_pipeline.py's generic [PENDING:*] resume). The
+            # opt-in template itself is anti-ban plumbing, not advertiser
+            # content — it does NOT consume messages_remaining; the deferred
+            # banner does, once it actually goes out on the contact's reply.
+            await _supersede_stale_pending(db, advertiser.id, contact.id)
+            db.add(Message(
+                campaign_id=campaign.id,
+                contact_id=contact.id,
+                advertiser_id=campaign.advertiser_id,
+                direction="outbound",
+                content=f"[PENDING:banner] {json.dumps({'banner_url': banner_url, 'caption': body_text})}",
+                status="queued",
+                scheduled_for=datetime.now(timezone.utc),
+            ))
+            contact.last_campaign_sent_at = datetime.now(timezone.utc)
+            invited_count += 1
+            continue
+
+        # "open" — window already open, send now
         msg = Message(
             campaign_id=campaign.id,
             contact_id=contact.id,
@@ -541,7 +458,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         sent_count += 1
 
     # Auto-pause if failure rate is too high
-    total_attempted = sent_count + skipped_count
+    total_attempted = sent_count + invited_count + skipped_count
     if total_attempted > 10 and skipped_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD:
         campaign.status = "paused"
         logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
@@ -556,8 +473,10 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
 
 async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay):
     """Send radio/comunitaria campaign messages. Capa 16: contacts with a
-    closed 24h window get an opt-in invite (Sí/Ahora no) instead of the audio
-    directly — see `_offer_or_send_radio_audio` for why."""
+    closed 24h window get an opt-in invite instead of the audio directly —
+    see `_offer_or_queue` for why."""
+    from app.models.message import Message
+    from app.workers.tasks import send_whatsapp_voice_note
     from app.services.messaging_throttle import anti_ban_delay
 
     audio_url = ab.get("audio_url", "")
@@ -588,23 +507,49 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         if idx_r > 0 and idx_r % MAX_PER_HOUR == 0:
             ban_delay = int(idx_r / MAX_PER_HOUR) * 3600
 
-        outcome, _sid, _error = await _offer_or_send_radio_audio(
-            db, advertiser, contact, audio_url, radio_script, campaign, ban_delay,
-            _convs=_convs, _cap=_cap,
+        outcome, _err = await _offer_or_queue(
+            db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),
         )
 
         if outcome == "blocked":
             skipped_count += 1
-            logger.info("[CAMPAIGN] Skipping contact %s — audio offer blocked (%s)", contact.id, _error)
+            logger.info("[CAMPAIGN] Skipping contact %s — audio offer blocked (%s)", contact.id, _err)
             continue
+
+        if outcome == "invited":
+            # Opt-in template already sent by _offer_or_queue; the audio
+            # itself is deferred until the contact replies (see
+            # inbound_pipeline.py). The template is anti-ban plumbing, not
+            # advertiser content — it does NOT consume messages_remaining.
+            await _supersede_stale_pending(db, advertiser.id, contact.id)
+            db.add(Message(
+                campaign_id=campaign.id, contact_id=contact.id, advertiser_id=advertiser.id,
+                direction="outbound",
+                content=f"[PENDING:audio] {json.dumps({'audio_url': audio_url, 'script': radio_script})}",
+                status="queued", scheduled_for=datetime.now(timezone.utc),
+            ))
+            contact.last_campaign_sent_at = datetime.now(timezone.utc)
+            invited_count += 1
+            continue
+
+        # "open"
+        msg = Message(
+            campaign_id=campaign.id, contact_id=contact.id, advertiser_id=advertiser.id,
+            direction="outbound", content=f"[AUDIO] {audio_url}",
+            status="queued", scheduled_for=datetime.now(timezone.utc),
+        )
+        db.add(msg)
+        await db.flush()
+        send_whatsapp_voice_note.apply_async(
+            args=[str(msg.id), contact.phone, audio_url, radio_script],
+            countdown=ban_delay,
+            queue="whatsapp",
+        )
+        sent_count += 1
 
         contact.last_campaign_sent_at = datetime.now(timezone.utc)
         advertiser.messages_remaining -= 1
         ban_delay += anti_ban_delay()
-        if outcome == "sent":
-            sent_count += 1
-        else:
-            invited_count += 1
 
     # Auto-pause if failure rate is too high — "invited" contacts count as a
     # successful attempt here (a real message was delivered, the audio just
@@ -653,6 +598,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     }
 
     sent_count = 0
+    invited_count = 0
     skipped_count = 0
 
     for i, contact in enumerate(contacts):
@@ -672,14 +618,13 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         if i > 0 and i % MAX_PER_HOUR == 0:
             ban_delay = int(i / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(
+        outcome, _err = await _offer_or_queue(
             db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),
         )
-        if extra is None:
+        if outcome == "blocked":
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
             continue
-        ban_delay += extra
 
         contact_data = {
             "name": contact.name,
@@ -718,6 +663,33 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             audio_url = await upload_bytes(mp3_bytes, key, "audio/mpeg")
         except Exception as tts_err:
             logger.error("[CAMPAIGN] TTS failed for contact %s: %s", contact.id, tts_err)
+
+        if outcome == "invited":
+            # Window's still closed — defer the real send until the contact
+            # actually replies (see inbound_pipeline.py's generic
+            # [PENDING:*] resume). Content is generated above either way so
+            # it's ready to fire the instant they do. The opt-in template is
+            # anti-ban plumbing, not advertiser content — it does NOT consume
+            # messages_remaining; the deferred send does, once it goes out.
+            if audio_url:
+                payload = {"audio_url": audio_url, "script": body}
+                kind = "voice"
+            else:
+                payload = {"body": body}
+                kind = "text"
+            await _supersede_stale_pending(db, advertiser.id, contact.id)
+            db.add(Message(
+                campaign_id=campaign.id,
+                contact_id=contact.id,
+                advertiser_id=campaign.advertiser_id,
+                direction="outbound",
+                content=f"[PENDING:{kind}] {json.dumps(payload)}",
+                status="queued",
+                scheduled_for=datetime.now(timezone.utc),
+            ))
+            contact.last_campaign_sent_at = datetime.now(timezone.utc)
+            invited_count += 1
+            continue
 
         if audio_url:
             msg = Message(
@@ -768,7 +740,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         sent_count += 1
 
     # Auto-pause if failure rate is too high
-    total_attempted = sent_count + skipped_count
+    total_attempted = sent_count + invited_count + skipped_count
     if total_attempted > 10 and skipped_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD:
         campaign.status = "paused"
         logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
@@ -865,6 +837,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
     MAX_PER_HOUR = advertiser.meta_send_throttle_per_hour or 60
     ban_delay = 0
     sent = 0
+    invited_count = 0
     skipped_count = 0
     _convs = await _preload_conversations(db, advertiser.id, contacts)
     _cap = await get_recipient_cap_state(db, advertiser)
@@ -886,15 +859,33 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
         if idx > 0 and idx % MAX_PER_HOUR == 0:
             ban_delay = int(idx / MAX_PER_HOUR) * 3600
 
-        extra = await _ensure_conversation_window(
+        outcome, _err = await _offer_or_queue(
             db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),
         )
-        if extra is None:
+        if outcome == "blocked":
             skipped_count += 1
             logger.info("[CAMPAIGN] Skipping contact %s — 24h window closed, no approved template", contact.id)
             continue
-        ban_delay += extra
 
+        if outcome == "invited":
+            # Opt-in template already sent by _offer_or_queue; the audio is
+            # deferred until the contact replies (see inbound_pipeline.py).
+            # The template is anti-ban plumbing, not advertiser content — it
+            # does NOT consume messages_remaining.
+            await _supersede_stale_pending(db, advertiser.id, contact.id)
+            db.add(Message(
+                advertiser_id=advertiser.id,
+                contact_id=contact.id,
+                direction="outbound",
+                content=f"[PENDING:parrilla] {json.dumps({'audio_url': audio_url, 'script': script[:200], 'day_name': day_name, 'mode': mode})}",
+                status="queued",
+                scheduled_for=datetime.now(timezone.utc),
+            ))
+            contact.last_campaign_sent_at = datetime.now(timezone.utc)
+            invited_count += 1
+            continue
+
+        # "open"
         msg = Message(
             advertiser_id=advertiser.id,
             contact_id=contact.id,
@@ -917,7 +908,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
         sent += 1
 
     # Auto-pause if failure rate is too high
-    total_attempted = sent + skipped_count
+    total_attempted = sent + invited_count + skipped_count
     if total_attempted > 10 and skipped_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD:
         if campaign:
             campaign.status = "paused"

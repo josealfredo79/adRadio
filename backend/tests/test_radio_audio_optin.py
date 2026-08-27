@@ -1,157 +1,108 @@
-"""Capa 16 anti-baneo: `_offer_or_send_radio_audio` (campaign_ops.py).
+"""Capa 16 anti-baneo: `send_radio_messages`'s open/invited branching
+(campaign_ops.py).
 
 Real-world finding (2026-08-25): sending an approved template does NOT
 reopen the 24h customer-service window for a follow-up free-form message —
 only a real customer reply does (verified live: Meta rejected a follow-up
 audio send with error 131047 right after a successful template send, twice,
-14+ minutes apart). This is the fix for the radio/audio campaign path: when
-the window is closed, offer the audio via an opt-in template (Sí/Ahora no
-buttons) and stop — don't send the audio in the same pass.
-
-Mirrors tests/test_whatsapp_window_hard_block.py's style for the sibling
-`_ensure_conversation_window` function.
+14+ minutes apart). The fix lives in the shared `_offer_or_queue` gate (see
+tests/test_whatsapp_window_hard_block.py for its own unit tests) — this file
+covers what `send_radio_messages` does with each of its outcomes: dispatch
+the audio via Celery when the window's already "open", or defer it as a
+`[PENDING:audio]` Message when the gate only managed to send an "invited"
+opt-in template.
 """
-from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.workers.task_helpers.campaign_ops import _offer_or_send_radio_audio
+from app.workers.task_helpers.campaign_ops import send_radio_messages
 
 
-def _conv(hours_ago: float | None):
-    if hours_ago is None:
-        return None
-    conv = MagicMock()
-    conv.last_activity = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
-    return conv
+def _contact():
+    return MagicMock(
+        id="c1", phone="+521234567890", name="Juan", status="active",
+        suppressed_until=None, last_campaign_sent_at=None, last_interaction=None,
+        engagement_score=0,
+    )
 
 
-def _campaign():
-    return MagicMock(id="camp1")
+def _campaign(test_user):
+    return MagicMock(id="camp1", advertiser_id=test_user.id)
 
 
 class TestOpenWindowDispatchesViaCelery:
     @pytest.mark.asyncio
-    async def test_open_window_dispatches_audio_task_not_a_direct_send(self, mock_db, test_user):
-        contact = MagicMock(id="c1", phone="+521234567890", name="Juan")
-        convs = {"c1": _conv(1)}  # window open
+    async def test_open_outcome_dispatches_audio_task_not_a_direct_send(self, test_user):
+        db = AsyncMock()
+        contact = _contact()
+        campaign = _campaign(test_user)
+        test_user.messages_remaining = 100
+        ab = {"audio_url": "https://x/audio.ogg", "radio_script": "script"}
 
-        with patch(
-            "app.workers.tasks.send_whatsapp_voice_note.apply_async",
-        ) as mock_apply_async, patch(
-            "app.services.meta_service.send_whatsapp_template",
-        ) as mock_template:
-            outcome, sid, error = await _offer_or_send_radio_audio(
-                mock_db, test_user, contact, "https://x/audio.ogg", "script", _campaign(), ban_delay=5,
-                _convs=convs,
-            )
+        with patch("app.workers.task_helpers.campaign_ops._preload_conversations", new=AsyncMock(return_value={"c1": None})), \
+             patch("app.workers.task_helpers.campaign_ops._offer_or_queue", new=AsyncMock(return_value=("open", None))), \
+             patch("app.workers.tasks.send_whatsapp_voice_note.apply_async") as mock_apply_async, \
+             patch("app.services.messaging_throttle.anti_ban_delay", return_value=1):
+            await send_radio_messages(db, campaign, [contact], test_user, ab, ban_delay=5)
 
-        assert outcome == "sent"
         mock_apply_async.assert_called_once()
-        # Real content send is queued with the given ban_delay, not fired synchronously.
         assert mock_apply_async.call_args.kwargs["countdown"] == 5
-        mock_template.assert_not_called()
+        assert mock_apply_async.call_args.kwargs["args"][2] == "https://x/audio.ogg"
+
+        queued_pending = [
+            call.args[0] for call in db.add.call_args_list
+            if hasattr(call.args[0], "content") and str(call.args[0].content).startswith("[PENDING:")
+        ]
+        assert queued_pending == []
 
 
-class TestClosedWindowOffersInsteadOfSending:
+class TestInvitedOutcomeDefersAudio:
     @pytest.mark.asyncio
-    async def test_closed_window_no_invite_template_configured_blocks(self, mock_db, test_user):
-        contact = MagicMock(id="c1", phone="+521234567890", name="Juan", consent_status="confirmed")
-        convs = {"c1": _conv(30)}  # window closed
-        test_user.meta_radio_invite_template_name = None
-
-        with patch("app.services.meta_service.send_whatsapp_template") as mock_template:
-            outcome, sid, error = await _offer_or_send_radio_audio(
-                mock_db, test_user, contact, "https://x/audio.ogg", "script", _campaign(), ban_delay=0,
-                _convs=convs,
-            )
-
-        assert outcome == "blocked"
-        mock_template.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_closed_window_unconfirmed_consent_blocks_even_with_template(self, mock_db, test_user):
-        contact = MagicMock(id="c1", phone="+521234567890", name="Juan", consent_status="unconfirmed")
-        convs = {"c1": _conv(30)}
-        test_user.meta_radio_invite_template_name = "iaradio_audio_disponible"
-
-        with patch(
-            "app.services.meta_service.send_whatsapp_template",
-            new=AsyncMock(return_value=("wamid.OK", None)),
-        ) as mock_send:
-            outcome, sid, error = await _offer_or_send_radio_audio(
-                mock_db, test_user, contact, "https://x/audio.ogg", "script", _campaign(), ban_delay=0,
-                _convs=convs,
-            )
-
-        assert outcome == "blocked"
-        mock_send.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_closed_window_template_send_fails_blocks(self, mock_db, test_user):
-        contact = MagicMock(id="c1", phone="+521234567890", name="Juan", consent_status="confirmed")
-        convs = {"c1": _conv(30)}
-        test_user.meta_radio_invite_template_name = "iaradio_audio_disponible"
-
-        with patch(
-            "app.services.meta_service.send_whatsapp_template",
-            new=AsyncMock(return_value=(None, "template rejected")),
-        ):
-            outcome, sid, error = await _offer_or_send_radio_audio(
-                mock_db, test_user, contact, "https://x/audio.ogg", "script", _campaign(), ban_delay=0,
-                _convs=convs,
-            )
-
-        assert outcome == "blocked"
-
-    @pytest.mark.asyncio
-    async def test_closed_window_template_succeeds_offers_and_defers_audio(self, mock_db, test_user):
-        """The key fix under test: a successful template send must NOT be
-        treated as "window open, send the audio now" — it must return
-        "invited" (audio deferred) and queue a [AUDIO-PENDING] Message for
+    async def test_invited_outcome_queues_pending_audio_without_dispatching(self, test_user):
+        """The key fix under test: an "invited" outcome from the gate (opt-in
+        template sent, window still closed) must NOT dispatch the real audio
+        in the same pass — it must be stored as [PENDING:audio] for
         inbound_pipeline.py to fulfill once the contact actually replies."""
-        contact = MagicMock(id="c1", phone="+521234567890", name="Juan", consent_status="confirmed")
-        convs = {"c1": None}  # no conversation yet, window closed
-        test_user.meta_radio_invite_template_name = "iaradio_audio_disponible"
+        db = AsyncMock()
+        contact = _contact()
+        campaign = _campaign(test_user)
+        test_user.messages_remaining = 100
+        ab = {"audio_url": "https://x/audio.ogg", "radio_script": "script"}
 
-        with patch(
-            "app.services.meta_service.send_whatsapp_template",
-            new=AsyncMock(return_value=("wamid.TEMPLATE", None)),
-        ) as mock_template, patch(
-            "app.workers.tasks.send_whatsapp_voice_note.apply_async",
-        ) as mock_apply_async:
-            outcome, sid, error = await _offer_or_send_radio_audio(
-                mock_db, test_user, contact, "https://x/audio.ogg", "script", _campaign(), ban_delay=0,
-                _convs=convs,
-            )
+        with patch("app.workers.task_helpers.campaign_ops._preload_conversations", new=AsyncMock(return_value={"c1": None})), \
+             patch("app.workers.task_helpers.campaign_ops._offer_or_queue", new=AsyncMock(return_value=("invited", None))), \
+             patch("app.workers.tasks.send_whatsapp_voice_note.apply_async") as mock_apply_async, \
+             patch("app.services.messaging_throttle.anti_ban_delay", return_value=1):
+            await send_radio_messages(db, campaign, [contact], test_user, ab, ban_delay=0)
 
-        assert outcome == "invited"
-        mock_template.assert_called_once()
-        # The audio itself must NOT be dispatched in this same pass.
         mock_apply_async.assert_not_called()
 
         queued_messages = [
-            call.args[0] for call in mock_db.add.call_args_list
-            if hasattr(call.args[0], "content") and str(call.args[0].content).startswith("[AUDIO-PENDING]")
+            call.args[0] for call in db.add.call_args_list
+            if hasattr(call.args[0], "content") and str(call.args[0].content).startswith("[PENDING:audio]")
         ]
         assert len(queued_messages) == 1
         assert queued_messages[0].status == "queued"
-        assert queued_messages[0].content == "[AUDIO-PENDING] https://x/audio.ogg"
+        import json
+        payload = json.loads(queued_messages[0].content.removeprefix("[PENDING:audio] "))
+        assert payload == {"audio_url": "https://x/audio.ogg", "script": "script"}
 
     @pytest.mark.asyncio
-    async def test_open_window_reaches_unconfirmed_contact_anyway(self, mock_db, test_user):
-        """Consent gate only blocks the cold-window offer path — a contact
-        who already has an open window is unaffected regardless of
-        consent_status, same precedent as _ensure_conversation_window."""
-        contact = MagicMock(id="c1", phone="+521234567890", name="Juan", consent_status="unconfirmed")
-        convs = {"c1": _conv(1)}  # window open
+    async def test_blocked_outcome_skips_contact_entirely(self, test_user):
+        db = AsyncMock()
+        contact = _contact()
+        campaign = _campaign(test_user)
+        test_user.messages_remaining = 100
+        ab = {"audio_url": "https://x/audio.ogg", "radio_script": "script"}
 
-        with patch("app.workers.tasks.send_whatsapp_voice_note.apply_async") as mock_apply_async:
-            outcome, sid, error = await _offer_or_send_radio_audio(
-                mock_db, test_user, contact, "https://x/audio.ogg", "script", _campaign(), ban_delay=0,
-                _convs=convs,
-            )
+        with patch("app.workers.task_helpers.campaign_ops._preload_conversations", new=AsyncMock(return_value={"c1": None})), \
+             patch("app.workers.task_helpers.campaign_ops._offer_or_queue", new=AsyncMock(return_value=("blocked", None))), \
+             patch("app.workers.tasks.send_whatsapp_voice_note.apply_async") as mock_apply_async, \
+             patch("app.services.messaging_throttle.anti_ban_delay", return_value=1):
+            await send_radio_messages(db, campaign, [contact], test_user, ab, ban_delay=0)
 
-        assert outcome == "sent"
-        mock_apply_async.assert_called_once()
+        mock_apply_async.assert_not_called()
+        assert not any(
+            call.args and hasattr(call.args[0], "direction") for call in db.add.call_args_list
+        )

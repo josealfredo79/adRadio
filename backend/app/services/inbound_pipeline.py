@@ -6,6 +6,7 @@ closure bound to meta_service. Everything from there on (STOP-words,
 appointment state machine, coupon redemption, order/plan state machine, RAG
 fallback, message persistence, follow-up jobs) lives here.
 """
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -276,74 +277,113 @@ async def process_inbound_message(
 
             return {"message": "ok"}
 
-    # Capa 16 anti-baneo: confirmación de cuña de radio ofrecida vía
-    # plantilla (ver `_offer_or_send_radio_audio` en campaign_ops.py). Una
-    # plantilla enviada por el negocio NO reabre la ventana de 24h por sí
-    # sola — solo lo hace una respuesta real del cliente — así que en vez de
-    # asumir que la ventana ya está abierta después de mandar la plantilla,
-    # se le pregunta al cliente y el audio solo se envía tras su respuesta
-    # real (un tap en el botón cuenta como respuesta real ante Meta). Se
-    # revisa aquí, antes que cualquier otro estado, pero solo actúa si de
-    # verdad hay un audio pendiente para este contacto — si no lo hay, un
-    # "sí"/"no" cualquiera sigue de largo a los demás manejadores.
-    normalized_audio_reply = body_text.strip().lower().rstrip(".!¡¿? ")
-    audio_confirm_words = {"si, escuchalo", "sí, escúchalo", "si", "sí", "s", "yes", "escuchar", "escúchalo", "escuchalo"}
-    audio_decline_words = {"ahora no", "no", "no gracias", "despues", "después"}
-    if normalized_audio_reply in audio_confirm_words or normalized_audio_reply in audio_decline_words:
-        audio_contact_result = await db.execute(
-            select(Contact).where(
-                Contact.advertiser_id == advertiser.id,
-                Contact.phone.in_(from_candidates),
-            )
+    # Capa 16 anti-baneo: reanudar un envío diferido (audio/banner/texto/
+    # parrilla) ofrecido vía plantilla de opt-in cuando la ventana de 24h
+    # estaba cerrada (ver `_offer_or_queue` en campaign_ops.py). Una
+    # plantilla enviada por el negocio NO reabre la ventana por sí sola —
+    # solo lo hace una respuesta real del cliente — así que el contenido
+    # real quedó guardado como [PENDING:<kind>] y se dispara aquí, en la
+    # primera respuesta genuina del contacto. La plantilla de invitación
+    # configurada hoy no siempre trae botones Sí/No (solo una de las
+    # plantillas aprobadas los tiene), así que cualquier respuesta cuenta
+    # como reapertura real de ventana — solo un "no"/"ahora no" explícito
+    # cancela el envío diferido en vez de dispararlo.
+    #
+    # IMPORTANTE: esto NO hace `return`. Después de disparar (o descartar) el
+    # contenido diferido, el mensaje sigue por el pipeline normal, que es
+    # quien: persiste la respuesta del cliente (aparece en el Inbox), marca
+    # `consent_status="confirmed"` — esta respuesta ES la prueba de opt-in —,
+    # actualiza `conv.last_activity` para que `is_window_open` vea la ventana
+    # abierta, y atiende la intención real si la trae ("quiero una cita",
+    # "cuánto cuesta", etc.). El propio contenido diferido que se envía aquí
+    # es el acuse; no se manda un texto "¡Aquí tienes!" extra.
+    pending_contact_result = await db.execute(
+        select(Contact).where(
+            Contact.advertiser_id == advertiser.id,
+            Contact.phone.in_(from_candidates),
         )
-        audio_contact = audio_contact_result.scalar_one_or_none()
-        if audio_contact:
-            pending_result = await db.execute(
-                select(Message).where(
-                    Message.advertiser_id == advertiser.id,
-                    Message.contact_id == audio_contact.id,
-                    Message.status == "queued",
-                    Message.content.like("[AUDIO-PENDING]%"),
-                ).order_by(Message.created_at.desc()).limit(1)
-            )
-            pending_msg = pending_result.scalar_one_or_none()
-            if pending_msg:
-                if normalized_audio_reply in audio_confirm_words:
-                    from app.services.meta_service import send_whatsapp_media
+    )
+    pending_contact = pending_contact_result.scalar_one_or_none()
+    if pending_contact:
+        pending_result = await db.execute(
+            select(Message).where(
+                Message.advertiser_id == advertiser.id,
+                Message.contact_id == pending_contact.id,
+                Message.status == "queued",
+                Message.content.like("[PENDING:%"),
+            ).order_by(Message.created_at.desc()).limit(1)
+        )
+        pending_msg = pending_result.scalar_one_or_none()
+        if pending_msg:
+            normalized_reply = body_text.strip().lower().rstrip(".!¡¿? ")
+            decline_words = {"ahora no", "no", "no gracias", "despues", "después"}
+            kind, _, raw_payload = pending_msg.content.removeprefix("[PENDING:").partition("] ")
+            try:
+                payload = json.loads(raw_payload)
+            except (ValueError, TypeError):
+                payload = None
 
-                    pending_audio_url = pending_msg.content.removeprefix("[AUDIO-PENDING] ")
-                    pending_script = None
-                    if pending_msg.campaign_id:
-                        camp_result = await db.execute(
-                            select(Campaign).where(Campaign.id == pending_msg.campaign_id)
-                        )
-                        camp = camp_result.scalar_one_or_none()
-                        if camp:
-                            pending_script = (camp.ab_test or {}).get("radio_script")
-
-                    sid_au, err_au = await send_whatsapp_media(
-                        from_number, pending_audio_url, body=pending_script or "", advertiser=advertiser,
+            if payload is None:
+                # Fila [PENDING] malformada — no bloquear el pipeline por ella.
+                logger.warning(
+                    "[PENDING-OPTIN] Malformed pending payload for contact %s: %r",
+                    pending_contact.id, pending_msg.content,
+                )
+                pending_msg.status = "failed"
+                pending_msg.error_code = "malformed_payload"
+            elif normalized_reply in decline_words:
+                pending_msg.status = "failed"
+                pending_msg.error_code = "declined_by_contact"
+            else:
+                # La ventana ya está abierta de verdad (estamos dentro del
+                # webhook de la respuesta genuina del cliente). Se despacha
+                # por la MISMA task Celery que usa la ruta de ventana abierta
+                # en campaign_ops: reintentos, auto-supresión de contacto en
+                # errores permanentes, detección de riesgo de baneo (Capa 13)
+                # y un único punto de descuento de cuota (la task). Esto NO
+                # se pauta con anti_ban_delay / is_human_hour a propósito —
+                # es una respuesta 1:1 dentro de ventana, no un blast: las
+                # capas de pacing existen para envíos masivos iniciados por
+                # el negocio, no para contestarle a un cliente.
+                from app.workers.tasks import (
+                    send_whatsapp_image_message,
+                    send_whatsapp_message,
+                    send_whatsapp_voice_note,
+                )
+                pending_contact.last_campaign_sent_at = datetime.now(timezone.utc)
+                if kind in ("audio", "voice", "parrilla"):
+                    pending_msg.content = f"[AUDIO] {payload['audio_url']}"
+                    await db.flush()
+                    send_whatsapp_voice_note.apply_async(
+                        args=[str(pending_msg.id), from_number, payload["audio_url"], payload.get("script", "")],
+                        queue="whatsapp",
                     )
-                    pending_msg.status = "sent" if sid_au else "failed"
-                    pending_msg.wa_message_id = sid_au
-                    pending_msg.error_code = err_au
-                    pending_msg.sent_at = datetime.now(timezone.utc) if sid_au else None
-                    if sid_au:
-                        advertiser.messages_remaining -= 1
-                        audio_contact.last_campaign_sent_at = datetime.now(timezone.utc)
-                        confirm_reply = "¡Aquí tienes! 🎙️"
-                    else:
-                        confirm_reply = "Uy, tuvimos un problema enviándolo. Lo reintentamos en breve 🙏"
+                elif kind == "banner":
+                    pending_msg.content = f"[BANNER] {payload['banner_url']}"
+                    await db.flush()
+                    send_whatsapp_image_message.apply_async(
+                        args=[str(pending_msg.id), from_number, payload["banner_url"], payload.get("caption", "")],
+                        queue="whatsapp",
+                    )
+                elif kind == "text":
+                    pending_msg.content = payload["body"]
+                    await db.flush()
+                    send_whatsapp_message.apply_async(
+                        args=[str(pending_msg.id), from_number, payload["body"]],
+                        queue="whatsapp",
+                    )
                 else:
                     pending_msg.status = "failed"
-                    pending_msg.error_code = "declined_by_contact"
-                    confirm_reply = "Entendido 👍 Aquí estamos si cambias de opinión."
-                await db.commit()
-                try:
-                    await send(from_number, confirm_reply)
-                except Exception:
-                    logger.warning("[RADIO-OPTIN] Failed to send confirmation reply to %s", from_number, exc_info=True)
-                return {"message": "ok"}
+                    pending_msg.error_code = f"unknown_pending_kind:{kind}"
+                    logger.warning("[PENDING-OPTIN] Unknown pending kind %r for contact %s", kind, pending_contact.id)
+                # pending_msg.status queda "queued": la task lo pasa a
+                # sent/failed y descuenta la cuota cuando el envío ocurre.
+
+            # Persistir el estado del [PENDING] antes de continuar: un
+            # reintento del webhook (sesión nueva) no debe re-disparar el
+            # envío — el query exige content LIKE "[PENDING:%", que arriba ya
+            # cambió (o status != "queued" en decline / kind desconocido).
+            await db.commit()
 
     # Coupon redemption intent
     if is_redeem_intent(body_text):

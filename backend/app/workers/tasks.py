@@ -505,8 +505,8 @@ def import_contacts_csv(self, advertiser_id: str, rows: list[dict], consent_conf
     new contacts are stored as consent_status='unconfirmed' — they can still
     receive messages while their conversation window is open (e.g. they wrote
     in first), but campaign sends can't use an approved template to reopen a
-    closed window for them (see _ensure_conversation_window). This is the
-    guard against blasting cold, unverified lists.
+    closed window for them (see _offer_or_queue in campaign_ops.py). This is
+    the guard against blasting cold, unverified lists.
     """
     async def _import():
         import re

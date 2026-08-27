@@ -29,6 +29,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
+def _preview_text(content: str | None) -> str | None:
+    """Friendly inbox preview for internal message markers. A campaign whose
+    24h window was closed queues its real content as `[PENDING:<kind>] {json}`
+    (see campaign_ops._offer_or_queue) until the contact replies — don't show
+    that raw JSON blob as the conversation's last message."""
+    if content is None:
+        return None
+    if content.startswith("[PENDING:"):
+        return "⏳ Contenido en espera de que el cliente responda"
+    return content
+
+
 class StatusUpdateBody(BaseModel):
     status: Literal["active", "escalated", "closed"]
 
@@ -116,7 +128,7 @@ async def list_conversations(
             "tags": conv.tags,
             "last_activity": conv.last_activity,
             "message_count": message_count,
-            "last_message": {"role": "assistant" if direction == "outbound" else "user", "content": content}
+            "last_message": {"role": "assistant" if direction == "outbound" else "user", "content": _preview_text(content)}
             if content else None,
             "contact": {
                 "id": str(contact.id) if contact else None,
