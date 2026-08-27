@@ -366,9 +366,16 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     sent_count = 0
     invited_count = 0
     skipped_count = 0
+    # Local running estimate of quota spent this batch. The actual
+    # messages_remaining decrement happens once, inside the Celery send task
+    # on delivery success (send_whatsapp_message / _voice_note /
+    # _image_message) — this counter only gates the loop so we don't
+    # dispatch past quota. Conservative: a task that later fails to send
+    # won't have decremented, so at worst we stop a touch early.
+    charged = 0
 
     for idx_b, contact in enumerate(contacts):
-        if advertiser.messages_remaining <= 0:
+        if advertiser.messages_remaining - charged <= 0:
             break
 
         active, block_reason = _is_contact_active(contact)
@@ -453,7 +460,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             queue="whatsapp",
         )
         contact.last_campaign_sent_at = datetime.now(timezone.utc)
-        advertiser.messages_remaining -= 1
+        charged += 1
         ban_delay += anti_ban_delay()
         sent_count += 1
 
@@ -489,9 +496,12 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
     sent_count = 0
     invited_count = 0
     skipped_count = 0
+    # See send_banner_messages: the real messages_remaining decrement lives
+    # in the Celery send task; this only gates the loop.
+    charged = 0
 
     for idx_r, contact in enumerate(contacts):
-        if advertiser.messages_remaining <= 0:
+        if advertiser.messages_remaining - charged <= 0:
             break
 
         active, block_reason = _is_contact_active(contact)
@@ -548,7 +558,7 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         sent_count += 1
 
         contact.last_campaign_sent_at = datetime.now(timezone.utc)
-        advertiser.messages_remaining -= 1
+        charged += 1
         ban_delay += anti_ban_delay()
 
     # Auto-pause if failure rate is too high — "invited" contacts count as a
@@ -600,9 +610,12 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     sent_count = 0
     invited_count = 0
     skipped_count = 0
+    # See send_banner_messages: the real messages_remaining decrement lives
+    # in the Celery send task; this only gates the loop.
+    charged = 0
 
     for i, contact in enumerate(contacts):
-        if advertiser.messages_remaining <= 0:
+        if advertiser.messages_remaining - charged <= 0:
             break
 
         active, block_reason = _is_contact_active(contact)
@@ -735,7 +748,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             ab_stats_a["sent"] = ab_stats_a.get("sent", 0) + 1
 
         contact.last_campaign_sent_at = datetime.now(timezone.utc)
-        advertiser.messages_remaining -= 1
+        charged += 1
         ban_delay += anti_ban_delay()
         sent_count += 1
 
@@ -839,11 +852,14 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
     sent = 0
     invited_count = 0
     skipped_count = 0
+    # See send_banner_messages: the real messages_remaining decrement lives
+    # in the Celery send task; this only gates the loop.
+    charged = 0
     _convs = await _preload_conversations(db, advertiser.id, contacts)
     _cap = await get_recipient_cap_state(db, advertiser)
 
     for idx, contact in enumerate(contacts):
-        if advertiser.messages_remaining <= 0:
+        if advertiser.messages_remaining - charged <= 0:
             break
 
         active, block_reason = _is_contact_active(contact)
@@ -903,7 +919,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
             queue="whatsapp",
         )
         contact.last_campaign_sent_at = datetime.now(timezone.utc)
-        advertiser.messages_remaining -= 1
+        charged += 1
         ban_delay += anti_ban_delay()
         sent += 1
 
