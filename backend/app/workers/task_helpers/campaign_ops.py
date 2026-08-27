@@ -199,6 +199,7 @@ async def _offer_or_queue(
     window above is unaffected — that's returned before this check runs).
     """
     from app.models.conversation import Conversation
+    from app.models.message import Message
     from app.models.recipient_send import RecipientSend
     from app.services.meta_service import send_whatsapp_template
     from app.services.whatsapp_window import is_window_open
@@ -280,6 +281,20 @@ async def _offer_or_queue(
     if not sid:
         logger.warning("[TEMPLATE] Reopen template failed for %s: %s — blocking send", contact.phone, error)
         return "blocked", error
+
+    # Persist the opt-in template as a real Message row so its delivery/read
+    # status webhook has something to attach to (statuses arrive keyed by
+    # wa_message_id) and it shows up in analytics/Inbox like any other send.
+    db.add(Message(
+        advertiser_id=advertiser.id,
+        contact_id=contact.id,
+        campaign_id=_campaign_id,
+        direction="outbound",
+        content=f"[TEMPLATE:{template_name}]",
+        status="sent",
+        wa_message_id=sid,
+        sent_at=datetime.now(timezone.utc),
+    ))
 
     if _cap is not None:
         db.add(RecipientSend(advertiser_id=advertiser.id, contact_id=contact.id))

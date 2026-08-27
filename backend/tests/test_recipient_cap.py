@@ -203,9 +203,9 @@ class TestOfferOrQueueRespectsCap:
 
         assert outcome == "invited"
         assert cap.count == 4  # incrementado
-        # db.add se llama dos veces en este flujo: una para el RecipientSend
-        # nuevo (capa 10) y otra para el Conversation nuevo (lógica previa
-        # de _offer_or_queue) — no es un doble-conteo del tier.
+        # db.add se llama varias veces en este flujo (Message de la plantilla,
+        # RecipientSend de capa 10, Conversation nuevo) — aquí solo se verifica
+        # que el RecipientSend del tier se agrega UNA vez, sin doble-conteo.
         from app.models.recipient_send import RecipientSend
         recipient_send_calls = [
             call for call in db.add.call_args_list if isinstance(call.args[0], RecipientSend)
