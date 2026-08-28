@@ -5,6 +5,11 @@ class MetaWhatsappCredentials(BaseModel):
     waba_id: str
     phone_number_id: str
     token: str
+    # Onboarding manual self-service: la Meta App propia del anunciante. Si
+    # vienen ambos, el servidor configura el webhook de esa app por Graph API
+    # y guarda el App Secret (cifrado) para validar la firma de sus eventos.
+    app_id: str | None = None
+    app_secret: str | None = None
 
     @field_validator("waba_id", "phone_number_id", "token")
     @classmethod
@@ -13,6 +18,14 @@ class MetaWhatsappCredentials(BaseModel):
         if not v:
             raise ValueError("Este campo no puede estar vacío")
         return v
+
+    @field_validator("app_id", "app_secret")
+    @classmethod
+    def blank_to_none(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
 
 class MetaWhatsappTestResult(BaseModel):
@@ -34,6 +47,12 @@ class MetaWhatsappConnectionOut(BaseModel):
     utility_template_name: str | None = None
     appointment_template_name: str | None = None
     radio_invite_template_name: str | None = None
+    # Onboarding manual self-service
+    app_id_last4: str | None = None
+    app_secret_set: bool = False
+    webhook_configured: bool = False
+    webhook_message: str | None = None
+    verification_status: str = "not_started"
 
 
 class MetaWhatsappHealthOut(BaseModel):

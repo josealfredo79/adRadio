@@ -117,6 +117,60 @@ class TestSaveConnection:
             # Must not have been marked connected.
             assert test_user.meta_connection_status != "connected"
 
+    def test_save_without_app_credentials_keeps_legacy_flow(self, client, test_user):
+        """PUT sin app_id/app_secret (Embedded Signup, número ya en Cloud API):
+        no toca el App Secret ni configura webhook, y queda 'connected'."""
+        with patch("app.api.v1.meta_whatsapp.test_connection", new=AsyncMock(return_value=ConnectionCheck(
+            ok=True, display_phone_number="+521234567890", verified_name="Mi Negocio",
+        ))), patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()), \
+                patch("app.api.v1.meta_whatsapp.configure_app_webhook", new=AsyncMock()) as mock_webhook:
+            r = client.put("/api/v1/me/whatsapp-connection", json={
+                "waba_id": "waba-1", "phone_number_id": "phone-1", "token": "real-token",
+            })
+            assert r.status_code == 200
+            assert test_user.meta_connection_status == "connected"
+            assert test_user.meta_app_secret_cipher is None
+            mock_webhook.assert_not_called()
+
+    def test_save_with_app_credentials_configures_webhook_and_connects(self, client, test_user):
+        from app.services.meta_provisioning import ProvisionResult
+        with patch("app.api.v1.meta_whatsapp.test_connection", new=AsyncMock(return_value=ConnectionCheck(
+            ok=True, display_phone_number="+521234567890", verified_name="Mi Negocio",
+        ))), patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()), \
+                patch("app.api.v1.meta_whatsapp.configure_app_webhook",
+                      new=AsyncMock(return_value=ProvisionResult(ok=True))) as mock_webhook:
+            r = client.put("/api/v1/me/whatsapp-connection", json={
+                "waba_id": "waba-1", "phone_number_id": "phone-1", "token": "real-token",
+                "app_id": "111222333", "app_secret": "the-secret",
+            })
+            assert r.status_code == 200
+            data = r.json()
+            assert test_user.meta_connection_status == "connected"
+            assert test_user.meta_app_id == "111222333"
+            assert test_user.meta_app_secret_cipher is not None
+            assert test_user.meta_webhook_configured is True
+            assert data["webhook_configured"] is True
+            assert data["app_secret_set"] is True
+            mock_webhook.assert_awaited_once_with("111222333", "the-secret")
+
+    def test_save_with_app_credentials_webhook_failure_is_non_fatal_and_pending_setup(self, client, test_user):
+        from app.services.meta_provisioning import ProvisionResult
+        with patch("app.api.v1.meta_whatsapp.test_connection", new=AsyncMock(return_value=ConnectionCheck(
+            ok=True, display_phone_number="+521234567890", verified_name="Mi Negocio",
+        ))), patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()), \
+                patch("app.api.v1.meta_whatsapp.configure_app_webhook",
+                      new=AsyncMock(return_value=ProvisionResult(ok=False, code="invalid_credentials", message="Meta rechazó el App ID"))):
+            r = client.put("/api/v1/me/whatsapp-connection", json={
+                "waba_id": "waba-1", "phone_number_id": "phone-1", "token": "real-token",
+                "app_id": "111222333", "app_secret": "bad-secret",
+            })
+            assert r.status_code == 200  # no es fatal
+            data = r.json()
+            assert test_user.meta_connection_status == "pending_setup"
+            assert test_user.meta_webhook_configured is False
+            assert data["webhook_configured"] is False
+            assert "no se pudo configurar el webhook" in data["webhook_message"].lower()
+
     def test_first_connection_sets_connected_at(self, client, test_user):
         """Capa 11: primera conexión (meta_phone_number_id era None) arranca
         la rampa de warm-up."""
@@ -201,15 +255,29 @@ class TestEmbeddedConfig:
         with patch("app.api.v1.meta_whatsapp.settings") as mock_settings:
             mock_settings.META_APP_ID = ""
             mock_settings.META_EMBEDDED_SIGNUP_CONFIG_ID = ""
+            mock_settings.META_EMBEDDED_SIGNUP_ENABLED = True
             r = client.get("/api/v1/me/whatsapp-embedded-config")
             assert r.status_code == 200
             data = r.json()
             assert data["enabled"] is False
 
-    def test_returns_enabled_when_configured(self, client, test_user):
+    def test_returns_disabled_when_configured_but_switch_off(self, client, test_user):
         with patch("app.api.v1.meta_whatsapp.settings") as mock_settings:
             mock_settings.META_APP_ID = "123456789"
             mock_settings.META_EMBEDDED_SIGNUP_CONFIG_ID = "cfg-123"
+            mock_settings.META_EMBEDDED_SIGNUP_ENABLED = False
+            r = client.get("/api/v1/me/whatsapp-embedded-config")
+            assert r.status_code == 200
+            data = r.json()
+            assert data["enabled"] is False
+            # app_id / config_id still exposed so the frontend can preload the SDK
+            assert data["app_id"] == "123456789"
+
+    def test_returns_enabled_when_configured_and_switch_on(self, client, test_user):
+        with patch("app.api.v1.meta_whatsapp.settings") as mock_settings:
+            mock_settings.META_APP_ID = "123456789"
+            mock_settings.META_EMBEDDED_SIGNUP_CONFIG_ID = "cfg-123"
+            mock_settings.META_EMBEDDED_SIGNUP_ENABLED = True
             r = client.get("/api/v1/me/whatsapp-embedded-config")
             assert r.status_code == 200
             data = r.json()

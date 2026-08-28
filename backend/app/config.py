@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     META_APP_ID: str = ""
     # ID del "WhatsApp Embedded Signup configuration" (dashboard → WhatsApp → Embedded Signup).
     META_EMBEDDED_SIGNUP_CONFIG_ID: str = ""
+    # Interruptor explícito para mostrar el botón "Conectar con Meta" en el
+    # wizard. Separado de tener APP_ID/CONFIG_ID: permite dejar la config
+    # cargada en prod pero el botón oculto hasta que Meta apruebe TP/BSP,
+    # y encenderlo solo en staging para probar. Requiere APP_ID + CONFIG_ID.
+    META_EMBEDDED_SIGNUP_ENABLED: bool = False
 
     # Stripe
     STRIPE_SECRET_KEY: str = ""

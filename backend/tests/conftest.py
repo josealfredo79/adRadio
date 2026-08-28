@@ -73,6 +73,15 @@ def test_user():
     user.meta_token_iv = None
     user.meta_token_tag = None
     user.meta_connection_status = "not_connected"
+    user.meta_app_id = None
+    user.meta_app_secret_cipher = None
+    user.meta_app_secret_iv = None
+    user.meta_app_secret_tag = None
+    user.meta_webhook_configured = False
+    user.meta_verification_status = "not_started"
+    user.meta_pin_cipher = None
+    user.meta_pin_iv = None
+    user.meta_pin_tag = None
     user.meta_utility_template_status = "not_configured"
     user.meta_utility_template_name = None
     user.meta_appointment_template_name = None

@@ -64,8 +64,28 @@ class User(Base):
     meta_token_cipher: Mapped[str | None] = mapped_column(Text)
     meta_token_iv: Mapped[str | None] = mapped_column(String(64))
     meta_token_tag: Mapped[str | None] = mapped_column(String(64))
-    # 'not_connected' | 'connected' | 'reconnect_required'
+    # 'not_connected' | 'pending_setup' | 'connected' | 'reconnect_required'
+    # 'pending_setup': credenciales guardadas pero el número aún no está
+    # verificado/registrado en Cloud API (flujo manual self-service).
     meta_connection_status: Mapped[str] = mapped_column(String(20), default="not_connected", server_default="not_connected")
+
+    # Onboarding manual self-service: la Meta App PROPIA del anunciante. El
+    # servidor la usa para configurar el webhook de esa app vía Graph API
+    # (POST /{app_id}/subscriptions con app access token {app_id}|{app_secret})
+    # y para validar la firma X-Hub-Signature-256 de los eventos que llegan
+    # de ESA app — distinta de la app central de IaRadio (META_APP_SECRET).
+    meta_app_id: Mapped[str | None] = mapped_column(String(50))
+    meta_app_secret_cipher: Mapped[str | None] = mapped_column(Text)
+    meta_app_secret_iv: Mapped[str | None] = mapped_column(String(64))
+    meta_app_secret_tag: Mapped[str | None] = mapped_column(String(64))
+    meta_webhook_configured: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Sub-flujo de verificación del número por OTP (Fase B):
+    # 'not_started' | 'code_sent' | 'verified' | 'registered' | 'failed'
+    meta_verification_status: Mapped[str] = mapped_column(String(20), default="not_started", server_default="not_started")
+    # PIN de 2FA de Cloud API generado por IaRadio (cifrado, para re-registrar).
+    meta_pin_cipher: Mapped[str | None] = mapped_column(Text)
+    meta_pin_iv: Mapped[str | None] = mapped_column(String(64))
+    meta_pin_tag: Mapped[str | None] = mapped_column(String(64))
     # Cuándo se conectó el número de WhatsApp actual (meta_phone_number_id).
     # Solo se reinicia si cambia el número — reconectar el mismo número (ej.
     # refrescar el token) no reinicia la rampa de warm-up (ver Capa 11 en

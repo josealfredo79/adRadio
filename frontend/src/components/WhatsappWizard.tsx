@@ -5,10 +5,12 @@ import api, { getApiError } from '@/lib/api'
 import { launchEmbeddedSignup } from '@/lib/fbSdk'
 import { Check, ChevronDown, ExternalLink, Loader2, MessageCircle, Sparkles, X } from 'lucide-react'
 
-// Embedded Signup requiere que la app esté certificada como Tech Provider/BSP
-// ante Meta (bloqueado hasta que se apruebe — ver memoria de sesión 2026-08-04).
-// El código queda intacto y probado; solo se oculta del dashboard hasta entonces.
-const EMBEDDED_SIGNUP_LIVE = false
+// El botón "Conectar con Meta" (Embedded Signup) se muestra solo si el
+// servidor reporta `enabled: true` — requiere META_APP_ID +
+// META_EMBEDDED_SIGNUP_CONFIG_ID y además el interruptor explícito
+// META_EMBEDDED_SIGNUP_ENABLED=true. Así se prueba en staging sin exponerlo
+// en producción hasta que Meta apruebe la verificación de negocio y el App
+// Review para acceso avanzado / TP-BSP (ver memoria de sesión 2026-08-04).
 
 interface Connection {
   waba_id: string | null
@@ -20,6 +22,11 @@ interface Connection {
   utility_template_status: string
   utility_template_name: string | null
   appointment_template_name: string | null
+  app_id_last4?: string | null
+  app_secret_set?: boolean
+  webhook_configured?: boolean
+  webhook_message?: string | null
+  verification_status?: string
 }
 
 interface TestResult {
@@ -78,15 +85,26 @@ export default function WhatsappWizard() {
   const [wabaId, setWabaId] = useState('')
   const [phoneNumberId, setPhoneNumberId] = useState('')
   const [token, setToken] = useState('')
+  const [appId, setAppId] = useState('')
+  const [appSecret, setAppSecret] = useState('')
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [showGuide, setShowGuide] = useState(false)
 
   const canTest = wabaId.trim() && phoneNumberId.trim() && token.trim()
 
+  const credsBody = () => ({
+    waba_id: wabaId,
+    phone_number_id: phoneNumberId,
+    token,
+    // Opcionales: si el anunciante trae su propia Meta App, el servidor
+    // configura el webhook de esa app y guarda el App Secret cifrado.
+    ...(appId.trim() && appSecret.trim() ? { app_id: appId.trim(), app_secret: appSecret.trim() } : {}),
+  })
+
   const testMutation = useMutation({
     mutationFn: () =>
       api
-        .post('/me/whatsapp-connection/test', { waba_id: wabaId, phone_number_id: phoneNumberId, token })
+        .post('/me/whatsapp-connection/test', credsBody())
         .then((r) => r.data as TestResult),
     onSuccess: (data) => setTestResult(data),
     onError: (err: unknown) => setTestResult({ ok: false, message: getApiError(err, 'No se pudo probar la conexión') }),
@@ -94,9 +112,10 @@ export default function WhatsappWizard() {
 
   const saveMutation = useMutation({
     mutationFn: () =>
-      api.put('/me/whatsapp-connection', { waba_id: wabaId, phone_number_id: phoneNumberId, token }).then((r) => r.data),
+      api.put('/me/whatsapp-connection', credsBody()).then((r) => r.data as Connection),
     onSuccess: () => {
       setToken('')
+      setAppSecret('')
       setTestResult(null)
       qc.invalidateQueries({ queryKey: ['whatsapp-connection'] })
     },
@@ -137,6 +156,32 @@ export default function WhatsappWizard() {
           El token expiró o ya no es válido — reconecta abajo.
         </div>
       )}
+
+      {connection?.app_secret_set && (
+        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2.5">
+          <p className="text-sm font-semibold text-foreground">Estado de la configuración</p>
+          <div className="flex items-start gap-2 text-sm">
+            {connection.webhook_configured ? (
+              <Check className="h-4 w-4 shrink-0 mt-0.5 text-green-600" />
+            ) : (
+              <X className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
+            )}
+            <span className={connection.webhook_configured ? 'text-foreground' : 'text-red-700'}>
+              {connection.webhook_configured
+                ? 'Webhook conectado — tu app recibe los mensajes entrantes automáticamente.'
+                : (connection.webhook_message ||
+                    'El webhook de tu Meta App aún no está configurado — no vas a recibir respuestas hasta arreglarlo.')}
+            </span>
+          </div>
+          {connection.verification_status && connection.verification_status !== 'registered' && (
+            <p className="text-xs text-muted-foreground">
+              Verificación del número: pendiente. (El asistente de verificación por SMS llega en una
+              actualización próxima; por ahora verifica y registra el número en WhatsApp Manager.)
+            </p>
+          )}
+        </div>
+      )}
+
       {!isConnected && connection?.status !== 'reconnect_required' && (
         <div className="flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800">
           <Sparkles className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
@@ -147,7 +192,7 @@ export default function WhatsappWizard() {
         </div>
       )}
 
-      {EMBEDDED_SIGNUP_LIVE && (
+      {embeddedConfig?.enabled && (
         <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
           <p className="text-sm font-medium text-foreground">
             ¿Ya tienes tu cuenta de negocio en Meta? Conecta en un solo clic.
@@ -246,7 +291,9 @@ export default function WhatsappWizard() {
                 → <span className="font-medium">Mis apps</span> → <span className="font-medium">Crear app</span> (tipo 'Negocio', luego
                 agrega el producto <span className="font-medium">WhatsApp</span>). Ahí verás{' '}
                 <span className="font-medium">WABA ID</span> y <span className="font-medium">Phone Number ID</span> en la sección{' '}
-                <span className="font-medium">API Setup</span>.
+                <span className="font-medium">API Setup</span>. El <span className="font-medium">App ID</span> y el{' '}
+                <span className="font-medium">App Secret</span> están en{' '}
+                <span className="font-medium">Configuración de la app → Básico</span> — cópialos también.
               </p>
               <a
                 href="https://developers.facebook.com/apps"
@@ -302,7 +349,9 @@ export default function WhatsappWizard() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        Pega abajo los 3 datos que viste en el paso 3 y 4. El token debe ser de un usuario del sistema (no expira).
+        Pega abajo los datos que viste en los pasos 3 y 4. El token debe ser de un usuario del sistema (no expira).
+        Si además pegas el <span className="font-medium">App ID</span> y el <span className="font-medium">App Secret</span>
+        de tu Meta App, configuramos el webhook por ti — sin eso tu app no recibe las respuestas de tus clientes.
       </p>
 
       <div className="space-y-3">
@@ -336,6 +385,36 @@ export default function WhatsappWizard() {
             className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
           />
         </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">
+              App ID <span className="font-normal text-muted-foreground">(recomendado)</span>
+            </label>
+            <input
+              type="text"
+              value={appId}
+              onChange={(e) => { setAppId(e.target.value); setTestResult(null) }}
+              placeholder="Ej: 123456789012345"
+              className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">
+              App Secret <span className="font-normal text-muted-foreground">(recomendado)</span>
+            </label>
+            <input
+              type="password"
+              value={appSecret}
+              onChange={(e) => { setAppSecret(e.target.value); setTestResult(null) }}
+              placeholder={connection?.app_secret_set ? '•••• (ya guardado — pega de nuevo para cambiarlo)' : 'App Secret'}
+              className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          App ID y App Secret salen de <span className="font-medium">Configuración de la app → Básico</span> en
+          developers.facebook.com. No necesitas configurar webhooks a mano: al guardar los dejamos listos.
+        </p>
       </div>
 
       {testResult && (

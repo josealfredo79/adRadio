@@ -24,41 +24,51 @@ from app.schemas.meta_whatsapp import (
 )
 from app.services.meta_connect_service import subscribe_app_to_waba, test_connection
 from app.services.meta_oauth_service import exchange_embedded_code
+from app.services.meta_provisioning import configure_app_webhook
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["meta-whatsapp"])
 
 
-@router.get("/me/whatsapp-connection", response_model=MetaWhatsappConnectionOut)
-async def get_whatsapp_connection(current_user: User = Depends(get_current_user)):
+def _connection_out(user: User, *, webhook_message: str | None = None) -> MetaWhatsappConnectionOut:
+    """Build the connection snapshot returned by every /me/whatsapp-connection*
+    endpoint. `webhook_message` carries a transient note from the write that
+    just ran (e.g. why the app webhook config failed)."""
+    from app.core.crypto import EncryptedValue, decrypt_secret
+
     token_last4 = None
-    if current_user.meta_token_cipher:
+    if user.meta_token_cipher:
         try:
-            from app.core.crypto import EncryptedValue, decrypt_secret
-            token = decrypt_secret(
-                EncryptedValue(
-                    cipher=current_user.meta_token_cipher,
-                    iv=current_user.meta_token_iv,
-                    tag=current_user.meta_token_tag,
-                )
-            )
+            token = decrypt_secret(EncryptedValue(
+                cipher=user.meta_token_cipher, iv=user.meta_token_iv, tag=user.meta_token_tag,
+            ))
             token_last4 = token[-4:] if len(token) >= 4 else token
         except Exception:
             token_last4 = None
 
     return MetaWhatsappConnectionOut(
-        waba_id=current_user.meta_waba_id,
-        phone_number_id=current_user.meta_phone_number_id,
-        display_phone_number=current_user.meta_display_phone_number,
-        verified_name=current_user.meta_verified_name,
-        status=current_user.meta_connection_status,
+        waba_id=user.meta_waba_id,
+        phone_number_id=user.meta_phone_number_id,
+        display_phone_number=user.meta_display_phone_number,
+        verified_name=user.meta_verified_name,
+        status=user.meta_connection_status,
         token_last4=token_last4,
-        utility_template_status=current_user.meta_utility_template_status,
-        utility_template_name=current_user.meta_utility_template_name,
-        appointment_template_name=current_user.meta_appointment_template_name,
-        radio_invite_template_name=current_user.meta_radio_invite_template_name,
+        utility_template_status=user.meta_utility_template_status,
+        utility_template_name=user.meta_utility_template_name,
+        appointment_template_name=user.meta_appointment_template_name,
+        radio_invite_template_name=user.meta_radio_invite_template_name,
+        app_id_last4=(user.meta_app_id[-4:] if user.meta_app_id else None),
+        app_secret_set=bool(user.meta_app_secret_cipher),
+        webhook_configured=bool(user.meta_webhook_configured),
+        webhook_message=webhook_message,
+        verification_status=user.meta_verification_status,
     )
+
+
+@router.get("/me/whatsapp-connection", response_model=MetaWhatsappConnectionOut)
+async def get_whatsapp_connection(current_user: User = Depends(get_current_user)):
+    return _connection_out(current_user)
 
 
 @router.get("/me/whatsapp-health", response_model=MetaWhatsappHealthOut)
@@ -138,8 +148,15 @@ class MetaEmbeddedConfigOut(BaseModel):
 @router.get("/me/whatsapp-embedded-config", response_model=MetaEmbeddedConfigOut)
 async def get_whatsapp_embedded_config(current_user: User = Depends(get_current_user)):
     """Expose whether one-click "Conectar con Meta" is wired up server-side.
-    App ID / config ID are public (they ship inside the FB JS SDK anyway)."""
-    enabled = bool(settings.META_APP_ID and settings.META_EMBEDDED_SIGNUP_CONFIG_ID)
+    App ID / config ID are public (they ship inside the FB JS SDK anyway).
+    `enabled` also requires the explicit META_EMBEDDED_SIGNUP_ENABLED switch —
+    the config can sit loaded in prod with the button still hidden until Meta
+    approves TP/BSP (see meta_oauth_service docstring / migration notes)."""
+    enabled = bool(
+        settings.META_APP_ID
+        and settings.META_EMBEDDED_SIGNUP_CONFIG_ID
+        and settings.META_EMBEDDED_SIGNUP_ENABLED
+    )
     return MetaEmbeddedConfigOut(
         app_id=settings.META_APP_ID,
         config_id=settings.META_EMBEDDED_SIGNUP_CONFIG_ID,
@@ -184,7 +201,7 @@ async def connect_whatsapp_embedded(
 
     await subscribe_app_to_waba(body.waba_id, result.token)
 
-    return await get_whatsapp_connection(current_user)
+    return _connection_out(current_user)
 
 
 @router.put("/me/whatsapp-connection", response_model=MetaWhatsappConnectionOut)
@@ -217,13 +234,46 @@ async def save_whatsapp_connection(
     current_user.meta_token_cipher = enc.cipher
     current_user.meta_token_iv = enc.iv
     current_user.meta_token_tag = enc.tag
-    current_user.meta_connection_status = "connected"
+
+    # Onboarding manual self-service: si el anunciante trae su propia Meta App,
+    # guardamos el App Secret (cifrado) y configuramos el webhook de esa app
+    # por Graph API — sin esto, la app del anunciante no está conectada a
+    # nuestro webhook central y los mensajes entrantes nunca llegan.
+    webhook_message: str | None = None
+    if body.app_id and body.app_secret:
+        current_user.meta_app_id = body.app_id
+        sec = encrypt_secret(body.app_secret)
+        current_user.meta_app_secret_cipher = sec.cipher
+        current_user.meta_app_secret_iv = sec.iv
+        current_user.meta_app_secret_tag = sec.tag
+
+        prov = await configure_app_webhook(body.app_id, body.app_secret)
+        current_user.meta_webhook_configured = prov.ok
+        if not prov.ok:
+            webhook_message = (
+                f"Credenciales guardadas, pero no se pudo configurar el webhook automáticamente: "
+                f"{prov.message}. Configúralo a mano en tu Meta App → WhatsApp → Configuration "
+                f"(Callback URL: {settings.BASE_URL.rstrip('/')}/api/v1/webhooks/meta)."
+            )
+
+    # Con App propia: el número ya se validó contra Meta (test_connection ok
+    # arriba), así que el único bloqueante de Fase A es el webhook. Si quedó
+    # configurado → 'connected'; si falló → 'pending_setup' hasta arreglarlo.
+    # Sin App propia (Embedded Signup o número ya 100% en Cloud API) se
+    # mantiene el flujo actual.
+    if body.app_id and body.app_secret:
+        current_user.meta_connection_status = (
+            "connected" if current_user.meta_webhook_configured else "pending_setup"
+        )
+    else:
+        current_user.meta_connection_status = "connected"
+
     await db.commit()
     await db.refresh(current_user)
 
     await subscribe_app_to_waba(body.waba_id, body.token)
 
-    return await get_whatsapp_connection(current_user)
+    return _connection_out(current_user, webhook_message=webhook_message)
 
 
 class MetaTemplatesUpdate(BaseModel):
@@ -253,4 +303,4 @@ async def update_whatsapp_templates(
         current_user.meta_radio_invite_template_name = body.radio_invite_template_name.strip() or None
     await db.commit()
     await db.refresh(current_user)
-    return await get_whatsapp_connection(current_user)
+    return _connection_out(current_user)

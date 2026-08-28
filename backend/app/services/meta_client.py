@@ -40,14 +40,19 @@ async def graph_request(
     token: str,
     method: str = "GET",
     body: dict | None = None,
+    params: dict | None = None,
 ) -> dict:
-    """Call `{META_GRAPH_BASE_URL}/{META_GRAPH_API_VERSION}/{path}` with a Bearer token."""
+    """Call `{META_GRAPH_BASE_URL}/{META_GRAPH_API_VERSION}/{path}` with a Bearer token.
+
+    `params` are URL query params (Meta accepts POST args as query params too,
+    which is how the provisioning endpoints — /subscriptions, /register — expect them).
+    """
     url = f"{settings.META_GRAPH_BASE_URL}/{settings.META_GRAPH_API_VERSION}/{path}"
     headers = {"Authorization": f"Bearer {token}"}
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.request(method, url, headers=headers, json=body)
+            resp = await client.request(method, url, headers=headers, json=body, params=params)
     except httpx.RequestError as e:
         raise MetaApiError(f"No se pudo conectar con Meta: {e}", status=0) from e
 

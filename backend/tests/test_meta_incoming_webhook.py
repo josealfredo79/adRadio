@@ -269,6 +269,67 @@ class TestPhoneNumberQualityUpdate:
         assert r.json() == {"received": True}
 
 
+class TestPerAdvertiserSignature:
+    """`_validate_signature` accepts a payload signed with the advertiser's own
+    Meta App Secret (manual self-service flow), falls back to the global
+    META_APP_SECRET, and to trusting the URL when neither is available."""
+
+    def _sig(self, secret: str, body: bytes) -> str:
+        return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+    @pytest.mark.asyncio
+    async def test_accepts_signature_from_advertiser_app_secret(self):
+        from app.api.v1.webhooks_pkg import meta_incoming
+
+        body = json.dumps({"entry": [{"id": "waba-9"}]}).encode()
+        with patch.object(meta_incoming, "settings") as s, patch.object(
+            meta_incoming, "_advertiser_app_secret", new=AsyncMock(return_value="adv-secret")
+        ):
+            s.META_APP_SECRET = "global-secret"
+            ok = await meta_incoming._validate_signature(
+                AsyncMock(), body, self._sig("adv-secret", body), json.loads(body)
+            )
+        assert ok is True
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_global_secret(self):
+        from app.api.v1.webhooks_pkg import meta_incoming
+
+        body = json.dumps({"entry": [{"id": "waba-9"}]}).encode()
+        with patch.object(meta_incoming, "settings") as s, patch.object(
+            meta_incoming, "_advertiser_app_secret", new=AsyncMock(return_value=None)
+        ):
+            s.META_APP_SECRET = "global-secret"
+            ok = await meta_incoming._validate_signature(
+                AsyncMock(), body, self._sig("global-secret", body), json.loads(body)
+            )
+        assert ok is True
+
+    @pytest.mark.asyncio
+    async def test_rejects_when_advertiser_secret_present_but_signature_forged(self):
+        from app.api.v1.webhooks_pkg import meta_incoming
+
+        body = json.dumps({"entry": [{"id": "waba-9"}]}).encode()
+        with patch.object(meta_incoming, "settings") as s, patch.object(
+            meta_incoming, "_advertiser_app_secret", new=AsyncMock(return_value="adv-secret")
+        ):
+            s.META_APP_SECRET = ""
+            ok = await meta_incoming._validate_signature(
+                AsyncMock(), body, "sha256=deadbeef", json.loads(body)
+            )
+        assert ok is False
+
+    @pytest.mark.asyncio
+    async def test_trusts_when_no_secret_available_and_no_header(self):
+        from app.api.v1.webhooks_pkg import meta_incoming
+
+        body = b'{"entry": []}'
+        with patch.object(meta_incoming, "settings") as s:
+            s.META_APP_SECRET = ""
+            ok = await meta_incoming._validate_signature(AsyncMock(), body, "", json.loads(body))
+        assert ok is True
+
+
 class TestAccountAlerts:
     def test_account_alert_is_logged_and_acked(self, client):
         payload = {

@@ -50,15 +50,75 @@ async def meta_webhook_verify(
     return Response(status_code=403)
 
 
-def _valid_signature(raw_body: bytes, header: str) -> bool:
-    if not settings.META_APP_SECRET:
-        # No app secret configured — the caller falls back to trusting the
-        # URL being unlisted. Recommended to set META_APP_SECRET in production.
-        return True
+def _hmac_matches(secret: str, raw_body: bytes, header: str) -> bool:
     if not header or not header.startswith("sha256="):
         return False
-    expected = hmac.new(settings.META_APP_SECRET.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(header[7:], expected)
+
+
+async def _advertiser_app_secret(db: AsyncSession, payload: dict) -> str | None:
+    """The App Secret of the advertiser's OWN Meta App, for events that come
+    from an app connected via the self-service manual flow (not IaRadio's
+    central app). Resolved by the WABA id / phone_number_id in the payload."""
+    waba_ids: set[str] = set()
+    phone_number_ids: set[str] = set()
+    for entry in payload.get("entry", []):
+        if entry.get("id"):
+            waba_ids.add(str(entry["id"]))
+        for change in entry.get("changes", []):
+            pn = change.get("value", {}).get("metadata", {}).get("phone_number_id")
+            if pn:
+                phone_number_ids.add(str(pn))
+    if not waba_ids and not phone_number_ids:
+        return None
+
+    from sqlalchemy import or_
+    conds = []
+    if waba_ids:
+        conds.append(User.meta_waba_id.in_(waba_ids))
+    if phone_number_ids:
+        conds.append(User.meta_phone_number_id.in_(phone_number_ids))
+    result = await db.execute(
+        select(User).where(or_(*conds), User.meta_app_secret_cipher.is_not(None))
+    )
+    advertiser = result.scalars().first()
+    if not advertiser or not advertiser.meta_app_secret_cipher:
+        return None
+    try:
+        return decrypt_secret(EncryptedValue(
+            cipher=advertiser.meta_app_secret_cipher,
+            iv=advertiser.meta_app_secret_iv,
+            tag=advertiser.meta_app_secret_tag,
+        ))
+    except Exception:
+        logger.error("[META WEBHOOK] app secret decrypt failed for advertiser=%s", advertiser.id)
+        return None
+
+
+async def _validate_signature(db: AsyncSession, raw_body: bytes, header: str, payload: dict) -> bool:
+    """Validate X-Hub-Signature-256 against every secret that could have signed
+    this: the advertiser's own App Secret (manual flow) and/or the global
+    META_APP_SECRET (central app / Embedded Signup). If neither is available,
+    fall back to trusting the URL being unlisted (legacy behavior)."""
+    # Central app / Embedded Signup: the global secret signs everything —
+    # check it first and skip the DB lookup on the common path.
+    if settings.META_APP_SECRET and _hmac_matches(settings.META_APP_SECRET, raw_body, header):
+        return True
+
+    # Manual self-service flow: the event is signed with the advertiser's own
+    # App Secret. Only worth the DB lookup when there's a signature to check.
+    per_advertiser = await _advertiser_app_secret(db, payload) if header else None
+    if per_advertiser and _hmac_matches(per_advertiser, raw_body, header):
+        return True
+
+    # No secret we can check against — neither the global one nor a stored
+    # per-advertiser one — fall back to trusting the URL being unlisted
+    # (unchanged legacy behavior; Railway runs with META_APP_SECRET empty).
+    if not settings.META_APP_SECRET and per_advertiser is None:
+        return True
+
+    return False
 
 
 def _extract_body_text(msg: dict) -> tuple[str, str | None]:
@@ -121,15 +181,15 @@ async def meta_incoming(
     raw_body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256", "")
 
-    if not _valid_signature(raw_body, signature):
-        logger.warning("[META WEBHOOK] Invalid signature")
-        return {"received": True}
-
     try:
         payload = json.loads(raw_body)
     except json.JSONDecodeError:
         # Meta disables the subscription after repeated non-200s — always ack.
         logger.warning("[META WEBHOOK] Malformed JSON payload")
+        return {"received": True}
+
+    if not await _validate_signature(db, raw_body, signature, payload):
+        logger.warning("[META WEBHOOK] Invalid signature")
         return {"received": True}
 
     for entry in payload.get("entry", []):
