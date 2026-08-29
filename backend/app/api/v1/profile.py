@@ -22,6 +22,7 @@ from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.coupon import Coupon
 from app.models.message import Message
+from app.models.customer_story import CustomerStory
 from app.models.order import Order
 from app.models.user import User
 from app.services.storage_service import upload_bytes
@@ -337,6 +338,13 @@ async def dashboard(
             Order.state.notin_(["confirmed", "cancelled"]),
         )
     )
+    # Voces del Barrio — historias esperando aprobación
+    voces_stories_pending = await db.execute(
+        select(func.count()).where(
+            CustomerStory.advertiser_id == current_user.id,
+            CustomerStory.status == "pending",
+        )
+    )
 
     # Leads del bot — contactos creados vía WhatsApp este mes
     leads_from_bot = await db.execute(
@@ -417,6 +425,7 @@ async def dashboard(
         "subscription_status": current_user.subscription_status,
         "orders_confirmed": orders_confirmed.scalar_one(),
         "orders_pending": orders_pending.scalar_one(),
+        "voces_stories_pending": voces_stories_pending.scalar_one(),
         "leads_from_bot": leads_from_bot.scalar_one(),
         "plan_requests": plan_requests.scalar_one(),
         "leads_unreplied": unreplied.scalar_one(),

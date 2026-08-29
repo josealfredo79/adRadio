@@ -395,7 +395,7 @@ async def list_public_stories(
     result = await db.execute(
         select(CustomerStory)
         .options(joinedload(CustomerStory.advertiser))
-        .where(CustomerStory.approved == True)
+        .where(CustomerStory.status == "approved")
         .order_by(CustomerStory.created_at.desc())
         .limit(20)
     )
@@ -625,7 +625,7 @@ async def generate_capsule(
         .options(selectinload(CustomerStory.contact))
         .where(
             CustomerStory.campaign_id == campaign_id,
-            CustomerStory.approved == True,
+            CustomerStory.status == "approved",
         )
     )
     stories = stories_result.scalars().all()
@@ -697,15 +697,30 @@ async def list_campaign_stories(
             transcription=s.transcription,
             sentiment=s.sentiment,
             approved=s.approved,
+            status=s.status,
+            published_at=s.published_at,
             created_at=s.created_at,
         ))
 
     return CustomerStoryListOut(
         stories=out,
         total=len(out),
-        approved_count=sum(1 for s in stories if s.approved),
-        pending_count=sum(1 for s in stories if not s.approved),
+        approved_count=sum(1 for s in stories if s.status == "approved"),
+        pending_count=sum(1 for s in stories if s.status == "pending"),
     )
+
+
+async def _get_owned_story(db: AsyncSession, story_id: uuid.UUID, user: User) -> CustomerStory:
+    result = await db.execute(
+        select(CustomerStory).where(
+            CustomerStory.id == story_id,
+            CustomerStory.advertiser_id == user.id,
+        )
+    )
+    story = result.scalar_one_or_none()
+    if not story:
+        raise HTTPException(status_code=404, detail="Historia no encontrada")
+    return story
 
 
 @router.patch("/stories/{story_id}/approve")
@@ -713,21 +728,42 @@ async def approve_story(
     story_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, bool]:
-    """Toggle approval of a customer story."""
-    result = await db.execute(
-        select(CustomerStory).where(
-            CustomerStory.id == story_id,
-            CustomerStory.advertiser_id == current_user.id,
-        )
-    )
-    story = result.scalar_one_or_none()
-    if not story:
-        raise HTTPException(status_code=404, detail="Historia no encontrada")
+) -> dict[str, str]:
+    """Publica una historia en el micrositio y le avisa al cliente que ya está al aire."""
+    from datetime import timezone
 
-    story.approved = not story.approved
+    from app.workers.tasks import notify_story_published
+
+    story = await _get_owned_story(db, story_id, current_user)
+    first_publish = story.status != "approved"
+    story.status = "approved"
+    story.approved = True
+    if first_publish and story.published_at is None:
+        story.published_at = datetime.now(timezone.utc)
     await db.commit()
-    return {"approved": story.approved}
+
+    if first_publish:
+        try:
+            notify_story_published.apply_async(args=[str(story.id)], queue="whatsapp", countdown=3)
+        except Exception:
+            logger.warning("[VOCES] Failed to queue notify_story_published for %s", story.id)
+
+    return {"status": story.status}
+
+
+@router.patch("/stories/{story_id}/reject")
+async def reject_story(
+    story_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    """Descarta una historia — no se publica y no se le avisa al cliente."""
+    story = await _get_owned_story(db, story_id, current_user)
+    story.status = "rejected"
+    story.approved = False
+    story.published_at = None
+    await db.commit()
+    return {"status": story.status}
 
 
 @router.post("/generate-parrilla", response_model=ParrillaJobOut, status_code=status.HTTP_202_ACCEPTED)

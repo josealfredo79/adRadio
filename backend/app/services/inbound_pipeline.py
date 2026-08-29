@@ -35,7 +35,14 @@ from app.services.claude_service import (
     format_time_gap_note,
     personalize_message,
 )
-from app.services.coupon_service import is_expired, is_redeem_intent
+from app.services.coupon_service import (
+    default_expiry,
+    format_coupon_in_message,
+    generate_coupon_code,
+    is_expired,
+    is_redeem_intent,
+)
+from app.services import voces_copy
 from app.services.handoff_service import matches_handoff_intent
 from app.services.rag_service import answer_with_rag
 from app.services.template_lookup import get_template
@@ -518,7 +525,11 @@ async def process_inbound_message(
     else:
         _is_new_contact = False
 
-    # Voces del Barrio — save customer story from audio
+    # Voces del Barrio — save customer story from audio, reward the customer
+    # with a VIP coupon, notify the owner, and acknowledge (instead of a RAG
+    # reply — see `story_ack_reply` at the RAG gate below).
+    story_ack_reply: str | None = None
+    new_story_id: uuid.UUID | None = None
     if audio_transcription and media_url:
         voces_result = await db.execute(
             select(Campaign).where(
@@ -529,14 +540,58 @@ async def process_inbound_message(
         )
         voces_campaign = voces_result.scalar_one_or_none()
         if voces_campaign:
+            ab = voces_campaign.ab_test or {}
+            biz = advertiser.business_name or "el negocio"
+            fn_raw = (contact.name or "").split()[0] if contact.name else ""
+            first_name = "" if (fn_raw.startswith("+") or fn_raw.isdigit()) else fn_raw
+
             story = CustomerStory(
                 advertiser_id=advertiser.id,
                 contact_id=contact.id,
                 campaign_id=voces_campaign.id,
                 media_url=media_url,
                 transcription=audio_transcription,
+                consent_text=voces_copy.consent_line(ab.get("consent_line"), biz),
+                consent_at=datetime.now(timezone.utc),
             )
             db.add(story)
+            await db.flush()
+            new_story_id = story.id
+
+            ack = voces_copy.story_ack(first_name, biz)
+
+            # One VIP coupon per contact per campaign.
+            if ab.get("reward_coupon"):
+                existing = await db.execute(
+                    select(Coupon).where(
+                        Coupon.campaign_id == voces_campaign.id,
+                        Coupon.contact_id == contact.id,
+                    ).limit(1)
+                )
+                if existing.scalar_one_or_none() is None:
+                    coupon = Coupon(
+                        advertiser_id=advertiser.id,
+                        campaign_id=voces_campaign.id,
+                        contact_id=contact.id,
+                        code=generate_coupon_code(),
+                        description=(ab.get("reward_coupon_desc") or "").strip() or "Cupón Cliente VIP",
+                        discount_type=ab.get("reward_discount_type") or "percentage",
+                        discount_value=ab.get("reward_discount_value") or 0,
+                        expires_at=default_expiry(hours=int(ab.get("reward_coupon_hours") or 72)),
+                    )
+                    db.add(coupon)
+                    await db.flush()
+                    story.coupon_id = coupon.id
+                    ack = format_coupon_in_message(ack, coupon.code, coupon.expires_at, coupon.description or "")
+
+            story_ack_reply = ack
+
+            owner_wa = advertiser.whatsapp_number or advertiser.phone
+            if owner_wa:
+                try:
+                    await send_owner(owner_wa, voces_copy.owner_new_story(first_name, biz))
+                except Exception:
+                    logger.warning("[VOCES] Failed to notify owner of new story", exc_info=True)
 
     # Save inbound message (unique constraint on wa_message_id for idempotency)
     try:
@@ -1024,7 +1079,11 @@ async def process_inbound_message(
     time_gap_note = format_time_gap_note(previous_last_activity)
 
     reply: str | None = None
-    if pending_resume == "declined":
+    if story_ack_reply:
+        # El cliente mandó una historia para "Voces del Barrio" — el acuse ES
+        # la respuesta; no tiene sentido pasarlo por el bot RAG.
+        reply = story_ack_reply
+    elif pending_resume == "declined":
         reply = "Entendido 👍 Si cambias de opinión, aquí estamos."
     elif pending_resume == "resumed" and _is_bare_ack(body_text):
         # El contenido diferido ya va en camino y la respuesta fue un puro
@@ -1152,5 +1211,16 @@ async def process_inbound_message(
         )
     except Exception:
         logger.warning("[PIPELINE] Failed to queue auto-tag")
+
+    if new_story_id is not None:
+        try:
+            from app.workers.tasks import classify_story_sentiment
+            classify_story_sentiment.apply_async(
+                args=[str(new_story_id)],
+                queue="whatsapp",
+                countdown=5,
+            )
+        except Exception:
+            logger.warning("[VOCES] Failed to queue sentiment classification")
 
     return {"message": "ok"}

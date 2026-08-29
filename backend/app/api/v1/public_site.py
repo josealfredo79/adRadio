@@ -96,7 +96,11 @@ async def get_public_site_stories(request: Request, slug: str, db: AsyncSession 
     stories_result = await db.execute(
         select(CustomerStory)
         .options(selectinload(CustomerStory.contact))
-        .where(CustomerStory.advertiser_id == user.id, CustomerStory.approved.is_(True))
+        .where(
+            CustomerStory.advertiser_id == user.id,
+            CustomerStory.status == "approved",
+            CustomerStory.consent_at.is_not(None),
+        )
         .order_by(CustomerStory.created_at.desc())
         .limit(6)
     )

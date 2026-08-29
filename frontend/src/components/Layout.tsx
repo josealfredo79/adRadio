@@ -36,7 +36,7 @@ import { cn } from '@/lib/utils'
 
 const navItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/app/campaigns', icon: Megaphone, label: 'Campañas' },
+  { to: '/app/campaigns', icon: Megaphone, label: 'Campañas', badge: 'voces_stories_pending' as const },
   { to: '/app/automations', icon: Bot, label: 'Automatizaciones' },
   { to: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
   { to: '/app/orders', icon: ShoppingBag, label: 'Pedidos', badge: 'orders_pending' as const },
@@ -66,7 +66,7 @@ export default function Layout() {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const { data: dashData } = useQuery<{ orders_pending: number }>({
+  const { data: dashData } = useQuery<{ orders_pending: number; voces_stories_pending: number }>({
     queryKey: ['dashboard'],
     queryFn: () => api.get('/dashboard').then((r) => r.data),
     staleTime: 1000 * 60 * 2,
@@ -111,7 +111,12 @@ export default function Layout() {
       <div className="flex-1 min-h-0 overflow-y-auto">
       <nav className="px-3 py-2 space-y-1">
         {navItems.map(({ to, icon: Icon, label, badge }) => {
-          const count = badge === 'orders_pending' ? (dashData?.orders_pending ?? 0) : 0
+          const count =
+            badge === 'orders_pending'
+              ? (dashData?.orders_pending ?? 0)
+              : badge === 'voces_stories_pending'
+              ? (dashData?.voces_stories_pending ?? 0)
+              : 0
           return (
             <NavLink
               key={to}

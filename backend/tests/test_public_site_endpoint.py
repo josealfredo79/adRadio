@@ -2,6 +2,7 @@
 GET /api/v1/public/site/{slug}. Mirrors the security pattern already
 covered for widget_preview in test_widget_endpoints.py::TestWidgetPreview."""
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -186,18 +187,31 @@ class TestGetPublicSiteStories:
             assert exc_info.value.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_only_returns_approved_stories(self):
+    async def test_only_returns_approved_stories_with_consent(self):
         user_id = await _seed_user(business_name="Con historias", slug="con-historias")
+        now = datetime.now(timezone.utc)
         try:
             async with AsyncSessionLocal() as db:
                 db.add_all([
                     CustomerStory(
                         advertiser_id=user_id, media_url="https://x/aprobada.mp3",
-                        transcription="Excelente servicio", sentiment="positivo", approved=True,
+                        transcription="Excelente servicio", sentiment="positivo",
+                        status="approved", approved=True, consent_at=now,
                     ),
                     CustomerStory(
                         advertiser_id=user_id, media_url="https://x/pendiente.mp3",
-                        transcription="Aún sin aprobar", sentiment="positivo", approved=False,
+                        transcription="Aún sin aprobar", sentiment="positivo",
+                        status="pending", consent_at=now,
+                    ),
+                    CustomerStory(
+                        advertiser_id=user_id, media_url="https://x/rechazada.mp3",
+                        transcription="Descartada", sentiment="negativo",
+                        status="rejected", consent_at=now,
+                    ),
+                    CustomerStory(
+                        advertiser_id=user_id, media_url="https://x/sin-consentimiento.mp3",
+                        transcription="Aprobada pero sin consentimiento registrado", sentiment="positivo",
+                        status="approved", approved=True, consent_at=None,
                     ),
                 ])
                 await db.commit()
@@ -219,7 +233,8 @@ class TestGetPublicSiteStories:
             async with AsyncSessionLocal() as db:
                 db.add(CustomerStory(
                     advertiser_id=other_id, media_url="https://x/ajena.mp3",
-                    transcription="No es mía", sentiment="positivo", approved=True,
+                    transcription="No es mía", sentiment="positivo",
+                    status="approved", approved=True, consent_at=datetime.now(timezone.utc),
                 ))
                 await db.commit()
 
@@ -239,7 +254,8 @@ class TestGetPublicSiteStories:
                 await db.flush()
                 db.add(CustomerStory(
                     advertiser_id=user_id, contact_id=contact.id, media_url="https://x/laura.mp3",
-                    transcription="Muy contenta", sentiment="positivo", approved=True,
+                    transcription="Muy contenta", sentiment="positivo",
+                    status="approved", approved=True, consent_at=datetime.now(timezone.utc),
                 ))
                 await db.commit()
 
@@ -257,7 +273,8 @@ class TestGetPublicSiteStories:
                 db.add_all([
                     CustomerStory(
                         advertiser_id=user_id, media_url=f"https://x/{i}.mp3",
-                        transcription=f"Historia {i}", sentiment="positivo", approved=True,
+                        transcription=f"Historia {i}", sentiment="positivo",
+                        status="approved", approved=True, consent_at=datetime.now(timezone.utc),
                     )
                     for i in range(8)
                 ])

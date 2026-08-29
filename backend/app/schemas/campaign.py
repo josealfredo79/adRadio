@@ -142,6 +142,8 @@ class CustomerStoryOut(BaseModel):
     transcription: str
     sentiment: str
     approved: bool
+    status: str = "pending"
+    published_at: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

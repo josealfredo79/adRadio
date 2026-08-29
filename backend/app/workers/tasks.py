@@ -312,6 +312,77 @@ def auto_tag_contact_from_conversation(self, contact_id: str):
         raise self.retry(exc=exc)
 
 
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
+def classify_story_sentiment(self, story_id: str):
+    """Voces del Barrio: clasifica el sentimiento de una historia con Claude."""
+    async def _run():
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.models.customer_story import CustomerStory
+        from app.services.claude_service import classify_sentiment
+        from sqlalchemy import select
+
+        async with AsyncSessionLocal() as db:
+            res = await db.execute(
+                select(CustomerStory).where(CustomerStory.id == uuid.UUID(story_id))
+            )
+            story = res.scalar_one_or_none()
+            if not story:
+                return
+            story.sentiment = await classify_sentiment(story.transcription)
+            await db.commit()
+            logger.info("[VOCES] Story %s sentiment=%s", story_id, story.sentiment)
+
+    try:
+        run_async(_run())
+    except Exception as exc:
+        logger.warning("[VOCES] classify_story_sentiment failed for %s: %s", story_id, exc)
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
+def notify_story_published(self, story_id: str):
+    """Voces del Barrio: avisa al cliente que su historia ya está publicada,
+    con el link al micrositio para que lo comparta."""
+    async def _run():
+        from app.config import settings
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.models.contact import Contact
+        from app.models.customer_story import CustomerStory
+        from app.models.user import User
+        from app.services import voces_copy
+        from app.services.meta_service import send_whatsapp
+        from sqlalchemy import select
+
+        async with AsyncSessionLocal() as db:
+            res = await db.execute(
+                select(CustomerStory).where(CustomerStory.id == uuid.UUID(story_id))
+            )
+            story = res.scalar_one_or_none()
+            if not story or story.status != "approved" or not story.contact_id:
+                return
+            contact = (await db.execute(
+                select(Contact).where(Contact.id == story.contact_id)
+            )).scalar_one_or_none()
+            advertiser = (await db.execute(
+                select(User).where(User.id == story.advertiser_id)
+            )).scalar_one_or_none()
+            if not contact or not contact.phone or not advertiser:
+                return
+
+            biz = advertiser.business_name or "el negocio"
+            fn_raw = (contact.name or "").split()[0] if contact.name else ""
+            first_name = "" if (fn_raw.startswith("+") or fn_raw.isdigit()) else fn_raw
+            base = settings.FRONTEND_PUBLIC_URL or settings.FRONTEND_URL
+            site_url = f"{base.rstrip('/')}/sitio/{advertiser.slug}#opiniones" if advertiser.slug else base
+            await send_whatsapp(contact.phone, voces_copy.story_published(first_name, biz, site_url), advertiser=advertiser)
+
+    try:
+        run_async(_run())
+    except Exception as exc:
+        logger.warning("[VOCES] notify_story_published failed for %s: %s", story_id, exc)
+        raise self.retry(exc=exc)
+
+
 @celery_app.task(bind=True, max_retries=2)
 def schedule_campaign(self, campaign_id: str):
     """Process and send all messages for a scheduled campaign."""
@@ -409,7 +480,10 @@ def schedule_campaign(self, campaign_id: str):
             else:
                 await send_regular_messages(db, campaign, contacts, advertiser, ab, messages_list, ban_delay=0)
 
-            campaign.status = "completed"
+            # Voces del Barrio: la invitación ya se envió, pero la campaña sigue
+            # "running" para recolectar las notas de voz que lleguen (ver
+            # inbound_pipeline.py). El dueño la cierra pausándola.
+            campaign.status = "running" if campaign.type == "voces" else "completed"
             await db.commit()
 
     try:

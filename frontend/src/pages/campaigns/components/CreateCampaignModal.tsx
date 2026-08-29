@@ -92,6 +92,16 @@ export function CreateCampaignModal({
     bannerPreviewing,
     vocesCollectionPrompt,
     setVocesCollectionPrompt,
+    vocesRewardCoupon,
+    setVocesRewardCoupon,
+    vocesRewardDesc,
+    setVocesRewardDesc,
+    vocesRewardDiscount,
+    setVocesRewardDiscount,
+    vocesRewardHours,
+    setVocesRewardHours,
+    vocesConsentLine,
+    setVocesConsentLine,
     generateContent,
     previewBanner,
   } = formState
@@ -136,12 +146,27 @@ export function CreateCampaignModal({
       ab_test.banner_layout = bannerLayout
       ab_test.banner_caption = bannerCaption
     }
+    if (isVocesMode) {
+      ab_test.consent_line = vocesConsentLine
+      ab_test.reward_coupon = vocesRewardCoupon
+      if (vocesRewardCoupon) {
+        ab_test.reward_coupon_desc = vocesRewardDesc
+        ab_test.reward_coupon_hours = vocesRewardHours
+        ab_test.reward_discount_type = 'percentage'
+        ab_test.reward_discount_value = vocesRewardDiscount
+      }
+    }
     const schedule = scheduledAt ? { start_date: new Date(scheduledAt).toISOString() } : {}
     const campaignStatus = scheduledAt ? 'scheduled' : 'draft'
 
+    const messageText = form.message_text || radioScript || bannerPromo || vocesCollectionPrompt
+
     onCreate({
       ...form,
-      message_text: form.message_text || radioScript || bannerPromo || vocesCollectionPrompt,
+      type: isVocesMode ? 'voces' : form.type,
+      message_text: isVocesMode
+        ? `${vocesCollectionPrompt}\n\n${vocesConsentLine}`.trim()
+        : messageText,
       ab_test,
       schedule,
       status: campaignStatus,
@@ -316,6 +341,16 @@ export function CreateCampaignModal({
                 setVocesCollectionPrompt(val)
                 setForm({ ...form, message_text: val })
               }}
+              rewardCoupon={vocesRewardCoupon}
+              onRewardCouponChange={setVocesRewardCoupon}
+              rewardDesc={vocesRewardDesc}
+              onRewardDescChange={setVocesRewardDesc}
+              rewardDiscount={vocesRewardDiscount}
+              onRewardDiscountChange={setVocesRewardDiscount}
+              rewardHours={vocesRewardHours}
+              onRewardHoursChange={setVocesRewardHours}
+              consentLine={vocesConsentLine}
+              onConsentLineChange={setVocesConsentLine}
             />
           )}
 
@@ -405,7 +440,8 @@ export function CreateCampaignModal({
             </div>
           )}
 
-          {/* Cupón */}
+          {/* Cupón (para Voces del Barrio el cupón se configura en el panel de arriba) */}
+          {!isVocesMode && (
           <div className={`rounded-xl border p-4 transition-all ${hasCoupon ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/30' : 'border-border'}`}>
             <label className="flex cursor-pointer items-center gap-2">
               <input
@@ -444,6 +480,7 @@ export function CreateCampaignModal({
               </div>
             )}
           </div>
+          )}
 
           {/* Prueba A/B */}
           <div className={`rounded-xl border p-4 transition-all ${abEnabled ? 'border-purple-300 bg-purple-50 dark:bg-purple-950/30' : 'border-border'}`}>

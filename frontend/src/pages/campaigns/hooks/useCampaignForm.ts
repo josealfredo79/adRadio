@@ -41,7 +41,15 @@ interface VocesState {
   }[]
   vocesCapsuleAudioUrl: string
   vocesCapsuleScript: string
+  vocesRewardCoupon: boolean
+  vocesRewardDesc: string
+  vocesRewardDiscount: number
+  vocesRewardHours: number
+  vocesConsentLine: string
 }
+
+export const DEFAULT_VOCES_CONSENT =
+  'Al enviar tu nota de voz autorizas que la publiquemos con tu nombre de pila en la página de {negocio}.'
 
 interface AbState {
   abEnabled: boolean
@@ -108,6 +116,11 @@ const INITIAL_STATE: CampaignFormState = {
     vocesStories: [],
     vocesCapsuleAudioUrl: '',
     vocesCapsuleScript: '',
+    vocesRewardCoupon: true,
+    vocesRewardDesc: 'Cupón Cliente VIP',
+    vocesRewardDiscount: 20,
+    vocesRewardHours: 72,
+    vocesConsentLine: DEFAULT_VOCES_CONSENT,
   },
   ab: {
     abEnabled: false,
@@ -325,6 +338,16 @@ export function useCampaignForm() {
     setVocesCapsuleAudioUrl: (payload: string) => dispatch({ type: 'SET_VOCES', payload: { vocesCapsuleAudioUrl: payload } }),
     vocesCapsuleScript: state.voces.vocesCapsuleScript,
     setVocesCapsuleScript: (payload: string) => dispatch({ type: 'SET_VOCES', payload: { vocesCapsuleScript: payload } }),
+    vocesRewardCoupon: state.voces.vocesRewardCoupon,
+    setVocesRewardCoupon: (payload: boolean) => dispatch({ type: 'SET_VOCES', payload: { vocesRewardCoupon: payload } }),
+    vocesRewardDesc: state.voces.vocesRewardDesc,
+    setVocesRewardDesc: (payload: string) => dispatch({ type: 'SET_VOCES', payload: { vocesRewardDesc: payload } }),
+    vocesRewardDiscount: state.voces.vocesRewardDiscount,
+    setVocesRewardDiscount: (payload: number) => dispatch({ type: 'SET_VOCES', payload: { vocesRewardDiscount: payload } }),
+    vocesRewardHours: state.voces.vocesRewardHours,
+    setVocesRewardHours: (payload: number) => dispatch({ type: 'SET_VOCES', payload: { vocesRewardHours: payload } }),
+    vocesConsentLine: state.voces.vocesConsentLine,
+    setVocesConsentLine: (payload: string) => dispatch({ type: 'SET_VOCES', payload: { vocesConsentLine: payload } }),
     // ab (flat)
     abEnabled: state.ab.abEnabled,
     setAbEnabled: (payload: boolean) => dispatch({ type: 'SET_AB', payload: { abEnabled: payload } }),

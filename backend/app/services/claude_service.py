@@ -520,3 +520,29 @@ Debe sonar como un segmento de radio del barrio, no como un anuncio."""
         max_tokens=600,
         temperature=0.7,
     )
+
+
+_SENTIMENTS = {"positivo", "neutro", "negativo"}
+
+
+async def classify_sentiment(text: str) -> str:
+    """Clasifica el sentimiento de una historia/testimonio en una palabra.
+    Devuelve 'positivo' | 'neutro' | 'negativo' (default 'neutro' si falla)."""
+    if not text or not text.strip():
+        return "neutro"
+    prompt = (
+        "Clasifica el sentimiento de este testimonio de un cliente sobre un negocio. "
+        "Responde ÚNICAMENTE con una palabra: positivo, neutro o negativo.\n\n"
+        f"Testimonio:\n{text[:1000]}"
+    )
+    try:
+        raw = await chat_completion(
+            [{"role": "user", "content": prompt}],
+            max_tokens=10, temperature=0.0,
+            anthropic_model="claude-haiku-4-5-20251001",
+        )
+        word = (raw or "").strip().lower().strip(".!¡ ")
+        return word if word in _SENTIMENTS else "neutro"
+    except Exception:
+        logger.warning("[CLAUDE] Failed to classify sentiment", exc_info=True)
+        return "neutro"

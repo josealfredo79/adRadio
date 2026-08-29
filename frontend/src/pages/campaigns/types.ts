@@ -16,6 +16,13 @@ export interface CampaignAbTest {
   banner_palette?: string
   banner_layout?: string
   banner_caption?: string
+  // Voces del Barrio
+  consent_line?: string
+  reward_coupon?: boolean
+  reward_coupon_desc?: string
+  reward_coupon_hours?: number
+  reward_discount_type?: string
+  reward_discount_value?: number
   stats_a?: { sent: number; replied: number }
   stats_b?: { sent: number; replied: number }
   stats_c?: { sent: number; replied: number }
