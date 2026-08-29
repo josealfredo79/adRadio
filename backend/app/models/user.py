@@ -143,6 +143,10 @@ class User(Base):
     bot_personality: Mapped[str] = mapped_column(String(50), default="professional", server_default="professional")
     bot_name: Mapped[str] = mapped_column(String(100), default="Asistente", server_default="Asistente")
     bot_instructions: Mapped[str | None] = mapped_column(Text)
+    # Bot Closer — oferta con caducidad real cuando el lead está "hot":
+    # {"enabled": bool, "hold_hours": int, "discount_type": str,
+    #  "discount_value": number, "label": str, "message": str|None}
+    closer_config: Mapped[dict | None] = mapped_column(JSONB)
 
     # Google Calendar OAuth
     google_refresh_token: Mapped[str | None] = mapped_column(Text)

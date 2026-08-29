@@ -1127,6 +1127,26 @@ async def process_inbound_message(
                 except Exception:
                     logger.warning("[HANDOFF] Failed to notify owner of bot-error handoff", exc_info=True)
 
+    # Bot Closer — si el lead está "hot" y el anunciante lo activó, el bot añade
+    # una oferta con caducidad REAL (un Coupon que de verdad expira) al final de
+    # su respuesta. Solo sobre una respuesta real del RAG (no escalada, no acuse
+    # de Voces, no resume de envío diferido).
+    if (
+        reply
+        and conv.status != "escalated"
+        and not story_ack_reply
+        and not pending_resume
+        and conv.lead_score == "hot"
+    ):
+        try:
+            from app.services.closer_service import build_closer_offer
+            offer = await build_closer_offer(db, advertiser, contact)
+            if offer:
+                _coupon, offer_text = offer
+                reply = f"{reply}\n\n{offer_text}"
+        except Exception:
+            logger.warning("[CLOSER] build_closer_offer failed", exc_info=True)
+
     updated_msgs = conv.messages + [
         {"role": "user", "content": body_text},
         {"role": "assistant", "content": reply},

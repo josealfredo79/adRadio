@@ -21,11 +21,13 @@ def calculate_lead_score(body_text: str, message_count: int) -> str | None:
     """Calculate lead score based on message content and conversation history."""
     text_lower = body_text.lower().strip()
 
-    if message_count >= 3:
-        return "warm"
-
+    # Intención de compra explícita gana sobre todo — incluso en un hilo largo,
+    # un "quiero comprar ahora" es hot, no warm.
     if any(kw in text_lower for kw in HOT_KEYWORDS):
         return "hot"
+
+    if message_count >= 3:
+        return "warm"
 
     if any(kw in text_lower for kw in WARM_KEYWORDS):
         return "warm"

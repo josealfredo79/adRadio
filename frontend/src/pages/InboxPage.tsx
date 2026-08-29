@@ -67,6 +67,7 @@ interface ConvSummary {
 
 interface ConvDetail extends ConvSummary {
   messages: { role: string; content: string }[]
+  active_closer_offer: { code: string; expires_at: string } | null
 }
 
 const LEAD_ICON = {
@@ -347,6 +348,15 @@ export default function InboxPage() {
                   {detail.status === 'escalated' && (
                     <span className="flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-600 dark:bg-orange-900/40 dark:text-orange-400">
                       <BotOff className="h-3 w-3" /> Bot pausado
+                    </span>
+                  )}
+                  {detail.active_closer_offer && (
+                    <span className="flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-600 dark:bg-orange-900/40 dark:text-orange-400">
+                      🔥 Oferta activa · vence{' '}
+                      {new Date(detail.active_closer_offer.expires_at).toLocaleTimeString('es-MX', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
                     </span>
                   )}
                 </div>

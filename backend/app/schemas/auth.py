@@ -84,5 +84,6 @@ class UserOut(BaseModel):
     site_theme: str = "medianoche"
     landing_sections: list[str] | None = None
     business_hours: dict | None = None
+    closer_config: dict | None = None
 
     model_config = {"from_attributes": True}

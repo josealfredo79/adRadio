@@ -82,6 +82,8 @@ def test_user():
     user.meta_pin_cipher = None
     user.meta_pin_iv = None
     user.meta_pin_tag = None
+    user.closer_config = None
+    user.business_hours = None
     user.meta_utility_template_status = "not_configured"
     user.meta_utility_template_name = None
     user.meta_appointment_template_name = None

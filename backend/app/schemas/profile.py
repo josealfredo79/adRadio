@@ -28,6 +28,31 @@ class ProfileUpdate(BaseModel):
     site_theme: str | None = None
     landing_sections: list[str] | None = None
     business_hours: dict[str, list[str] | None] | None = None
+    closer_config: dict | None = None
+
+    @field_validator("closer_config")
+    @classmethod
+    def validate_closer_config(cls, v: dict | None) -> dict | None:
+        if v is None:
+            return None
+        out: dict = {"enabled": bool(v.get("enabled", False))}
+        hold = int(v.get("hold_hours", 2) or 2)
+        if not (1 <= hold <= 168):
+            raise ValueError("hold_hours debe estar entre 1 y 168")
+        out["hold_hours"] = hold
+        dtype = v.get("discount_type", "percentage")
+        if dtype not in ("percentage", "fixed"):
+            raise ValueError("discount_type debe ser 'percentage' o 'fixed'")
+        out["discount_type"] = dtype
+        dval = float(v.get("discount_value", 0) or 0)
+        if dval < 0:
+            raise ValueError("discount_value no puede ser negativo")
+        out["discount_value"] = dval
+        label = (v.get("label") or "Apartado especial").strip()[:60]
+        out["label"] = label or "Apartado especial"
+        msg = v.get("message")
+        out["message"] = (msg.strip()[:600] or None) if isinstance(msg, str) else None
+        return out
 
     @field_validator("phone")
     @classmethod

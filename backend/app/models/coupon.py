@@ -30,6 +30,8 @@ class Coupon(Base):
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     discount_type: Mapped[str] = mapped_column(String(20), default="percentage")  # percentage/fixed/free_item
     discount_value: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
+    # 'campaign' | 'voces' | 'closer' — de dónde salió el cupón.
+    source: Mapped[str] = mapped_column(String(20), default="campaign", server_default="campaign")
 
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     max_uses: Mapped[int] = mapped_column(Integer, default=1)
@@ -37,6 +39,8 @@ class Coupon(Base):
 
     redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     redeemed_by_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Bot Closer: cuándo se mandó el recordatorio único antes de que venza.
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

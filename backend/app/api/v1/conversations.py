@@ -210,6 +210,23 @@ async def get_conversation(
         raise HTTPException(status_code=404, detail="Conversación no encontrada")
 
     conv, contact = row
+
+    active_closer_offer = None
+    if contact:
+        from datetime import datetime, timezone
+
+        from app.models.coupon import Coupon
+        offer = (await db.execute(
+            select(Coupon).where(
+                Coupon.contact_id == contact.id,
+                Coupon.source == "closer",
+                Coupon.redeemed_at.is_(None),
+                Coupon.expires_at > datetime.now(timezone.utc),
+            ).order_by(Coupon.created_at.desc()).limit(1)
+        )).scalar_one_or_none()
+        if offer:
+            active_closer_offer = {"code": offer.code, "expires_at": offer.expires_at}
+
     return {
         "id": str(conv.id),
         "status": conv.status,
@@ -217,6 +234,7 @@ async def get_conversation(
         "tags": conv.tags,
         "last_activity": conv.last_activity,
         "messages": conv.messages,
+        "active_closer_offer": active_closer_offer,
         "contact": {
             "id": str(contact.id) if contact else None,
             "name": contact.name if contact else "Desconocido",

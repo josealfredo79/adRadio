@@ -772,6 +772,20 @@ def send_appointment_reminders():
 
 
 @celery_app.task
+def send_closer_reminders_task():
+    """Celery Beat: recordatorio único de las ofertas del Bot Closer que están
+    por vencer."""
+    async def _run():
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.workers.task_helpers.closer_ops import send_closer_reminders
+        async with AsyncSessionLocal() as db:
+            await send_closer_reminders(db, datetime.now(timezone.utc))
+            await db.commit()
+
+    run_async(_run())
+
+
+@celery_app.task
 def poll_meta_quality_ratings():
     """Celery Beat: refresh the real quality_rating (GREEN/YELLOW/RED) from
     Meta's Graph API for every connected advertiser. The webhook

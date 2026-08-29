@@ -31,6 +31,16 @@ interface User {
   site_theme: string
   landing_sections: string[] | null
   business_hours: Record<string, [string, string] | null> | null
+  closer_config: CloserConfig | null
+}
+
+export interface CloserConfig {
+  enabled: boolean
+  hold_hours: number
+  discount_type: 'percentage' | 'fixed'
+  discount_value: number
+  label: string
+  message: string | null
 }
 
 interface AuthContextType {
