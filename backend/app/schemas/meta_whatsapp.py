@@ -73,3 +73,7 @@ class MetaWhatsappHealthOut(BaseModel):
     effective_recipient_limit: int | None = None
     active_campaigns_count: int
     paused_campaigns_count: int
+    # Meta error 131042 (payment method / business-eligibility) seen on a
+    # failed send in the last 7 days — templates are blocked until it's fixed.
+    billing_error_recent: bool = False
+    billing_error_last_seen: str | None = None

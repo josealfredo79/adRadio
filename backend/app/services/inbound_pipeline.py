@@ -497,11 +497,14 @@ async def process_inbound_message(
                 out_msg.error_code = err_c
             await db.commit()
             await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
-            update_contact_engagement_score.apply_async(
-                args=[str(contact.id)],
-                queue="whatsapp",
-                countdown=30,
-            )
+            try:
+                update_contact_engagement_score.apply_async(
+                    args=[str(contact.id)],
+                    queue="whatsapp",
+                    countdown=30,
+                )
+            except Exception:
+                logger.warning("[PIPELINE] Failed to queue engagement score update")
         return {"message": "ok"}
 
     # Get or create contact
@@ -765,11 +768,14 @@ async def process_inbound_message(
             out_msg.error_code = err_a
         await db.commit()
         await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
-        update_contact_engagement_score.apply_async(
-            args=[str(contact.id)],
-            queue="whatsapp",
-            countdown=10,
-        )
+        try:
+            update_contact_engagement_score.apply_async(
+                args=[str(contact.id)],
+                queue="whatsapp",
+                countdown=10,
+            )
+        except Exception:
+            logger.warning("[PIPELINE] Failed to queue engagement score update")
         return {"message": "ok"}
 
     # Order state machine
@@ -1067,11 +1073,14 @@ async def process_inbound_message(
             out_msg.error_code = err_o
         await db.commit()
         await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
-        update_contact_engagement_score.apply_async(
-            args=[str(contact.id)],
-            queue="whatsapp",
-            countdown=10,
-        )
+        try:
+            update_contact_engagement_score.apply_async(
+                args=[str(contact.id)],
+                queue="whatsapp",
+                countdown=10,
+            )
+        except Exception:
+            logger.warning("[PIPELINE] Failed to queue engagement score update")
         return {"message": "ok"}
 
     # Build conversation history

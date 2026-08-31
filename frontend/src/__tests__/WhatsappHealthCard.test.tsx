@@ -28,6 +28,8 @@ const baseHealth = {
   effective_recipient_limit: 1000,
   active_campaigns_count: 2,
   paused_campaigns_count: 0,
+  billing_error_recent: false,
+  billing_error_last_seen: null,
 }
 
 describe('WhatsappHealthCard', () => {
@@ -72,6 +74,16 @@ describe('WhatsappHealthCard', () => {
   it('uses singular phrasing for exactly one paused campaign', () => {
     renderCard('connected', { ...baseHealth, paused_campaigns_count: 1 })
     expect(screen.getByText(/Tienes 1 campaña pausada — /)).toBeDefined()
+  })
+
+  it('warns about a missing WhatsApp payment method when 131042 was seen recently', () => {
+    renderCard('connected', {
+      ...baseHealth,
+      billing_error_recent: true,
+      billing_error_last_seen: '2026-08-29T12:00:00Z',
+    })
+    expect(screen.getByText(/método de pago/)).toBeDefined()
+    expect(screen.getByText(/131042/)).toBeDefined()
   })
 
   it('shows a critical-rating warning when quality is RED', () => {

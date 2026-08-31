@@ -21,21 +21,21 @@ export default function CookieConsent() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100]">
-      <div className="mx-auto max-w-5xl px-4 pb-4">
-        <div className="rounded-t-2xl bg-card/90 backdrop-blur-md border border-border shadow-lg px-6 py-4 flex flex-col sm:flex-row items-center gap-4">
-          <p className="text-sm text-muted-foreground flex-1 text-center sm:text-left">
+      <div className="mx-auto max-w-5xl px-2 pb-2 sm:px-4 sm:pb-4">
+        <div className="rounded-t-2xl bg-card/90 backdrop-blur-md border border-border shadow-lg px-4 py-2.5 sm:px-6 sm:py-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+          <p className="text-xs sm:text-sm text-muted-foreground flex-1 text-center sm:text-left">
             🍪 Usamos cookies propias y de terceros para mejorar tu experiencia. Al continuar navegando, aceptas su uso.
           </p>
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-2 shrink-0 w-full sm:w-auto">
             <button
               onClick={() => accept('necessary')}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 transition-colors"
+              className="flex-1 sm:flex-none rounded-lg border border-gray-300 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 transition-colors"
             >
               Solo necesarias
             </button>
             <button
               onClick={() => accept('all')}
-              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
+              className="flex-1 sm:flex-none rounded-lg bg-brand-500 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium text-white hover:bg-brand-600 transition-colors"
             >
               Aceptar todas
             </button>

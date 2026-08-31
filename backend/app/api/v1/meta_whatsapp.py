@@ -5,7 +5,7 @@ GET/PUT/POST(test) shape: the test endpoint never persists, PUT always
 re-validates server-side before saving.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -83,6 +83,7 @@ async def get_whatsapp_health(
     from sqlalchemy import func, select
 
     from app.models.campaign import Campaign
+    from app.models.message import Message
     from app.services.meta_quality_service import (
         resolve_tier_limit, resolve_warmup_cap, warmup_days_remaining,
     )
@@ -91,6 +92,20 @@ async def get_whatsapp_health(
     tier_limit = resolve_tier_limit(current_user.meta_messaging_tier)
     warmup_cap = resolve_warmup_cap(current_user.meta_connected_at)
     cap_state = await get_recipient_cap_state(db, current_user)
+
+    # Meta error 131042 = business-eligibility / payment-method problem on the
+    # WABA — templates (any business-initiated message) stop going out entirely
+    # until a payment method is added. It's an account-config gap Meta never
+    # surfaces in-app, so mirror the last 7 days of failed sends carrying it.
+    billing_error_last_seen = (
+        await db.execute(
+            select(func.max(Message.created_at)).where(
+                Message.advertiser_id == current_user.id,
+                Message.error_code.ilike("%131042%"),
+                Message.created_at >= datetime.now(timezone.utc) - timedelta(days=7),
+            )
+        )
+    ).scalar_one_or_none()
 
     counts_result = await db.execute(
         select(Campaign.status, func.count()).where(
@@ -115,6 +130,8 @@ async def get_whatsapp_health(
         effective_recipient_limit=cap_state.limit,
         active_campaigns_count=active_count,
         paused_campaigns_count=paused_count,
+        billing_error_recent=billing_error_last_seen is not None,
+        billing_error_last_seen=billing_error_last_seen.isoformat() if billing_error_last_seen else None,
     )
 
 

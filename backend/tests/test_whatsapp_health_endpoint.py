@@ -23,17 +23,20 @@ def client(test_user):
     main_module.app.dependency_overrides.clear()
 
 
-def _install_db(recipient_count: int, campaign_counts: list[tuple[str, int]]):
-    """First db.execute call is get_recipient_cap_state's RecipientSend
-    count query, second is this endpoint's campaign status GROUP BY."""
+def _install_db(recipient_count: int, campaign_counts: list[tuple[str, int]], billing_error_last_seen=None):
+    """db.execute call order: (1) get_recipient_cap_state's RecipientSend
+    count query, (2) this endpoint's recent-131042 MAX(created_at) query,
+    (3) this endpoint's campaign status GROUP BY."""
     recipient_result = MagicMock()
     recipient_result.scalar_one.return_value = recipient_count
+    billing_result = MagicMock()
+    billing_result.scalar_one_or_none.return_value = billing_error_last_seen
     campaign_result = MagicMock()
     campaign_result.all.return_value = campaign_counts
 
     async def _fake_db():
         db = AsyncMock()
-        db.execute = AsyncMock(side_effect=[recipient_result, campaign_result])
+        db.execute = AsyncMock(side_effect=[recipient_result, billing_result, campaign_result])
         yield db
 
     main_module.app.dependency_overrides[get_db] = _fake_db
@@ -97,3 +100,22 @@ class TestWhatsappHealth:
         data = r.json()
         assert data["active_campaigns_count"] == 0
         assert data["paused_campaigns_count"] == 0
+
+    def test_no_recent_billing_error_by_default(self, client, test_user):
+        test_user.meta_connected_at = None
+        _install_db(recipient_count=0, campaign_counts=[], billing_error_last_seen=None)
+
+        data = client.get("/api/v1/me/whatsapp-health").json()
+
+        assert data["billing_error_recent"] is False
+        assert data["billing_error_last_seen"] is None
+
+    def test_recent_131042_failure_is_surfaced(self, client, test_user):
+        test_user.meta_connected_at = None
+        seen = datetime(2026, 8, 29, 12, 0, tzinfo=timezone.utc)
+        _install_db(recipient_count=0, campaign_counts=[], billing_error_last_seen=seen)
+
+        data = client.get("/api/v1/me/whatsapp-health").json()
+
+        assert data["billing_error_recent"] is True
+        assert data["billing_error_last_seen"] == seen.isoformat()

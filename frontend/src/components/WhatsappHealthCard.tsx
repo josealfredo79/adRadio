@@ -18,6 +18,8 @@ interface Health {
   effective_recipient_limit: number | null
   active_campaigns_count: number
   paused_campaigns_count: number
+  billing_error_recent: boolean
+  billing_error_last_seen: string | null
 }
 
 const RATING_STYLES: Record<string, string> = {
@@ -93,6 +95,17 @@ export default function WhatsappHealthCard() {
         <Activity className="h-5 w-5 text-brand-500" />
         <h2 className="text-base font-semibold text-foreground">Salud de la cuenta de WhatsApp</h2>
       </div>
+
+      {health.billing_error_recent && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-800">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div>
+            Falta un método de pago en tu cuenta de WhatsApp Business (error 131042 de Meta) — mientras
+            no lo agregues, las plantillas y cualquier mensaje que inicie tu negocio <span className="font-medium">no se entregan</span>.
+            Agrégalo en Meta Business → Configuración → Cuentas de WhatsApp → Facturación.
+          </div>
+        </div>
+      )}
 
       {health.paused_campaigns_count > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
