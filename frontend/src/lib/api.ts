@@ -19,7 +19,10 @@ export function getAccessToken(): string | null {
   return _accessToken
 }
 
-// Stable idempotency keys per (url + body) to prevent duplicate processing on retries
+// Idempotency keys per (url + body). Stable only while a request is in
+// flight (so axios' own retries reuse it); cleared once it settles so a
+// deliberate later re-click gets a fresh key instead of a 409 "ya fue
+// procesada" for up to an hour (the backend caches the key server-side).
 const _idempotencyMap = new Map<string, string>()
 
 const api = axios.create({
@@ -44,13 +47,24 @@ api.interceptors.request.use((config) => {
       _idempotencyMap.set(idemKey, crypto.randomUUID())
     }
     config.headers['Idempotency-Key'] = _idempotencyMap.get(idemKey)
+    ;(config as { _idemKey?: string })._idemKey = idemKey
   }
   return config
 })
 
+// Release the idempotency key once the request settles (success or error),
+// so the next identical user action gets a new key.
+function _releaseIdemKey(config: unknown) {
+  const k = (config as { _idemKey?: string } | undefined)?._idemKey
+  if (k) _idempotencyMap.delete(k)
+}
+
 // Auto-refresh on 401 using httpOnly cookie (no body needed)
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    _releaseIdemKey(res.config)
+    return res
+  },
   async (error) => {
     const originalRequest = error.config
 
@@ -74,6 +88,7 @@ api.interceptors.response.use(
         window.location.href = currentPath !== '/login' ? `/login?redirect=${encodeURIComponent(currentPath)}` : '/login'
       }
     }
+    _releaseIdemKey(originalRequest)
     return Promise.reject(error)
   }
 )

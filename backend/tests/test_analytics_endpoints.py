@@ -195,9 +195,16 @@ class TestCampaignPerformance:
             assert len(result) == 1
             entry = result[0]
             assert entry["campaign_id"] == str(campaign_id)
+            # breakdown stays raw per-status row counts
             assert entry["breakdown"] == {"delivered": 1, "read": 1, "failed": 2}
-            assert entry["delivery_rate"] == round(1 / 4 * 100, 1)
-            assert entry["read_rate"] == round(1 / 4 * 100, 1)
+            # stats/rates use the monotonic delivery funnel: read implies
+            # delivered implies sent, so sent=2, delivered=2, read=1.
+            assert entry["stats"]["sent"] == 2
+            assert entry["stats"]["delivered"] == 2
+            assert entry["stats"]["read"] == 1
+            assert entry["stats"]["failed"] == 2
+            assert entry["delivery_rate"] == 100.0
+            assert entry["read_rate"] == round(1 / 2 * 100, 1)
         finally:
             await _cleanup([user_id])
 

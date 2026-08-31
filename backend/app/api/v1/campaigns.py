@@ -81,7 +81,7 @@ async def list_campaigns(
     total = total_result.scalar_one()
     campaigns = result.scalars().all()
 
-    # Message counts per campaign
+    # Message counts per campaign (per-contact status breakdown shown on the card)
     campaign_ids = [c.id for c in campaigns]
     counts_raw = await db.execute(
         select(Message.campaign_id, Message.status, func.count(Message.id))
@@ -93,10 +93,19 @@ async def list_campaigns(
         cid, status, cnt = row
         counts.setdefault(cid, {})[status] = cnt
 
+    # Engagement stats derived live from messages/coupons — the stored
+    # Campaign.stats JSON counters drift (see campaign_stats_service).
+    from app.services.campaign_stats_service import compute_campaign_stats, merge_stats
+    from app.services.send_block_explain import explain_campaign_pause
+    derived = await compute_campaign_stats(db, campaign_ids)
+
     items = []
     for c in campaigns:
         out = CampaignOut.model_validate(c)
         out.message_counts = counts.get(c.id, {})
+        out.stats = merge_stats(c.stats, derived.get(c.id))
+        if c.status == "paused":
+            out.pause_reason = await explain_campaign_pause(db, c)
         items.append(out.model_dump())
 
     return {"items": items, "total": total}
@@ -238,6 +247,19 @@ async def resume_campaign(
             raise HTTPException(status_code=400, detail="Agrega un mensaje a la campaña antes de enviarla")
     if campaign.status not in ("draft", "scheduled", "paused"):
         raise HTTPException(status_code=400, detail="La campaña no puede ser reanudada desde su estado actual")
+
+    # Pre-flight the anti-ban gates synchronously. Without this the campaign
+    # flips to "running", the toast says "reanudada", then schedule_campaign
+    # hits the same wall and silently re-pauses it — the advertiser is left
+    # watching a campaign that never sends and never says why.
+    adv_res = await db.execute(select(User).where(User.id == campaign.advertiser_id))
+    advertiser = adv_res.scalar_one_or_none()
+    if advertiser:
+        from app.services.send_block_explain import preflight_campaign_send
+        blocked = await preflight_campaign_send(db, campaign, advertiser)
+        if blocked:
+            raise HTTPException(status_code=409, detail=blocked)
+
     campaign.status = "running"
     try:
         await db.commit()
@@ -327,7 +349,10 @@ async def campaign_stats(
     campaign = result.scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaña no encontrada")
-    return campaign.stats
+
+    from app.services.campaign_stats_service import compute_campaign_stats, merge_stats
+    derived = await compute_campaign_stats(db, [campaign.id])
+    return merge_stats(campaign.stats, derived.get(campaign.id))
 
 
 @router.get("/export-csv")
@@ -343,6 +368,9 @@ async def export_campaigns_csv(
     )
     campaigns = result.scalars().all()
 
+    from app.services.campaign_stats_service import compute_campaign_stats, merge_stats
+    derived = await compute_campaign_stats(db, [c.id for c in campaigns])
+
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
@@ -351,12 +379,12 @@ async def export_campaigns_csv(
         "% Entrega", "% Respuesta", "Creada"
     ])
     for c in campaigns:
-        s = c.stats
+        s = merge_stats(c.stats, derived.get(c.id))
         sent = s.get("sent", 0) or 0
         delivered = s.get("delivered", 0) or 0
         replied = s.get("replied", 0) or 0
-        pct_delivery = round((delivered / sent * 100), 1) if sent > 0 else 0
-        pct_reply = round((replied / sent * 100), 1) if sent > 0 else 0
+        pct_delivery = min(100.0, round((delivered / sent * 100), 1)) if sent > 0 else 0
+        pct_reply = min(100.0, round((replied / sent * 100), 1)) if sent > 0 else 0
         writer.writerow([
             c.name, c.type, c.status,
             sent, delivered,

@@ -1,3 +1,4 @@
+import { AxiosError } from 'axios'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useToast } from '@/contexts/ToastContext'
@@ -61,10 +62,13 @@ export function useCampaignMutations(callbacks?: MutationCallbacks) {
       })
     },
     onError: (err: unknown) => {
+      // 409 = an anti-ban gate blocked the send (segment cooldown, recipient
+      // cap, quota). Not a failure — a rule the advertiser needs to know.
+      const blocked = err instanceof AxiosError && err.response?.status === 409
       toast({
-        title: 'Error',
+        title: blocked ? 'No se puede enviar todavía' : 'Error',
         description: getApiError(err, 'Error al iniciar campaña'),
-        variant: 'error',
+        variant: blocked ? 'info' : 'error',
       })
     },
   })
