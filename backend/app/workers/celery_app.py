@@ -35,6 +35,21 @@ celery_app.conf.update(
         "app.workers.tasks.schedule_campaign": {"queue": "campaigns"},
         "app.workers.tasks.generate_parrilla_task": {"queue": "campaigns"},
         "app.workers.tasks.run_lab_task": {"queue": "processing"},
+        # Celery Beat periodic tasks. The worker only consumes
+        # whatsapp/campaigns/processing (see Dockerfile.worker / railway.json /
+        # start.sh) — it does NOT consume the default "celery" queue, so every
+        # beat task MUST be routed to one of those three or it is published and
+        # never executed. Route them all to "campaigns" (bulk/scheduled
+        # outbound) to keep them off the latency-sensitive "whatsapp" queue
+        # that serves real-time bot replies.
+        "app.workers.tasks.check_scheduled_campaigns": {"queue": "campaigns"},
+        "app.workers.tasks.cleanup_expired_data": {"queue": "campaigns"},
+        "app.workers.tasks.replenish_annual_message_quota": {"queue": "campaigns"},
+        "app.workers.tasks.send_appointment_reminders": {"queue": "campaigns"},
+        "app.workers.tasks.send_closer_reminders_task": {"queue": "campaigns"},
+        "app.workers.tasks.process_automation_enrollments": {"queue": "campaigns"},
+        "app.workers.tasks.send_trial_expiry_reminders": {"queue": "campaigns"},
+        "app.workers.tasks.poll_meta_quality_ratings": {"queue": "campaigns"},
     },
 )
 
