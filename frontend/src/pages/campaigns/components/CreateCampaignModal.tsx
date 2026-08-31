@@ -598,6 +598,14 @@ export function CreateCampaignModal({
             </div>
           )}
 
+          {utilityTemplateStatus === 'approved' && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              A un contacto con la ventana de 24 h cerrada se le envía primero una plantilla de
+              reapertura. Ese envío consume 1 mensaje de tu plan, conteste o no; si contesta, la cuña
+              se le entrega sin costo adicional.
+            </p>
+          )}
+
           {!scheduledAt && (
             <p className="text-xs text-muted-foreground">
               La campaña se guardará como borrador. Después podrás enviarla desde el listado.

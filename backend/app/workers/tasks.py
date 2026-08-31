@@ -34,8 +34,13 @@ _RATE_LIMIT_ERROR_CODES = ("(#4)", "80007", "130429", "131048", "131056", "13106
 
 
 @celery_app.task(bind=True, max_retries=5, default_retry_delay=120)
-def send_whatsapp_message(self, message_id: str, to: str, body: str):
-    """Send a WhatsApp message via Meta Cloud API with retry logic."""
+def send_whatsapp_message(self, message_id: str, to: str, body: str, charge: bool = True):
+    """Send a WhatsApp message via Meta Cloud API with retry logic.
+
+    `charge=False` skips the quota gate and the messages_remaining decrement —
+    used when the advertiser was already billed upfront (a reopen template
+    charged at invite time in _offer_or_queue, now firing the deferred send
+    on the contact's reply)."""
     async def _send():
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
@@ -51,7 +56,7 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
             if msg:
                 adv_res = await db.execute(select(User).where(User.id == msg.advertiser_id))
                 advertiser = adv_res.scalar_one_or_none()
-                if not advertiser or advertiser.messages_remaining <= 0:
+                if not advertiser or (charge and advertiser.messages_remaining <= 0):
                     msg.status = "failed"
                     msg.error_code = "quota_exceeded"
                     msg.sent_at = None
@@ -66,7 +71,7 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
                 msg.wa_message_id = sid
                 msg.error_code = error
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
-                if sid and advertiser:
+                if sid and advertiser and charge:
                     advertiser.messages_remaining -= 1
                 await db.commit()
 
@@ -99,8 +104,12 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str):
 
 
 @celery_app.task(bind=True, max_retries=5, default_retry_delay=120)
-def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, caption: str = ""):
-    """Send a WhatsApp voice note (audio cuña) via Meta Cloud API media message."""
+def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, caption: str = "", charge: bool = True):
+    """Send a WhatsApp voice note (audio cuña) via Meta Cloud API media message.
+
+    `charge=False`: see send_whatsapp_message — the advertiser was already
+    billed upfront for the reopen template, so the deferred cuña isn't billed
+    again when the contact's reply fires it."""
     async def _send():
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
@@ -116,7 +125,7 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
             if msg:
                 adv_res = await db.execute(select(User).where(User.id == msg.advertiser_id))
                 advertiser = adv_res.scalar_one_or_none()
-                if not advertiser or advertiser.messages_remaining <= 0:
+                if not advertiser or (charge and advertiser.messages_remaining <= 0):
                     msg.status = "failed"
                     msg.error_code = "quota_exceeded"
                     msg.sent_at = None
@@ -131,7 +140,7 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
                 msg.wa_message_id = sid
                 msg.error_code = error
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
-                if sid and advertiser:
+                if sid and advertiser and charge:
                     advertiser.messages_remaining -= 1
                 await db.commit()
 
@@ -164,8 +173,12 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
 
 
 @celery_app.task(bind=True, max_retries=5, default_retry_delay=120)
-def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, caption: str = ""):
-    """Send a WhatsApp image (banner) via Meta Cloud API media message."""
+def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, caption: str = "", charge: bool = True):
+    """Send a WhatsApp image (banner) via Meta Cloud API media message.
+
+    `charge=False`: see send_whatsapp_message — the deferred banner isn't
+    billed again when the contact's reply fires it, since the reopen template
+    was already charged upfront."""
     async def _send():
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
@@ -181,7 +194,7 @@ def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, 
             if msg:
                 adv_res = await db.execute(select(User).where(User.id == msg.advertiser_id))
                 advertiser = adv_res.scalar_one_or_none()
-                if not advertiser or advertiser.messages_remaining <= 0:
+                if not advertiser or (charge and advertiser.messages_remaining <= 0):
                     msg.status = "failed"
                     msg.error_code = "quota_exceeded"
                     msg.sent_at = None
@@ -196,7 +209,7 @@ def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, 
                 msg.wa_message_id = sid
                 msg.error_code = error
                 msg.sent_at = datetime.now(timezone.utc) if sid else None
-                if sid and advertiser:
+                if sid and advertiser and charge:
                     advertiser.messages_remaining -= 1
                 await db.commit()
 

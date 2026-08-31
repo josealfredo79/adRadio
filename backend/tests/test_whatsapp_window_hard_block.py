@@ -68,6 +68,8 @@ class TestOfferOrQueueHardBlock:
         test_user.meta_utility_template_name = "notificacion_v2"
         test_user.meta_radio_invite_template_name = None
 
+        test_user.messages_remaining = 500
+
         with patch(
             "app.services.meta_service.send_whatsapp_template",
             new=AsyncMock(return_value=(None, "template rejected")),
@@ -75,6 +77,8 @@ class TestOfferOrQueueHardBlock:
             outcome, detail = await _offer_or_queue(db, test_user, contact, _convs=convs)
         assert outcome == "blocked"
         assert detail == "template rejected"
+        # A template that never went out must not consume quota.
+        assert test_user.messages_remaining == 500
 
     @pytest.mark.asyncio
     async def test_closed_window_template_send_succeeds_returns_invited(self, mock_db, test_user):
@@ -88,6 +92,7 @@ class TestOfferOrQueueHardBlock:
         convs = {"c1": None}  # no conversation yet, window closed
         test_user.meta_utility_template_name = "notificacion_v2"
         test_user.meta_radio_invite_template_name = None
+        test_user.messages_remaining = 500
 
         with patch(
             "app.services.meta_service.send_whatsapp_template",
@@ -96,6 +101,8 @@ class TestOfferOrQueueHardBlock:
             outcome, detail = await _offer_or_queue(db, test_user, contact, _convs=convs)
         assert outcome == "invited"
         assert detail is None
+        # Pricing: the reopen template bills 1 message upfront, reply or not.
+        assert test_user.messages_remaining == 499
 
     @pytest.mark.asyncio
     async def test_closed_window_unconfirmed_consent_blocks_even_with_template(self, mock_db, test_user):

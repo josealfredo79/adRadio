@@ -130,6 +130,9 @@ class TestPendingAudioConfirm:
             assert mock_task.call_args.kwargs["args"][1] == phone
             assert mock_task.call_args.kwargs["args"][2] == "https://example.com/cuna.ogg"
             assert mock_task.call_args.kwargs["args"][3] == "test script"
+            # Pricing: the reopen template was already billed at invite time,
+            # so the deferred cuña fires with charge=False (no double bill).
+            assert mock_task.call_args.kwargs["kwargs"] == {"charge": False}
 
             # The pending row is rewritten to its real marker and left queued
             # for the task to finalize.

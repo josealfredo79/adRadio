@@ -296,6 +296,17 @@ async def _offer_or_queue(
         sent_at=datetime.now(timezone.utc),
     ))
 
+    # Pricing: a send to a closed-window contact consumes 1 message from the
+    # advertiser's quota the moment the reopen template goes out — whether or
+    # not the contact ever replies. That template costs AdRadio a real
+    # per-message fee (MARKETING rate) it pays Meta regardless, so charging
+    # only on the reply left AdRadio absorbing every non-responder. The
+    # deferred content that fires later on a genuine reply is dispatched with
+    # charge=False (see inbound_pipeline.py) so it isn't billed twice. The
+    # caller's loop only reaches here with messages_remaining >= 1 (its gate),
+    # so this never goes negative.
+    advertiser.messages_remaining -= 1
+
     if _cap is not None:
         db.add(RecipientSend(advertiser_id=advertiser.id, contact_id=contact.id))
         _cap.count += 1
@@ -381,12 +392,14 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     sent_count = 0
     invited_count = 0
     skipped_count = 0
-    # Local running estimate of quota spent this batch. The actual
-    # messages_remaining decrement happens once, inside the Celery send task
+    # Running count of open-window sends dispatched this batch. Their
+    # messages_remaining decrement happens later, inside the Celery send task
     # on delivery success (send_whatsapp_message / _voice_note /
-    # _image_message) — this counter only gates the loop so we don't
-    # dispatch past quota. Conservative: a task that later fails to send
-    # won't have decremented, so at worst we stop a touch early.
+    # _image_message), so this counter stands in for it when gating the loop.
+    # The "invited" path decrements messages_remaining synchronously inside
+    # _offer_or_queue instead, so it is NOT counted here — the gate below
+    # already sees the reduced balance. Conservative: an open-window task that
+    # later fails to send won't have decremented, so at worst we stop early.
     charged = 0
 
     for idx_b, contact in enumerate(contacts):
@@ -439,9 +452,9 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             # Window's still closed — the opt-in template only asked the
             # contact to reply. Defer the real banner until they actually do
             # (see inbound_pipeline.py's generic [PENDING:*] resume). The
-            # opt-in template itself is anti-ban plumbing, not advertiser
-            # content — it does NOT consume messages_remaining; the deferred
-            # banner does, once it actually goes out on the contact's reply.
+            # reopen template already charged 1 message to the advertiser's
+            # quota inside _offer_or_queue; the deferred banner fires later
+            # with charge=False so it isn't billed twice.
             await _supersede_stale_pending(db, advertiser.id, contact.id)
             db.add(Message(
                 campaign_id=campaign.id,
@@ -511,8 +524,9 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
     sent_count = 0
     invited_count = 0
     skipped_count = 0
-    # See send_banner_messages: the real messages_remaining decrement lives
-    # in the Celery send task; this only gates the loop.
+    # See send_banner_messages: open-window sends decrement in the Celery
+    # task (counted here); "invited" sends decrement synchronously in
+    # _offer_or_queue (not counted here). This only gates the loop.
     charged = 0
 
     for idx_r, contact in enumerate(contacts):
@@ -542,10 +556,10 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
             continue
 
         if outcome == "invited":
-            # Opt-in template already sent by _offer_or_queue; the audio
-            # itself is deferred until the contact replies (see
-            # inbound_pipeline.py). The template is anti-ban plumbing, not
-            # advertiser content — it does NOT consume messages_remaining.
+            # Reopen template already sent AND charged 1 message to the
+            # advertiser's quota inside _offer_or_queue; the audio itself is
+            # deferred until the contact replies (see inbound_pipeline.py)
+            # and fires with charge=False so it isn't billed twice.
             await _supersede_stale_pending(db, advertiser.id, contact.id)
             db.add(Message(
                 campaign_id=campaign.id, contact_id=contact.id, advertiser_id=advertiser.id,
@@ -625,8 +639,9 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     sent_count = 0
     invited_count = 0
     skipped_count = 0
-    # See send_banner_messages: the real messages_remaining decrement lives
-    # in the Celery send task; this only gates the loop.
+    # See send_banner_messages: open-window sends decrement in the Celery
+    # task (counted here); "invited" sends decrement synchronously in
+    # _offer_or_queue (not counted here). This only gates the loop.
     charged = 0
 
     for i, contact in enumerate(contacts):
@@ -696,9 +711,9 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             # Window's still closed — defer the real send until the contact
             # actually replies (see inbound_pipeline.py's generic
             # [PENDING:*] resume). Content is generated above either way so
-            # it's ready to fire the instant they do. The opt-in template is
-            # anti-ban plumbing, not advertiser content — it does NOT consume
-            # messages_remaining; the deferred send does, once it goes out.
+            # it's ready to fire the instant they do. _offer_or_queue already
+            # charged 1 message to the advertiser's quota for the reopen
+            # template; the deferred send fires with charge=False.
             if audio_url:
                 payload = {"audio_url": audio_url, "script": body}
                 kind = "voice"
@@ -867,8 +882,9 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
     sent = 0
     invited_count = 0
     skipped_count = 0
-    # See send_banner_messages: the real messages_remaining decrement lives
-    # in the Celery send task; this only gates the loop.
+    # See send_banner_messages: open-window sends decrement in the Celery
+    # task (counted here); "invited" sends decrement synchronously in
+    # _offer_or_queue (not counted here). This only gates the loop.
     charged = 0
     _convs = await _preload_conversations(db, advertiser.id, contacts)
     _cap = await get_recipient_cap_state(db, advertiser)
@@ -899,10 +915,10 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
             continue
 
         if outcome == "invited":
-            # Opt-in template already sent by _offer_or_queue; the audio is
-            # deferred until the contact replies (see inbound_pipeline.py).
-            # The template is anti-ban plumbing, not advertiser content — it
-            # does NOT consume messages_remaining.
+            # Reopen template already sent AND charged 1 message to the
+            # advertiser's quota inside _offer_or_queue; the audio is
+            # deferred until the contact replies (see inbound_pipeline.py)
+            # and fires with charge=False so it isn't billed twice.
             await _supersede_stale_pending(db, advertiser.id, contact.id)
             db.add(Message(
                 advertiser_id=advertiser.id,

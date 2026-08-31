@@ -396,11 +396,15 @@ async def process_inbound_message(
                     send_whatsapp_voice_note,
                 )
                 pending_contact.last_campaign_sent_at = datetime.now(timezone.utc)
+                # charge=False: the reopen template already billed 1 message
+                # to the advertiser's quota at invite time (_offer_or_queue),
+                # so this deferred send must not bill a second time.
                 if kind in ("audio", "voice", "parrilla"):
                     pending_msg.content = f"[AUDIO] {payload['audio_url']}"
                     await db.flush()
                     send_whatsapp_voice_note.apply_async(
                         args=[str(pending_msg.id), from_number, payload["audio_url"], payload.get("script", "")],
+                        kwargs={"charge": False},
                         queue="whatsapp",
                     )
                 elif kind == "banner":
@@ -408,6 +412,7 @@ async def process_inbound_message(
                     await db.flush()
                     send_whatsapp_image_message.apply_async(
                         args=[str(pending_msg.id), from_number, payload["banner_url"], payload.get("caption", "")],
+                        kwargs={"charge": False},
                         queue="whatsapp",
                     )
                 elif kind == "text":
@@ -415,6 +420,7 @@ async def process_inbound_message(
                     await db.flush()
                     send_whatsapp_message.apply_async(
                         args=[str(pending_msg.id), from_number, payload["body"]],
+                        kwargs={"charge": False},
                         queue="whatsapp",
                     )
                 else:
