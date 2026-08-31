@@ -45,6 +45,7 @@ class CampaignOut(BaseModel):
     status: str
     stats: dict
     message_counts: dict = {}
+    pause_reason: dict | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

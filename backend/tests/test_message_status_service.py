@@ -53,18 +53,23 @@ class TestApplyStatusUpdate:
         mock_pub.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_campaign_stats_incremented_on_status_change(self, mock_db):
-        campaign = MagicMock(stats={})
+    async def test_campaign_stats_not_touched_on_status_change(self, mock_db):
+        # Campaign engagement stats are derived live from messages.status
+        # (campaign_stats_service) — apply_status_update must NOT bump a
+        # Campaign.stats counter, else duplicate/reordered WhatsApp
+        # receipts drift delivered/read above sent.
         msg = MagicMock(
             status="sent", delivered_at=None, read_at=None,
             campaign_id=uuid.uuid4(), contact_id=uuid.uuid4(), advertiser_id=uuid.uuid4(),
         )
-        mock_db.execute.side_effect = [_msg_result(msg), _msg_result(campaign)]
+        mock_db.execute.return_value = _msg_result(msg)
 
         with patch("app.services.message_status_service.publish_conversation_event", new=AsyncMock()):
             await apply_status_update(mock_db, "wamid.X", "delivered")
 
-        assert campaign.stats["delivered"] == 1
+        # only the message lookup — no follow-up Campaign query
+        assert mock_db.execute.call_count == 1
+        assert msg.status == "delivered"
 
     @pytest.mark.asyncio
     async def test_unmapped_status_keeps_existing_status(self, mock_db):

@@ -36,9 +36,17 @@ export interface Campaign {
   status: string
   stats: Record<string, number>
   message_counts: Record<string, number>
+  pause_reason?: CampaignPauseReason | null
   ab_test: CampaignAbTest
   created_at: string
   schedule?: { start_date?: string; end_date?: string } | null
+}
+
+export interface CampaignPauseReason {
+  reason: string
+  message: string
+  retry_after?: string | null
+  blocked_at?: string | null
 }
 
 export type CampaignMode =

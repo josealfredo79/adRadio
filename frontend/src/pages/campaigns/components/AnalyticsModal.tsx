@@ -52,10 +52,11 @@ export function AnalyticsModal({ campaign, onClose }: AnalyticsModalProps) {
   const failed = s.failed ?? 0
   const hasCoupon = campaign.ab_test?.has_coupon
 
-  const deliveryRate = sent > 0 ? Math.round((delivered / sent) * 100) : 0
-  const responseRate = sent > 0 ? Math.round((replied / sent) * 100) : 0
-  const readRate = delivered > 0 ? Math.round((read / delivered) * 100) : 0
-  const couponRate = sent > 0 ? Math.round((coupons / sent) * 100) : 0
+  const rate = (num: number, den: number) => (den > 0 ? Math.min(100, Math.round((num / den) * 100)) : 0)
+  const deliveryRate = rate(delivered, sent)
+  const responseRate = rate(replied, sent)
+  const readRate = rate(read, delivered)
+  const couponRate = rate(coupons, sent)
 
   const chartData = [
     { name: 'Enviados', value: sent, fill: '#60a5fa' },

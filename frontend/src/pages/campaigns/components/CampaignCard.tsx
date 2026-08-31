@@ -62,8 +62,15 @@ export function CampaignCard({
   pausingId,
 }: CampaignCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const hasSentMessages = (campaign.stats.sent ?? 0) > 0
+  const sentTotal = campaign.stats.sent ?? 0
+  const hasSentMessages = sentTotal > 0
   const isRunning = campaign.status === 'running'
+
+  // Rates are clamped: WhatsApp status receipts can still momentarily
+  // outrun the sent count, and a bar/label over 100% reads as a bug.
+  const pct = (n: number) => (sentTotal > 0 ? Math.min(100, Math.round((n / sentTotal) * 100)) : 0)
+  const deliveryPct = pct(campaign.stats.delivered ?? 0)
+  const replyPct = pct(campaign.stats.replied ?? 0)
 
   // Progress: sent / total_contacts (if available)
   const totalContacts = campaign.stats.total_contacts ?? campaign.stats.sent ?? 0
@@ -100,6 +107,16 @@ export function CampaignCard({
           {campaign.ab_test?.audio_url && (
             <div className="mt-3">
               <audio controls src={campaign.ab_test.audio_url} className="h-8 w-full max-w-md rounded-lg" />
+            </div>
+          )}
+
+          {/* Why is this campaign paused */}
+          {campaign.status === 'paused' && campaign.pause_reason && (
+            <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+                {campaign.pause_reason.message}
+              </p>
             </div>
           )}
 
@@ -146,11 +163,11 @@ export function CampaignCard({
                 <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-green-400 dark:bg-green-500 transition-all"
-                    style={{ width: `${Math.min(100, Math.round(((campaign.stats.delivered ?? 0) / campaign.stats.sent) * 100))}%` }}
+                    style={{ width: `${deliveryPct}%` }}
                   />
                 </div>
                 <span className="text-[10px] font-semibold text-green-600 dark:text-green-400">
-                  {Math.round(((campaign.stats.delivered ?? 0) / campaign.stats.sent) * 100)}%
+                  {deliveryPct}%
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -158,11 +175,11 @@ export function CampaignCard({
                 <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-brand-50 dark:bg-brand-400 transition-all"
-                    style={{ width: `${Math.min(100, Math.round(((campaign.stats.replied ?? 0) / campaign.stats.sent) * 100))}%` }}
+                    style={{ width: `${replyPct}%` }}
                   />
                 </div>
                 <span className="text-[10px] font-semibold text-brand-600 dark:text-brand-400">
-                  {Math.round(((campaign.stats.replied ?? 0) / campaign.stats.sent) * 100)}%
+                  {replyPct}%
                 </span>
               </div>
             </div>

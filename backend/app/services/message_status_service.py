@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.campaign import Campaign
 from app.models.message import Message
 from app.services.realtime import publish_conversation_event
 
@@ -51,14 +50,12 @@ async def apply_status_update(
     elif new_status == "read" and not msg.read_at:
         msg.read_at = now
 
-    if msg.campaign_id and new_status != old_status:
-        camp_result = await db.execute(select(Campaign).where(Campaign.id == msg.campaign_id))
-        campaign = camp_result.scalar_one_or_none()
-        if campaign:
-            stats = dict(campaign.stats)
-            if new_status in ("sent", "delivered", "read", "failed"):
-                stats[new_status] = stats.get(new_status, 0) + 1
-            campaign.stats = stats
+    # Campaign engagement stats are derived live from messages.status on
+    # read (see campaign_stats_service) — we deliberately do NOT bump a
+    # Campaign.stats counter here. WhatsApp resends/reorders these status
+    # receipts, and the old "stats[new_status] += 1" had no dedupe and
+    # never decremented the prior bucket, so delivered/read drifted above
+    # sent and produced a >100% delivery rate in the UI.
 
     await db.commit()
     if msg.contact_id:

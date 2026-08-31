@@ -192,6 +192,9 @@ async def campaign_performance(
     )
     campaigns = campaigns.scalars().all()
 
+    from app.services.campaign_stats_service import compute_campaign_stats, merge_stats
+    derived = await compute_campaign_stats(db, [c.id for c in campaigns])
+
     result = []
     for c in campaigns:
         msg_counts = await db.execute(
@@ -202,17 +205,18 @@ async def campaign_performance(
             .group_by(Message.status)
         )
         statuses = {row[0]: row[1] for row in msg_counts}
-        total = sum(statuses.values()) or 1
+        stats = merge_stats(c.stats, derived.get(c.id))
+        sent = stats.get("sent", 0) or 0
         result.append({
             "campaign_id": str(c.id),
             "name": c.name,
             "type": c.type,
             "status": c.status,
             "created_at": c.created_at.isoformat() if c.created_at else None,
-            "stats": c.stats,
+            "stats": stats,
             "breakdown": statuses,
-            "delivery_rate": round(statuses.get("delivered", 0) / total * 100, 1),
-            "read_rate": round(statuses.get("read", 0) / total * 100, 1),
+            "delivery_rate": round(stats.get("delivered", 0) / sent * 100, 1) if sent else 0.0,
+            "read_rate": round(stats.get("read", 0) / sent * 100, 1) if sent else 0.0,
         })
 
     return result
