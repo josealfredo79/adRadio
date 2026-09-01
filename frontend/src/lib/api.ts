@@ -1,8 +1,17 @@
 import axios, { AxiosError } from 'axios'
 
+type FastApiValidationError = { loc?: (string | number)[]; msg?: string }
+
 export function getApiError(err: unknown, fallback = 'Error'): string {
   if (err instanceof AxiosError) {
-    return (err.response?.data as { detail?: string })?.detail ?? fallback
+    const detail = (err.response?.data as { detail?: unknown })?.detail
+    if (typeof detail === 'string') return detail
+    // FastAPI devuelve un array de errores en las respuestas 422 (validación)
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0] as FastApiValidationError
+      if (first?.msg) return first.msg.replace(/^Value error,\s*/, '')
+    }
+    return fallback
   }
   if (err instanceof Error) return err.message
   return fallback
