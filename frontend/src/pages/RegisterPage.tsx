@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import { Radio } from 'lucide-react'
+import { Radio, Eye, EyeOff } from 'lucide-react'
 import { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 
@@ -11,6 +11,7 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ email: '', password: '', businessName: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPwd, setShowPwd] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value })
@@ -74,15 +75,25 @@ export default function RegisterPage() {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Contraseña</label>
-              <input
-                name="password"
-                type="password"
-                required
-                value={form.password}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500"
-                placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número"
-              />
+              <div className="relative">
+                <input
+                  name="password"
+                  type={showPwd ? 'text' : 'password'}
+                  required
+                  value={form.password}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 pr-10 text-sm text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500"
+                  placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(!showPwd)}
+                  aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             {error && (
