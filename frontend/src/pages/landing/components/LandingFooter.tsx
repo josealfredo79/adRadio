@@ -29,7 +29,15 @@ export default function LandingFooter() {
         </div>
       </div>
       <div className="mx-auto mt-6 flex max-w-5xl flex-col items-center gap-2 sm:flex-row sm:justify-between">
-        <div className="flex gap-5 text-sm text-gray-600">
+        <div className="flex flex-wrap gap-5 text-sm text-gray-600">
+          <a
+            href="https://claude.ai/code/artifact/55e3de11-64da-4d3c-9524-9d0093f5c109"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-gray-300 transition-colors"
+          >
+            Centro de ayuda
+          </a>
           <Link to="/terms" className="hover:text-gray-300 transition-colors">Términos</Link>
           <Link to="/privacy" className="hover:text-gray-300 transition-colors">Privacidad</Link>
           <Link to="/login" className="hover:text-gray-300 transition-colors">Iniciar sesión</Link>
