@@ -8,6 +8,9 @@
 ## ¿Qué es IaRadio?
 IaRadio es una plataforma SaaS de inteligencia artificial que automatiza la atención al cliente y la publicidad de negocios locales a través de WhatsApp.
 
+### Canal: SOLO WhatsApp
+IaRadio funciona EXCLUSIVAMENTE por WhatsApp. NO ofrecemos SMS, mensajes de texto, email marketing, llamadas telefónicas, Instagram, Facebook Messenger ni ningún otro canal. Todo —campañas masivas, recordatorios de citas, notificaciones, cupones, comerciales de radio, notas de voz— ocurre dentro de WhatsApp. Si un cliente pregunta por SMS o cualquier otro canal, la respuesta es: "IaRadio trabaja solo por WhatsApp; ahí concentramos toda la automatización porque es donde tus clientes ya te leen." No prometas canales que no existen ni los describas como "próximamente".
+
 ### Funcionalidades principales
 - Bot de WhatsApp con IA que responde clientes automáticamente usando la base de conocimiento del negocio
 - Campañas publicitarias con mensajes masivos personalizados
@@ -82,6 +85,9 @@ Sí. Ofrecemos 30 días de prueba gratis con 50 mensajes para que pruebes todas 
 
 ### ¿Soporta audio / voz?
 Sí. El bot puede recibir mensajes de voz y transcribirlos. También puedes generar comerciales de radio con IA.
+
+### ¿Ofrecen SMS / mensajes de texto / email marketing?
+No. IaRadio funciona únicamente por WhatsApp. No hay módulo de SMS, ni email, ni otros canales. Los recordatorios de citas, campañas masivas y notificaciones se envían por WhatsApp, que es donde tus clientes ya te leen.
 
 ### ¿En qué idiomas funciona?
 Español, inglés y portugués.
