@@ -975,6 +975,32 @@ async def handle_chat(db: AsyncSession, user: User, message: str, history: list[
     }
 
 
+async def handle_tool_preview(db: AsyncSession, user: User, tool_name: str, args: dict) -> dict:
+    """Entrada determinista para las mini-app cards del frontend (formulario
+    real: selector de contacto, fecha, etc.) — arma la misma confirmación
+    firmada que produce el loop de chat, usando las mismas funciones de
+    preview/guardrails, pero sin pasar por Claude: los argumentos ya vienen
+    estructurados y validados por la UI, no hay texto libre que interpretar."""
+    if tool_name not in CONFIRM_TOOLS:
+        raise ValueError(f"'{tool_name}' no es una herramienta que use este flujo de confirmación.")
+
+    summary, resolved_args, error = await _preview_confirm_tool(db, user, tool_name, args)
+    if error:
+        return {"reply": error, "actions": [], "pending_confirmation": None}
+
+    confirmation_id = _create_confirmation_token(user.id, tool_name, resolved_args)
+    return {
+        "reply": _default_confirmation_reply(summary),
+        "actions": [],
+        "pending_confirmation": {
+            "confirmation_id": confirmation_id,
+            "tool": tool_name,
+            "summary": summary,
+            "args": resolved_args,
+        },
+    }
+
+
 async def handle_confirm(db: AsyncSession, user: User, confirmation_id: str, approve: bool, redis=None) -> dict:
     payload = _decode_confirmation_token(confirmation_id)
     if not payload or payload.get("sub") != str(user.id):
