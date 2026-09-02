@@ -1,16 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
   Sparkles, Send, AlertTriangle, Bot, ArrowUpRight, LayoutGrid, LayoutDashboard,
   Users, Megaphone, MessageSquare, ShoppingBag, Package, CalendarDays, Kanban,
   BookOpen, FlaskConical, UserCog, FileText, MessageCircle, BarChart3, CreditCard, Settings,
+  Ticket, Rocket,
   type LucideIcon,
 } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import SEO from '@/components/SEO'
-import { useCopilot, type CopilotAction, type PendingConfirmation } from '@/contexts/CopilotContext'
+import { useCopilot, type CopilotAction, type PendingConfirmation, type CopilotFormTool } from '@/contexts/CopilotContext'
+
+// Opciones reales para los selects de las mini-app cards — mismos endpoints
+// que ya usan ContactsPage/CampaignsPage, no algo nuevo.
+interface ContactOption {
+  id: string
+  name: string
+  phone: string
+}
+
+interface CampaignOption {
+  id: string
+  name: string
+  status: string
+}
+
+const LAUNCHABLE_STATUSES = new Set(['draft', 'scheduled', 'paused'])
 
 // A la herramienta que ejecutó la acción le corresponde una vista tradicional
 // del dashboard donde ver/seguir editando lo mismo — el chat es una puerta
@@ -194,6 +211,167 @@ function ActionsBlock({ actions }: { actions: CopilotAction[] }) {
   )
 }
 
+const fieldClass =
+  'w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-800 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'
+
+function FormCard({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {
+  return (
+    <div className="w-full max-w-sm space-y-2.5 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300">
+        <Icon className="h-3.5 w-3.5" />
+        {title}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// Mini-apps: la parte que faltaba del patrón "chat-first con tarjetas
+// interactivas" — un formulario real (selector de contacto, fecha, número)
+// en vez de depender de que el texto libre se interprete bien. El submit va
+// directo al endpoint de preview (sin pasar por Claude), y de ahí para
+// adelante es el mismo flujo de confirmación de siempre.
+function AppointmentForm({
+  contacts, onSubmit, disabled,
+}: { contacts: ContactOption[]; onSubmit: (args: Record<string, unknown>) => void; disabled?: boolean }) {
+  const [contactId, setContactId] = useState('')
+  const [date, setDate] = useState('')
+  const [time, setTime] = useState('')
+  const [service, setService] = useState('')
+  const canSubmit = !!contactId && !!date && !!time
+
+  return (
+    <FormCard title="Agendar cita" icon={CalendarDays}>
+      <select value={contactId} onChange={(e) => setContactId(e.target.value)} disabled={disabled} className={fieldClass}>
+        <option value="">Selecciona un contacto…</option>
+        {contacts.map((c) => (
+          <option key={c.id} value={c.id}>{c.name} · {c.phone}</option>
+        ))}
+      </select>
+      <div className="flex gap-2">
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={disabled} className={fieldClass} />
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} disabled={disabled} className={fieldClass} />
+      </div>
+      <input
+        type="text"
+        placeholder="Servicio o motivo (opcional)"
+        value={service}
+        onChange={(e) => setService(e.target.value)}
+        disabled={disabled}
+        className={fieldClass}
+      />
+      <button
+        type="button"
+        disabled={disabled || !canSubmit}
+        onClick={() => onSubmit({ contact_id: contactId, datetime_iso: `${date}T${time}:00`, service: service || undefined })}
+        className="w-full rounded-lg bg-brand-500 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Ver confirmación
+      </button>
+    </FormCard>
+  )
+}
+
+function CouponForm({
+  contacts, onSubmit, disabled,
+}: { contacts: ContactOption[]; onSubmit: (args: Record<string, unknown>) => void; disabled?: boolean }) {
+  const [name, setName] = useState('')
+  const [discount, setDiscount] = useState('')
+  const [target, setTarget] = useState<'all' | 'segment' | 'contact'>('all')
+  const [contactId, setContactId] = useState('')
+  const [segmentTag, setSegmentTag] = useState('')
+
+  const discountNum = Number(discount)
+  const canSubmit =
+    !!name.trim() &&
+    discount !== '' &&
+    discountNum > 0 &&
+    discountNum <= 100 &&
+    (target !== 'contact' || !!contactId) &&
+    (target !== 'segment' || !!segmentTag.trim())
+
+  return (
+    <FormCard title="Crear cupón" icon={Ticket}>
+      <input type="text" placeholder="Nombre del cupón" value={name} onChange={(e) => setName(e.target.value)} disabled={disabled} className={fieldClass} />
+      <input
+        type="number" min={1} max={100} placeholder="% de descuento"
+        value={discount} onChange={(e) => setDiscount(e.target.value)} disabled={disabled} className={fieldClass}
+      />
+      <select value={target} onChange={(e) => setTarget(e.target.value as typeof target)} disabled={disabled} className={fieldClass}>
+        <option value="all">Todos mis contactos activos</option>
+        <option value="segment">Contactos con una etiqueta</option>
+        <option value="contact">Un solo contacto</option>
+      </select>
+      {target === 'contact' && (
+        <select value={contactId} onChange={(e) => setContactId(e.target.value)} disabled={disabled} className={fieldClass}>
+          <option value="">Selecciona un contacto…</option>
+          {contacts.map((c) => (
+            <option key={c.id} value={c.id}>{c.name} · {c.phone}</option>
+          ))}
+        </select>
+      )}
+      {target === 'segment' && (
+        <input
+          type="text" placeholder="Etiqueta, ej. vip"
+          value={segmentTag} onChange={(e) => setSegmentTag(e.target.value)} disabled={disabled} className={fieldClass}
+        />
+      )}
+      <button
+        type="button"
+        disabled={disabled || !canSubmit}
+        onClick={() =>
+          onSubmit({
+            name: name.trim(),
+            discount_percent: discountNum,
+            target,
+            contact_id: target === 'contact' ? contactId : undefined,
+            segment_tag: target === 'segment' ? segmentTag.trim() : undefined,
+          })
+        }
+        className="w-full rounded-lg bg-brand-500 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Ver confirmación
+      </button>
+    </FormCard>
+  )
+}
+
+function LaunchCampaignForm({
+  campaigns, onSubmit, disabled,
+}: { campaigns: CampaignOption[]; onSubmit: (args: Record<string, unknown>) => void; disabled?: boolean }) {
+  const [campaignId, setCampaignId] = useState('')
+  const launchable = campaigns.filter((c) => LAUNCHABLE_STATUSES.has(c.status))
+
+  return (
+    <FormCard title="Lanzar campaña" icon={Rocket}>
+      {launchable.length ? (
+        <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} disabled={disabled} className={fieldClass}>
+          <option value="">Selecciona una campaña…</option>
+          {launchable.map((c) => (
+            <option key={c.id} value={c.id}>{c.name} ({c.status})</option>
+          ))}
+        </select>
+      ) : (
+        <p className="text-xs text-gray-400 dark:text-gray-500">No tienes campañas listas para lanzar.</p>
+      )}
+      <button
+        type="button"
+        disabled={disabled || !campaignId}
+        onClick={() => onSubmit({ campaign_id: campaignId })}
+        className="w-full rounded-lg bg-brand-500 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Ver confirmación
+      </button>
+    </FormCard>
+  )
+}
+
+const QUICK_ACTIONS: { tool: CopilotFormTool; label: string; icon: LucideIcon }[] = [
+  { tool: 'schedule_appointment', label: 'Agendar cita', icon: CalendarDays },
+  { tool: 'create_coupon', label: 'Crear cupón', icon: Ticket },
+  { tool: 'launch_campaign', label: 'Lanzar campaña', icon: Rocket },
+]
+
 export default function CopilotPage() {
   const { messages, setMessages, pendingConfirmation, setPendingConfirmation } = useCopilot()
   const [input, setInput] = useState('')
@@ -210,7 +388,26 @@ export default function CopilotPage() {
       api.post<CopilotChatResponse>('/copilot/confirm', payload).then((r) => r.data),
   })
 
-  const isBusy = chatMutation.isPending || confirmMutation.isPending
+  // Datos reales para los selects de las mini-app cards — mismos endpoints
+  // que ContactsPage/CampaignsPage, no una fuente nueva.
+  const contactsQuery = useQuery({
+    queryKey: ['copilot-contacts-options'],
+    queryFn: () =>
+      api.get('/contacts', { params: { page_size: 100, status: 'active' } }).then((r) => r.data.items as ContactOption[]),
+    staleTime: 60_000,
+  })
+  const campaignsQuery = useQuery({
+    queryKey: ['copilot-campaigns-options'],
+    queryFn: () => api.get('/campaigns', { params: { page_size: 100 } }).then((r) => r.data.items as CampaignOption[]),
+    staleTime: 60_000,
+  })
+
+  const previewMutation = useMutation({
+    mutationFn: (payload: { tool: CopilotFormTool; args: Record<string, unknown> }) =>
+      api.post<CopilotChatResponse>(`/copilot/tools/${payload.tool}/preview`, { args: payload.args }).then((r) => r.data),
+  })
+
+  const isBusy = chatMutation.isPending || confirmMutation.isPending || previewMutation.isPending
   const inputDisabled = isBusy || !!pendingConfirmation
 
   useEffect(() => {
@@ -301,6 +498,31 @@ export default function CopilotPage() {
     ])
   }
 
+  const openForm = (tool: CopilotFormTool) => {
+    if (isBusy || pendingConfirmation) return
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: '', formTool: tool }])
+  }
+
+  const handleFormSubmit = (tool: CopilotFormTool, args: Record<string, unknown>) => {
+    previewMutation.mutate(
+      { tool, args },
+      {
+        onSuccess: appendAssistantReply,
+        onError: (err) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: getApiError(err, 'No se pudo preparar la acción. Intenta de nuevo.'),
+              isError: true,
+            },
+          ])
+        },
+      }
+    )
+  }
+
   return (
     <>
       <SEO title="Copiloto" description="Opera tu CRM de AdRadio conversando en lenguaje natural." noIndex />
@@ -359,8 +581,8 @@ export default function CopilotPage() {
             ) : (
               messages.map((msg) => (
                 <div key={msg.id} className={cn('flex', msg.role === 'assistant' ? 'justify-start' : 'justify-end')}>
-                  <div className={msg.moduleGrid ? 'w-full max-w-2xl' : 'max-w-[75%]'}>
-                    {!msg.moduleGrid && (
+                  <div className={msg.moduleGrid || msg.formTool ? 'w-full max-w-2xl' : 'max-w-[75%]'}>
+                    {!msg.moduleGrid && !msg.formTool && (
                       <div
                         className={cn(
                           'rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap',
@@ -379,6 +601,27 @@ export default function CopilotPage() {
                       <div className="mt-2">
                         <ModuleGrid onSelect={handleModuleSelect} disabled={isBusy || !!pendingConfirmation} />
                       </div>
+                    )}
+                    {msg.formTool === 'schedule_appointment' && (
+                      <AppointmentForm
+                        contacts={contactsQuery.data ?? []}
+                        disabled={isBusy || !!pendingConfirmation}
+                        onSubmit={(args) => handleFormSubmit('schedule_appointment', args)}
+                      />
+                    )}
+                    {msg.formTool === 'create_coupon' && (
+                      <CouponForm
+                        contacts={contactsQuery.data ?? []}
+                        disabled={isBusy || !!pendingConfirmation}
+                        onSubmit={(args) => handleFormSubmit('create_coupon', args)}
+                      />
+                    )}
+                    {msg.formTool === 'launch_campaign' && (
+                      <LaunchCampaignForm
+                        campaigns={campaignsQuery.data ?? []}
+                        disabled={isBusy || !!pendingConfirmation}
+                        onSubmit={(args) => handleFormSubmit('launch_campaign', args)}
+                      />
                     )}
                     {msg.moduleLink && (
                       <Link
@@ -435,6 +678,23 @@ export default function CopilotPage() {
               </div>
             </div>
           )}
+
+          {/* Acciones rápidas — las mini-apps: un formulario real en vez de
+              depender de que el texto libre se interprete bien */}
+          <div className="flex flex-wrap gap-1.5 border-t border-gray-100 px-4 py-2 dark:border-gray-800/60">
+            {QUICK_ACTIONS.map((a) => (
+              <button
+                key={a.tool}
+                type="button"
+                onClick={() => openForm(a.tool)}
+                disabled={isBusy || !!pendingConfirmation}
+                className="flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                <a.icon className="h-3 w-3" />
+                {a.label}
+              </button>
+            ))}
+          </div>
 
           {/* Input */}
           <div className="border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">

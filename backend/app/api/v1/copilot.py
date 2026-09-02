@@ -19,7 +19,7 @@ from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.user import User
-from app.services.copilot_service import handle_chat, handle_confirm
+from app.services.copilot_service import handle_chat, handle_confirm, handle_tool_preview
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,10 @@ class ConfirmRequest(BaseModel):
     approve: bool
 
 
+class ToolPreviewRequest(BaseModel):
+    args: dict = {}
+
+
 @router.post("/chat", response_model=CopilotResponse)
 @limiter.limit("20/minute")
 async def chat(
@@ -91,6 +95,24 @@ async def confirm(
 ) -> CopilotResponse:
     try:
         result = await handle_confirm(db, current_user, body.confirmation_id, body.approve, redis=redis)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return CopilotResponse(**result)
+
+
+@router.post("/tools/{tool_name}/preview", response_model=CopilotResponse)
+@limiter.limit("20/minute")
+async def tool_preview(
+    tool_name: str,
+    request: Request,
+    body: ToolPreviewRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CopilotResponse:
+    """Entrada de las mini-app cards (formulario real, no texto libre) — arma
+    la confirmación directo desde `body.args`, sin pasar por Claude."""
+    try:
+        result = await handle_tool_preview(db, current_user, tool_name, body.args)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return CopilotResponse(**result)

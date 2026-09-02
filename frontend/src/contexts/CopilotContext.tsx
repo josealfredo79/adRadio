@@ -18,6 +18,8 @@ export interface PendingConfirmation {
   args?: Record<string, unknown>
 }
 
+export type CopilotFormTool = 'schedule_appointment' | 'create_coupon' | 'launch_campaign'
+
 export interface CopilotChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -26,6 +28,7 @@ export interface CopilotChatMessage {
   isError?: boolean
   moduleGrid?: boolean
   moduleLink?: { path: string; label: string }
+  formTool?: CopilotFormTool
 }
 
 interface CopilotContextValue {
