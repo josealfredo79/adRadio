@@ -23,7 +23,7 @@ from app.core.redis import close_redis
 from app.core.rate_limiter import limiter
 from app.services.analytics_service import flush as analytics_flush
 from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, template_seeds, team, automations, widget, analytics, admin, chat_demo, products
-from app.api.v1 import user_webhooks, public_api, public_api_routes, public_site, meta_whatsapp, lab
+from app.api.v1 import user_webhooks, public_api, public_api_routes, public_site, meta_whatsapp, lab, copilot
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +230,7 @@ app.include_router(public_api_routes.router, prefix=settings.API_PREFIX)
 app.include_router(public_site.router, prefix=settings.API_PREFIX)
 app.include_router(public_site.product_router, prefix=settings.API_PREFIX)
 app.include_router(chat_demo.router, prefix=settings.API_PREFIX)
+app.include_router(copilot.router, prefix=settings.API_PREFIX)
 
 # Serve WhatsApp widget static files publicly
 _WIDGET_DIR = Path(__file__).parent / "static" / "widget"

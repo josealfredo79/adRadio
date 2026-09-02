@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
+import { CopilotProvider, COPILOT_STORAGE_KEY } from '@/contexts/CopilotContext'
 import api from '@/lib/api'
 import {
   LayoutDashboard,
@@ -31,11 +32,13 @@ import {
   FlaskConical,
   Kanban,
   Package,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/app/copilot', icon: Sparkles, label: 'Copiloto' },
   { to: '/app/campaigns', icon: Megaphone, label: 'Campañas', badge: 'voces_stories_pending' as const },
   { to: '/app/automations', icon: Bot, label: 'Automatizaciones' },
   { to: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
@@ -73,6 +76,14 @@ export default function Layout() {
   })
 
   const handleLogout = async () => {
+    // Una sesión de Copiloto es de esta cuenta — si alguien más entra
+    // después en el mismo navegador (equipo compartido), no debe heredar
+    // la conversación de la sesión anterior.
+    try {
+      sessionStorage.removeItem(COPILOT_STORAGE_KEY)
+    } catch {
+      // ver nota equivalente en CopilotContext
+    }
     await logout()
     navigate('/login')
   }
@@ -238,7 +249,9 @@ export default function Layout() {
 
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-            <Outlet />
+            <CopilotProvider>
+              <Outlet />
+            </CopilotProvider>
           </div>
         </div>
       </main>

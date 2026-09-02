@@ -1,0 +1,481 @@
+<!doctype html>
+<title>Copiloto CRM</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #F2F4F3;
+    --surface: #FCFDFC;
+    --surface-sunken: #E8ECEA;
+    --ink: #182225;
+    --ink-soft: #4B5A5A;
+    --border: #D8DEDC;
+    --accent: #0F6E6A;
+    --accent-ink: #FFFFFF;
+    --accent-2: #C97A1E;
+    --console-bg: #142023;
+    --console-ink: #D7ECE9;
+    --console-dim: #7FA39D;
+    --good: #2F7A4F;
+    --warn: #B4551C;
+    --shadow: 0 1px 2px rgba(20, 32, 35, 0.06), 0 8px 24px -12px rgba(20, 32, 35, 0.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10171A;
+      --surface: #16201F;
+      --surface-sunken: #0D1315;
+      --ink: #E7EEEC;
+      --ink-soft: #9DB3AF;
+      --border: #26332F;
+      --accent: #4CC2B6;
+      --accent-ink: #0B1716;
+      --accent-2: #F0B152;
+      --console-bg: #0A1112;
+      --console-ink: #BFE3DE;
+      --console-dim: #5D8983;
+      --good: #5FBE87;
+      --warn: #E2924F;
+      --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 12px 28px -14px rgba(0,0,0,0.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10171A;
+    --surface: #16201F;
+    --surface-sunken: #0D1315;
+    --ink: #E7EEEC;
+    --ink-soft: #9DB3AF;
+    --border: #26332F;
+    --accent: #4CC2B6;
+    --accent-ink: #0B1716;
+    --accent-2: #F0B152;
+    --console-bg: #0A1112;
+    --console-ink: #BFE3DE;
+    --console-dim: #5D8983;
+    --good: #5FBE87;
+    --warn: #E2924F;
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 12px 28px -14px rgba(0,0,0,0.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace; }
+  h1, h2, h3 { font-family: 'IBM Plex Serif', Georgia, serif; font-weight: 600; text-wrap: balance; margin: 0; }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---------- header ---------- */
+  header.doc {
+    border-bottom: 1px solid var(--border);
+    padding: 56px 0 32px;
+    margin-bottom: 48px;
+  }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .eyebrow .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent-2);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 25%, transparent);
+  }
+  header.doc h1 { font-size: 40px; line-height: 1.15; max-width: 14ch; }
+  header.doc .dek {
+    margin-top: 14px;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: 62ch;
+  }
+  .meta-row {
+    margin-top: 28px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    font-size: 13px;
+  }
+  .meta-row div { display: flex; flex-direction: column; gap: 3px; }
+  .meta-row .k { font-family: 'IBM Plex Mono', monospace; color: var(--ink-soft); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .meta-row .v { font-weight: 500; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px 3px 8px; border-radius: 100px;
+    background: color-mix(in srgb, var(--accent-2) 16%, var(--surface));
+    color: var(--accent-2);
+    font-size: 12px; font-weight: 600; width: fit-content;
+  }
+  .status-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---------- sections ---------- */
+  section { margin-bottom: 56px; }
+  .s-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 18px; }
+  .s-num { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--ink-soft); }
+  section h2 { font-size: 24px; }
+  p { line-height: 1.7; color: var(--ink); max-width: 66ch; }
+  p.lede { color: var(--ink-soft); }
+  ul.plain { padding-left: 20px; line-height: 1.7; max-width: 64ch; }
+  ul.plain li { margin-bottom: 6px; }
+  strong { font-weight: 600; }
+  a { color: var(--accent); }
+
+  /* callout */
+  .callout {
+    display: flex; gap: 14px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent-2);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+    margin: 20px 0;
+  }
+  .callout .icon { font-family: 'IBM Plex Mono', monospace; color: var(--accent-2); font-size: 13px; padding-top: 2px; }
+  .callout p { margin: 0; font-size: 14.5px; }
+  .callout .cite { display: block; margin-top: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--ink-soft); }
+
+  /* existing surface grid */
+  .surface-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .surface-cell {
+    background: var(--surface);
+    padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .surface-cell .name { font-weight: 600; font-size: 13.5px; }
+  .surface-cell .kind { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+
+  /* path comparison */
+  .paths { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .paths { grid-template-columns: 1fr; } }
+  .path-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px;
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .path-card.rec { border-color: var(--accent); }
+  .path-card .tag {
+    align-self: flex-start;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 5px;
+    background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+    color: var(--accent);
+  }
+  .path-card h3 { font-size: 18px; }
+  .path-card .stat-row { display: flex; gap: 18px; padding-top: 4px; border-top: 1px solid var(--border); margin-top: 4px; }
+  .path-card .stat { display: flex; flex-direction: column; gap: 2px; }
+  .path-card .stat .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; }
+  .path-card .stat .v { font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .path-card ul.plain { font-size: 13.5px; margin: 0; }
+
+  /* architecture console */
+  .console {
+    background: var(--console-bg);
+    color: var(--console-ink);
+    border-radius: 12px;
+    padding: 24px 26px;
+    box-shadow: var(--shadow);
+  }
+  .console .console-head {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--console-dim);
+    margin-bottom: 16px;
+    display: flex; justify-content: space-between;
+  }
+  .flow-row { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+  .flow-block {
+    flex: 1; min-width: 140px;
+    border: 1px solid color-mix(in srgb, var(--console-ink) 25%, transparent);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 4px;
+    background: color-mix(in srgb, var(--console-ink) 6%, transparent);
+  }
+  .flow-block .t { font-weight: 600; font-size: 13.5px; margin-bottom: 4px; }
+  .flow-block .d { font-size: 11.5px; color: var(--console-dim); line-height: 1.5; font-family: 'IBM Plex Mono', monospace; }
+  .flow-arrow { display: flex; align-items: center; justify-content: center; color: var(--console-dim); font-size: 16px; padding: 0 2px; }
+
+  .tool-list { margin-top: 18px; border-top: 1px dashed color-mix(in srgb, var(--console-ink) 25%, transparent); padding-top: 16px; }
+  .tool-list .row { display: flex; gap: 10px; padding: 5px 0; font-size: 12.5px; align-items: baseline; }
+  .tool-list .fn { font-family: 'IBM Plex Mono', monospace; color: var(--accent-2); min-width: 190px; }
+  .tool-list .desc { color: var(--console-dim); }
+
+  /* timeline dial */
+  .timeline { display: flex; flex-direction: column; gap: 0; }
+  .phase {
+    display: grid;
+    grid-template-columns: 84px 1fr;
+    gap: 18px;
+    padding: 18px 0;
+    border-top: 1px solid var(--border);
+    position: relative;
+  }
+  .phase:first-child { border-top: none; }
+  .phase .dur {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 500;
+    padding-top: 2px;
+  }
+  .phase .body h3 { font-size: 15.5px; font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; margin-bottom: 4px; }
+  .phase .body p { font-size: 13.5px; margin: 0; color: var(--ink-soft); }
+  .phase .tickline {
+    grid-column: 1 / -1;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--surface-sunken);
+    margin-top: 12px;
+    overflow: hidden;
+  }
+  .phase .tickfill { height: 100%; background: var(--accent); border-radius: 3px; }
+  .total-row {
+    margin-top: 18px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-top: 18px; border-top: 2px solid var(--ink);
+  }
+  .total-row .label { font-size: 13px; color: var(--ink-soft); }
+  .total-row .value { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500; }
+
+  /* risks */
+  .risk-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .risk-table th {
+    text-align: left; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft);
+    padding: 0 12px 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .risk-table td { padding: 12px 12px 12px 0; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+  .risk-table tr:last-child td { border-bottom: none; }
+  .sev { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px; }
+  .sev::before { content: ''; width: 7px; height: 7px; border-radius: 50%; }
+  .sev.med::before { background: var(--accent-2); }
+  .sev.low::before { background: var(--good); }
+  .table-scroll { overflow-x: auto; }
+
+  footer.doc {
+    margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border);
+    font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--ink-soft);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="doc">
+    <div class="eyebrow"><span class="dot"></span>IARADIO · NOTA TÉCNICA</div>
+    <h1>Copiloto CRM sin WhatsApp</h1>
+    <p class="dek">Un chat dentro del dashboard de IaRadio, no de WhatsApp, para que un anunciante administre contactos, campañas y cupones hablando en vez de navegando formularios — sin depender de la verificación de Meta.</p>
+    <div class="meta-row">
+      <div><span class="k">Fecha</span><span class="v">2 sept 2026</span></div>
+      <div><span class="k">Para</span><span class="v">Decisión de alcance — build vs. buy ya descartado (buy = Landbot)</span></div>
+      <div><span class="k">Estado</span><span class="status-pill">Borrador · sin iniciar</span></div>
+    </div>
+  </header>
+
+  <section>
+    <div class="s-head"><span class="s-num">01</span><h2>Por qué ahora</h2></div>
+    <p class="lede">Casi todo lo que hoy limita la operación por WhatsApp es fricción de Meta, no de IaRadio. Un canal propio, dentro de la app, no hereda ninguna de estas reglas — porque nunca toca la API de WhatsApp.</p>
+    <div class="callout">
+      <div class="icon">!</div>
+      <div>
+        <p><strong>Cupo de negocio no verificado:</strong> el portfolio de Meta topó en 2 números conectados; un 3er cliente no puede conectarse hasta que la verificación de negocio resuelva ese límite a 20.</p>
+        <span class="cite">project_whatsapp_onboarding_blocker · 2026-09-01</span>
+      </div>
+    </div>
+    <div class="callout">
+      <div class="icon">!</div>
+      <div>
+        <p><strong><code class="mono">131042</code> / facturación de la WABA:</strong> los mensajes iniciados por el negocio (plantillas) dependieron durante semanas de que el método de pago quedara bien atado a la cuenta de WhatsApp, no a Ads — resuelto justo a tiempo, pero es una clase entera de falla que un chat propio no puede sufrir.</p>
+        <span class="cite">reference_meta_oct2026_changes · 2026-08-29</span>
+      </div>
+    </div>
+    <p>El copiloto propuesto aquí es para el <strong>dueño del negocio administrando su propio CRM</strong> — no reemplaza el bot que conversa con sus clientes por WhatsApp, que sigue siendo el canal correcto para eso.</p>
+  </section>
+
+  <section>
+    <div class="s-head"><span class="s-num">02</span><h2>Lo que ya existe</h2></div>
+    <p class="lede">No se construye un CRM nuevo. IaRadio ya tiene uno completo, operado hoy por formularios y tablas en React contra FastAPI. El copiloto es una segunda forma de operar la misma capa de datos.</p>
+    <div class="surface-grid">
+      <div class="surface-cell"><span class="name">Contactos</span><span class="kind">ContactsPage</span></div>
+      <div class="surface-cell"><span class="name">Pipeline</span><span class="kind">PipelinePage</span></div>
+      <div class="surface-cell"><span class="name">Campañas</span><span class="kind">CampaignsPage</span></div>
+      <div class="surface-cell"><span class="name">Pedidos</span><span class="kind">OrdersPage</span></div>
+      <div class="surface-cell"><span class="name">Productos</span><span class="kind">ProductsPage</span></div>
+      <div class="surface-cell"><span class="name">Citas</span><span class="kind">AppointmentsPage</span></div>
+      <div class="surface-cell"><span class="name">Automatizaciones</span><span class="kind">AutomationsPage</span></div>
+      <div class="surface-cell"><span class="name">Bandeja</span><span class="kind">InboxPage</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="s-head"><span class="s-num">03</span><h2>Dos caminos</h2></div>
+    <p class="lede">El tamaño del trabajo cambia por completo según cuál se elija — vale la pena decidirlo explícitamente antes de tocar código.</p>
+    <div class="paths">
+      <div class="path-card rec">
+        <span class="tag">Recomendado</span>
+        <h3>Ligera</h3>
+        <p style="font-size:13.5px; margin:0;">Chat con botones sobre los endpoints CRUD que ya existen, orquestado por un LLM con tool-calling. Cero motor nuevo de flujos.</p>
+        <ul class="plain">
+          <li>Reutiliza el 100% de la lógica de negocio actual</li>
+          <li>Vive solo en el dashboard del dueño</li>
+          <li>Riesgo principal: acotar bien lo que el LLM puede ejecutar</li>
+        </ul>
+        <div class="stat-row">
+          <div class="stat"><span class="k">Piezas nuevas</span><span class="v">2</span></div>
+          <div class="stat"><span class="k">Reuso backend</span><span class="v">~100%</span></div>
+        </div>
+      </div>
+      <div class="path-card">
+        <span class="tag" style="color:var(--ink-soft); background:var(--surface-sunken);">A futuro</span>
+        <h3>Completa</h3>
+        <p style="font-size:13.5px; margin:0;">Motor propio de bloques — botones, carrusel, forms, calendario, pagos — estilo Landbot, reutilizable en dashboard, sitio público y WhatsApp.</p>
+        <ul class="plain">
+          <li>Editor visual de flujos + engine de estado</li>
+          <li>Sirve también al bot público y a Voces del Barrio</li>
+          <li>Es, en la práctica, construir tu propio Landbot</li>
+        </ul>
+        <div class="stat-row">
+          <div class="stat"><span class="k">Piezas nuevas</span><span class="v">6+</span></div>
+          <div class="stat"><span class="k">Reuso backend</span><span class="v">parcial</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="s-head"><span class="s-num">04</span><h2>Arquitectura — camino ligero</h2></div>
+    <p class="lede">Dos piezas nuevas conectan el chat con lo que ya existe; ninguna toca WhatsApp.</p>
+    <div class="console">
+      <div class="console-head"><span>flujo de una acción</span><span>sin Meta de por medio</span></div>
+      <div class="flow-row">
+        <div class="flow-block">
+          <div class="t">Panel de chat</div>
+          <div class="d">nueva pestaña en el dashboard · botones + mini-forms</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-block">
+          <div class="t">Orquestador</div>
+          <div class="d">endpoint nuevo · LLM + tool-calling · valida scope</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-block">
+          <div class="t">Servicios existentes</div>
+          <div class="d">mismas funciones que ya usan las páginas actuales</div>
+        </div>
+      </div>
+      <div class="tool-list">
+        <div class="row"><span class="fn">create_contact()</span><span class="desc">alta de contacto — reusa ContactsPage service</span></div>
+        <div class="row"><span class="fn">launch_campaign()</span><span class="desc">confirmación explícita antes de ejecutar — gasta presupuesto</span></div>
+        <div class="row"><span class="fn">create_coupon()</span><span class="desc">reusa lógica de Voces del Barrio</span></div>
+        <div class="row"><span class="fn">get_campaign_stats()</span><span class="desc">solo lectura, sin confirmación</span></div>
+        <div class="row"><span class="fn">schedule_appointment()</span><span class="desc">reusa AppointmentsPage service</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="s-head"><span class="s-num">05</span><h2>Fases y tiempo</h2></div>
+    <p class="lede">Estimado de trabajo enfocado (no calendario) para el camino ligero — es la pregunta que estaba abierta.</p>
+    <div class="timeline">
+      <div class="phase">
+        <div class="dur">2–3 días</div>
+        <div class="body">
+          <h3>Diseño de tools y guardrails</h3>
+          <p>Definir qué acciones existentes se exponen, qué requiere confirmación explícita (todo lo que gasta dinero o es irreversible) y el scoping por cuenta de anunciante.</p>
+        </div>
+        <div class="tickline"><div class="tickfill" style="width:18%"></div></div>
+      </div>
+      <div class="phase">
+        <div class="dur">3–4 días</div>
+        <div class="body">
+          <h3>Orquestador backend</h3>
+          <p>Endpoint con loop de tool-calling sobre los servicios ya existentes; sin lógica de negocio nueva, solo el puente LLM → función.</p>
+        </div>
+        <div class="tickline"><div class="tickfill" style="width:40%"></div></div>
+      </div>
+      <div class="phase">
+        <div class="dur">3–4 días</div>
+        <div class="body">
+          <h3>Panel de chat (frontend)</h3>
+          <p>Nueva pestaña en el dashboard: lista de mensajes, botones de acción rápida, mini-forms para datos estructurados, streaming de respuesta.</p>
+        </div>
+        <div class="tickline"><div class="tickfill" style="width:62%"></div></div>
+      </div>
+      <div class="phase">
+        <div class="dur">2–3 días</div>
+        <div class="body">
+          <h3>QA y piloto con un cliente real</h3>
+          <p>Probar con datos reales de una cuenta (p. ej. tecnologicotlaxiaco), afinar confirmaciones y mensajes de error.</p>
+        </div>
+        <div class="tickline"><div class="tickfill" style="width:100%"></div></div>
+      </div>
+    </div>
+    <div class="total-row">
+      <span class="label">Total trabajo enfocado</span>
+      <span class="value">10–14 días · ~1.5–2 semanas</span>
+    </div>
+    <p style="margin-top:10px; font-size:13px; color:var(--ink-soft);">En calendario real — una sola persona alternando con lo demás en curso (CI roto, verificación de negocio, etc.) — esto tiende a estirarse a <strong>3–4 semanas</strong>. El camino completo (motor de bloques) es otra escala: <strong>6–10 semanas</strong>.</p>
+  </section>
+
+  <section>
+    <div class="s-head"><span class="s-num">06</span><h2>Riesgos y decisiones abiertas</h2></div>
+    <div class="table-scroll">
+      <table class="risk-table">
+        <thead><tr><th style="width:90px;">Severidad</th><th>Riesgo</th><th>Mitigación propuesta</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="sev med">Media</span></td>
+            <td>El LLM ejecuta una acción costosa (lanzar campaña, gastar cupón) sin que el usuario la haya pedido con claridad.</td>
+            <td>Confirmación explícita en el chat antes de cualquier tool que escriba o gaste — nunca ejecución silenciosa.</td>
+          </tr>
+          <tr>
+            <td><span class="sev med">Media</span></td>
+            <td>Costo por conversación (llamadas al LLM) no está presupuestado en los planes actuales.</td>
+            <td>Medir costo real en el piloto antes de decidir si se cobra aparte o se absorbe.</td>
+          </tr>
+          <tr>
+            <td><span class="sev low">Baja</span></td>
+            <td>El copiloto no entiende una solicitud fuera de las tools definidas.</td>
+            <td>Respuesta honesta + enlace directo a la página del dashboard que sí resuelve eso — nunca inventar una acción.</td>
+          </tr>
+          <tr>
+            <td><span class="sev low">Baja</span></td>
+            <td>Confusión entre este copiloto y el bot de WhatsApp que ya conversa con los clientes del anunciante.</td>
+            <td>Nombrarlo y ubicarlo sin ambigüedad como herramienta interna del dueño, no como canal de cara al cliente final.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="doc">
+    <span>adradio/research/copiloto-crm-spec.html</span>
+    <span>siguiente paso: decidir si se autoriza la Fase 0</span>
+  </footer>
+
+</div>
