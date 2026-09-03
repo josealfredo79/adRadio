@@ -12,9 +12,7 @@ from app.api.deps import get_current_user, get_db
 from app.models.message import Message
 from app.models.campaign import Campaign
 from app.models.user import User
-from app.models.order import Order
 from app.models.contact import Contact
-from app.models.conversation import Conversation
 from app.models.appointment import Appointment
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -63,115 +61,9 @@ async def analytics_summary(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Aggregated KPIs: delivery/open/response rates, totals."""
-    uid = current_user.id
-    now = datetime.now(timezone.utc)
-    first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    from app.services.analytics_service import compute_analytics_summary
 
-    total_out = await db.scalar(
-        select(func.count()).where(
-            Message.advertiser_id == uid,
-            Message.direction == "outbound",
-        )
-    )
-    total_in = await db.scalar(
-        select(func.count()).where(
-            Message.advertiser_id == uid,
-            Message.direction == "inbound",
-        )
-    )
-    sent = await db.scalar(
-        select(func.count()).where(
-            Message.advertiser_id == uid,
-            Message.direction == "outbound",
-            Message.status != "queued",
-        )
-    )
-    delivered = await db.scalar(
-        select(func.count()).where(
-            Message.advertiser_id == uid,
-            Message.direction == "outbound",
-            Message.delivered_at.isnot(None),
-        )
-    )
-    read = await db.scalar(
-        select(func.count()).where(
-            Message.advertiser_id == uid,
-            Message.direction == "outbound",
-            Message.read_at.isnot(None),
-        )
-    )
-    replied = await db.scalar(
-        select(func.count()).where(
-            Message.advertiser_id == uid,
-            Message.direction == "inbound",
-        )
-    )
-    failed = await db.scalar(
-        select(func.count()).where(
-            Message.advertiser_id == uid,
-            Message.direction == "outbound",
-            Message.status == "failed",
-        )
-    )
-
-    active_contacts = await db.scalar(
-        select(func.count()).where(
-            Contact.advertiser_id == uid,
-            Contact.status == "active",
-        )
-    )
-    total_campaigns = await db.scalar(
-        select(func.count()).where(
-            Campaign.advertiser_id == uid,
-        )
-    )
-    active_campaigns = await db.scalar(
-        select(func.count()).where(
-            Campaign.advertiser_id == uid,
-            Campaign.status.in_(["running", "scheduled"]),
-        )
-    )
-    orders_confirmed = await db.scalar(
-        select(func.count()).where(
-            Order.advertiser_id == uid,
-            Order.state == "confirmed",
-        )
-    )
-    conversations_active = await db.scalar(
-        select(func.count()).where(
-            Conversation.advertiser_id == uid,
-            Conversation.status == "active",
-        )
-    )
-
-    sent_val = sent or 0
-    delivery_rate = round((delivered or 0) / sent_val * 100, 1) if sent_val > 0 else 0.0
-    read_rate = round((read or 0) / sent_val * 100, 1) if sent_val > 0 else 0.0
-    response_rate = round((replied or 0) / sent_val * 100, 1) if sent_val > 0 else 0.0
-
-    return {
-        "totals": {
-            "messages_outbound": total_out or 0,
-            "messages_inbound": total_in or 0,
-            "sent": sent_val,
-            "delivered": delivered or 0,
-            "read": read or 0,
-            "replied": replied or 0,
-            "failed": failed or 0,
-        },
-        "rates": {
-            "delivery_rate": delivery_rate,
-            "read_rate": read_rate,
-            "response_rate": response_rate,
-        },
-        "business": {
-            "active_contacts": active_contacts or 0,
-            "total_campaigns": total_campaigns or 0,
-            "active_campaigns": active_campaigns or 0,
-            "orders_confirmed": orders_confirmed or 0,
-            "conversations_active": conversations_active or 0,
-        },
-    }
+    return await compute_analytics_summary(db, current_user.id)
 
 
 @router.get("/campaign-performance")

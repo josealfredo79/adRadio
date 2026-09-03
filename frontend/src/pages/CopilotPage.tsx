@@ -379,8 +379,11 @@ export default function CopilotPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const chatMutation = useMutation({
+    // El endpoint puede hacer varias idas y vueltas con Claude (tool-calling
+    // en cadena) antes de responder — el timeout global de 10s del cliente
+    // axios se queda corto y aborta antes de que el backend termine.
     mutationFn: (payload: { message: string; history: HistoryTurn[] }) =>
-      api.post<CopilotChatResponse>('/copilot/chat', payload).then((r) => r.data),
+      api.post<CopilotChatResponse>('/copilot/chat', payload, { timeout: 45000 }).then((r) => r.data),
   })
 
   const confirmMutation = useMutation({

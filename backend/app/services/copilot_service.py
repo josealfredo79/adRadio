@@ -36,7 +36,7 @@ from app.models.contact import Contact
 from app.models.coupon import Coupon
 from app.models.user import User
 from app.schemas.contact import ContactCreate
-from app.services.analytics_service import capture_event
+from app.services.analytics_service import capture_event, compute_analytics_summary
 from app.services.availability_service import TZ
 from app.services.campaign_stats_service import compute_campaign_stats, merge_stats
 from app.services.coupon_service import default_expiry, generate_coupon_code
@@ -130,6 +130,18 @@ TOOLS = [
             },
             "required": [],
         },
+    },
+    {
+        "name": "get_analytics_overview",
+        "description": (
+            "Obtiene un resumen agregado de analíticas del negocio: totales de mensajes "
+            "enviados/entregados/leídos/respondidos, tasas de entrega/lectura/respuesta, "
+            "y KPIs de negocio (contactos activos, campañas activas, pedidos confirmados, "
+            "conversaciones activas). Úsala para '¿cómo van mis analíticas/estadísticas?', "
+            "'dame un resumen', 'cómo va mi negocio' — es UNA sola llamada, no necesitas "
+            "combinarla con list_campaigns ni get_campaign_stats para responder esto."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "get_campaign_stats",
@@ -316,6 +328,8 @@ def _summarize(tool_name: str, data: dict) -> str:
         return f"Se encontraron {data.get('count', 0)} contacto(s)."
     if tool_name == "list_campaigns":
         return f"Se encontraron {data.get('count', 0)} campaña(s)."
+    if tool_name == "get_analytics_overview":
+        return "Resumen de analíticas del negocio."
     if tool_name == "get_campaign_stats":
         return f"Estadísticas de la campaña \"{data.get('name', '')}\"."
     if tool_name == "create_contact":
@@ -462,6 +476,8 @@ async def _execute_immediate_tool(db: AsyncSession, user: User, tool_name: str, 
             return await _tool_list_contacts(db, user, args)
         if tool_name == "list_campaigns":
             return await _tool_list_campaigns(db, user, args)
+        if tool_name == "get_analytics_overview":
+            return await compute_analytics_summary(db, user.id)
         if tool_name == "get_campaign_stats":
             return await _tool_get_campaign_stats(db, user, args)
         if tool_name == "create_contact":
