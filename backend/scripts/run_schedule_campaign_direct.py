@@ -1,12 +1,10 @@
-import asyncio
-import sys
 import os
-import uuid
+import sys
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from app.database import AsyncSessionLocal
 from app.workers.tasks import schedule_campaign
+
 
 def main():
     # Usaremos una de las campañas de la parrilla que están en estado "running" en tu base de datos:

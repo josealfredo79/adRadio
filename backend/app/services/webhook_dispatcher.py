@@ -37,7 +37,7 @@ async def dispatch_webhook_event(
     result = await db.execute(
         select(UserWebhook).where(
             UserWebhook.user_id == advertiser_id,
-            UserWebhook.active == True,  # noqa: E712
+            UserWebhook.active == True,
             # events is JSONB (a plain array column), not Postgres ARRAY — .any()
             # is an ARRAY-comparator method and raises AttributeError on JSONB.
             # .contains([event]) compiles to the `@>` containment operator instead.

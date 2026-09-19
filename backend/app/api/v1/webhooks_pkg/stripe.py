@@ -2,18 +2,19 @@
 Stripe webhook handler — subscription and payment events.
 """
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.payments import PLAN_MESSAGES, PLANS
 from app.config import settings
+from app.core.rate_limiter import limiter
 from app.database import get_db
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.analytics_service import capture_event
-from app.api.v1.payments import PLAN_MESSAGES, PLANS
-from app.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +229,6 @@ async def stripe_webhook(
 
     elif event_type == "customer.subscription.updated":
         status = data.get("status")
-        subscription_id = data.get("id", "unknown")
         user = await _lookup_user(customer_id, db)
         if not user:
             return {"received": True}
@@ -298,7 +298,6 @@ async def stripe_webhook(
         user.subscription_status = "churned"
         user.messages_remaining = 0
         user.cancel_at_period_end = False
-        await release_pool_number(user, db)
         await db.commit()
         logger.info("[WEBHOOK] Subscription deleted for user %s", user.id)
 
@@ -313,7 +312,7 @@ async def stripe_webhook(
             )
             txn = result.scalar_one_or_none()
             if txn:
-                txn.status = "refunded" if event_type == "charge.refunded" else "refunded"
+                txn.status = "refunded"
                 await db.commit()
                 logger.info("[WEBHOOK] Transaction %s updated to refunded", payment_intent)
 

@@ -2,8 +2,8 @@
 Tests de integración para la API REST de IaRadio.
 Requieren base de datos PostgreSQL — skip si no está disponible.
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -24,7 +24,7 @@ db_reason = "Requiere base de datos (TEST_DATABASE_URL o DATABASE_URL)"
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_health_endpoint():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -38,7 +38,7 @@ async def test_health_endpoint():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_protected_endpoint_returns_401():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -49,7 +49,7 @@ async def test_protected_endpoint_returns_401():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_customer_stories_public():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -61,7 +61,7 @@ async def test_customer_stories_public():
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_robots_txt_accessible():
     """Robots.txt should be served in production (from static dir)."""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -73,7 +73,7 @@ async def test_robots_txt_accessible():
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_sitemap_xml_accessible():
     """Sitemap.xml should be served in production."""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -85,7 +85,7 @@ async def test_sitemap_xml_accessible():
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_contacts_requires_auth():
     """Contacts endpoints are protected."""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -97,7 +97,7 @@ async def test_contacts_requires_auth():
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_payments_plans_public():
     """Plans endpoint is public."""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -112,7 +112,7 @@ async def test_payments_plans_public():
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_checkout_requires_auth():
     """Checkout endpoint requires authentication."""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

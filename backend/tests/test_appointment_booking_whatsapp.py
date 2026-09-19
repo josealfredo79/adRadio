@@ -81,13 +81,13 @@ class TestAppointmentBookingViaWhatsApp:
                 assert result1 == {"message": "ok"}
                 assert "día" in send1.call_args.args[1].lower()
 
-                result2, send2 = await _send_message(advertiser, "mañana")
+                _result2, send2 = await _send_message(advertiser, "mañana")
                 assert "1)" in send2.call_args.args[1]
 
-                result3, send3 = await _send_message(advertiser, "1")
+                _result3, send3 = await _send_message(advertiser, "1")
                 assert "nombre" in send3.call_args.args[1].lower()
 
-                result4, send4 = await _send_message(advertiser, "Ana Torres")
+                _result4, send4 = await _send_message(advertiser, "Ana Torres")
                 assert "confirmada" in send4.call_args.args[1].lower()
 
             async with AsyncSessionLocal() as db:
@@ -120,12 +120,12 @@ class TestAppointmentBookingViaWhatsApp:
         """Sanity check that the new branch is additive: an unrelated
         WhatsApp conversation with no pending order/appointment still reaches
         appointment detection normally."""
-        user_id, contact_id = await _seed_advertiser_and_contact()
+        user_id, _contact_id = await _seed_advertiser_and_contact()
         try:
             async with AsyncSessionLocal() as db:
                 advertiser = await db.get(User, user_id)
             with patch("app.services.inbound_pipeline.answer_with_rag", new=AsyncMock(return_value="Abrimos 9-6.")):
-                result, send = await _send_message(advertiser, "¿cuál es su horario de atención?")
+                result, _send = await _send_message(advertiser, "¿cuál es su horario de atención?")
             assert result == {"message": "ok"}
             # Falls through to RAG (no appointment/order keyword) — just
             # confirms no exception and the pipeline completed normally.

@@ -1,5 +1,6 @@
 import re
 import uuid
+
 from pydantic import BaseModel, EmailStr, field_validator
 
 

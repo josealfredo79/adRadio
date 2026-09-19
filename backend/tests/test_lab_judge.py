@@ -95,7 +95,7 @@ class TestEvaluateTranscript:
 
     @pytest.mark.asyncio
     async def test_api_failure_returns_diagnostic_finding_not_raise(self, mock_db, test_user):
-        mock_db.execute.return_value = MagicMock(all=lambda: [])
+        mock_db.execute.return_value = MagicMock(all=list)
         transcript = [{"role": "user", "content": "hola"}, {"role": "assistant", "content": "hola!"}]
         with patch(
             "app.services.lab.judge.chat_completion",
@@ -108,7 +108,7 @@ class TestEvaluateTranscript:
 
     @pytest.mark.asyncio
     async def test_malformed_judge_response_returns_diagnostic_finding(self, mock_db, test_user):
-        mock_db.execute.return_value = MagicMock(all=lambda: [])
+        mock_db.execute.return_value = MagicMock(all=list)
         transcript = [{"role": "user", "content": "hola"}, {"role": "assistant", "content": "hola!"}]
         with patch(
             "app.services.lab.judge.chat_completion",

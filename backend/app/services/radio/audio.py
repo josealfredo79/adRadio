@@ -48,7 +48,7 @@ def resolve_sfx_events(mode: str, voice_len_ms: int) -> list[tuple[str, int]]:
     return events
 
 
-def _overlay_sfx(track: "AudioSegment", sfx_name: str, position_ms: int, gain_db: float = -9.0) -> "AudioSegment":  # type: ignore[name-defined]
+def _overlay_sfx(track: "AudioSegment", sfx_name: str, position_ms: int, gain_db: float = -9.0) -> "AudioSegment":  # type: ignore[name-defined]  # noqa: F821
     """Superpone un efecto corto sobre `track` en `position_ms`, a un volumen
     bajo el de la voz/jingle para que acentúe sin taparlos."""
     path = SFX_DIR / SFX_FILES.get(sfx_name, "")
@@ -185,9 +185,13 @@ def _apply_peak_ceiling(segment, ceiling_db: float = -2.0):
     return segment
 
 
-def _process_voice(voice: "AudioSegment") -> "AudioSegment":  # type: ignore[name-defined]
+def _process_voice(voice: "AudioSegment") -> "AudioSegment":  # type: ignore[name-defined]  # noqa: F821
     try:
-        from pydub.effects import high_pass_filter, normalize, compress_dynamic_range  # type: ignore
+        from pydub.effects import (  # type: ignore
+            compress_dynamic_range,
+            high_pass_filter,
+            normalize,
+        )
 
         voice = high_pass_filter(voice, cutoff=120)
         # Compresión tipo locutor de radio: pareja el volumen entre sílabas
@@ -219,8 +223,6 @@ def mix_with_jingle(
     Mezcla profesional de radio con ducking automático.
     """
     try:
-        from pydub import AudioSegment  # type: ignore
-
         # Decodificar desde un archivo temporal, no io.BytesIO() directo:
         # BytesIO no tiene nombre de archivo, así que pydub se lo pasa a
         # ffmpeg por stdin ("cache:pipe:0") — un pipe no es seekable, y el
@@ -233,6 +235,8 @@ def mix_with_jingle(
         # mezclar, en silencio. Pendiente: decidir si vale la pena
         # reintentar la llamada a TTS en ese caso.
         import tempfile
+
+        from pydub import AudioSegment  # type: ignore
         with tempfile.NamedTemporaryFile(suffix=".mp3") as tmp:
             tmp.write(voice_bytes)
             tmp.flush()

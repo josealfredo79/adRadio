@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 
 from app.database import AsyncSessionLocal, engine
 from app.models.contact import Contact

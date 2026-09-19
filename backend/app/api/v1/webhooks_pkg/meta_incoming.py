@@ -115,10 +115,7 @@ async def _validate_signature(db: AsyncSession, raw_body: bytes, header: str, pa
     # No secret we can check against — neither the global one nor a stored
     # per-advertiser one — fall back to trusting the URL being unlisted
     # (unchanged legacy behavior; Railway runs with META_APP_SECRET empty).
-    if not settings.META_APP_SECRET and per_advertiser is None:
-        return True
-
-    return False
+    return not settings.META_APP_SECRET and per_advertiser is None
 
 
 def _extract_body_text(msg: dict) -> tuple[str, str | None]:
@@ -296,7 +293,7 @@ async def meta_incoming(
                     external_message_id=wamid,
                 )
 
-                async def _send(to: str, body: str) -> tuple[str | None, str | None]:
+                async def _send(to: str, body: str, advertiser=advertiser) -> tuple[str | None, str | None]:
                     return await send_whatsapp(to, body, advertiser=advertiser)
 
                 try:

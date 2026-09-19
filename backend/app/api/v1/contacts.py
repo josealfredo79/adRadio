@@ -6,7 +6,17 @@ import io
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, UploadFile, File, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -17,9 +27,15 @@ from app.core.rate_limiter import limiter
 from app.database import get_db
 from app.models.contact import Contact
 from app.models.user import User
-from app.schemas.contact import ContactCreate, ContactListResponse, ContactOut, ContactUpdate
-from app.workers.tasks import import_contacts_csv
+from app.schemas.contact import (
+    ContactCreate,
+    ContactListResponse,
+    ContactOut,
+    ContactUpdate,
+)
 from app.services.analytics_service import capture_event
+from app.workers.tasks import import_contacts_csv
+
 
 class BulkTagRequest(BaseModel):
     contact_ids: list[str]

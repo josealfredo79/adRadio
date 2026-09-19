@@ -1,9 +1,10 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from app.workers.celery_app import celery_app
+
 
 def check_workers():
     print("📡 Inspeccionando el servidor Redis de producción para buscar Workers de Celery activos...")
@@ -28,7 +29,7 @@ def check_workers():
         # También inspeccionamos las tareas registradas
         registered = inspect.registered()
         if registered:
-            print(f"📋 El worker tiene registradas {len(list(registered.values())[0])} tareas en el broker.")
+            print(f"📋 El worker tiene registradas {len(next(iter(registered.values())))} tareas en el broker.")
             
     except Exception as e:
         print(f"❌ Error al intentar conectar e inspeccionar Celery: {e}")

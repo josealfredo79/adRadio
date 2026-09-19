@@ -234,9 +234,11 @@ class TestSuggestLandingTagline:
         try:
             async with AsyncSessionLocal() as db:
                 user = await db.get(User, user_id)
-                with patch("app.services.llm_client.chat_completion", new=AsyncMock(return_value="not json")):
-                    with pytest.raises(HTTPException) as exc_info:
-                        await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
+                with (
+                    patch("app.services.llm_client.chat_completion", new=AsyncMock(return_value="not json")),
+                    pytest.raises(HTTPException) as exc_info,
+                ):
+                    await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
                 assert exc_info.value.status_code == 502
         finally:
             await _cleanup([user_id])
@@ -247,9 +249,11 @@ class TestSuggestLandingTagline:
         try:
             async with AsyncSessionLocal() as db:
                 user = await db.get(User, user_id)
-                with patch("app.services.llm_client.chat_completion", new=AsyncMock(return_value='{"suggestions": []}')):
-                    with pytest.raises(HTTPException) as exc_info:
-                        await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
+                with (
+                    patch("app.services.llm_client.chat_completion", new=AsyncMock(return_value='{"suggestions": []}')),
+                    pytest.raises(HTTPException) as exc_info,
+                ):
+                    await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
                 assert exc_info.value.status_code == 502
         finally:
             await _cleanup([user_id])

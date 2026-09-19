@@ -4,16 +4,17 @@ Revision ID: 0013_message_templates
 Revises: 0012_appt_awaiting_reschedule
 Create Date: 2026-06-01
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 revision: str = "0013_message_templates"
-down_revision: Union[str, None] = "0012_appt_awaiting_reschedule"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0012_appt_awaiting_reschedule"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

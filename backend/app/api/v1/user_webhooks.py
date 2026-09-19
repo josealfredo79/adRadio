@@ -140,10 +140,12 @@ async def test_webhook(
     if not wh:
         raise HTTPException(status_code=404, detail="Webhook no encontrado")
 
-    from app.services.webhook_dispatcher import _sign_body
     import json
     from datetime import datetime, timezone
+
     import httpx
+
+    from app.services.webhook_dispatcher import _sign_body
 
     body_data = {
         "event": "test.ping",

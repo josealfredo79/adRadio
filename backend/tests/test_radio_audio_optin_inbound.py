@@ -163,7 +163,7 @@ class TestPendingAudioConfirm:
         the resume no longer early-returns, a reply that carries real intent
         still reaches the bot (A fix)."""
         run_id = uuid.uuid4().hex[:8]
-        advertiser_id, contact_id, pending_msg_id, phone = await _seed_with_pending(
+        advertiser_id, _contact_id, pending_msg_id, phone = await _seed_with_pending(
             f"5{run_id[:6]}", "audio", {"audio_url": "https://example.com/cuna.ogg", "script": "test script"},
         )
 
@@ -230,7 +230,7 @@ class TestPendingAudioConfirm:
     @pytest.mark.asyncio
     async def test_bare_yes_gets_short_ack_not_a_confused_bot_turn(self):
         run_id = uuid.uuid4().hex[:8]
-        advertiser_id, contact_id, pending_msg_id, phone = await _seed_with_pending(
+        advertiser_id, _contact_id, _pending_msg_id, phone = await _seed_with_pending(
             f"8{run_id[:6]}", "audio", {"audio_url": "https://example.com/cuna.ogg", "script": "s"},
         )
         async with AsyncSessionLocal() as db:
@@ -257,7 +257,7 @@ class TestPendingAudioConfirm:
         must not re-dispatch — the query only matches queued [PENDING:%
         rows."""
         run_id = uuid.uuid4().hex[:8]
-        advertiser_id, contact_id, pending_msg_id, phone = await _seed_with_pending(
+        advertiser_id, _contact_id, _pending_msg_id, phone = await _seed_with_pending(
             f"4{run_id[:6]}", "audio", {"audio_url": "https://example.com/cuna.ogg", "script": "test script"},
         )
 
@@ -289,7 +289,7 @@ class TestPendingBannerConfirm:
     @pytest.mark.asyncio
     async def test_confirm_reply_dispatches_the_pending_banner(self):
         run_id = uuid.uuid4().hex[:8]
-        advertiser_id, contact_id, pending_msg_id, phone = await _seed_with_pending(
+        advertiser_id, _contact_id, pending_msg_id, phone = await _seed_with_pending(
             f"6{run_id[:6]}", "banner", {"banner_url": "https://example.com/banner.png", "caption": "¡Mira esto!"},
         )
 
@@ -322,7 +322,7 @@ class TestPendingTextConfirm:
     @pytest.mark.asyncio
     async def test_confirm_reply_dispatches_the_pending_text(self):
         run_id = uuid.uuid4().hex[:8]
-        advertiser_id, contact_id, pending_msg_id, phone = await _seed_with_pending(
+        advertiser_id, _contact_id, pending_msg_id, phone = await _seed_with_pending(
             f"7{run_id[:6]}", "text", {"body": "Hola, tenemos una promo para ti"},
         )
 

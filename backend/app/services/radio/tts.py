@@ -38,6 +38,7 @@ GOOGLE_VOICE_MAP = {
 async def _tts_fish_audio(text: str, voice_id: str | None) -> bytes:
     """Sintetiza voz con Fish Audio S2 (alta calidad). Retorna bytes MP3."""
     from fishaudio import AsyncFishAudio  # type: ignore
+
     from app.config import settings
 
     client = AsyncFishAudio(api_key=settings.FISH_AUDIO_API_KEY)
@@ -67,8 +68,10 @@ async def _tts_edge(text: str, voice: str, rate: str = "-5%", pitch: str = "-5Hz
 
 async def _tts_google_cloud(text: str, voice_name: str = "es-ES-Neural2-F") -> bytes:
     """Sintetiza voz con Google Cloud Text-to-Speech (WaveNet). Retorna bytes MP3."""
-    from google.cloud import texttospeech_v1 as tts
     import json
+
+    from google.cloud import texttospeech_v1 as tts
+
     from app.config import settings
 
     credentials_info = json.loads(settings.GOOGLE_SERVICE_ACCOUNT_JSON) if settings.GOOGLE_SERVICE_ACCOUNT_JSON else {}

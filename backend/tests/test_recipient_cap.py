@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.meta_quality_service import resolve_tier_limit, _DEFAULT_TIER_LIMIT
+from app.services.meta_quality_service import _DEFAULT_TIER_LIMIT, resolve_tier_limit
 from app.workers.task_helpers.campaign_ops import (
     RecipientCapState,
     _offer_or_queue,

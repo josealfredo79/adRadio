@@ -4,12 +4,13 @@ Uso: python test_templates_aprobacion.py <numero_destino>
 Ejemplo: python test_templates_aprobacion.py +521234567890
 """
 import asyncio
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from app.services.twilio_service import send_whatsapp_buttons
+
 from app.config import settings
 
 
@@ -17,7 +18,7 @@ async def test_template(nombre: str, sid: str, to: str):
     print(f"Probando plantilla: {nombre}")
     print(f"  SID: {sid}")
     if not sid:
-        print(f"  ⏭️  No configurada, se salta")
+        print("  ⏭️  No configurada, se salta")
         return
 
     sid_result, err = await send_whatsapp_buttons(

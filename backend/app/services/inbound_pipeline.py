@@ -9,9 +9,10 @@ fallback, message persistence, follow-up jobs) lives here.
 import json
 import logging
 import re
+import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Awaitable, Callable
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -27,8 +28,13 @@ from app.models.message import Message
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.user import User
+from app.services import voces_copy
 from app.services.appointment_booking_service import handle_appointment_booking
-from app.services.catalog_service import get_active_products, handle_catalog_query, match_products_in_text
+from app.services.catalog_service import (
+    get_active_products,
+    handle_catalog_query,
+    match_products_in_text,
+)
 from app.services.claude_service import (
     detect_order_intent,
     detect_plan_purchase_intent,
@@ -42,12 +48,11 @@ from app.services.coupon_service import (
     is_expired,
     is_redeem_intent,
 )
-from app.services import voces_copy
 from app.services.handoff_service import matches_handoff_intent
-from app.services.rag_service import answer_with_rag
-from app.services.template_lookup import get_template
 from app.services.lead_score import calculate_lead_score
+from app.services.rag_service import answer_with_rag
 from app.services.realtime import publish_conversation_event
+from app.services.template_lookup import get_template
 
 logger = logging.getLogger(__name__)
 
@@ -885,8 +890,9 @@ async def process_inbound_message(
                 owner_number = advertiser.whatsapp_number or advertiser.phone
                 await send_owner(owner_number, wa_notify)
 
-            from app.core.email import send_new_order_email
             import asyncio
+
+            from app.core.email import send_new_order_email
             asyncio.create_task(
                 send_new_order_email(
                     to=advertiser.email,
@@ -1124,8 +1130,8 @@ async def process_inbound_message(
                 bot_personality=advertiser.bot_personality or "amigable y profesional",
                 time_gap_note=time_gap_note,
             )
-        except Exception as e:
-            logger.error("[PIPELINE] RAG/Claude error: %s", e, exc_info=True)
+        except Exception:
+            logger.exception("[PIPELINE] RAG/Claude error")
             # Escalar en vez de arriesgarse a que el bot siga "adivinando" sin
             # el modelo funcionando — un genérico repetido en cada turno se
             # siente peor que admitir el problema y pasar a un humano.

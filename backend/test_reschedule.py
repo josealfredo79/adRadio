@@ -1,13 +1,15 @@
 import asyncio
-from httpx import ASGITransport, AsyncClient
-from app.main import app
-from app.database import AsyncSessionLocal
-from app.models.user import User
-from app.models.appointment import Appointment
-from sqlalchemy import select, delete
 from datetime import datetime, timedelta, timezone
 
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete, select
+
 import app.api.v1.webhooks as webhooks_module
+from app.database import AsyncSessionLocal
+from app.main import app
+from app.models.appointment import Appointment
+from app.models.user import User
+
 # Mock Twilio validation
 webhooks_module._validate_twilio_signature = lambda *args, **kwargs: True
 
@@ -50,7 +52,7 @@ async def check_appt_state(appt_id: str):
         return result.scalar_one_or_none()
 
 async def run_tests():
-    user_id, appt_id = await setup_db()
+    _user_id, appt_id = await setup_db()
 
     print("--- Probando Flujo de Reagendamiento ---")
     appt = await check_appt_state(appt_id)

@@ -1,12 +1,14 @@
 import asyncio
-import sys
 import os
+import sys
+
 from sqlalchemy import select
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from app.database import AsyncSessionLocal
 from app.models.user import User
+
 
 async def read_logs():
     print("📡 Consultando base de datos de producción para telemetría de logs...")

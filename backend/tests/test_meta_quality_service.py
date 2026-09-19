@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.meta_quality_service import apply_quality_signal, is_ban_risk_error, pause_active_campaigns
+from app.services.meta_quality_service import (
+    apply_quality_signal,
+    is_ban_risk_error,
+    pause_active_campaigns,
+)
 
 
 def _db_with_campaigns(campaigns):

@@ -112,7 +112,7 @@ class TestUpdateProduct:
         try:
             async with AsyncSessionLocal() as db:
                 user = await db.get(User, user_id)
-                created = await create_product(body=ProductCreate(name="Original", price=Decimal("50")), db=db, current_user=user)
+                created = await create_product(body=ProductCreate(name="Original", price=Decimal(50)), db=db, current_user=user)
 
             async with AsyncSessionLocal() as db:
                 user = await db.get(User, user_id)
@@ -122,7 +122,7 @@ class TestUpdateProduct:
                 )
             assert updated.name == "Editado"
             assert updated.active is False
-            assert updated.price == Decimal("50")  # untouched field preserved
+            assert updated.price == Decimal(50)  # untouched field preserved
         finally:
             await _cleanup([user_id])
 

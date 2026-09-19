@@ -64,11 +64,11 @@ class TestFormatSpanishDate:
         # 2026-08-08 is a Saturday — strftime('%A %d de %B') would render
         # "Saturday 08 de August" on a host without the es_MX locale installed.
         from datetime import datetime
-        assert format_spanish_date(datetime(2026, 8, 8)) == "sábado 8 de agosto"
+        assert format_spanish_date(datetime(2026, 8, 8)) == "sábado 8 de agosto"  # noqa: DTZ001
 
     def test_monday(self):
         from datetime import datetime
-        assert format_spanish_date(datetime(2026, 8, 10)) == "lunes 10 de agosto"
+        assert format_spanish_date(datetime(2026, 8, 10)) == "lunes 10 de agosto"  # noqa: DTZ001
 
 
 async def _seed_user(**overrides):

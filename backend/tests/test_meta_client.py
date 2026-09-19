@@ -4,7 +4,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.services.meta_client import MetaApiError, download_media, graph_request, normalize_recipient
+from app.services.meta_client import (
+    MetaApiError,
+    download_media,
+    graph_request,
+    normalize_recipient,
+)
 
 
 def _mock_response(status_code=200, json_data=None, is_error=False):
@@ -102,18 +107,20 @@ class TestNormalizeRecipient:
 class TestDownloadMedia:
     @pytest.mark.asyncio
     async def test_success_returns_bytes_and_mime_type(self):
-        with patch("app.services.meta_client.graph_request", new=AsyncMock(return_value={
-            "url": "https://lookaside.fbsbx.com/whatsapp_business/attachments/xyz",
-            "mime_type": "audio/ogg",
-        })):
-            with patch("httpx.AsyncClient") as mock_client:
-                media_resp = MagicMock()
-                media_resp.content = b"fake-audio-bytes"
-                media_resp.raise_for_status = MagicMock()
-                mock_client.return_value.__aenter__.return_value.get.return_value = media_resp
+        with (
+            patch("app.services.meta_client.graph_request", new=AsyncMock(return_value={
+                "url": "https://lookaside.fbsbx.com/whatsapp_business/attachments/xyz",
+                "mime_type": "audio/ogg",
+            })),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            media_resp = MagicMock()
+            media_resp.content = b"fake-audio-bytes"
+            media_resp.raise_for_status = MagicMock()
+            mock_client.return_value.__aenter__.return_value.get.return_value = media_resp
 
-                result = await download_media("media-id-123", "tok")
-                assert result == (b"fake-audio-bytes", "audio/ogg")
+            result = await download_media("media-id-123", "tok")
+            assert result == (b"fake-audio-bytes", "audio/ogg")
 
     @pytest.mark.asyncio
     async def test_resolve_failure_returns_none(self):
@@ -131,12 +138,14 @@ class TestDownloadMedia:
 
     @pytest.mark.asyncio
     async def test_download_http_error_returns_none(self):
-        with patch("app.services.meta_client.graph_request", new=AsyncMock(return_value={
-            "url": "https://example.com/x", "mime_type": "audio/ogg",
-        })):
-            with patch("httpx.AsyncClient") as mock_client:
-                mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                    side_effect=httpx.HTTPError("boom")
-                )
-                result = await download_media("media-id", "tok")
-                assert result is None
+        with (
+            patch("app.services.meta_client.graph_request", new=AsyncMock(return_value={
+                "url": "https://example.com/x", "mime_type": "audio/ogg",
+            })),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                side_effect=httpx.HTTPError("boom")
+            )
+            result = await download_media("media-id", "tok")
+            assert result is None

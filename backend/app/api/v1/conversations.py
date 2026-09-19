@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from redis.asyncio import Redis as AsyncRedis
 from pydantic import BaseModel
+from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
@@ -177,7 +177,7 @@ async def conversation_events(current_user: User = Depends(get_current_user_sse)
                 await pubsub.unsubscribe(channel)
                 await pubsub.aclose()
             except Exception:
-                pass
+                logger.debug("[SSE] pubsub cleanup failed for advertiser=%s", current_user.id, exc_info=True)
 
     return StreamingResponse(
         event_stream(),

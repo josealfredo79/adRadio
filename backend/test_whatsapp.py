@@ -1,11 +1,12 @@
 import asyncio
-import sys
 import os
+import sys
 
 # Agregamos el directorio actual al path para que encuentre el módulo app
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from app.services.twilio_service import send_whatsapp
+
 
 async def main():
     if len(sys.argv) < 2:

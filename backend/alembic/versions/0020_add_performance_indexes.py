@@ -4,8 +4,8 @@ Revision ID: 0020_add_performance_indexes
 Revises: 0019_phase_b_features
 Create Date: 2026-06-03 12:30:00.000000
 """
+
 from alembic import op
-import sqlalchemy as sa
 
 revision = "0020_add_performance_indexes"
 down_revision = "0019_phase_b_features"

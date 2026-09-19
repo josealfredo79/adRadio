@@ -13,7 +13,7 @@ from sqlalchemy import select, update
 sys.path.insert(0, ".")
 
 from app.database import engine
-from app.models.user import User  # noqa: E402
+from app.models.user import User
 
 
 async def promote(email: str):

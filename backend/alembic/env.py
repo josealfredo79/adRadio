@@ -1,32 +1,32 @@
-from logging.config import fileConfig
 import asyncio
+from logging.config import fileConfig
 
 from sqlalchemy import event, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+from app.config import settings
+from app.database import Base, _set_search_path
+from app.models.api_key import ApiKey  # noqa: F401
+from app.models.appointment import Appointment  # noqa: F401
+from app.models.campaign import Campaign  # noqa: F401
+from app.models.contact import Contact  # noqa: F401
+from app.models.conversation import Conversation  # noqa: F401
+from app.models.coupon import Coupon  # noqa: F401
+from app.models.customer_story import CustomerStory  # noqa: F401
+from app.models.founder_program import FounderProgram  # noqa: F401
+from app.models.knowledge_base import KnowledgeBase  # noqa: F401
+from app.models.lab import LabConversation, LabRun  # noqa: F401
+from app.models.message import Message  # noqa: F401
+from app.models.order import Order  # noqa: F401
+from app.models.order_item import OrderItem  # noqa: F401
+from app.models.product import Product  # noqa: F401
+from app.models.send_block_log import SendBlockLog  # noqa: F401
+from app.models.transaction import Transaction  # noqa: F401
 
 # Import all models so Alembic can detect them
 from app.models.user import User  # noqa: F401
-from app.models.contact import Contact  # noqa: F401
-from app.models.campaign import Campaign  # noqa: F401
-from app.models.message import Message  # noqa: F401
-from app.models.knowledge_base import KnowledgeBase  # noqa: F401
-from app.models.conversation import Conversation  # noqa: F401
-from app.models.transaction import Transaction  # noqa: F401
-from app.models.appointment import Appointment  # noqa: F401
-from app.models.order import Order  # noqa: F401
-from app.models.product import Product  # noqa: F401
-from app.models.order_item import OrderItem  # noqa: F401
-from app.models.coupon import Coupon  # noqa: F401
-from app.models.customer_story import CustomerStory  # noqa: F401
 from app.models.user_webhook import UserWebhook  # noqa: F401
-from app.models.api_key import ApiKey  # noqa: F401
-from app.models.lab import LabRun, LabConversation  # noqa: F401
-from app.models.founder_program import FounderProgram  # noqa: F401
-from app.models.send_block_log import SendBlockLog  # noqa: F401
-from app.database import Base, _set_search_path
-from app.config import settings
 
 config = context.config
 

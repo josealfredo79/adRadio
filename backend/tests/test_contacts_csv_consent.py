@@ -7,8 +7,6 @@ import asyncio
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from app.workers.tasks import import_contacts_csv
 
 

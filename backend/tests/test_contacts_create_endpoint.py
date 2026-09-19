@@ -13,7 +13,7 @@ real-DB session style.
 import uuid
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
 
 from app.core.security import create_access_token, hash_password

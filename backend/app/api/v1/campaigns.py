@@ -9,14 +9,14 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from redis.asyncio import Redis as AsyncRedis
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
+from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user, check_feature_access, get_radio_limit
+from app.api.deps import check_feature_access, get_current_user, get_radio_limit
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
@@ -28,30 +28,34 @@ from app.schemas.campaign import (
     CampaignCreate,
     CampaignOut,
     CampaignUpdate,
+    CustomerStoryListOut,
+    CustomerStoryOut,
     GenerateContentRequest,
     GenerateContentResponse,
     GenerateImageRequest,
-    GenerateSequenceRequest,
-    GenerateSagaRequest,
-    GenerateSequenceResponse,
     GenerateRadioAdRequest,
-    ParrillaRequest,
+    GenerateSagaRequest,
+    GenerateSequenceRequest,
+    GenerateSequenceResponse,
     ParrillaJobOut,
+    ParrillaRequest,
     ParrillaStatusOut,
-    CustomerStoryOut,
-    CustomerStoryListOut,
+)
+from app.services.analytics_service import capture_event
+from app.services.banner_service import (
+    generate_banner_copy_with_claude,
+    generate_banner_png,
+    select_design,
 )
 from app.services.claude_service import (
     generate_campaign_variants,
-    generate_sequence_messages,
     generate_saga_episodes,
+    generate_sequence_messages,
     generate_voces_capsule,
 )
 from app.services.imagen_service import generate_flyer
-from app.services.analytics_service import capture_event
-from app.services.banner_service import generate_banner_png, generate_banner_copy_with_claude, select_design
 from app.services.radio_service import generate_radio_ad, generate_radio_script
-from app.workers.tasks import schedule_campaign, generate_parrilla_task
+from app.workers.tasks import generate_parrilla_task, schedule_campaign
 
 logger = logging.getLogger(__name__)
 
@@ -142,9 +146,9 @@ async def create_campaign(
         db.add(campaign)
         await db.commit()
         await db.refresh(campaign)
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        logger.error("Error al crear campaña: %s", e, exc_info=True)
+        logger.exception("Error al crear campaña")
         raise HTTPException(status_code=500, detail="Error al guardar la campaña. Intenta de nuevo.")
 
     # If scheduled, dispatch to Celery respecting the start_date
@@ -263,9 +267,9 @@ async def resume_campaign(
     campaign.status = "running"
     try:
         await db.commit()
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        logger.error("Error al reanudar campaña %s: %s", campaign_id, e, exc_info=True)
+        logger.exception("Error al reanudar campaña %s", campaign_id)
         raise HTTPException(status_code=500, detail="Error al iniciar la campaña. Intenta de nuevo.")
     schedule_campaign.delay(str(campaign.id))
     capture_event("campaign_sent", user_id=current_user.id, properties={
@@ -490,9 +494,6 @@ async def preview_banner(
 ) -> Response:
     """Generate and return a preview PNG banner (no R2 upload, no DB write)."""
     from fastapi.responses import Response as FastAPIResponse
-    from app.services.banner_service import (
-        generate_banner_png, generate_banner_copy_with_claude, select_design,
-    )
 
     design = select_design(body.business_category or current_user.business_category, None)
     palette = body.palette or design.palette
@@ -586,8 +587,9 @@ async def generate_radio_ad_endpoint(
     if limit == 0:
         raise HTTPException(status_code=402, detail="Tu plan no incluye cuñas de radio. Actualiza a Growth o superior.")
     if limit > 0:
+        from datetime import datetime, timedelta, timezone
+
         from app.models.campaign import Campaign
-        from datetime import datetime, timezone, timedelta
         period_start = datetime.now(timezone.utc) - timedelta(days=30)
         count_result = await db.execute(
             select(func.count()).select_from(Campaign).where(

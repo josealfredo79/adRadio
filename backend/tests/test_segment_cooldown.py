@@ -2,9 +2,9 @@
 — closes the gap where the per-contact 48h cooldown doesn't stop the *same
 list* from being blasted wholesale every couple of days."""
 import uuid
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, patch
 
 from app.workers.task_helpers.campaign_ops import (
     is_segment_on_cooldown,

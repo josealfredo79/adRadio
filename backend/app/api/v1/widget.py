@@ -8,13 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis
 
 from app.api.idempotency import idempotent_post, store_idempotency_response
-from app.core.redis import get_redis_optional
 from app.core.rate_limiter import limiter
+from app.core.redis import get_redis_optional
 
 logger = logging.getLogger(__name__)
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
 
 from app.api.deps import get_current_user, get_db
 from app.config import settings
@@ -139,8 +140,8 @@ async def widget_chat(
                 bot_name=user.bot_name or "Asistente",
                 bot_personality=user.bot_personality or "amigable y profesional",
             )
-        except Exception as e:
-            logger.error("[WIDGET-CHAT] advertiser=%s error=%s", advertiser_id, e, exc_info=True)
+        except Exception:
+            logger.exception("[WIDGET-CHAT] advertiser=%s", advertiser_id)
             reply = "Gracias por tu mensaje. En breve un asesor te atenderá. 😊"
 
     history.append({"role": "user", "content": message})

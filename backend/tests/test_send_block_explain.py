@@ -14,7 +14,10 @@ from app.models.campaign_segment_send import CampaignSegmentSend
 from app.models.contact import Contact
 from app.models.send_block_log import SendBlockLog
 from app.models.user import User
-from app.services.send_block_explain import explain_campaign_pause, preflight_campaign_send
+from app.services.send_block_explain import (
+    explain_campaign_pause,
+    preflight_campaign_send,
+)
 from app.workers.task_helpers.campaign_ops import segment_fingerprint
 
 

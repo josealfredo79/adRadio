@@ -4,12 +4,12 @@ List and manage orders received via the WhatsApp bot.
 """
 import logging
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -29,7 +29,7 @@ class OrderStateUpdate(BaseModel):
 
 @router.get("")
 async def list_orders(
-    state: Optional[str] = Query(None, description="Filter by state: collecting_name, collecting_address, collecting_payment, confirmed, cancelled"),
+    state: str | None = Query(None, description="Filter by state: collecting_name, collecting_address, collecting_payment, confirmed, cancelled"),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),

@@ -5,8 +5,9 @@ Revises: 0008_missing_user_columns
 Create Date: 2026-05-11
 """
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0009_orders"
 down_revision = "0008_missing_user_columns"

@@ -363,7 +363,7 @@ class TestExtractBodyText:
 
     def test_button_reply(self):
         from app.api.v1.webhooks_pkg.meta_incoming import _extract_body_text
-        body, media_id = _extract_body_text({"type": "button", "button": {"text": "1"}})
+        body, _media_id = _extract_body_text({"type": "button", "button": {"text": "1"}})
         assert body == "1"
 
     def test_interactive_button_reply(self):

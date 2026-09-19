@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -289,7 +289,7 @@ async def google_callback(
 
         refresh_token = exchange_code(code, redirect_uri, code_verifier)
     except Exception as e:
-        logger.error("[GCAL] OAuth exchange failed: %s", e, exc_info=True)
+        logger.exception("[GCAL] OAuth exchange failed")
         error_detail = str(e)[:200] if str(e) else "unknown"
         return RedirectResponse(f"{settings.FRONTEND_URL}/app/appointments?error=oauth_failed&detail={error_detail}")
 

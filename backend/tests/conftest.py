@@ -12,10 +12,45 @@ from dotenv import load_dotenv
 # the test session, so it overrides whatever backend/.env (production) would set.
 load_dotenv(Path(__file__).resolve().parent.parent / ".env.test", override=True)
 
+import logging
 import uuid
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
+
+import pytest
+
+logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(autouse=True)
+async def _reset_async_singletons():
+    """
+    Force fresh DB/Redis connections bound to the *current* test's event loop.
+
+    `app.database.engine` and `app.core.redis._redis_pool` are lazy
+    module-level singletons that pool live connections tied to whichever
+    event loop was running when they were first created. That's fine in
+    production (one process = one long-lived loop), but under
+    pytest-asyncio each test function gets its own event loop, so a
+    connection pooled during one integration test raises "Event loop is
+    closed" / "attached to a different loop" the moment a later test in
+    the session tries to reuse it. Disposing/clearing here avoids that.
+    """
+    try:
+        from app.database import engine
+        await engine.dispose()
+    except Exception:
+        logger.debug("Engine dispose failed during test reset", exc_info=True)
+    try:
+        import app.core.redis as redis_module
+        if redis_module._redis_pool is not None:
+            try:
+                await redis_module._redis_pool.aclose()
+            except Exception:
+                logger.debug("Redis pool close failed during test reset", exc_info=True)
+            redis_module._redis_pool = None
+    except Exception:
+        logger.debug("Redis pool reset failed during test reset", exc_info=True)
+    yield
 
 
 @pytest.fixture
@@ -125,7 +160,6 @@ def mock_redis():
 @pytest.fixture(autouse=True)
 def no_posthog():
     """Disable PostHog during tests by clearing the API key."""
-    import app.services.analytics_service  # ensure module is imported before patch (Python 3.12)
     with patch("app.services.analytics_service.settings") as mock:
         mock.POSTHOG_API_KEY = ""
         yield

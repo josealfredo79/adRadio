@@ -7,9 +7,10 @@ import logging
 import random
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select, update as sa_update
+from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 
 from app.models.send_block_log import (
     REASON_CONSENT_UNCONFIRMED,
@@ -366,13 +367,15 @@ async def _preload_conversations(db, advertiser_id: uuid.UUID, contacts) -> dict
 
 async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay):
     """Send banner-style campaign messages."""
-    from app.services.banner_service import (
-        generate_banner_png, generate_banner_copy_with_claude, select_design,
-    )
-    from app.services.storage_service import upload_bytes
     from app.models.message import Message
-    from app.workers.tasks import send_whatsapp_image_message
+    from app.services.banner_service import (
+        generate_banner_copy_with_claude,
+        generate_banner_png,
+        select_design,
+    )
     from app.services.messaging_throttle import anti_ban_delay
+    from app.services.storage_service import upload_bytes
+    from app.workers.tasks import send_whatsapp_image_message
 
     promo_description = ab.get("promo_description", campaign.message_text)
     palette = ab.get("banner_palette", "")  # vacío = auto según negocio
@@ -511,8 +514,8 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
     closed 24h window get an opt-in invite instead of the audio directly —
     see `_offer_or_queue` for why."""
     from app.models.message import Message
-    from app.workers.tasks import send_whatsapp_voice_note
     from app.services.messaging_throttle import anti_ban_delay
+    from app.workers.tasks import send_whatsapp_voice_note
 
     audio_url = ab.get("audio_url", "")
     radio_script = ab.get("radio_script", campaign.message_text)
@@ -610,14 +613,16 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     """Send regular campaign messages as audio voice notes with personalization and coupons."""
     from app.models.coupon import Coupon
     from app.models.message import Message
-    from app.workers.tasks import send_whatsapp_voice_note
     from app.services.claude_service import personalize_message
     from app.services.coupon_service import (
-        generate_coupon_code, format_coupon_in_message, default_expiry
+        default_expiry,
+        format_coupon_in_message,
+        generate_coupon_code,
     )
-    from app.services.storage_service import upload_bytes
-    from app.services.radio.tts import text_to_speech, LOCUTOR_VOICES
     from app.services.messaging_throttle import anti_ban_delay
+    from app.services.radio.tts import LOCUTOR_VOICES, text_to_speech
+    from app.services.storage_service import upload_bytes
+    from app.workers.tasks import send_whatsapp_voice_note
 
     MAX_PER_HOUR = advertiser.meta_send_throttle_per_hour or 60
     _convs = await _preload_conversations(db, campaign.advertiser_id, contacts)
@@ -836,12 +841,13 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
 async def notify_campaign_failed(campaign_id, exc):
     """Send failure notifications for campaign."""
     try:
+        from sqlalchemy import select
+
+        from app.core.email import send_campaign_failed_email
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.campaign import Campaign
         from app.models.user import User
-        from app.core.email import send_campaign_failed_email
         from app.services.webhook_dispatcher import dispatch_webhook_event
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(
@@ -874,8 +880,8 @@ async def notify_campaign_failed(campaign_id, exc):
 async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, day_name, mode, campaign=None):
     """Send parrilla day messages to all active contacts."""
     from app.models.message import Message
-    from app.workers.tasks import send_whatsapp_voice_note
     from app.services.messaging_throttle import anti_ban_delay
+    from app.workers.tasks import send_whatsapp_voice_note
 
     MAX_PER_HOUR = advertiser.meta_send_throttle_per_hour or 60
     ban_delay = 0
@@ -956,15 +962,14 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
 
     # Auto-pause if failure rate is too high
     total_attempted = sent + invited_count + skipped_count
-    if total_attempted > 10 and skipped_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD:
-        if campaign:
-            campaign.status = "paused"
-            logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
-                           campaign.id, skipped_count / total_attempted * 100, skipped_count, total_attempted)
-            log_send_block(
-                db, advertiser.id, REASON_HIGH_FAILURE_RATE, campaign_id=campaign.id,
-                detail=f"{skipped_count}/{total_attempted} ({skipped_count / total_attempted * 100:.0f}%)",
-            )
+    if total_attempted > 10 and skipped_count / max(total_attempted, 1) > _AUTO_PAUSE_THRESHOLD and campaign:
+        campaign.status = "paused"
+        logger.warning("[CAMPAIGN] Auto-paused %s: %.0f%% failure rate (%d/%d)",
+                       campaign.id, skipped_count / total_attempted * 100, skipped_count, total_attempted)
+        log_send_block(
+            db, advertiser.id, REASON_HIGH_FAILURE_RATE, campaign_id=campaign.id,
+            detail=f"{skipped_count}/{total_attempted} ({skipped_count / total_attempted * 100:.0f}%)",
+        )
 
     return sent
 
@@ -1018,14 +1023,20 @@ async def run_parrilla_generation(job_id: str, advertiser_id: str, body_dict: di
     resultado queda disponible al consultar el estado.
     """
     import asyncio
+
     import redis.asyncio as aioredis
+
     from app.config import settings
     from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
-    from app.models.user import User
     from app.models.campaign import Campaign
+    from app.models.user import User
     from app.schemas.campaign import ParrillaDayOut
     from app.services.analytics_service import capture_event
-    from app.services.banner_service import generate_banner_png, generate_banner_copy_with_claude, select_design
+    from app.services.banner_service import (
+        generate_banner_copy_with_claude,
+        generate_banner_png,
+        select_design,
+    )
     from app.services.radio_service import generate_radio_ad, generate_radio_script
     from app.services.storage_service import upload_bytes
     from app.workers.tasks import schedule_campaign
@@ -1200,7 +1211,7 @@ async def run_parrilla_generation(job_id: str, advertiser_id: str, body_dict: di
             await _update_state(status="done", days=days_out)
 
     except Exception as exc:
-        logger.exception("[PARRILLA] job %s failed: %s", job_id, exc)
+        logger.exception("[PARRILLA] job %s failed", job_id)
         await _update_state(status="error", error=str(exc))
     finally:
         await redis_client.aclose()

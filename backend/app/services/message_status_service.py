@@ -39,7 +39,6 @@ async def apply_status_update(
         return
 
     new_status = _STATUS_MAP.get(wa_status, msg.status)
-    old_status = msg.status
     msg.status = new_status
     if error_code:
         msg.error_code = error_code

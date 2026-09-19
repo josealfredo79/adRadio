@@ -48,7 +48,7 @@ class TestBanRiskErrorAutoPauses:
                 await db.commit()
                 return advertiser.id, campaign.id, msg.id
 
-        advertiser_id, campaign_id, message_id = asyncio.run(_seed())
+        _advertiser_id, campaign_id, message_id = asyncio.run(_seed())
 
         ban_error = "(#131049) This message was not delivered to maintain healthy ecosystem engagement"
         with patch(

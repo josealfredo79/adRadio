@@ -4,8 +4,9 @@ Revision ID: 0024_add_ai_prompt_to_steps
 Revises: 0023_add_bot_instructions
 Create Date: 2026-06-05 14:00:00.000000
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0024"
 down_revision = "0023"

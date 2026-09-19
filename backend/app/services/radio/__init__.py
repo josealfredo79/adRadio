@@ -6,9 +6,9 @@ Split from radio_service.py for maintainability.
 import logging
 import os
 
-from app.services.radio.scripts import generate_radio_script
-from app.services.radio.tts import text_to_speech, LOCUTOR_VOICES
 from app.services.radio.audio import get_jingle_path, mix_with_jingle
+from app.services.radio.scripts import generate_radio_script
+from app.services.radio.tts import LOCUTOR_VOICES, text_to_speech
 
 logger = logging.getLogger(__name__)
 

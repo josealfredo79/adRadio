@@ -4,8 +4,9 @@ Revision ID: 0023_add_bot_instructions
 Revises: 0022_stripe_subscription_improvements
 Create Date: 2026-06-05 13:00:00.000000
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0023"
 down_revision = "0022"

@@ -4,9 +4,10 @@ Revision ID: 0016_customer_stories
 Revises: 0015_automation_flows
 Create Date: 2026-06-03 00:00:00.000000
 """
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0016_customer_stories"
 down_revision = "0015_automation_flows"

@@ -2,18 +2,18 @@
 Payments router — /api/v1/plans, /api/v1/checkout, /api/v1/transactions
 """
 import logging
+
+import stripe as stripe_lib  # type: ignore
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from redis.asyncio import Redis as AsyncRedis
 from pydantic import BaseModel
+from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import stripe as stripe_lib  # type: ignore
-
 from app.api.deps import get_current_user
 from app.api.idempotency import idempotent_post, store_idempotency_response
-from app.core.redis import get_redis_optional
 from app.config import settings
+from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.founder_program import FounderProgram
 from app.models.transaction import Transaction
@@ -174,16 +174,16 @@ async def create_checkout_session(
                 request, body, current_user, db, _, redis,
                 _founder_slot_claimed=body.founder,
             )
-        logger.exception("Stripe InvalidRequestError: %s", e)
+        logger.exception("Stripe InvalidRequestError")
         raise HTTPException(status_code=502, detail="Error de comunicación con Stripe")
     except stripe_lib.error.AuthenticationError:
         logger.exception("Stripe AuthenticationError — revisa STRIPE_SECRET_KEY")
         raise HTTPException(status_code=502, detail="Error de autenticación con Stripe")
-    except stripe_lib.error.StripeError as e:
-        logger.exception("Stripe error inesperado: %s", e)
+    except stripe_lib.error.StripeError:
+        logger.exception("Stripe error inesperado")
         raise HTTPException(status_code=502, detail="Error al procesar el pago. Stripe puede no estar activado para cobros en vivo.")
     except Exception as e:
-        logger.exception("Error inesperado en create_checkout_session (tipo=%s): %s", type(e).__name__, e)
+        logger.exception("Error inesperado en create_checkout_session (tipo=%s)", type(e).__name__)
         raise HTTPException(status_code=500, detail=f"Error interno al crear sesión de pago: {type(e).__name__}")
 
 
@@ -211,7 +211,6 @@ async def cancel_subscription(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Cancel the user's active Stripe subscription at period end and release pool number."""
-    from app.services.number_pool_service import release_pool_number
 
     if current_user.subscription_status != "active" or not current_user.stripe_customer_id:
         raise HTTPException(status_code=400, detail="No tienes una suscripción activa")

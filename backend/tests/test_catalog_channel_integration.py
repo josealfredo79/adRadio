@@ -116,7 +116,7 @@ class TestHandleCatalogQueryService:
 class TestCatalogViaWhatsApp:
     @pytest.mark.asyncio
     async def test_catalog_question_replies_with_products_and_creates_no_order_or_appointment(self):
-        user_id, contact_id = await _seed_advertiser_and_contact()
+        user_id, _contact_id = await _seed_advertiser_and_contact()
         try:
             async with AsyncSessionLocal() as db:
                 db.add(Product(advertiser_id=user_id, name="Pastel de chocolate", price=250, active=True))
@@ -140,7 +140,7 @@ class TestCatalogViaWhatsApp:
     async def test_real_order_message_is_unaffected_by_the_new_catalog_branch(self):
         """Regression guard: adding the catalog branch before the order
         state machine must not swallow a genuine order-intent message."""
-        user_id, contact_id = await _seed_advertiser_and_contact()
+        user_id, _contact_id = await _seed_advertiser_and_contact()
         try:
             async with AsyncSessionLocal() as db:
                 advertiser = await db.get(User, user_id)

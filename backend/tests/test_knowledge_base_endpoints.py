@@ -12,7 +12,12 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import delete
 
-from app.api.v1.knowledge_base import delete_file, get_file_content, list_files, upload_file
+from app.api.v1.knowledge_base import (
+    delete_file,
+    get_file_content,
+    list_files,
+    upload_file,
+)
 from app.api.v1.knowledge_base import test_bot as ask_bot
 from app.database import AsyncSessionLocal, engine
 from app.models.knowledge_base import KnowledgeBase

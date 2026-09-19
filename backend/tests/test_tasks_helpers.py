@@ -1,8 +1,10 @@
 """Tests for Celery task helpers."""
 
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone, timedelta
+
 from app.workers.task_helpers.common import run_async
 
 

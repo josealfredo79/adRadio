@@ -7,7 +7,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import Depends, HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis

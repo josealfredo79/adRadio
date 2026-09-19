@@ -1,0 +1,5 @@
+[tool.ruff.lint]
+ignore = [
+    "B008",   # function-call-in-default-argument — FastAPI's Depends()/Query() pattern is idiomatic here.
+    "BLE001", # blind-except — webhooks/Celery tasks/external-API calls deliberately catch Exception to log and degrade instead of crashing; audited 2026-09-18, consistent pattern across the codebase.
+]

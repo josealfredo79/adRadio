@@ -3,7 +3,9 @@ Whisper transcription service — uses Whisper via Groq's free tier (2,000
 req/day, no card required) to transcribe incoming WhatsApp audio messages.
 """
 import logging
+
 import httpx
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)

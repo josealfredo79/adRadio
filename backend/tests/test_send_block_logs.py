@@ -12,7 +12,11 @@ from sqlalchemy import delete
 from app.api.v1.campaigns import list_send_blocks
 from app.database import AsyncSessionLocal, engine
 from app.models.contact import Contact
-from app.models.send_block_log import REASON_CONTACT_COOLDOWN, REASON_SEGMENT_COOLDOWN, SendBlockLog
+from app.models.send_block_log import (
+    REASON_CONTACT_COOLDOWN,
+    REASON_SEGMENT_COOLDOWN,
+    SendBlockLog,
+)
 from app.models.user import User
 from app.services.send_block_log_service import log_send_block
 

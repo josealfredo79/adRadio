@@ -3,10 +3,11 @@ Radio audio proxy — /api/v1/radio
 Serves audio files from local storage (primary) or R2 (fallback).
 """
 import asyncio
-import boto3
 import logging
 import mimetypes
 import os
+
+import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException, Request
@@ -65,8 +66,7 @@ def _fetch_and_cache_from_r2(filename: str, local_path: str) -> str:
     obj = r2.get_object(Bucket=settings.CF_R2_BUCKET, Key=filename)
     os.makedirs(os.path.dirname(local_path), exist_ok=True)
     with open(local_path, "wb") as f:
-        for chunk in obj["Body"].iter_chunks(chunk_size=65536):
-            f.write(chunk)
+        f.writelines(obj["Body"].iter_chunks(chunk_size=65536))
     return obj.get("ContentType", "audio/ogg")
 
 

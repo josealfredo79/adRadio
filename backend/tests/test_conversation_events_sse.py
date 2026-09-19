@@ -21,11 +21,13 @@ def client(test_user):
 
 class TestConversationEventsRoute:
     def test_no_redis_yields_unavailable_comment_and_closes(self, client):
-        with patch("app.api.v1.conversations.get_redis_optional", new=AsyncMock(return_value=None)):
-            with client.stream("GET", "/api/v1/conversations/events") as r:
-                assert r.status_code == 200
-                assert r.headers["content-type"].startswith("text/event-stream")
-                body = b"".join(r.iter_bytes()).decode()
+        with (
+            patch("app.api.v1.conversations.get_redis_optional", new=AsyncMock(return_value=None)),
+            client.stream("GET", "/api/v1/conversations/events") as r,
+        ):
+            assert r.status_code == 200
+            assert r.headers["content-type"].startswith("text/event-stream")
+            body = b"".join(r.iter_bytes()).decode()
         assert "redis unavailable" in body
 
     def test_streams_published_event_as_sse_data(self, client):
@@ -40,10 +42,12 @@ class TestConversationEventsRoute:
         redis = MagicMock()
         redis.pubsub.return_value = pubsub
 
-        with patch("app.api.v1.conversations.get_redis_optional", new=AsyncMock(return_value=redis)):
-            with client.stream("GET", "/api/v1/conversations/events") as r:
-                assert r.status_code == 200
-                body = b"".join(r.iter_bytes()).decode()
+        with (
+            patch("app.api.v1.conversations.get_redis_optional", new=AsyncMock(return_value=redis)),
+            client.stream("GET", "/api/v1/conversations/events") as r,
+        ):
+            assert r.status_code == 200
+            body = b"".join(r.iter_bytes()).decode()
 
         assert f"data: {event_payload}" in body
         pubsub.subscribe.assert_called_once()
@@ -55,8 +59,10 @@ class TestConversationEventsRoute:
         redis = MagicMock()
         redis.pubsub.return_value = pubsub
 
-        with patch("app.api.v1.conversations.get_redis_optional", new=AsyncMock(return_value=redis)):
-            with client.stream("GET", "/api/v1/conversations/events") as r:
-                body = b"".join(r.iter_bytes()).decode()
+        with (
+            patch("app.api.v1.conversations.get_redis_optional", new=AsyncMock(return_value=redis)),
+            client.stream("GET", "/api/v1/conversations/events") as r,
+        ):
+            body = b"".join(r.iter_bytes()).decode()
 
         assert ": ping" in body

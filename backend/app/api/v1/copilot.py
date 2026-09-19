@@ -19,7 +19,11 @@ from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.user import User
-from app.services.copilot_service import handle_chat, handle_confirm, handle_tool_preview
+from app.services.copilot_service import (
+    handle_chat,
+    handle_confirm,
+    handle_tool_preview,
+)
 
 logger = logging.getLogger(__name__)
 

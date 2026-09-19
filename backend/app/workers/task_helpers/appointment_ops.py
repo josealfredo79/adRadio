@@ -2,7 +2,7 @@
 Appointment reminder operations.
 """
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 
 from sqlalchemy import select
 
@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 async def send_24h_reminders(db, now):
     """Send 24h appointment reminders."""
     from app.models.appointment import Appointment
-    from app.models.user import User
     from app.models.contact import Contact
     from app.models.conversation import Conversation
+    from app.models.user import User
     from app.services.meta_service import send_whatsapp, send_whatsapp_buttons
     from app.services.whatsapp_window import is_window_open
 
@@ -109,8 +109,8 @@ async def send_24h_reminders(db, now):
 async def send_1h_reminders(db, now):
     """Send 1h appointment reminders."""
     from app.models.appointment import Appointment
-    from app.models.user import User
     from app.models.contact import Contact
+    from app.models.user import User
     from app.services.meta_service import send_whatsapp
 
     window_1h_start = now + timedelta(minutes=50)

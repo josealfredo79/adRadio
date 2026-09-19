@@ -3,7 +3,6 @@ import logging
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -62,7 +61,7 @@ MAX_PHOTO_SIZE = 5 * 1024 * 1024  # 5MB
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.get("", response_model=List[ProductOut])
+@router.get("", response_model=list[ProductOut])
 async def list_products(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

@@ -15,7 +15,12 @@ import pytest
 from sqlalchemy import delete
 
 from app.database import AsyncSessionLocal, engine
-from app.main import _CRAWLER_UA_RE, _PRODUCT_PAGE_BY_ID_RE, _PRODUCT_PAGE_RE, _render_product_og_html
+from app.main import (
+    _CRAWLER_UA_RE,
+    _PRODUCT_PAGE_BY_ID_RE,
+    _PRODUCT_PAGE_RE,
+    _render_product_og_html,
+)
 from app.models.product import Product
 from app.models.user import User
 

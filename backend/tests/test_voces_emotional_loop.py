@@ -143,7 +143,7 @@ class TestVocesLoop:
 
     @pytest.mark.asyncio
     async def test_second_voice_note_adds_story_but_not_a_second_coupon(self):
-        advertiser_id, contact_id, campaign_id, phone = await _seed(reward_coupon=True)
+        advertiser_id, _contact_id, _campaign_id, phone = await _seed(reward_coupon=True)
         try:
             for i in range(2):
                 async with AsyncSessionLocal() as db:
@@ -163,7 +163,7 @@ class TestVocesLoop:
     @pytest.mark.asyncio
     async def test_no_reward_coupon_still_stores_story_and_acks(self):
         run_id = uuid.uuid4().hex[:8]
-        advertiser_id, contact_id, campaign_id, phone = await _seed(reward_coupon=False)
+        advertiser_id, _contact_id, _campaign_id, phone = await _seed(reward_coupon=False)
 
         async with AsyncSessionLocal() as db:
             advertiser = await db.get(User, advertiser_id)
@@ -184,7 +184,7 @@ class TestVocesLoop:
     @pytest.mark.asyncio
     async def test_voice_note_without_active_voces_campaign_goes_to_bot(self):
         run_id = uuid.uuid4().hex[:8]
-        advertiser_id, contact_id, campaign_id, phone = await _seed(campaign_status="completed")
+        advertiser_id, _contact_id, _campaign_id, phone = await _seed(campaign_status="completed")
 
         async with AsyncSessionLocal() as db:
             advertiser = await db.get(User, advertiser_id)

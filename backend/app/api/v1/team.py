@@ -1,8 +1,7 @@
 """Team member management — /api/v1/team"""
 import logging
-from typing import List
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr
@@ -34,7 +33,7 @@ class TeamMemberOut(BaseModel):
         from_attributes = True
 
 
-@router.get("", response_model=List[TeamMemberOut])
+@router.get("", response_model=list[TeamMemberOut])
 async def list_team(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

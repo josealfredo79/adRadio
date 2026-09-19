@@ -2,30 +2,29 @@
 Auth router — /api/v1/auth
 """
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rate_limiter import limiter
 from app.config import settings
-from app.core.email import send_verification_email, send_password_reset_email
+from app.core.email import send_password_reset_email, send_verification_email
+from app.core.rate_limiter import limiter
 from app.core.redis import get_redis
 from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
     generate_referral_code,
-    generate_verification_code,
     generate_secure_token,
+    generate_verification_code,
     hash_password,
     verify_password,
 )
 from app.database import get_db
 from app.models.user import User
-from app.services.demo_data_service import seed_demo_data
-from app.services.analytics_service import capture_event, identify_user
 from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -35,6 +34,8 @@ from app.schemas.auth import (
     TokenResponse,
     VerifyEmailRequest,
 )
+from app.services.analytics_service import capture_event, identify_user
+from app.services.demo_data_service import seed_demo_data
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ async def login(
 
     # Store refresh token in Redis (rotation)
     await redis.setex(
-        f"refresh:{str(user.id)}",
+        f"refresh:{user.id!s}",
         settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         refresh_token,
     )

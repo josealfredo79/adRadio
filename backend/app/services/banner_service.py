@@ -385,8 +385,6 @@ def _render_split(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tu
     font_greeting = _load_font(_FONT_REGULAR, 26)
     font_headline = _load_font(_FONT_BOLD, 66)
     font_sub = _load_font(_FONT_REGULAR, 28)
-    font_biz = _load_font(_FONT_BOLD, 22)
-    font_cta = _load_font(_FONT_BOLD, 30)
 
     # Columna derecha — fondo oscuro
     _gradient_background(draw, BANNER_W, BANNER_H, c1, c2)
@@ -691,7 +689,7 @@ def _render_arco(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tup
         fill=c1,
     )
     # Segundo gradiente encima del círculo interior para suavizar la transición
-    for y in range(0, min(210, BANNER_H)):
+    for y in range(min(210, BANNER_H)):
         t = y / BANNER_H
         r2 = int(c1[0] + (c2[0] - c1[0]) * t)
         g2 = int(c1[1] + (c2[1] - c1[1]) * t)
@@ -779,7 +777,6 @@ def select_design(business_category: str | None, campaign_type: str | None) -> B
     if biz_style:
         layout = biz_style["layout"]
         palette = biz_style["palette"]
-        vibe = biz_style["vibe"]
     else:
         if camp_style:
             fallback = {
@@ -837,6 +834,7 @@ async def generate_banner_copy_with_claude(
 ) -> BannerCopy:
     """Genera el copy del banner, adaptado al negocio y campaña."""
     import json
+
     from app.services.llm_client import chat_completion
 
     design = select_design(business_category, campaign_type)

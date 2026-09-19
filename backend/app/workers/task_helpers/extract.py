@@ -15,11 +15,13 @@ def _extract_text(content: bytes, file_type: str) -> str:
             return "\n".join(page.get_text() for page in doc)
         elif file_type == "docx":
             import io
+
             from docx import Document
             doc = Document(io.BytesIO(content))
             return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
         elif file_type == "xlsx":
             import io
+
             import openpyxl
             wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
             texts = []
@@ -35,6 +37,7 @@ def _extract_text(content: bytes, file_type: str) -> str:
                 logger.warning("GROQ_API_KEY not set — skipping Whisper transcription")
                 return ""
             import io
+
             from openai import OpenAI
             # Whisper via Groq's free tier (OpenAI-SDK-compatible, 2,000 req/day,
             # no card required) — no OpenAI account/billing needed for this.

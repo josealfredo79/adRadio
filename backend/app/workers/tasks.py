@@ -3,24 +3,31 @@ Celery tasks — background jobs for IaRadio.
 """
 import logging
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-from app.workers.celery_app import celery_app
-from app.workers.task_helpers import (
-    run_async, _extract_text,
-    send_regular_messages, send_banner_messages, send_radio_messages,
-    send_parrilla_messages, notify_campaign_failed, run_parrilla_generation,
-    send_24h_reminders, send_1h_reminders,
-    segment_fingerprint, is_segment_on_cooldown, record_segment_send,
-    get_recipient_cap_state,
-)
-from app.workers.task_helpers.common import suppress_contact_on_error
 from app.models.send_block_log import (
     REASON_NO_MESSAGES_REMAINING,
     REASON_RECIPIENT_CAP,
     REASON_SEGMENT_COOLDOWN,
 )
 from app.services.send_block_log_service import log_send_block
+from app.workers.celery_app import celery_app
+from app.workers.task_helpers import (
+    _extract_text,
+    get_recipient_cap_state,
+    is_segment_on_cooldown,
+    record_segment_send,
+    run_async,
+    run_parrilla_generation,
+    segment_fingerprint,
+    send_1h_reminders,
+    send_24h_reminders,
+    send_banner_messages,
+    send_parrilla_messages,
+    send_radio_messages,
+    send_regular_messages,
+)
+from app.workers.task_helpers.common import suppress_contact_on_error
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +49,12 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str, charge: boo
     charged at invite time in _offer_or_queue, now firing the deferred send
     on the contact's reply)."""
     async def _send():
+        from sqlalchemy import select
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
         from app.models.user import User
         from app.services.meta_service import send_whatsapp
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
@@ -85,7 +93,10 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str, charge: boo
                 # advertiser — pause_active_campaigns ya es un no-op sobre
                 # campañas que otra tarea concurrente dejó en 'paused'.
                 if not sid and error and advertiser:
-                    from app.services.meta_quality_service import is_ban_risk_error, pause_active_campaigns
+                    from app.services.meta_quality_service import (
+                        is_ban_risk_error,
+                        pause_active_campaigns,
+                    )
                     if is_ban_risk_error(error):
                         await pause_active_campaigns(db, advertiser.id)
                         await db.commit()
@@ -111,11 +122,12 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
     billed upfront for the reopen template, so the deferred cuña isn't billed
     again when the contact's reply fires it."""
     async def _send():
+        from sqlalchemy import select
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
         from app.models.user import User
         from app.services.meta_service import send_whatsapp_media
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
@@ -154,7 +166,10 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
                 # advertiser — pause_active_campaigns ya es un no-op sobre
                 # campañas que otra tarea concurrente dejó en 'paused'.
                 if not sid and error and advertiser:
-                    from app.services.meta_quality_service import is_ban_risk_error, pause_active_campaigns
+                    from app.services.meta_quality_service import (
+                        is_ban_risk_error,
+                        pause_active_campaigns,
+                    )
                     if is_ban_risk_error(error):
                         await pause_active_campaigns(db, advertiser.id)
                         await db.commit()
@@ -180,11 +195,12 @@ def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, 
     billed again when the contact's reply fires it, since the reopen template
     was already charged upfront."""
     async def _send():
+        from sqlalchemy import select
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
         from app.models.user import User
         from app.services.meta_service import send_whatsapp_image
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
@@ -223,7 +239,10 @@ def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, 
                 # advertiser — pause_active_campaigns ya es un no-op sobre
                 # campañas que otra tarea concurrente dejó en 'paused'.
                 if not sid and error and advertiser:
-                    from app.services.meta_quality_service import is_ban_risk_error, pause_active_campaigns
+                    from app.services.meta_quality_service import (
+                        is_ban_risk_error,
+                        pause_active_campaigns,
+                    )
                     if is_ban_risk_error(error):
                         await pause_active_campaigns(db, advertiser.id)
                         await db.commit()
@@ -245,12 +264,13 @@ def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, 
 def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str):
     """Generate a radio cuña and send it as a WhatsApp voice note to a new lead."""
     async def _run():
+        from sqlalchemy import select
+
+        from app.config import settings
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.user import User
-        from app.services.radio_service import generate_radio_ad
-        from app.config import settings
         from app.services.meta_service import send_whatsapp_media
-        from sqlalchemy import select
+        from app.services.radio_service import generate_radio_ad
 
         r2_url = await generate_radio_ad(
             business_name=business_name,
@@ -283,11 +303,12 @@ def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str):
 def auto_tag_contact_from_conversation(self, contact_id: str):
     """Use Claude Haiku to detect intent from last 10 messages and add auto-tags."""
     async def _run():
+        from sqlalchemy import select
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.contact import Contact
         from app.models.message import Message
         from app.services.claude_service import detect_intent_tags
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             c_uuid = uuid.UUID(contact_id)
@@ -329,10 +350,11 @@ def auto_tag_contact_from_conversation(self, contact_id: str):
 def classify_story_sentiment(self, story_id: str):
     """Voces del Barrio: clasifica el sentimiento de una historia con Claude."""
     async def _run():
+        from sqlalchemy import select
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.customer_story import CustomerStory
         from app.services.claude_service import classify_sentiment
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             res = await db.execute(
@@ -357,6 +379,8 @@ def notify_story_published(self, story_id: str):
     """Voces del Barrio: avisa al cliente que su historia ya está publicada,
     con el link al micrositio para que lo comparta."""
     async def _run():
+        from sqlalchemy import select
+
         from app.config import settings
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.contact import Contact
@@ -364,7 +388,6 @@ def notify_story_published(self, story_id: str):
         from app.models.user import User
         from app.services import voces_copy
         from app.services.meta_service import send_whatsapp
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             res = await db.execute(
@@ -400,12 +423,13 @@ def notify_story_published(self, story_id: str):
 def schedule_campaign(self, campaign_id: str):
     """Process and send all messages for a scheduled campaign."""
     async def _process():
+        from sqlalchemy import select
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.campaign import Campaign
         from app.models.contact import Contact
         from app.models.user import User
         from app.services.messaging_throttle import is_human_hour, next_human_hour_utc
-        from sqlalchemy import select
 
         if not is_human_hour(timezone_offset=-6):
             now_utc = datetime.now(timezone.utc)
@@ -511,11 +535,12 @@ def schedule_campaign(self, campaign_id: str):
 def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type: str):
     """Extract text, chunk, generate embeddings and store in pgvector."""
     async def _process():
+        from sqlalchemy import select
+
+        from app.config import settings
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.knowledge_base import KnowledgeBase
-        from app.services.embedding_service import get_embedding, chunk_text
-        from app.config import settings
-        from sqlalchemy import select
+        from app.services.embedding_service import chunk_text, get_embedding
 
         using_openai_embeddings = settings.USE_OPENAI_EMBEDDINGS and settings.OPENAI_API_KEY
         embed_delay: float = 0.0 if using_openai_embeddings else getattr(settings, "VOYAGE_EMBEDDING_DELAY_S", 22.0)
@@ -567,9 +592,10 @@ def process_knowledge_base_file(self, kb_id: str, file_content: bytes, file_type
         run_async(_process())
     except Exception as exc:
         async def _mark_error():
+            from sqlalchemy import select
+
             from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
             from app.models.knowledge_base import KnowledgeBase
-            from sqlalchemy import select
             async with AsyncSessionLocal() as db:
                 result = await db.execute(select(KnowledgeBase).where(KnowledgeBase.id == uuid.UUID(kb_id)))
                 kb = result.scalar_one_or_none()
@@ -597,9 +623,11 @@ def import_contacts_csv(self, advertiser_id: str, rows: list[dict], consent_conf
     """
     async def _import():
         import re
+
+        from sqlalchemy import select
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.contact import Contact
-        from sqlalchemy import select
 
         consent_status = "confirmed" if consent_confirmed else "unconfirmed"
 
@@ -649,9 +677,10 @@ def import_contacts_csv(self, advertiser_id: str, rows: list[dict], consent_conf
 def check_scheduled_campaigns():
     """Celery Beat: trigger campaigns scheduled for now."""
     async def _check():
+        from sqlalchemy import select
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.campaign import Campaign
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             now = datetime.now(timezone.utc)
@@ -672,10 +701,11 @@ def check_scheduled_campaigns():
 def cleanup_expired_data():
     """Remove messages older than 12 months and expired subscriptions."""
     async def _cleanup():
+        from sqlalchemy import delete, update
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.message import Message
         from app.models.user import User
-        from sqlalchemy import delete, update
 
         cutoff = datetime.now(timezone.utc) - timedelta(days=365)
         now = datetime.now(timezone.utc)
@@ -701,10 +731,11 @@ def replenish_annual_message_quota():
     PLAN_MESSAGES[plan] cada vez que messages_refill_at vence y avanza el
     ciclo 30 días, igual que haría un invoice mensual normal."""
     async def _replenish():
+        from sqlalchemy import select
+
+        from app.api.v1.payments import PLAN_MESSAGES
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.user import User
-        from app.api.v1.payments import PLAN_MESSAGES
-        from sqlalchemy import select
 
         now = datetime.now(timezone.utc)
         async with AsyncSessionLocal() as db:
@@ -731,12 +762,13 @@ def replenish_annual_message_quota():
 def send_trial_expiry_reminders():
     """Celery Beat: send reminders to expiring users."""
     async def _remind():
-        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
-        from app.models.user import User
+        from sqlalchemy import select
+
         from app.config import settings
         from app.core.email import send_trial_expiring_email
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.models.user import User
         from app.services.meta_service import send_whatsapp
-        from sqlalchemy import select
 
         now = datetime.now(timezone.utc)
         async with AsyncSessionLocal() as db:
@@ -840,10 +872,11 @@ def poll_meta_quality_ratings():
 def send_parrilla_day(self, advertiser_id: str, audio_url: str, script: str, day_name: str, mode: str):
     """Sends the daily cuña from the weekly parrilla to all active contacts."""
     async def _send():
+        from sqlalchemy import select
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.contact import Contact
         from app.models.user import User
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             adv_result = await db.execute(select(User).where(User.id == uuid.UUID(advertiser_id)))
@@ -916,12 +949,14 @@ def update_contact_engagement_score(contact_id: str):
     """Update contact engagement_score and lead_score using Claude."""
     async def _update():
         import json
+
+        from sqlalchemy import select
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.contact import Contact
         from app.models.conversation import Conversation
         from app.models.message import Message
         from app.services.llm_client import chat_completion
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as db:
             c_uuid = uuid.UUID(contact_id)
@@ -999,6 +1034,9 @@ def update_contact_engagement_score(contact_id: str):
 def process_automation_enrollments():
     """Celery beat — send next drip message to all due enrollments."""
     async def _run():
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.automation import AutomationEnrollment, AutomationFlow
         from app.models.contact import Contact
@@ -1006,8 +1044,6 @@ def process_automation_enrollments():
         from app.models.message import Message
         from app.models.user import User
         from app.services.meta_service import send_whatsapp
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
 
         now = datetime.now(timezone.utc)
 
@@ -1105,11 +1141,13 @@ def process_automation_enrollments():
 def trigger_automation_for_contact(contact_id: str, advertiser_id: str, trigger: str, trigger_value: str = ""):
     """Enroll a contact in all matching active flows."""
     async def _run():
-        from datetime import datetime, timezone, timedelta
-        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
-        from app.models.automation import AutomationFlow, AutomationEnrollment
+        from datetime import datetime, timedelta, timezone
+
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
+
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.models.automation import AutomationEnrollment, AutomationFlow
 
         now = datetime.now(timezone.utc)
 
@@ -1124,9 +1162,8 @@ def trigger_automation_for_contact(contact_id: str, advertiser_id: str, trigger:
             )).scalars().all()
 
             for flow in flows:
-                if trigger == "keyword" and flow.trigger_value:
-                    if flow.trigger_value.lower() not in trigger_value.lower():
-                        continue
+                if trigger == "keyword" and flow.trigger_value and flow.trigger_value.lower() not in trigger_value.lower():
+                    continue
 
                 already = await db.execute(
                     select(AutomationEnrollment).where(

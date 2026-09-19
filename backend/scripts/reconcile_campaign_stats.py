@@ -16,11 +16,11 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import select
 
-from app.database import AsyncSessionLocal  # noqa: E402
-from app.models.campaign import Campaign  # noqa: E402
-from app.services.campaign_stats_service import compute_campaign_stats  # noqa: E402
+from app.database import AsyncSessionLocal
+from app.models.campaign import Campaign
+from app.services.campaign_stats_service import compute_campaign_stats
 
 
 async def main(apply: bool) -> None:

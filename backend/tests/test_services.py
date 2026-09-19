@@ -2,12 +2,13 @@
 Tests unitarios para servicios de IaRadio.
 Estos tests no requieren conexión a DB externa ni APIs de terceros.
 """
-import uuid
-import pytest
-from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, AsyncMock, patch
-import sys
 import os
+import sys
+import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -36,7 +37,7 @@ class TestCouponService:
             assert "L" not in code
 
     def test_format_coupon_in_message_basic(self):
-        from app.services.coupon_service import format_coupon_in_message, default_expiry
+        from app.services.coupon_service import default_expiry, format_coupon_in_message
         
         message = "Hola bienvenido a nuestra tienda"
         code = "TEST123"
@@ -50,7 +51,7 @@ class TestCouponService:
         assert "⏰" in result
 
     def test_format_coupon_in_message_with_description(self):
-        from app.services.coupon_service import format_coupon_in_message, default_expiry
+        from app.services.coupon_service import default_expiry, format_coupon_in_message
         
         message = "Promoción especial"
         code = "PROMO55"
@@ -79,7 +80,7 @@ class TestCouponService:
         assert 3600 * 23 < diff < 3600 * 25
 
     def test_is_expired(self):
-        from app.services.coupon_service import is_expired, default_expiry
+        from app.services.coupon_service import default_expiry, is_expired
         
         # Un código que expira en 1 hora NO está expirado
         future = default_expiry(hours=1)
@@ -158,7 +159,7 @@ class TestDateTimeUtils:
         assert expiry.tzinfo is not None
 
     def test_expiry_format_in_message(self):
-        from app.services.coupon_service import format_coupon_in_message, default_expiry
+        from app.services.coupon_service import format_coupon_in_message
         
         # Usar una fecha específica para el test
         specific_date = datetime(2026, 12, 31, 23, 59, tzinfo=timezone.utc)
@@ -339,9 +340,7 @@ class TestWebhookValidation:
             Valida la firma de Twilio.
             Nota: En producción usar twilio.auth.AuthValidator
             """
-            if not signature or not auth_token:
-                return False
-            return True  # Placeholder
+            return bool(signature and auth_token)  # Placeholder
         
         assert validate_twilio_signature("sig123", "https://webhook.url", {"foo": "bar"}, "token") is True
         assert validate_twilio_signature("", "https://webhook.url", {}, "token") is False
@@ -356,9 +355,7 @@ class TestWebhookValidation:
             Valida la firma de Stripe.
             Nota: En producción usar stripe.webhook.construct_event
             """
-            if not signature or not webhook_secret:
-                return False
-            return True  # Placeholder
+            return bool(signature and webhook_secret)  # Placeholder
         
         assert validate_stripe_signature("sig_123", "{}", "whsec_xxx") is True
         assert validate_stripe_signature("", "{}", "whsec_xxx") is False
@@ -424,10 +421,10 @@ class TestDemoDataService:
 
     @pytest.mark.asyncio
     async def test_seed_demo_data_creates_contacts(self):
-        from app.services.demo_data_service import seed_demo_data
-        from app.models.contact import Contact
         from app.models.campaign import Campaign
+        from app.models.contact import Contact
         from app.models.knowledge_base import KnowledgeBase
+        from app.services.demo_data_service import seed_demo_data
 
         db = AsyncMock()
         db.add = MagicMock()
@@ -541,7 +538,7 @@ class TestEmailNotifications:
             sent_count=10,
         )
 
-        args, kwargs = mock_send_email.call_args
+        args, _kwargs = mock_send_email.call_args
         # args: (to, subject, html_body)
         assert "Mi Negocio" in args[1] or "Campaña 1" in args[1]
 
@@ -559,7 +556,7 @@ class TestEmailNotifications:
             stats_dict=stats,
         )
 
-        args, kwargs = mock_send_email.call_args
+        args, _kwargs = mock_send_email.call_args
         body = args[2]
         assert "100" in body
         assert "95" in body
@@ -578,7 +575,7 @@ class TestEmailNotifications:
             error="Credenciales inválidas",
         )
 
-        args, kwargs = mock_send_email.call_args
+        args, _kwargs = mock_send_email.call_args
         body = args[2]
         assert "Credenciales inválidas" in body
 
@@ -638,11 +635,12 @@ class TestWebhookDispatcher:
         contact.created event would fire advertiser B's webhook too. Uses a
         real DB (not mocks) so the actual SQL filter is exercised, not just
         the Python call signature."""
+        from sqlalchemy import delete
+
+        from app.core.security import hash_password
         from app.database import AsyncSessionLocal, engine
         from app.models.user import User
         from app.models.user_webhook import UserWebhook
-        from app.core.security import hash_password
-        from sqlalchemy import delete
 
         await engine.dispose()
         async with AsyncSessionLocal() as db:
@@ -737,8 +735,9 @@ class TestPublicCustomerStories:
         assert all(s["approved"] for s in approved)
 
     def test_stories_response_model(self):
-        from app.schemas.campaign import CustomerStoryOut
         import uuid
+
+        from app.schemas.campaign import CustomerStoryOut
 
         story = CustomerStoryOut(
             id=uuid.uuid4(),
@@ -774,7 +773,6 @@ class TestBatchContacts:
 
     @pytest.mark.asyncio
     async def test_bulk_tag_adds_tags(self):
-        db = AsyncMock()
         contacts = [
             MagicMock(tags=["tag1"]),
             MagicMock(tags=[]),

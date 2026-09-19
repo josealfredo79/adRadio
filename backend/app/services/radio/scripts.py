@@ -180,6 +180,7 @@ async def generate_radio_script(
 ) -> str:
     """Genera el guión de la cuña según el modo seleccionado."""
     from datetime import datetime, timezone
+
     from app.services.llm_client import chat_completion
 
     system = _MODE_PROMPTS.get(mode, GUION_SYSTEM_PROMPT)

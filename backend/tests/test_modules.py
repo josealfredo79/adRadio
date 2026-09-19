@@ -3,12 +3,14 @@ Smoke tests for modules without coverage: widget, profile, templates, automation
 team, knowledge_base, conversations, payments, radio, analytics.
 Require DB — skip if not available.
 """
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pytest
 import uuid
+
+import pytest
 
 HAS_DB = bool(os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL"))
 
@@ -33,6 +35,7 @@ async def _get_verification_code(email: str) -> str | None:
     real verify-email flow instead of stubbing it out."""
     try:
         import redis.asyncio as aioredis
+
         from app.config import settings
         r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
         try:
@@ -54,7 +57,7 @@ async def _register():
     if _token:
         return
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         r = await c.post("/api/v1/auth/register", json={
@@ -85,9 +88,10 @@ async def _set_current_plan(plan: str) -> None:
     """Directly bump the test advertiser's plan in the DB (bypasses Stripe).
     Needed to exercise plan-gated flows (e.g. knowledge-base upload requires
     Growth+) without wiring a real payment."""
+    from sqlalchemy import select
+
     from app.database import AsyncSessionLocal
     from app.models.user import User
-    from sqlalchemy import select
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.email == AUTH_EMAIL))
@@ -97,45 +101,13 @@ async def _set_current_plan(plan: str) -> None:
             await db.commit()
 
 
-@pytest.fixture(autouse=True)
-async def _reset_async_singletons():
-    """
-    Force fresh DB/Redis connections bound to the *current* test's event loop.
-
-    `app.database.engine` and `app.core.redis._redis_pool` are lazy
-    module-level singletons that pool live connections tied to whichever
-    event loop was running when they were first created. That's fine in
-    production (one process = one long-lived loop), but under
-    pytest-asyncio each test function gets its own event loop, so a
-    connection pooled during one integration test raises "Event loop is
-    closed" / "attached to a different loop" the moment a later test in
-    this file tries to reuse it. Disposing/clearing here avoids that.
-    """
-    try:
-        from app.database import engine
-        await engine.dispose()
-    except Exception:
-        pass
-    try:
-        import app.core.redis as redis_module
-        if redis_module._redis_pool is not None:
-            try:
-                await redis_module._redis_pool.aclose()
-            except Exception:
-                pass
-            redis_module._redis_pool = None
-    except Exception:
-        pass
-    yield
-
-
 # ── Widget ──────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_widget_get_snippet_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/widget/snippet")
@@ -146,7 +118,7 @@ async def test_widget_get_snippet_requires_auth():
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_widget_preview_public():
     """Public endpoint should 404 for random UUID (but not 401)."""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get(f"/api/v1/widget/preview/{uuid.uuid4()}")
@@ -156,7 +128,7 @@ async def test_widget_preview_public():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_widget_get_config_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/widget/config")
@@ -169,7 +141,7 @@ async def test_widget_get_config_requires_auth():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_profile_me_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/me")
@@ -179,7 +151,7 @@ async def test_profile_me_requires_auth():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_profile_change_password_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post("/api/v1/me/change-password", json={
@@ -195,7 +167,7 @@ async def test_profile_change_password_requires_auth():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_templates_list_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/templates")
@@ -205,7 +177,7 @@ async def test_templates_list_requires_auth():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_templates_create_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post("/api/v1/templates", json={"name": "T", "content": "C"})
@@ -219,7 +191,7 @@ async def test_templates_crud():
     if not _token:
         pytest.skip("No se pudo autenticar")
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         name = f"T-{uuid.uuid4().hex[:6]}"
@@ -227,7 +199,7 @@ async def test_templates_crud():
         assert resp.status_code == 201
         tid = resp.json()["id"]
 
-        resp = await c.get(f"/api/v1/templates", headers=_headers())
+        resp = await c.get("/api/v1/templates", headers=_headers())
         assert resp.status_code == 200
         ids = [t["id"] for t in resp.json()]
         assert tid in ids
@@ -245,7 +217,7 @@ async def test_templates_crud():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_automations_list_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/automations")
@@ -255,7 +227,7 @@ async def test_automations_list_requires_auth():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_automations_create_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post("/api/v1/automations", json={"name": "F", "trigger": "new_contact"})
@@ -268,7 +240,7 @@ async def test_automations_create_requires_auth():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_team_list_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/team")
@@ -281,7 +253,7 @@ async def test_team_list_requires_auth():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_kb_list_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/knowledge-base")
@@ -297,7 +269,7 @@ async def test_kb_upload_requires_growth_plan():
         pytest.skip("No se pudo autenticar")
     await _set_current_plan("trial")
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post(
@@ -316,7 +288,7 @@ async def test_kb_upload_list_delete_on_growth_plan():
         pytest.skip("No se pudo autenticar")
     await _set_current_plan("growth")
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post(
@@ -342,7 +314,7 @@ async def test_kb_upload_list_delete_on_growth_plan():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_appointments_list_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/appointments")
@@ -356,7 +328,7 @@ async def test_appointments_crud():
     if not _token:
         pytest.skip("No se pudo autenticar")
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post("/api/v1/appointments", json={
@@ -388,7 +360,7 @@ async def test_appointments_update_delete_404_for_missing():
     if not _token:
         pytest.skip("No se pudo autenticar")
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.patch(f"/api/v1/appointments/{uuid.uuid4()}", json={"status": "completed"}, headers=_headers())
@@ -404,7 +376,7 @@ async def test_appointments_update_delete_404_for_missing():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_conversations_list_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/conversations")
@@ -414,7 +386,7 @@ async def test_conversations_list_requires_auth():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_conversations_reply_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post(f"/api/v1/conversations/{uuid.uuid4()}/reply", json={"text": "hola"})
@@ -427,7 +399,7 @@ async def test_conversations_reply_requires_auth():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_plans_public():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/plans")
@@ -438,7 +410,7 @@ async def test_plans_public():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_checkout_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post("/api/v1/checkout/create-session", json={"plan": "starter"})
@@ -448,7 +420,7 @@ async def test_checkout_requires_auth():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_transactions_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/transactions")
@@ -462,7 +434,7 @@ async def test_transactions_list_authenticated():
     if not _token:
         pytest.skip("No se pudo autenticar")
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/transactions", headers=_headers())
@@ -478,7 +450,7 @@ async def test_checkout_invalid_plan_rejected():
     if not _token:
         pytest.skip("No se pudo autenticar")
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post("/api/v1/checkout/create-session", json={"plan": "not-a-real-plan"}, headers=_headers())
@@ -491,7 +463,7 @@ async def test_checkout_invalid_plan_rejected():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_radio_voices_public():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/radio/voices")
@@ -504,7 +476,7 @@ async def test_radio_voices_public():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_radio_audio_404_for_invalid():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/radio/audio/nonexistent.ogg")
@@ -517,7 +489,7 @@ async def test_radio_audio_404_for_invalid():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_analytics_requires_auth():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/analytics/optimal-send-time")
@@ -531,7 +503,7 @@ async def test_analytics_summary_authenticated():
     if not _token:
         pytest.skip("No se pudo autenticar")
 
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/v1/analytics/summary", headers=_headers())

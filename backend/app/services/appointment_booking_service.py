@@ -18,12 +18,12 @@ import asyncio
 import json
 import logging
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.contact import Contact
 from app.models.appointment import Appointment
+from app.models.contact import Contact
 from app.models.user import User
 from app.services.availability_service import TZ, get_available_slots
 from app.services.claude_service import detect_appointment_intent
@@ -193,7 +193,7 @@ async def _advance(
             )
         slots = await get_available_slots(db, advertiser, parsed)
         if not slots:
-            return f"No tenemos horarios disponibles ese día 😕 ¿Quieres intentar con otra fecha?"
+            return "No tenemos horarios disponibles ese día 😕 ¿Quieres intentar con otra fecha?"
 
         _, options, has_more = _format_slots_page(slots, 0)
         state["step"] = "collecting_time"

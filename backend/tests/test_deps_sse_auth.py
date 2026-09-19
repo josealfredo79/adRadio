@@ -1,6 +1,6 @@
 """Tests for get_current_user_sse — token via query param (EventSource can't set headers)."""
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -53,14 +53,18 @@ class TestGetCurrentUserSse:
 
     @pytest.mark.asyncio
     async def test_invalid_token_raises_401(self, mock_db):
-        with patch("app.api.deps.decode_token", return_value=None):
-            with pytest.raises(HTTPException) as exc_info:
-                await get_current_user_sse(token="garbage", credentials=None, db=mock_db)
+        with (
+            patch("app.api.deps.decode_token", return_value=None),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await get_current_user_sse(token="garbage", credentials=None, db=mock_db)
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
     async def test_wrong_token_type_raises_401(self, mock_db):
-        with patch("app.api.deps.decode_token", return_value={"type": "refresh", "sub": str(uuid.uuid4())}):
-            with pytest.raises(HTTPException) as exc_info:
-                await get_current_user_sse(token="a-refresh-token", credentials=None, db=mock_db)
+        with (
+            patch("app.api.deps.decode_token", return_value={"type": "refresh", "sub": str(uuid.uuid4())}),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await get_current_user_sse(token="a-refresh-token", credentials=None, db=mock_db)
         assert exc_info.value.status_code == 401

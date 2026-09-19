@@ -3,7 +3,7 @@ Servicio de cupones — generación, formato y validación.
 """
 import secrets
 import string
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 def generate_coupon_code(length: int = 8) -> str:

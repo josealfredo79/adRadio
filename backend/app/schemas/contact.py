@@ -1,8 +1,8 @@
+import re
 import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, field_validator
-import re
 
 
 def validate_phone_e164(v: str) -> str:

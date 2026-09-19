@@ -4,8 +4,9 @@ Revision ID: 0005
 Revises: 0004
 Create Date: 2026-05-06
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0005_whatsapp_number_source"
 down_revision = "0004_kb_processing_status"

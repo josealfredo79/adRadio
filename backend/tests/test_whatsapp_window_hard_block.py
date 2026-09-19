@@ -57,7 +57,7 @@ class TestOfferOrQueueHardBlock:
         test_user.meta_utility_template_name = None
         test_user.meta_radio_invite_template_name = None
 
-        outcome, detail = await _offer_or_queue(db, test_user, contact, _convs=convs)
+        outcome, _detail = await _offer_or_queue(db, test_user, contact, _convs=convs)
         assert outcome == "blocked"
 
     @pytest.mark.asyncio
@@ -119,7 +119,7 @@ class TestOfferOrQueueHardBlock:
             "app.services.meta_service.send_whatsapp_template",
             new=AsyncMock(return_value=("wamid.OK", None)),
         ) as mock_send:
-            outcome, detail = await _offer_or_queue(db, test_user, contact, _convs=convs)
+            outcome, _detail = await _offer_or_queue(db, test_user, contact, _convs=convs)
         assert outcome == "blocked"
         mock_send.assert_not_called()
 
@@ -132,7 +132,7 @@ class TestOfferOrQueueHardBlock:
         contact = MagicMock(id="c1", phone="+521234567890", name="Juan", consent_status="unconfirmed")
         convs = {"c1": _conv(1)}  # window open
 
-        outcome, detail = await _offer_or_queue(db, test_user, contact, _convs=convs)
+        outcome, _detail = await _offer_or_queue(db, test_user, contact, _convs=convs)
         assert outcome == "open"
 
 

@@ -31,6 +31,6 @@ def test_months_gap_mentions_months():
 
 
 def test_naive_datetime_does_not_raise():
-    naive = datetime.now() - timedelta(days=40)
+    naive = datetime.now() - timedelta(days=40)  # noqa: DTZ005 — the point of this test is a naive datetime
     note = format_time_gap_note(naive)
     assert "mes" in note

@@ -23,13 +23,12 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import anthropic
-from jose import jwt
 from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core.security import decode_token
+from app.core.security import decode_token, sign_jwt
 from app.models.appointment import Appointment
 from app.models.campaign import Campaign
 from app.models.contact import Contact
@@ -267,16 +266,14 @@ TOOLS = [
 # ─── Confirmación firmada (stateless) ─────────────────────────────────────────
 
 def _create_confirmation_token(user_id, tool: str, args: dict) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=CONFIRMATION_TTL_MINUTES)
     payload = {
         "sub": str(user_id),
         "type": "copilot_confirm",
         "tool": tool,
         "args": args,
         "jti": uuid.uuid4().hex,
-        "exp": expire,
     }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return sign_jwt(payload, expires_in=timedelta(minutes=CONFIRMATION_TTL_MINUTES))
 
 
 async def _claim_confirmation_once(redis, jti: str) -> bool:
@@ -580,9 +577,9 @@ async def _execute_launch_campaign(db: AsyncSession, user: User, args: dict) -> 
     campaign.status = "running"
     try:
         await db.commit()
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        logger.error("[COPILOT] Error lanzando campaña %s: %s", cid, e, exc_info=True)
+        logger.exception("[COPILOT] Error lanzando campaña %s", cid)
         return None, "Ocurrió un error al lanzar la campaña. Intenta de nuevo."
 
     from app.workers.tasks import schedule_campaign
@@ -722,9 +719,9 @@ async def _execute_create_coupon(db: AsyncSession, user: User, args: dict) -> tu
 
     try:
         await db.commit()
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        logger.error("[COPILOT] Error creando cupones: %s", e, exc_info=True)
+        logger.exception("[COPILOT] Error creando cupones")
         return None, "Ocurrió un error al crear los cupones. Intenta de nuevo."
 
     capture_event(
@@ -829,9 +826,9 @@ async def _execute_schedule_appointment(db: AsyncSession, user: User, args: dict
 
     try:
         await db.commit()
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        logger.error("[COPILOT] Error agendando cita: %s", e, exc_info=True)
+        logger.exception("[COPILOT] Error agendando cita")
         return None, "Ocurrió un error al agendar la cita. Intenta de nuevo."
 
     await db.refresh(appointment)
@@ -874,7 +871,7 @@ async def _execute_confirm_tool(db: AsyncSession, user: User, tool_name: str, ar
         try:
             await db.rollback()
         except Exception:
-            pass
+            logger.debug("[COPILOT] rollback after failed action also failed", exc_info=True)
         return None, "Ocurrió un error al ejecutar la acción. Intenta de nuevo."
 
 

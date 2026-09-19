@@ -6,6 +6,7 @@ Returns a URL that serves from the backend.
 import asyncio
 import logging
 import os
+
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
 
@@ -43,8 +44,12 @@ async def upload_bytes(content: bytes, key: str, content_type: str) -> str | Non
 
     local_path = os.path.join(_LOCAL_AUDIO_DIR, key)
     os.makedirs(os.path.dirname(local_path), exist_ok=True)
-    with open(local_path, "wb") as f:
-        f.write(content)
+
+    def _write() -> None:
+        with open(local_path, "wb") as f:
+            f.write(content)
+
+    await asyncio.to_thread(_write)
 
     url = f"{settings.BASE_URL}/api/v1/radio/audio/{key}"
     logger.info("[STORAGE] Saved locally %s bytes → %s", len(content), url)

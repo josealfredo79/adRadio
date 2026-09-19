@@ -3,7 +3,6 @@ public API (/api/v1/public/*), the highest-risk surface in the app since
 it's the one meant for external, third-party clients. Zero coverage
 existed before this file."""
 import uuid
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

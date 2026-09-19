@@ -1,5 +1,6 @@
-from pydantic import BaseModel, field_validator
 import re
+
+from pydantic import BaseModel, field_validator
 
 from app.services.landing_sections import LANDING_SECTION_IDS
 

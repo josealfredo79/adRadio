@@ -51,6 +51,7 @@ async def _embed_openai(text: str) -> list[float]:
 async def _embed_voyage(text: str, _retries: int = 5) -> list[float]:
     """Voyage AI voyage-3 — fallback gratuito (3 RPM, delay 22s entre llamadas)."""
     import asyncio
+
     import voyageai
 
     client = voyageai.AsyncClient(api_key=settings.VOYAGE_API_KEY)

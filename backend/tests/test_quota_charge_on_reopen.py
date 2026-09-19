@@ -69,7 +69,7 @@ def test_charge_false_does_not_decrement_quota():
 def test_charge_false_delivers_even_at_zero_quota():
     """The advertiser already paid upfront for the reopen template — a
     balance that has since hit zero must not block the deferred content."""
-    adv_id, msg_id = _seed(0)
+    _adv_id, msg_id = _seed(0)
     sid = f"sid.{uuid.uuid4().hex[:12]}"
     with patch("app.services.meta_service.send_whatsapp_media", return_value=(sid, None)):
         send_whatsapp_voice_note(str(msg_id), "+521234567890", "https://x/a.ogg", "", charge=False)

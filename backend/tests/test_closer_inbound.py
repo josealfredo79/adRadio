@@ -75,7 +75,7 @@ async def _coupons(user_id):
 class TestCloserInbound:
     @pytest.mark.asyncio
     async def test_hot_lead_gets_offer_appended(self):
-        user_id, contact_id, phone = await _seed({"enabled": True, "hold_hours": 2})
+        user_id, _contact_id, phone = await _seed({"enabled": True, "hold_hours": 2})
         try:
             send = await _run(user_id, phone, "necesito saber el precio del paquete ya, es urgente")
             reply = send.await_args.args[1]
@@ -88,7 +88,7 @@ class TestCloserInbound:
 
     @pytest.mark.asyncio
     async def test_warm_lead_gets_no_offer(self):
-        user_id, contact_id, phone = await _seed({"enabled": True})
+        user_id, _contact_id, phone = await _seed({"enabled": True})
         try:
             send = await _run(user_id, phone, "gracias, lo voy a pensar")
             assert "🎫 Tu cupón" not in send.await_args.args[1]
@@ -98,7 +98,7 @@ class TestCloserInbound:
 
     @pytest.mark.asyncio
     async def test_disabled_closer_gets_no_offer(self):
-        user_id, contact_id, phone = await _seed({"enabled": False})
+        user_id, _contact_id, phone = await _seed({"enabled": False})
         try:
             send = await _run(user_id, phone, "necesito el precio ahora, es urgente")
             assert "🎫 Tu cupón" not in send.await_args.args[1]
@@ -108,7 +108,7 @@ class TestCloserInbound:
 
     @pytest.mark.asyncio
     async def test_redeem_reply_closes_the_offer(self):
-        user_id, contact_id, phone = await _seed({"enabled": True})
+        user_id, _contact_id, phone = await _seed({"enabled": True})
         try:
             await _run(user_id, phone, "necesito el precio ya, urgente")
             await _run(user_id, phone, "CANJEAR")

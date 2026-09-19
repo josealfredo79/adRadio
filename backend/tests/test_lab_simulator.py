@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.services.lab.personas import PERSONAS
-from app.services.lab.simulator import generate_persona_message, run_persona_conversation
+from app.services.lab.simulator import (
+    generate_persona_message,
+    run_persona_conversation,
+)
 
 
 class TestGeneratePersonaMessage:

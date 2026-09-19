@@ -20,7 +20,11 @@ from app.models.contact import Contact
 from app.models.coupon import Coupon
 from app.models.user import User
 from app.services.availability_service import get_available_slots
-from app.services.coupon_service import default_expiry, format_coupon_in_message, generate_coupon_code
+from app.services.coupon_service import (
+    default_expiry,
+    format_coupon_in_message,
+    generate_coupon_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +48,7 @@ async def _scarcity_note(db: AsyncSession, advertiser: User) -> str | None:
     """Frase de escasez REAL — solo negocios con agenda configurada."""
     if not advertiser.business_hours:
         return None
-    today = date.today()
+    today = date.today()  # noqa: DTZ011 — advertiser has no stored timezone; server-local date is the best available approximation
     for label, day in (("hoy", today), ("mañana", today + timedelta(days=1))):
         try:
             slots = await get_available_slots(db, advertiser, day)

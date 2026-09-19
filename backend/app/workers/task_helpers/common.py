@@ -4,6 +4,7 @@ Common utilities for Celery tasks.
 import asyncio
 import logging
 import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,8 +46,9 @@ async def suppress_contact_on_error(db: AsyncSession, contact_id: uuid.UUID, err
     if code not in _PERMANENT_ERRORS:
         return
 
+    from datetime import datetime, timedelta, timezone
+
     from app.models.contact import Contact
-    from datetime import datetime, timezone, timedelta
 
     result = await db.execute(select(Contact).where(Contact.id == contact_id))
     contact = result.scalar_one_or_none()

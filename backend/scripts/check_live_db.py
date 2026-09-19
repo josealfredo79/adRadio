@@ -1,15 +1,17 @@
 import asyncio
-import sys
 import os
+import sys
+
 from sqlalchemy import select
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from app.database import AsyncSessionLocal
-from app.models.user import User
-from app.models.contact import Contact
 from app.models.campaign import Campaign
+from app.models.contact import Contact
 from app.models.message import Message
+from app.models.user import User
+
 
 async def check_db():
     print("🔍 Diagnosticando Base de Datos de Producción...")

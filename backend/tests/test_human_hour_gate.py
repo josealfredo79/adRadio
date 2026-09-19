@@ -2,9 +2,7 @@
 anti-baneo) — Mon-Sat 8am-9pm, Sunday blocked outright. Exercises the pure
 _is_human_hour_at / _next_human_hour_after helpers with hand-built datetimes
 instead of mocking the wall clock (no freezegun in this repo's deps)."""
-from datetime import datetime, timezone, timedelta
-
-import pytest
+from datetime import datetime, timedelta, timezone
 
 from app.services.messaging_throttle import (
     _is_human_hour_at,

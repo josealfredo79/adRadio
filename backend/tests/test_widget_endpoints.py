@@ -14,7 +14,12 @@ from sqlalchemy import delete, func, select
 from starlette.requests import Request
 
 from app.api.v1.widget import (
-    get_widget_config, get_widget_snippet, update_widget_config, widget_capture_lead, widget_chat, widget_preview,
+    get_widget_config,
+    get_widget_snippet,
+    update_widget_config,
+    widget_capture_lead,
+    widget_chat,
+    widget_preview,
 )
 from app.database import AsyncSessionLocal, engine
 from app.models.contact import Contact

@@ -4,8 +4,9 @@ Revision ID: 0008_missing_user_columns
 Revises: 0007_voyage_embedding_1024
 Create Date: 2026-05-07
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0008_missing_user_columns"
 down_revision = "0007_voyage_embedding_1024"

@@ -7,20 +7,19 @@ own focused unit tests in test_admin_auth.py — this file only covers what
 each handler actually does once past that gate. Zero coverage existed
 before this file."""
 import uuid
-from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 
 from app.api.v1.admin import (
+    SubscriptionUpdateRequest,
     get_subscription,
     list_subscriptions,
     list_user_transactions,
     list_users,
     platform_stats,
     update_subscription,
-    SubscriptionUpdateRequest,
 )
 from app.database import AsyncSessionLocal, engine
 from app.models.transaction import Transaction

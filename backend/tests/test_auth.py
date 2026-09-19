@@ -2,8 +2,9 @@
 Tests de integración para auth endpoints.
 Requieren base de datos PostgreSQL — skip si no está disponible.
 """
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
@@ -23,8 +24,9 @@ db_reason = "Requiere base de datos (TEST_DATABASE_URL o DATABASE_URL)"
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_register_returns_201():
-    from httpx import AsyncClient, ASGITransport
     import uuid
+
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         email = f"test-{uuid.uuid4().hex[:8]}@example.com"
@@ -40,8 +42,9 @@ async def test_register_returns_201():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_register_duplicate_email_returns_409():
-    from httpx import AsyncClient, ASGITransport
     import uuid
+
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         email = f"dup-{uuid.uuid4().hex[:8]}@example.com"
@@ -61,7 +64,7 @@ async def test_register_duplicate_email_returns_409():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_login_invalid_credentials_returns_401():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/v1/auth/login", json={
@@ -74,7 +77,7 @@ async def test_login_invalid_credentials_returns_401():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_forgot_password_always_returns_200():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/v1/auth/forgot-password", json={
@@ -88,7 +91,7 @@ async def test_forgot_password_always_returns_200():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_reset_password_invalid_token_returns_400():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/v1/auth/reset-password", json={
@@ -101,7 +104,7 @@ async def test_reset_password_invalid_token_returns_400():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_APP or not HAS_DB, reason=db_reason)
 async def test_protected_route_without_token_returns_401():
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/api/v1/campaigns")

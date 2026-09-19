@@ -172,7 +172,7 @@ class TestSendWhatsappTemplate:
                  return_value={"messages": [{"id": "wamid.TPL1"}]}
              )) as mock_gr:
             components = [{"type": "body", "parameters": [{"type": "text", "text": "Juan"}]}]
-            sid, error = await send_whatsapp_template(
+            sid, _error = await send_whatsapp_template(
                 "+521234567890", "utility_template", components=components, advertiser=test_user
             )
             assert sid == "wamid.TPL1"
@@ -228,7 +228,7 @@ class TestSendWhatsappButtons:
              patch("app.services.meta_service.graph_request", new=AsyncMock(
                  return_value={"messages": [{"id": "wamid.PLAIN"}]}
              )) as mock_gr:
-            sid, error = await send_whatsapp_buttons(
+            sid, _error = await send_whatsapp_buttons(
                 "+521234567890", "texto plano de respaldo", template_name="", advertiser=test_user
             )
             assert sid == "wamid.PLAIN"
@@ -241,7 +241,7 @@ class TestSendWhatsappButtons:
              patch("app.services.meta_service.graph_request", new=AsyncMock(
                  return_value={"messages": [{"id": "wamid.BTN"}]}
              )) as mock_gr:
-            sid, error = await send_whatsapp_buttons(
+            sid, _error = await send_whatsapp_buttons(
                 "+521234567890", "fallback", template_name="appt_confirm", advertiser=test_user
             )
             assert sid == "wamid.BTN"

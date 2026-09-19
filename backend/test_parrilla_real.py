@@ -1,16 +1,18 @@
 import asyncio
-import sys
 import os
+import sys
 import uuid
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
+from sqlalchemy import delete, select
+
 from app.database import AsyncSessionLocal
-from app.models.user import User
 from app.models.contact import Contact
 from app.models.message import Message
-from sqlalchemy import select, delete
+from app.models.user import User
+
 
 async def main():
     print("🚀 Iniciando prueba real de Parrilla + Twilio...")
@@ -90,7 +92,7 @@ async def main():
             message_obj.sent_at = datetime.now(timezone.utc)
             await db.commit()
             print(f"   ✅ ¡Mensaje enviado exitosamente a Twilio! SID: {sid}")
-            print(f"   ✅ Estado del mensaje actualizado en la base de datos a: 'sent'")
+            print("   ✅ Estado del mensaje actualizado en la base de datos a: 'sent'")
         else:
             message_obj.status = "failed"
             await db.commit()

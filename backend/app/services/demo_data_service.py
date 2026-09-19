@@ -4,7 +4,7 @@ so they see a populated dashboard after email verification.
 """
 import logging
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,8 +54,8 @@ async def seed_demo_data(advertiser_id: uuid.UUID, business_name: str, db: Async
     Create sample contacts, a draft campaign, and a knowledge-base entry
     so new advertisers see a non-empty dashboard immediately.
     """
-    from app.models.contact import Contact
     from app.models.campaign import Campaign
+    from app.models.contact import Contact
     from app.models.knowledge_base import KnowledgeBase
 
     try:

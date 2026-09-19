@@ -298,7 +298,6 @@ class TestEmbeddedSignup:
             assert "no están configurados" in r.json()["detail"]
 
     def test_successful_embedded_signup_persists_and_subscribes(self, client, test_user):
-        from app.api.v1.meta_whatsapp import get_whatsapp_connection
         with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(
             ok=True, token="EAAGembeddedtoken", display_phone_number="+521234567890",
             verified_name="Mi Negocio",

@@ -66,7 +66,7 @@ def flush():
         try:
             posthog.flush()
         except Exception:
-            pass
+            logger.debug("PostHog flush failed", exc_info=True)
 
 
 async def compute_analytics_summary(db: AsyncSession, user_id: UUID) -> dict:

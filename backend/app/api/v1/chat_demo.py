@@ -8,11 +8,11 @@ from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.redis import get_redis_optional
+from app.api.v1.payments import PLANS
 from app.core.rate_limiter import limiter
+from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.services.claude_service import generate_bot_response
-from app.api.v1.payments import PLANS
 
 logger = logging.getLogger(__name__)
 
@@ -148,8 +148,8 @@ async def demo_chat(
             bot_name=DEMO_BOT_NAME,
             bot_personality=DEMO_BOT_PERSONALITY,
         )
-    except Exception as e:
-        logger.error("[DEMO_CHAT] Claude error: %s", e, exc_info=True)
+    except Exception:
+        logger.exception("[DEMO_CHAT] Claude error")
         reply = (
             "¡Hola! Soy Alex de IaRadio. 🎙️\n\n"
             "Somos una plataforma que automatiza las ventas por WhatsApp con IA. "

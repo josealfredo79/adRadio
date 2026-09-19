@@ -6,15 +6,19 @@ test_admin_endpoints.py. The auth dependency itself (require_api_key_scope)
 has its own unit tests in test_api_key_auth.py. Zero coverage existed
 before this file."""
 import uuid
-from decimal import Decimal
-
-import pytest
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi import HTTPException
 from sqlalchemy import delete
 
-from app.api.v1.public_api import ApiKeyCreate, create_api_key, deactivate_api_key, delete_api_key, list_api_keys
+from app.api.v1.public_api import (
+    ApiKeyCreate,
+    create_api_key,
+    deactivate_api_key,
+    delete_api_key,
+    list_api_keys,
+)
 from app.api.v1.public_api_routes import public_list_campaigns, public_list_contacts
 from app.database import AsyncSessionLocal, engine
 from app.models.api_key import ApiKey

@@ -128,7 +128,7 @@ CONVERSACIÓN A EVALUAR:
         )
         return _parse_judge_json(raw_text)
     except Exception as e:
-        logger.error("[LAB JUDGE] Evaluation failed for persona=%s: %s", persona.key, e, exc_info=True)
+        logger.exception("[LAB JUDGE] Evaluation failed for persona=%s", persona.key)
         return {
             "score": 0,
             "summary": "El juez no pudo evaluar esta conversación (error técnico).",

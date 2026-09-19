@@ -13,17 +13,52 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.api.v1 import (
+    admin,
+    analytics,
+    appointments,
+    auth,
+    automations,
+    campaigns,
+    chat_demo,
+    contacts,
+    conversations,
+    copilot,
+    knowledge_base,
+    lab,
+    meta_whatsapp,
+    orders,
+    payments,
+    products,
+    profile,
+    public_api,
+    public_api_routes,
+    public_site,
+    radio,
+    team,
+    template_seeds,
+    templates,
+    user_webhooks,
+    webhooks,
+    widget,
+)
 from app.config import settings
-from app.core.redis import close_redis
 from app.core.rate_limiter import limiter
+from app.core.redis import close_redis
 from app.services.analytics_service import flush as analytics_flush
-from app.api.v1 import auth, contacts, campaigns, conversations, knowledge_base, webhooks, profile, payments, radio, orders, appointments, templates, template_seeds, team, automations, widget, analytics, admin, chat_demo, products
-from app.api.v1 import user_webhooks, public_api, public_api_routes, public_site, meta_whatsapp, lab, copilot
+
+# No-ops if the root logger already has handlers (e.g. uvicorn's own CLI
+# setup) — only kicks in when the app is run some other way (a script, a
+# different ASGI server) that wouldn't otherwise configure logging at all.
+logging.basicConfig(
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +153,6 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())[:8]
         response = await call_next(request)
         response.headers["X-Request-ID"] = req_id
-        logger = logging.getLogger("app")
         # Make the request ID available to handlers via request.state
         request.state.request_id = req_id
         return response
@@ -245,6 +279,7 @@ async def health():
 
     import stripe as stripe_lib
     from sqlalchemy import text
+
     from app.database import engine
 
     checks = {}

@@ -9,7 +9,7 @@ inbox sends) was rejected with a 422 before the handler ever ran. The
 "Pausar bot" button could never have worked.
 """
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient

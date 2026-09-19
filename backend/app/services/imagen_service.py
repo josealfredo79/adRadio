@@ -66,8 +66,8 @@ def _get_access_token() -> str | None:
     if not settings.GOOGLE_SERVICE_ACCOUNT_JSON:
         return None
     try:
-        from google.oauth2 import service_account  # type: ignore
         import google.auth.transport.requests  # type: ignore
+        from google.oauth2 import service_account  # type: ignore
 
         info = json.loads(settings.GOOGLE_SERVICE_ACCOUNT_JSON)
         creds = service_account.Credentials.from_service_account_info(

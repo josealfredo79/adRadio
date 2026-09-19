@@ -4,8 +4,9 @@ Revision ID: 0011_appt_confirm
 Revises: 0010_appointments
 Create Date: 2026-05-12
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0011_appt_confirm"
 down_revision = "0010_appointments"

@@ -1,6 +1,6 @@
 """Analytics endpoints — /api/v1/analytics"""
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 
@@ -9,11 +9,10 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.models.message import Message
 from app.models.campaign import Campaign
-from app.models.user import User
 from app.models.contact import Contact
-from app.models.appointment import Appointment
+from app.models.message import Message
+from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 

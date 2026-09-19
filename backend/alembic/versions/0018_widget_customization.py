@@ -4,8 +4,9 @@ Revision ID: 0018_widget_customization
 Revises: 0017_add_voces_campaign_type
 Create Date: 2026-06-03 00:00:02.000000
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0018_widget_customization"
 down_revision = "0017_add_voces_campaign_type"

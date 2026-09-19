@@ -9,11 +9,16 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import delete, select
 
-from app.api.v1.payments import (
-    PLANS, PLAN_MESSAGES, FOUNDER_PRICES,
-    CheckoutSessionBody, create_checkout_session, founder_status, _claim_founder_slot,
-)
 from app.api.deps import PLAN_ORDER, PLAN_RADIO_LIMITS, check_feature_access
+from app.api.v1.payments import (
+    FOUNDER_PRICES,
+    PLAN_MESSAGES,
+    PLANS,
+    CheckoutSessionBody,
+    _claim_founder_slot,
+    create_checkout_session,
+    founder_status,
+)
 from app.core.security import generate_referral_code, hash_password
 from app.database import AsyncSessionLocal, engine
 from app.models.founder_program import FounderProgram
@@ -421,7 +426,8 @@ class TestReferrals:
 
     @pytest.mark.asyncio
     async def test_register_generates_unique_referral_code(self):
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
+
         from app.main import app
 
         transport = ASGITransport(app=app)
@@ -444,7 +450,8 @@ class TestReferrals:
 
     @pytest.mark.asyncio
     async def test_register_with_valid_ref_sets_referred_by(self):
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
+
         from app.main import app
 
         referrer_id = await _seed_user(referral_code="TESTR1")
@@ -467,7 +474,8 @@ class TestReferrals:
 
     @pytest.mark.asyncio
     async def test_register_with_invalid_ref_does_not_fail(self):
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
+
         from app.main import app
 
         transport = ASGITransport(app=app)

@@ -4,8 +4,8 @@ Revision ID: 0021_add_missing_indexes
 Revises: 0020_add_performance_indexes
 Create Date: 2026-06-04 10:00:00.000000
 """
+
 from alembic import op
-import sqlalchemy as sa
 
 revision = "0021_add_missing_indexes"
 down_revision = "0020_add_performance_indexes"

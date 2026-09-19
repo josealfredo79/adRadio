@@ -8,7 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.llm_client import chat_completion, is_groq_configured, is_openrouter_configured
+from app.services.llm_client import (
+    chat_completion,
+    is_groq_configured,
+    is_openrouter_configured,
+)
 
 
 def _unconfigured_settings(mock_settings) -> None:

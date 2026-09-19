@@ -1,7 +1,6 @@
 """Automation flows — /api/v1/automations"""
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import List
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, get_db
-from app.models.automation import AutomationFlow, AutomationStep, AutomationEnrollment
+from app.models.automation import AutomationEnrollment, AutomationFlow, AutomationStep
 from app.models.contact import Contact
 from app.models.user import User
 
@@ -32,7 +31,7 @@ class FlowCreate(BaseModel):
     name: str
     trigger: str = "new_contact"
     trigger_value: str | None = None
-    steps: List[StepIn] = []
+    steps: list[StepIn] = []
 
 
 class StepOut(BaseModel):
@@ -54,7 +53,7 @@ class FlowOut(BaseModel):
     trigger_value: str | None
     is_active: bool
     created_at: datetime
-    steps: List[StepOut] = []
+    steps: list[StepOut] = []
 
     class Config:
         from_attributes = True
@@ -64,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.get("", response_model=List[FlowOut])
+@router.get("", response_model=list[FlowOut])
 async def list_flows(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -191,7 +190,7 @@ async def enroll_contact(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="El contacto ya está en este flujo")
 
-    first_step = sorted(flow.steps, key=lambda s: s.position)[0] if flow.steps else None
+    first_step = min(flow.steps, key=lambda s: s.position) if flow.steps else None
     next_send = datetime.now(timezone.utc) + timedelta(minutes=first_step.delay_minutes) if first_step else None
 
     enrollment = AutomationEnrollment(

@@ -2,14 +2,14 @@
 Tests extendidos para servicios de IaRadio.
 Mockea APIs externas (Claude, OpenAI, Twilio, Google, etc.)
 """
-import uuid
-import json
 import base64
-import unittest
-from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
-import sys
+import json
 import os
+import sys
+import unittest
+import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -359,7 +359,7 @@ class TestStorageService:
 
         from app.services.storage_service import upload_bytes
 
-        with patch("builtins.open", unittest.mock.mock_open()) as mock_file, \
+        with patch("builtins.open", unittest.mock.mock_open()), \
              patch("app.services.storage_service._upload_to_r2", new_callable=AsyncMock) as mock_r2:
             result = await upload_bytes(b"audio data", "test.mp3", "audio/mpeg")
 
@@ -379,7 +379,7 @@ class TestStorageService:
             import app.services.storage_service as ss
             ss._s3_client = None
 
-            client = _get_client()
+            _get_client()
             mock_boto.assert_called_once()
 
     @pytest.mark.asyncio
@@ -664,8 +664,13 @@ class TestRadioScripts:
 
     def test_system_prompts_not_empty(self):
         from app.services.radio.scripts import (
-            GUION_SYSTEM_PROMPT, GUION_COMUNITARIO_PROMPT, GUION_CAPSULA_PROMPT,
-            GUION_TRIVIA_PROMPT, GUION_HISTORIA_PROMPT, GUION_ALERTA_PROMPT, GUION_ESTACIONAL_PROMPT,
+            GUION_ALERTA_PROMPT,
+            GUION_CAPSULA_PROMPT,
+            GUION_COMUNITARIO_PROMPT,
+            GUION_ESTACIONAL_PROMPT,
+            GUION_HISTORIA_PROMPT,
+            GUION_SYSTEM_PROMPT,
+            GUION_TRIVIA_PROMPT,
         )
         for p in [GUION_SYSTEM_PROMPT, GUION_COMUNITARIO_PROMPT, GUION_CAPSULA_PROMPT,
                   GUION_TRIVIA_PROMPT, GUION_HISTORIA_PROMPT, GUION_ALERTA_PROMPT, GUION_ESTACIONAL_PROMPT]:
@@ -757,7 +762,7 @@ class TestRadioAudio:
     """Tests para procesamiento de audio de radio."""
 
     def test_get_jingle_path_known_category(self):
-        from app.services.radio.audio import get_jingle_path, JINGLES_DIR
+        from app.services.radio.audio import get_jingle_path
 
         with patch("pathlib.Path.exists") as mock_exists:
             mock_exists.return_value = True
@@ -766,7 +771,7 @@ class TestRadioAudio:
             assert "restaurante.mp3" in path
 
     def test_get_jingle_path_unknown_category(self):
-        from app.services.radio.audio import get_jingle_path, JINGLES_DIR
+        from app.services.radio.audio import get_jingle_path
 
         with patch("pathlib.Path.exists") as mock_exists:
             mock_exists.return_value = True
@@ -775,7 +780,7 @@ class TestRadioAudio:
             assert "generico.mp3" in path
 
     def test_get_jingle_path_none_category(self):
-        from app.services.radio.audio import get_jingle_path, JINGLES_DIR
+        from app.services.radio.audio import get_jingle_path
 
         with patch("pathlib.Path.exists") as mock_exists:
             mock_exists.return_value = True
@@ -810,8 +815,6 @@ class TestRadioAudio:
             mock_audio.from_mp3.return_value = mock_segment
             mock_segment.dBFS = -15.0
 
-            import io
-            mock_out = MagicMock()
             mock_segment.export.return_value = None
 
             result = mix_with_jingle(b"fake_mp3_bytes")

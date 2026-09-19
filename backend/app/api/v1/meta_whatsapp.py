@@ -85,7 +85,9 @@ async def get_whatsapp_health(
     from app.models.campaign import Campaign
     from app.models.message import Message
     from app.services.meta_quality_service import (
-        resolve_tier_limit, resolve_warmup_cap, warmup_days_remaining,
+        resolve_tier_limit,
+        resolve_warmup_cap,
+        warmup_days_remaining,
     )
     from app.workers.task_helpers.campaign_ops import get_recipient_cap_state
 

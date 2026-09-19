@@ -26,7 +26,7 @@ async def get_user_from_api_key(
     result = await db.execute(
         select(ApiKey).where(
             ApiKey.prefix == prefix,
-            ApiKey.active == True,  # noqa: E712
+            ApiKey.active == True,
         )
     )
     api_key = result.scalar_one_or_none()
@@ -68,7 +68,7 @@ def require_api_key_scope(required_scope: str):
         result = await db.execute(
             select(ApiKey).where(
                 ApiKey.prefix == prefix,
-                ApiKey.active == True,  # noqa: E712
+                ApiKey.active == True,
             )
         )
         api_key = result.scalar_one_or_none()

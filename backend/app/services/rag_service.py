@@ -10,8 +10,8 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
-from app.services.embedding_service import get_embedding
 from app.services.claude_service import generate_bot_response
+from app.services.embedding_service import get_embedding
 
 
 async def _fetch_user(

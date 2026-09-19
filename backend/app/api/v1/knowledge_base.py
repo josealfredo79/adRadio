@@ -4,12 +4,21 @@ Knowledge Base router — /api/v1/knowledge-base
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, check_feature_access
+from app.api.deps import check_feature_access, get_current_user
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.core.redis import get_redis_optional
 from app.database import get_db
@@ -46,7 +55,7 @@ async def list_files(
         select(KnowledgeBase)
         .where(
             KnowledgeBase.advertiser_id == current_user.id,
-            KnowledgeBase.is_active == True,  # noqa: E712
+            KnowledgeBase.is_active == True,
         )
         .order_by(KnowledgeBase.created_at.desc())
         .offset((page - 1) * page_size)

@@ -3,7 +3,8 @@ import logging
 import redis.asyncio as aioredis
 from fastapi import HTTPException
 from redis.backoff import ExponentialWithJitterBackoff
-from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from redis.retry import Retry
 
 from app.config import settings

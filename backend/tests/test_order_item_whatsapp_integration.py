@@ -75,7 +75,7 @@ async def _send_whatsapp(advertiser, text):
 class TestOrderItemViaWhatsApp:
     @pytest.mark.asyncio
     async def test_real_order_creates_order_items_for_matched_products(self):
-        user_id, contact_id = await _seed_advertiser_and_contact()
+        user_id, _contact_id = await _seed_advertiser_and_contact()
         product_id = await _seed_product(user_id, name="Pizza Pepperoni")
         try:
             async with AsyncSessionLocal() as db:
@@ -124,7 +124,7 @@ class TestOrderItemViaWhatsApp:
 
     @pytest.mark.asyncio
     async def test_real_order_with_no_product_match_creates_no_order_items(self):
-        user_id, contact_id = await _seed_advertiser_and_contact()
+        user_id, _contact_id = await _seed_advertiser_and_contact()
         await _seed_product(user_id, name="Pizza Pepperoni")
         try:
             async with AsyncSessionLocal() as db:
@@ -147,7 +147,7 @@ class TestOrderItemViaWhatsApp:
         """The detected_plan branch (IaRadio plan purchase, reuses Order
         with items_raw='Plan X') is structurally outside the product-matching
         block — confirms it stays that way."""
-        user_id, contact_id = await _seed_advertiser_and_contact()
+        user_id, _contact_id = await _seed_advertiser_and_contact()
         await _seed_product(user_id, name="Plan Starter")  # deliberately named to tempt a false match
         try:
             async with AsyncSessionLocal() as db:

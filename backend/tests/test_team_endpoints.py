@@ -11,7 +11,13 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import delete
 
-from app.api.v1.team import TeamMemberInvite, invite_member, list_team, remove_member, update_member_role
+from app.api.v1.team import (
+    TeamMemberInvite,
+    invite_member,
+    list_team,
+    remove_member,
+    update_member_role,
+)
 from app.database import AsyncSessionLocal, engine
 from app.models.team_member import TeamMember
 from app.models.user import User

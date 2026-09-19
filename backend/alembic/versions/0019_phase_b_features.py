@@ -4,9 +4,10 @@ Revision ID: 0019_phase_b_features
 Revises: 0018_widget_customization
 Create Date: 2026-06-03 12:00:00.000000
 """
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision = "0019_phase_b_features"
 down_revision = "0018_widget_customization"

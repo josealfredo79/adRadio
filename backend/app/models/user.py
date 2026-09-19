@@ -176,11 +176,11 @@ class User(Base):
     )
 
     # Relationships
-    contacts: Mapped[list["Contact"]] = relationship(back_populates="advertiser", cascade="all, delete-orphan")
-    campaigns: Mapped[list["Campaign"]] = relationship(back_populates="advertiser", cascade="all, delete-orphan")
-    knowledge_base: Mapped[list["KnowledgeBase"]] = relationship(back_populates="advertiser", cascade="all, delete-orphan")
-    conversations: Mapped[list["Conversation"]] = relationship(back_populates="advertiser", cascade="all, delete-orphan")
-    transactions: Mapped[list["Transaction"]] = relationship(back_populates="advertiser", cascade="all, delete-orphan")
+    contacts: Mapped[list["Contact"]] = relationship(back_populates="advertiser", cascade="all, delete-orphan")  # noqa: F821
+    campaigns: Mapped[list["Campaign"]] = relationship(back_populates="advertiser", cascade="all, delete-orphan")  # noqa: F821
+    knowledge_base: Mapped[list["KnowledgeBase"]] = relationship(back_populates="advertiser", cascade="all, delete-orphan")  # noqa: F821
+    conversations: Mapped[list["Conversation"]] = relationship(back_populates="advertiser", cascade="all, delete-orphan")  # noqa: F821
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="advertiser", cascade="all, delete-orphan")  # noqa: F821
 
     __table_args__ = (
         CheckConstraint("role IN ('admin', 'advertiser')", name="ck_users_role"),

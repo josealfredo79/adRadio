@@ -1,12 +1,14 @@
 import asyncio
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
+from sqlalchemy import select
+
 from app.database import AsyncSessionLocal
 from app.models.message import Message
-from sqlalchemy import select
+
 
 async def main():
     async with AsyncSessionLocal() as db:
