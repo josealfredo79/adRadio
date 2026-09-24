@@ -21,6 +21,7 @@ const ProductsPage = lazy(() => import('@/pages/ProductsPage'))
 const AppointmentsPage = lazy(() => import('@/pages/AppointmentsPage'))
 const TermsPage = lazy(() => import('@/pages/TermsPage'))
 const PrivacyPage = lazy(() => import('@/pages/PrivacyPage'))
+const DataDeletionPage = lazy(() => import('@/pages/DataDeletionPage'))
 const CustomerStoriesPage = lazy(() => import('@/pages/CustomerStoriesPage'))
 const PublicSitePage = lazy(() => import('@/pages/PublicSitePage'))
 const ProductDetailPage = lazy(() => import('@/pages/ProductDetailPage'))
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/data-deletion" element={<DataDeletionPage />} />
             <Route path="/customer-stories" element={<CustomerStoriesPage />} />
             <Route path="/sitio/:slug" element={<PublicSitePage />} />
             <Route path="/sitio/:slug/producto/:productId" element={<ProductDetailPage />} />

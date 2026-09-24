@@ -40,6 +40,7 @@ export default function LandingFooter() {
           </a>
           <Link to="/terms" className="hover:text-gray-300 transition-colors">Términos</Link>
           <Link to="/privacy" className="hover:text-gray-300 transition-colors">Privacidad</Link>
+          <Link to="/data-deletion" className="hover:text-gray-300 transition-colors">Eliminación de datos</Link>
           <Link to="/login" className="hover:text-gray-300 transition-colors">Iniciar sesión</Link>
           <Link to="/register" className="hover:text-gray-300 transition-colors">Registrarse</Link>
         </div>

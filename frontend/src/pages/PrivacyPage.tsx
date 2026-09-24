@@ -60,6 +60,11 @@ export default function PrivacyPage() {
               <p>Implementamos medidas de seguridad estándar de la industria (como encriptación de contraseñas usando bcrypt y conexiones seguras HTTPS) para proteger tu información y la de tus clientes contra acceso no autorizado, alteración o destrucción.</p>
             </section>
 
+            <section>
+              <h2 className="text-xl font-bold text-white mb-3">6. Eliminación de Datos</h2>
+              <p>Puedes solicitar la eliminación de tu cuenta y de todos los datos asociados, incluida la conexión con WhatsApp Business. Consulta las instrucciones en <Link to="/data-deletion" className="text-indigo-400 underline">Eliminación de datos</Link>.</p>
+            </section>
+
             <p className="pt-8 text-xs text-gray-500 border-t border-white/10">Última actualización: {new Date().toLocaleDateString()}</p>
           </div>
         </div>
