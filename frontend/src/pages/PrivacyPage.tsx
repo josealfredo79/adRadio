@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
-import { Radio, ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import SEO from '@/components/SEO'
+import BrandMark from '@/components/BrandMark'
 
 export default function PrivacyPage() {
   return (
@@ -13,9 +14,7 @@ export default function PrivacyPage() {
         </Link>
         <div className="glass rounded-3xl p-8 sm:p-12 border border-white/10 bg-white/5 backdrop-blur-xl">
           <div className="flex items-center gap-3 mb-10 pb-10 border-b border-white/10">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg">
-              <Radio className="h-6 w-6 text-white" />
-            </div>
+            <BrandMark className="h-12 w-12 shadow-lg rounded-[22%]" />
             <h1 className="text-3xl font-black text-white">Política de Privacidad</h1>
           </div>
           

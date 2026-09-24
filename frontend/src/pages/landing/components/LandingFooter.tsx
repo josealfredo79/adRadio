@@ -1,14 +1,12 @@
 import { Link } from 'react-router-dom'
-import { Radio } from 'lucide-react'
+import BrandMark from '@/components/BrandMark'
 
 export default function LandingFooter() {
   return (
     <footer className="border-t border-white/5 px-5 py-10">
       <div className="mx-auto flex max-w-5xl flex-col items-center gap-5 sm:flex-row sm:justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#674CC4] to-[#6366F1]">
-            <Radio className="h-3.5 w-3.5 text-white" />
-          </div>
+          <BrandMark className="h-7 w-7" />
           <span className="font-black text-white">IaRadio</span>
           <span className="text-gray-600 text-sm">— Spots de radio con IA para WhatsApp</span>
         </div>

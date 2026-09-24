@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import api from '@/lib/api'
-import { Radio, CheckCircle } from 'lucide-react'
+import { CheckCircle } from 'lucide-react'
 import { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
+import BrandMark from '@/components/BrandMark'
 
 export default function VerifyEmailPage() {
   const [params] = useSearchParams()
@@ -50,9 +51,7 @@ export default function VerifyEmailPage() {
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-lg">
-            <Radio className="h-7 w-7 text-white" />
-          </div>
+          <BrandMark className="block mx-auto mb-4 h-14 w-14 shadow-lg rounded-[22%]" />
         </div>
         <div className="rounded-2xl bg-white p-8 shadow-xl">
           <h2 className="mb-2 text-xl font-semibold text-gray-900">Verifica tu email</h2>

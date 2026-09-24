@@ -1,14 +1,12 @@
 import { Link } from 'react-router-dom'
-import { Radio } from 'lucide-react'
+import BrandMark from '@/components/BrandMark'
 
 export default function LandingNav() {
   return (
     <nav className="sticky top-0 z-50 glass">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#674CC4] to-[#6366F1] shadow-lg shadow-indigo-500/30">
-            <Radio className="h-4 w-4 text-white" />
-          </div>
+          <BrandMark className="h-9 w-9 shadow-lg shadow-indigo-500/30 rounded-[22%]" />
           <span className="text-lg font-black tracking-tight">IaRadio</span>
         </div>
         <div className="hidden items-center gap-7 text-sm text-gray-400 sm:flex">

@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '@/lib/api'
-import { Radio, ArrowLeft, CheckCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle } from 'lucide-react'
 import SEO from '@/components/SEO'
+import BrandMark from '@/components/BrandMark'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -54,9 +55,7 @@ export default function ForgotPasswordPage() {
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 to-indigo-100 px-4 dark:from-gray-950 dark:to-gray-900">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-lg">
-            <Radio className="h-7 w-7 text-white" />
-          </div>
+          <BrandMark className="block mx-auto mb-4 h-14 w-14 shadow-lg rounded-[22%]" />
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">IaRadio</h1>
         </div>
 

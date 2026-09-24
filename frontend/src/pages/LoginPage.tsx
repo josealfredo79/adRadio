@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { getApiError } from '@/lib/api'
-import { Radio, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import SEO from '@/components/SEO'
+import BrandMark from '@/components/BrandMark'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -35,9 +36,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 shadow-lg">
-            <Radio className="h-7 w-7 text-white" />
-          </div>
+          <BrandMark className="block mx-auto mb-4 h-14 w-14 shadow-lg rounded-[22%]" />
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">IaRadio</h1>
           <p className="mt-1 text-gray-500 dark:text-gray-400">Radio Publicitaria por WhatsApp con IA</p>
         </div>

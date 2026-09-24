@@ -13,7 +13,6 @@ import {
   BookOpen,
   CreditCard,
   LogOut,
-  Radio,
   Settings,
   ShoppingBag,
   CalendarDays,
@@ -35,6 +34,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import BrandMark from '@/components/BrandMark'
 
 const navItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -92,9 +92,7 @@ export default function Layout() {
     <>
       {/* Logo */}
       <div className="flex items-center gap-2 px-6 py-5 border-b border-border">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500">
-          <Radio className="h-4 w-4 text-white" />
-        </div>
+        <BrandMark className="h-8 w-8" />
         <span className="text-xl font-bold text-foreground">IaRadio</span>
       </div>
 
@@ -240,9 +238,7 @@ export default function Layout() {
             <Menu className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-500">
-              <Radio className="h-3.5 w-3.5 text-white" />
-            </div>
+            <BrandMark className="h-6 w-6" />
             <span className="font-bold text-foreground">IaRadio</span>
           </div>
         </div>
