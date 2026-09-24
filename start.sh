@@ -7,7 +7,14 @@ echo "PORT: ${PORT:-8000}"
 echo "SERVICE_ROLE: ${SERVICE_ROLE:-api}"
 echo "======================="
 
-if [ "${SERVICE_ROLE:-api}" = "api" ]; then
+if [ "${SERVICE_ROLE:-api}" = "api" ] && [ "${SKIP_MIGRATIONS:-false}" = "true" ]; then
+    # Escape de emergencia: con la BD caída (p. ej. cuota de Neon agotada)
+    # alembic aborta el arranque y tumba también el landing y las páginas
+    # públicas, que no necesitan BD. Quitar la variable en cuanto la BD vuelva.
+    echo "WARNING: SKIP_MIGRATIONS=true — starting without running migrations"
+    exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+
+elif [ "${SERVICE_ROLE:-api}" = "api" ]; then
     echo "Running database migrations..."
     alembic upgrade head
     MIGRATION_EXIT=$?
