@@ -27,6 +27,7 @@ from app.models.contact import Contact
 from app.models.user import User
 from app.services.availability_service import TZ, get_available_slots
 from app.services.claude_service import detect_appointment_intent
+from app.services.owner_question_service import owner_number as get_owner_number
 
 logger = logging.getLogger(__name__)
 
@@ -301,10 +302,10 @@ async def _notify_owner(advertiser: User, appointment: Appointment, channel: str
         )
     )
 
-    if advertiser.whatsapp_number or advertiser.phone:
+    if get_owner_number(advertiser):
         from app.services.meta_service import send_whatsapp
 
-        owner_number = advertiser.whatsapp_number or advertiser.phone
+        owner_number = get_owner_number(advertiser)
         origen = "desde tu página web" if channel == "widget" else "desde WhatsApp"
         wa_notify = (
             f"📅 *NUEVA CITA* ({origen})\n"

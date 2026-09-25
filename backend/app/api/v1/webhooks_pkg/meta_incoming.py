@@ -28,6 +28,8 @@ from app.services.message_status_service import apply_status_update
 from app.services.meta_client import download_media
 from app.services.meta_quality_service import apply_quality_signal
 from app.services.meta_service import send_typing_indicator, send_whatsapp
+from app.services.owner_question_service import handle_owner_message
+from app.services.platform_whatsapp import platform_enabled, send_platform_text
 from app.services.storage_service import upload_bytes
 from app.services.whisper_service import transcribe_audio_bytes
 
@@ -170,6 +172,29 @@ async def _handle_account_alert(db: AsyncSession, waba_id: str | None, value: di
     )
 
 
+async def _send_platform_owner(to: str, body: str) -> tuple[str | None, str | None]:
+    return await send_platform_text(to, body)
+
+
+async def _handle_platform_message(db: AsyncSession, msg: dict) -> None:
+    """Mensaje al número central: el dueño contesta una pregunta de un
+    cliente, por texto o nota de voz."""
+    body_text, media_id = _extract_body_text(msg)
+    if media_id:
+        downloaded = await download_media(media_id, settings.IARADIO_WA_TOKEN)
+        transcription = None
+        if downloaded:
+            audio_bytes, mime_type = downloaded
+            transcription = await transcribe_audio_bytes(audio_bytes, mime_type)
+        body_text = transcription or "[audio: transcripción no disponible]"
+    await handle_owner_message(
+        db,
+        from_number=f"+{msg.get('from', '')}",
+        text=body_text,
+        context_wamid=(msg.get("context") or {}).get("id"),
+    )
+
+
 @limiter.limit("60/minute")
 async def meta_incoming(
     request: Request,
@@ -229,6 +254,16 @@ async def meta_incoming(
 
             messages = value.get("messages", [])
             if not messages:
+                continue
+
+            if platform_enabled() and phone_number_id == settings.IARADIO_WA_PHONE_NUMBER_ID:
+                # Un DUEÑO le escribió al número central de IaRadio — no es un
+                # cliente de ningún negocio, no entra al pipeline del bot.
+                for msg in messages:
+                    try:
+                        await _handle_platform_message(db, msg)
+                    except Exception:
+                        logger.exception("[META WEBHOOK] Owner channel failed for wamid=%s", msg.get("id"))
                 continue
 
             result = await db.execute(select(User).where(User.meta_phone_number_id == phone_number_id))
@@ -296,8 +331,14 @@ async def meta_incoming(
                 async def _send(to: str, body: str, advertiser=advertiser) -> tuple[str | None, str | None]:
                     return await send_whatsapp(to, body, advertiser=advertiser)
 
+                # Avisos al dueño: por el número central de IaRadio si está
+                # configurado — desde el número del negocio solo llegan si el
+                # dueño le escribió en las últimas 24h, y con coexistencia
+                # nunca (el celular del dueño ES el número del negocio).
+                _send_owner = _send_platform_owner if platform_enabled() else _send
+
                 try:
-                    await process_inbound_message(db, inbound, send=_send, send_owner=_send)
+                    await process_inbound_message(db, inbound, send=_send, send_owner=_send_owner)
                 except Exception:
                     logger.exception("[META WEBHOOK] Pipeline failed for advertiser=%s wamid=%s", advertiser.id, wamid)
 

@@ -42,6 +42,25 @@ def format_time_gap_note(last_activity: datetime | None) -> str:
 logger = logging.getLogger(__name__)
 
 
+# Marcador que el modelo emite (solo con ask_owner=True) cuando el cliente
+# pregunta algo que no está en el contexto — ver generate_bot_response().
+OWNER_QUESTION_MARKER = "[[PREGUNTAR_AL_DUENO]]"
+_OWNER_QUESTION_RE = re.compile(r"\[\[\s*PREGUNTAR_AL_DUE[NÑ]O\s*\]\]\s*:?\s*(.*)", re.IGNORECASE | re.DOTALL)
+
+
+def parse_owner_question(reply: str | None, fallback_question: str) -> str | None:
+    """Si `reply` trae el marcador, devuelve la pregunta para el dueño; si no,
+    None. Tolerante a lo que hacen los modelos baratos de la cadena (Groq,
+    OpenRouter): texto antes del marcador, Ñ, dos puntos, pregunta vacía."""
+    if not reply:
+        return None
+    m = _OWNER_QUESTION_RE.search(reply)
+    if not m:
+        return None
+    question = " ".join(m.group(1).split())
+    return question or fallback_question
+
+
 CAMPAIGN_SYSTEM_PROMPT = """Eres un experto en marketing digital y publicidad para WhatsApp.
 Tu tarea es crear mensajes publicitarios cortos, naturales y efectivos para pequeños negocios en Latinoamérica.
 
@@ -89,13 +108,35 @@ async def generate_bot_response(
     bot_personality: str = "amigable y profesional",
     bot_instructions: str | None = None,
     time_gap_note: str = "",
+    ask_owner: bool = False,
 ) -> str:
-    """Generate a RAG-based bot response."""
+    """Generate a RAG-based bot response.
+
+    `ask_owner=True` (solo el canal de WhatsApp, con el número central de
+    IaRadio configurado): cuando falta un dato, en vez de "no tengo ese dato"
+    el modelo responde con OWNER_QUESTION_MARKER + la pregunta, y el pipeline
+    se la reenvía al dueño. Ver parse_owner_question()."""
     custom_block = ""
     if bot_instructions:
         custom_block = f"""INSTRUCCIONES PERSONALIZADAS (prioridad sobre el resto):
 {bot_instructions}
 
+"""
+
+    if ask_owner:
+        missing_info_rule = f"""   - Si el cliente pregunta un dato concreto de {business_name} que NO está en el
+     contexto (precio, horario, disponibilidad, si hacen o tienen algo, etc.), NO
+     contestes tú: responde ÚNICAMENTE con esta línea, sin nada más:
+     {OWNER_QUESTION_MARKER} <la pregunta del cliente, clara y en una sola línea>
+     Ejemplo: {OWNER_QUESTION_MARKER} ¿Tienen servicio a domicilio a la colonia Centro?
+     Nunca uses esa línea para saludos, agradecimientos ni preguntas fuera del tema.
+     Si aplica la regla siguiente (algo que no aparece en el contexto), usa esta
+     línea en vez de ofrecer confirmarlo con el equipo.
+"""
+    else:
+        missing_info_rule = f"""   - Si no tienes la información, di algo como:
+     "No tengo ese dato a la mano, pero puedes consultarlo directamente con nosotros 😊
+      ¿Te ayudo con algo más de {business_name}?"
 """
 
     system = f"""Eres {bot_name}, el asistente virtual de {business_name}.
@@ -110,10 +151,7 @@ Tu personalidad es: {bot_personality}.
 1. INFORMACIÓN DEL NEGOCIO
    - Responde SOLO con datos del contexto anterior.
    - Nunca inventes precios, horarios, productos ni datos.
-   - Si no tienes la información, di algo como:
-     "No tengo ese dato a la mano, pero puedes consultarlo directamente con nosotros 😊
-      ¿Te ayudo con algo más de {business_name}?"
-   - FUNCIONES / SERVICIOS / CANALES no mencionados en el contexto: si el cliente
+{missing_info_rule}   - FUNCIONES / SERVICIOS / CANALES no mencionados en el contexto: si el cliente
      pregunta si {business_name} ofrece algo que NO aparece en el contexto (un
      producto, una integración, un canal como SMS o email, un método de pago, etc.),
      NO lo confirmes ni lo describas como si existiera, aunque la pregunta sea

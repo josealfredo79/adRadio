@@ -611,7 +611,12 @@ export default function SettingsPage() {
           {field('Ciudad', 'city', 'text', 'Ej: Ciudad de México')}
           {field('País (código)', 'country', 'text', 'Ej: MX')}
         </div>
-        {field('Teléfono', 'phone', 'tel', 'Ej: +525512345678')}
+        <div>
+          {field('Tu WhatsApp personal', 'phone', 'tel', 'Ej: +5215512345678')}
+          <p className="mt-1 text-xs text-muted-foreground">
+            Aquí te avisamos de pedidos y citas, y te preguntamos lo que tu bot no sepa contestar. Usa tu celular, no el número del negocio.
+          </p>
+        </div>
       </div>
 
       <WhatsappWizard />

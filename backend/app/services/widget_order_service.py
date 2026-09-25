@@ -22,6 +22,7 @@ from app.models.order_item import OrderItem
 from app.models.user import User
 from app.services.catalog_service import get_active_products, match_products_in_text
 from app.services.claude_service import detect_order_intent
+from app.services.owner_question_service import owner_number as get_owner_number
 
 logger = logging.getLogger(__name__)
 
@@ -140,10 +141,10 @@ async def _notify_owner(advertiser: User, contact: Contact, order: Order) -> Non
         )
     )
 
-    if advertiser.whatsapp_number or advertiser.phone:
+    if get_owner_number(advertiser):
         from app.services.meta_service import send_whatsapp
 
-        owner_number = advertiser.whatsapp_number or advertiser.phone
+        owner_number = get_owner_number(advertiser)
         wa_notify = (
             f"📦 *NUEVO PEDIDO #{order.order_number:04d}* (desde tu página web)\n"
             f"────────────────\n"

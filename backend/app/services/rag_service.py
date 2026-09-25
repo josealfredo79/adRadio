@@ -32,6 +32,7 @@ async def answer_with_rag(
     bot_name: str = "Asistente",
     bot_personality: str = "amigable y profesional",
     time_gap_note: str = "",
+    ask_owner: bool = False,
 ) -> str:
     """
     1. Generate embedding for the user query.
@@ -73,8 +74,10 @@ async def answer_with_rag(
     user = await _fetch_user(advertiser_id, db)
     bot_instructions = user.bot_instructions if user else None
 
-    # Always call Claude if there are custom instructions or KB context
-    if bot_instructions or context:
+    # Always call Claude if there are custom instructions or KB context. With
+    # ask_owner, also with neither: a brand-new business with nothing loaded
+    # yet is exactly when the bot must ask the owner instead of greeting.
+    if bot_instructions or context or ask_owner:
         return await generate_bot_response(
             advertiser_context=context,
             conversation_history=conversation_history,
@@ -84,6 +87,7 @@ async def answer_with_rag(
             bot_personality=bot_personality,
             bot_instructions=bot_instructions,
             time_gap_note=time_gap_note,
+            ask_owner=ask_owner,
         )
 
     # Pure fallback — no instructions, no context

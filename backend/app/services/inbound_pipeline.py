@@ -39,6 +39,7 @@ from app.services.claude_service import (
     detect_order_intent,
     detect_plan_purchase_intent,
     format_time_gap_note,
+    parse_owner_question,
     personalize_message,
 )
 from app.services.coupon_service import (
@@ -50,6 +51,9 @@ from app.services.coupon_service import (
 )
 from app.services.handoff_service import matches_handoff_intent
 from app.services.lead_score import calculate_lead_score
+from app.services.owner_question_service import escalate_to_owner
+from app.services.owner_question_service import owner_number as get_owner_number
+from app.services.platform_whatsapp import platform_enabled
 from app.services.rag_service import answer_with_rag
 from app.services.realtime import publish_conversation_event
 from app.services.template_lookup import get_template
@@ -312,8 +316,8 @@ async def process_inbound_message(
             await db.commit()
             await send(from_number, _appt_reply)
 
-            if advertiser.whatsapp_number or advertiser.phone:
-                owner_wa = advertiser.whatsapp_number or advertiser.phone
+            if get_owner_number(advertiser):
+                owner_wa = get_owner_number(advertiser)
                 await send_owner(owner_wa, owner_notify)
 
             return {"message": "ok"}
@@ -600,7 +604,7 @@ async def process_inbound_message(
 
             story_ack_reply = ack
 
-            owner_wa = advertiser.whatsapp_number or advertiser.phone
+            owner_wa = get_owner_number(advertiser)
             if owner_wa:
                 try:
                     await send_owner(owner_wa, voces_copy.owner_new_story(first_name, biz))
@@ -698,8 +702,8 @@ async def process_inbound_message(
         await db.commit()
         await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
 
-        if advertiser.whatsapp_number or advertiser.phone:
-            owner_wa = advertiser.whatsapp_number or advertiser.phone
+        if get_owner_number(advertiser):
+            owner_wa = get_owner_number(advertiser)
             try:
                 await send_owner(owner_wa, f"🙋 {contact_name} pidió hablar con una persona — revisa el Inbox.")
             except Exception:
@@ -887,7 +891,7 @@ async def process_inbound_message(
                 f"Responde a este número para contactar al cliente."
             )
             if advertiser.phone or advertiser.whatsapp_number:
-                owner_number = advertiser.whatsapp_number or advertiser.phone
+                owner_number = get_owner_number(advertiser)
                 await send_owner(owner_number, wa_notify)
 
             import asyncio
@@ -965,7 +969,7 @@ async def process_inbound_message(
                     f"Contacta al cliente para activar su plan."
                 )
                 if advertiser.phone or advertiser.whatsapp_number:
-                    owner_number = advertiser.whatsapp_number or advertiser.phone
+                    owner_number = get_owner_number(advertiser)
                     await send_owner(owner_number, wa_notify)
 
     elif not pending_order:
@@ -999,7 +1003,7 @@ async def process_inbound_message(
                 f"Abre el inbox para dar seguimiento."
             )
             if advertiser.phone or advertiser.whatsapp_number:
-                owner_number = advertiser.whatsapp_number or advertiser.phone
+                owner_number = get_owner_number(advertiser)
                 try:
                     await send_owner(owner_number, req_notify)
                 except Exception:
@@ -1115,6 +1119,9 @@ async def process_inbound_message(
         reply = "¡Perfecto! 🙌"
 
     if reply is None:
+        # "Déjame preguntarle al dueño": solo con el número central de IaRadio
+        # configurado y un número del dueño a dónde escribirle.
+        can_ask_owner = platform_enabled() and bool(get_owner_number(advertiser))
         rag_query = body_text
         if audio_transcription:
             rag_query = f"[El cliente envió un mensaje de voz. Transcripción: {audio_transcription}]"
@@ -1129,7 +1136,18 @@ async def process_inbound_message(
                 bot_name=advertiser.bot_name or "Asistente",
                 bot_personality=advertiser.bot_personality or "amigable y profesional",
                 time_gap_note=time_gap_note,
+                ask_owner=can_ask_owner,
             )
+            owner_question = parse_owner_question(reply, fallback_question=body_text) if can_ask_owner else None
+            if owner_question:
+                reply = await escalate_to_owner(
+                    db,
+                    advertiser=advertiser,
+                    contact_id=contact.id,
+                    customer_phone=from_number,
+                    customer_name=contact.name or from_number,
+                    question=owner_question,
+                )
         except Exception:
             logger.exception("[PIPELINE] RAG/Claude error")
             # Escalar en vez de arriesgarse a que el bot siga "adivinando" sin
@@ -1141,8 +1159,8 @@ async def process_inbound_message(
                 f"Disculpa, tuve un problema técnico. Ya avisé al equipo de {biz} "
                 "para que te atienda directamente en un momento 🙏"
             )
-            if advertiser.whatsapp_number or advertiser.phone:
-                owner_wa = advertiser.whatsapp_number or advertiser.phone
+            if get_owner_number(advertiser):
+                owner_wa = get_owner_number(advertiser)
                 try:
                     await send_owner(owner_wa, f"⚠️ El bot falló respondiéndole a {contact_name} — revisa el Inbox.")
                 except Exception:

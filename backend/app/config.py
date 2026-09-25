@@ -60,6 +60,19 @@ class Settings(BaseSettings):
     # y encenderlo solo en staging para probar. Requiere APP_ID + CONFIG_ID.
     META_EMBEDDED_SIGNUP_ENABLED: bool = False
 
+    # Número central de IaRadio — canal con los DUEÑOS (no con sus clientes):
+    # avisos y "Déjame preguntarle al dueño". Vive en el WABA propio de
+    # IaRadio, así que funciona aunque el negocio use coexistencia (el dueño
+    # no puede escribirse a sí mismo) y una sola plantilla aprobada cubre la
+    # ventana de 24h de todos los dueños. Vacío = apagado: los avisos salen
+    # del número del negocio como antes y el bot no escala preguntas.
+    IARADIO_WA_PHONE_NUMBER_ID: str = ""
+    IARADIO_WA_TOKEN: str = ""
+    # Plantilla utility con UNA variable en el cuerpo ({{1}} = el aviso),
+    # para cuando el dueño no le ha escrito al número central en 24h.
+    IARADIO_OWNER_TEMPLATE_NAME: str = "aviso_dueno"
+    IARADIO_OWNER_TEMPLATE_LANG: str = "es_MX"
+
     # Stripe
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
