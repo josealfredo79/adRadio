@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.config import settings
 from app.database import get_db
+from app.domain.appointment_actions import AppointmentConflictError, check_no_conflict
 from app.models.appointment import Appointment
 from app.models.user import User
 from app.schemas.appointment import AppointmentCreate, AppointmentOut, AppointmentUpdate
@@ -108,6 +109,11 @@ async def create_appointment(
     db: AsyncSession = Depends(get_db),
 ) -> AppointmentOut:
     """Create a new appointment. Syncs to Google Calendar if connected."""
+    try:
+        await check_no_conflict(db, current_user, body.scheduled_at, body.duration_min)
+    except AppointmentConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
     appointment = Appointment(
         advertiser_id=current_user.id,
         **body.model_dump(),
@@ -155,6 +161,18 @@ async def update_appointment(
         raise HTTPException(status_code=404, detail="Cita no encontrada")
 
     update_data = body.model_dump(exclude_none=True)
+
+    if "scheduled_at" in update_data or "duration_min" in update_data:
+        try:
+            await check_no_conflict(
+                db, current_user,
+                update_data.get("scheduled_at", appointment.scheduled_at),
+                update_data.get("duration_min", appointment.duration_min),
+                exclude_appointment_id=appointment.id,
+            )
+        except AppointmentConflictError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+
     for field, value in update_data.items():
         setattr(appointment, field, value)
 

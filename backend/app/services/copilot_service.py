@@ -29,6 +29,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.security import decode_token, sign_jwt
+from app.domain.appointment_actions import AppointmentConflictError, check_no_conflict
+from app.domain.campaign_actions import (
+    CampaignContentIncompleteError,
+    check_content_complete,
+)
 from app.models.appointment import Appointment
 from app.models.campaign import Campaign
 from app.models.contact import Contact
@@ -64,8 +69,20 @@ def _get_client() -> anthropic.AsyncAnthropic:
 
 # ─── System prompt ────────────────────────────────────────────────────────────
 
-def _build_system_prompt(user: User) -> str:
+_WHATSAPP_CHANNEL_NOTE = """
+Canal: WhatsApp. El dueño te escribe desde su celular al número de IaRadio.
+- Respuestas cortas (máximo 5 líneas), sin tablas ni encabezados de markdown;
+  para resaltar usa *asteriscos* (negritas de WhatsApp).
+- Cuando el sistema pida confirmación, el dueño la verá como botones
+  "Sí, hazlo" / "Cancelar" — no expliques cómo confirmar.
+- Donde la regla 3 dice "panel", aplica igual: operas su CRM, no le escribes
+  a sus clientes.
+"""
+
+
+def _build_system_prompt(user: User, channel: str = "panel") -> str:
     business = user.business_name or "tu negocio"
+    channel_note = _WHATSAPP_CHANNEL_NOTE if channel == "whatsapp" else ""
     return f"""Eres el Copiloto CRM de AdRadio, el asistente interno del panel de {business}.
 Ayudas al dueño del negocio a operar SU PROPIO CRM (contactos, campañas, cupones y citas)
 en lenguaje natural, usando ÚNICAMENTE las herramientas que tienes disponibles.
@@ -92,7 +109,7 @@ Reglas estrictas:
 6. Listar contactos/campañas y consultar estadísticas son de lectura — ejecútalas
    directamente cuando te ayuden a responder. Crear un contacto es barato y reversible
    — también se ejecuta directo.
-"""
+{channel_note}"""
 
 
 # ─── Definición de herramientas (Anthropic tool-use schema) ──────────────────
@@ -568,6 +585,11 @@ async def _execute_launch_campaign(db: AsyncSession, user: User, args: dict) -> 
     if campaign.status not in ("draft", "scheduled", "paused"):
         return None, f"La campaña \"{campaign.name}\" ya no está en un estado que se pueda lanzar (estado actual: {campaign.status})."
 
+    try:
+        check_content_complete(campaign)
+    except CampaignContentIncompleteError as e:
+        return None, str(e)
+
     blocked = await preflight_campaign_send(db, campaign, user)
     if blocked:
         return None, blocked
@@ -795,6 +817,11 @@ async def _execute_schedule_appointment(db: AsyncSession, user: User, args: dict
     except (ValueError, TypeError):
         return None, "La fecha/hora no es válida."
 
+    try:
+        await check_no_conflict(db, user, dt, 30)
+    except AppointmentConflictError as e:
+        return None, str(e)
+
     service = args.get("service") or "Cita"
     appointment = Appointment(
         advertiser_id=user.id,
@@ -909,9 +936,11 @@ async def _phrase_confirmed_result(user: User, tool_name: str, data: dict) -> st
 
 # ─── Entradas públicas ─────────────────────────────────────────────────────────
 
-async def handle_chat(db: AsyncSession, user: User, message: str, history: list[dict]) -> dict:
+async def handle_chat(
+    db: AsyncSession, user: User, message: str, history: list[dict], channel: str = "panel"
+) -> dict:
     client = _get_client()
-    system = _build_system_prompt(user)
+    system = _build_system_prompt(user, channel)
 
     messages: list[dict] = [
         {"role": h["role"], "content": h["content"]}

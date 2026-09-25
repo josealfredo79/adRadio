@@ -168,6 +168,58 @@ class TestCreateAppointment:
         finally:
             await _cleanup([user_id])
 
+    @pytest.mark.asyncio
+    async def test_rejects_overlapping_appointment(self):
+        """2026-09-18 finding: REST let the same advertiser double-book the
+        exact same slot twice. The dashboard owner can still pick any time
+        (business hours aren't enforced here — that's their own calendar),
+        but two confirmed appointments can't occupy the same slot."""
+        user_id = await _seed_user()
+        try:
+            when = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                await create_appointment(
+                    body=AppointmentCreate(customer_name="Ana", service="Corte", scheduled_at=when, duration_min=30),
+                    current_user=user, db=db,
+                )
+
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with pytest.raises(HTTPException) as exc_info:
+                    await create_appointment(
+                        body=AppointmentCreate(customer_name="Otro", service="Tinte", scheduled_at=when, duration_min=30),
+                        current_user=user, db=db,
+                    )
+                assert exc_info.value.status_code == 409
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_allows_non_overlapping_appointment_same_day(self):
+        user_id = await _seed_user()
+        try:
+            when = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                await create_appointment(
+                    body=AppointmentCreate(customer_name="Ana", service="Corte", scheduled_at=when, duration_min=30),
+                    current_user=user, db=db,
+                )
+
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                created = await create_appointment(
+                    body=AppointmentCreate(
+                        customer_name="Otro", service="Tinte",
+                        scheduled_at=when + timedelta(minutes=30), duration_min=30,
+                    ),
+                    current_user=user, db=db,
+                )
+            assert created.customer_name == "Otro"
+        finally:
+            await _cleanup([user_id])
+
 
 class TestUpdateAppointment:
     @pytest.mark.asyncio
@@ -214,6 +266,60 @@ class TestUpdateAppointment:
                 assert exc_info.value.status_code == 404
         finally:
             await _cleanup([owner_id, other_id])
+
+    @pytest.mark.asyncio
+    async def test_rejects_moving_into_another_appointments_slot(self):
+        user_id = await _seed_user()
+        try:
+            when = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                fixed = await create_appointment(
+                    body=AppointmentCreate(customer_name="Fija", service="Corte", scheduled_at=when, duration_min=30),
+                    current_user=user, db=db,
+                )
+                movable = await create_appointment(
+                    body=AppointmentCreate(
+                        customer_name="Movible", service="Tinte",
+                        scheduled_at=when + timedelta(hours=2), duration_min=30,
+                    ),
+                    current_user=user, db=db,
+                )
+
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with pytest.raises(HTTPException) as exc_info:
+                    await update_appointment(
+                        appointment_id=movable.id,
+                        body=AppointmentUpdate(scheduled_at=fixed.scheduled_at),
+                        current_user=user, db=db,
+                    )
+                assert exc_info.value.status_code == 409
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_updating_own_appointment_without_changing_time_does_not_self_conflict(self):
+        user_id = await _seed_user()
+        try:
+            when = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                created = await create_appointment(
+                    body=AppointmentCreate(customer_name="Ana", service="Corte", scheduled_at=when, duration_min=30),
+                    current_user=user, db=db,
+                )
+
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                updated = await update_appointment(
+                    appointment_id=created.id,
+                    body=AppointmentUpdate(scheduled_at=when, notes="Confirmar con el cliente"),
+                    current_user=user, db=db,
+                )
+            assert updated.notes == "Confirmar con el cliente"
+        finally:
+            await _cleanup([user_id])
 
 
 class TestDeleteAppointment:

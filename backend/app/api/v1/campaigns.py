@@ -21,6 +21,10 @@ from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
+from app.domain.campaign_actions import (
+    CampaignContentIncompleteError,
+    check_content_complete,
+)
 from app.models.campaign import Campaign
 from app.models.customer_story import CustomerStory
 from app.models.user import User
@@ -242,13 +246,10 @@ async def resume_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaña no encontrada")
     mode = (campaign.ab_test or {}).get("campaign_mode", "regular")
-    if campaign.status == "draft":
-        if mode in ("radio", "comunitaria") and not (campaign.ab_test or {}).get("audio_url"):
-            raise HTTPException(status_code=400, detail="Completa la generación de audio antes de enviar la campaña")
-        if mode in ("banner",) and not campaign.image_url:
-            raise HTTPException(status_code=400, detail="Completa la generación del banner antes de enviar la campaña")
-        if not campaign.message_text and mode == "regular":
-            raise HTTPException(status_code=400, detail="Agrega un mensaje a la campaña antes de enviarla")
+    try:
+        check_content_complete(campaign)
+    except CampaignContentIncompleteError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     if campaign.status not in ("draft", "scheduled", "paused"):
         raise HTTPException(status_code=400, detail="La campaña no puede ser reanudada desde su estado actual")
 
