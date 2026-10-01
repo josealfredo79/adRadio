@@ -1,11 +1,31 @@
 import { useState, useRef, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
-import { Users, Plus, Upload, Trash2, Search, Download, Tag, X, Tags, Send, CheckCheck, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Users, Plus, Upload, Trash2, Search, Download, Tag, X, Tags, Send, CheckCheck, ChevronLeft, ChevronRight, Link2 } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
 import PrintButton from '@/components/PrintButton'
 import { useToast } from '@/contexts/ToastContext'
+
+// Copia el link del portal del cliente (/c/:token) — el bot ya lo manda solo
+// en cada confirmación; esto es para compartirlo a mano.
+function PortalLinkButton({ contactId, className }: { contactId: string; className: string }) {
+  const { toast } = useToast()
+  const copy = async () => {
+    try {
+      const { data } = await api.get(`/contacts/${contactId}/portal-link`)
+      await navigator.clipboard.writeText(data.url)
+      toast({ title: 'Link copiado', description: 'Mándaselo a tu cliente: ahí ve sus citas, pedidos y promos.', variant: 'success' })
+    } catch (err) {
+      toast({ title: 'Error', description: getApiError(err), variant: 'error' })
+    }
+  }
+  return (
+    <button onClick={copy} title="Copiar link del portal del cliente" aria-label="Copiar link del portal del cliente" className={className}>
+      <Link2 className="h-4 w-4" />
+    </button>
+  )
+}
 
 interface Contact {
   id: string
@@ -500,6 +520,8 @@ export default function ContactsPage() {
                     </td>
                     <td className="hidden md:table-cell px-6 py-4 text-sm text-muted-foreground">{formatDate(contact.created_at)}</td>
                     <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                      <PortalLinkButton contactId={contact.id} className="text-muted-foreground hover:text-brand-500 transition-colors" />
                       <button
                         onClick={() => {
                           const ids = selectedIds.size > 0 ? Array.from(selectedIds) : [contact.id]
@@ -515,6 +537,7 @@ export default function ContactsPage() {
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
+                      </div>
                     </td>
                   </tr>
                   <tr key={`${contact.id}-mobile`} className="md:hidden">
@@ -550,6 +573,7 @@ export default function ContactsPage() {
                             onChange={() => toggleSelect(contact.id)}
                             className="rounded border-border bg-background text-brand-500 focus:ring-brand-500"
                           />
+                          <PortalLinkButton contactId={contact.id} className="text-muted-foreground hover:text-brand-500 transition-colors p-1" />
                           <button
                             onClick={() => {
                               const ids = selectedIds.size > 0 ? Array.from(selectedIds) : [contact.id]

@@ -11,7 +11,7 @@ sus datos de contacto antes de llegar aquí.
 """
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,8 +23,15 @@ from app.models.user import User
 from app.services.catalog_service import get_active_products, match_products_in_text
 from app.services.claude_service import detect_order_intent
 from app.services.owner_question_service import owner_number as get_owner_number
+from app.services.portal_service import portal_footer
 
 logger = logging.getLogger(__name__)
+
+# Un pedido a medias solo se retoma si se empezó hace poco. Sin este límite,
+# un pedido abandonado hace días se "comía" el siguiente mensaje del cliente
+# (ej. "me interesa la promo" se guardaba como dirección de entrega) — y con
+# el portal del cliente, volver días después al chat es lo normal.
+ORDER_RESUME_WINDOW = timedelta(hours=2)
 
 NEEDS_CONTACT_REPLY = (
     "¡Con gusto te ayudo con tu pedido! 🛒 Para poder contactarte y confirmarlo, "
@@ -43,6 +50,7 @@ async def handle_widget_order(
                 Order.advertiser_id == advertiser.id,
                 Order.contact_id == contact.id,
                 Order.state.not_in(["confirmed", "cancelled"]),
+                Order.created_at > datetime.now(timezone.utc) - ORDER_RESUME_WINDOW,
             ).order_by(Order.created_at.desc())
         )
         pending_order = result.scalars().first()
@@ -122,6 +130,7 @@ async def _advance(
         f"📍 {order.delivery_address}\n"
         f"💳 {order.payment_method}\n\n"
         "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
+        f"{portal_footer(contact.id)}"
     )
 
 

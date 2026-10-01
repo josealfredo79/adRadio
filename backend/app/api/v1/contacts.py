@@ -172,6 +172,27 @@ async def update_contact(
     return ContactOut.model_validate(contact)
 
 
+@router.get("/{contact_id}/portal-link")
+async def get_portal_link(
+    contact_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Link del portal del cliente (ver portal_service.py), para que el dueño
+    lo comparta a mano — el bot ya lo manda solo en cada confirmación."""
+    from app.services.portal_service import portal_url
+
+    result = await db.execute(
+        select(Contact).where(
+            Contact.id == contact_id,
+            Contact.advertiser_id == current_user.id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Contacto no encontrado")
+    return {"url": portal_url(contact_id)}
+
+
 @router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_contact(
     contact_id: uuid.UUID,

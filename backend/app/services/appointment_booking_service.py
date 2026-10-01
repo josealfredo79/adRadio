@@ -28,6 +28,7 @@ from app.models.user import User
 from app.services.availability_service import TZ, get_available_slots
 from app.services.claude_service import detect_appointment_intent
 from app.services.owner_question_service import owner_number as get_owner_number
+from app.services.portal_service import portal_footer
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +282,7 @@ async def _advance(
         f"📌 {appointment.service}\n"
         f"🕐 {fecha} a las {hora}\n\n"
         "¡Te esperamos! Si necesitas reagendar, escríbenos."
+        f"{portal_footer(contact.id)}"
     )
 
 

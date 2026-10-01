@@ -25,6 +25,7 @@ const DataDeletionPage = lazy(() => import('@/pages/DataDeletionPage'))
 const CustomerStoriesPage = lazy(() => import('@/pages/CustomerStoriesPage'))
 const PublicSitePage = lazy(() => import('@/pages/PublicSitePage'))
 const ProductDetailPage = lazy(() => import('@/pages/ProductDetailPage'))
+const PortalPage = lazy(() => import('@/pages/PortalPage'))
 const TeamPage = lazy(() => import('@/pages/TeamPage'))
 const WidgetPage = lazy(() => import('@/pages/WidgetPage'))
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
@@ -72,6 +73,8 @@ export default function App() {
             <Route path="/sitio/:slug" element={<PublicSitePage />} />
             <Route path="/sitio/:slug/producto/:productId" element={<ProductDetailPage />} />
             <Route path="/p/:advertiserId/:productId" element={<ProductDetailPage />} />
+            <Route path="/c/:token" element={<PortalPage />} />
+            <Route path="/c/:token/promo/:promoId" element={<PortalPage />} />
 
             {/* Public */}
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />

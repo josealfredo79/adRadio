@@ -54,9 +54,11 @@ from app.services.lead_score import calculate_lead_score
 from app.services.owner_question_service import escalate_to_owner
 from app.services.owner_question_service import owner_number as get_owner_number
 from app.services.platform_whatsapp import platform_enabled
+from app.services.portal_service import portal_footer
 from app.services.rag_service import answer_with_rag
 from app.services.realtime import publish_conversation_event
 from app.services.template_lookup import get_template
+from app.services.widget_order_service import ORDER_RESUME_WINDOW
 
 logger = logging.getLogger(__name__)
 
@@ -282,6 +284,7 @@ async def process_inbound_message(
                     f"🏪 {biz_name}\n\n"
                     f"¡Te esperamos! Si necesitas reagendar escríbenos 😊"
                 )
+                _appt_reply += portal_footer(pending_appt.contact_id)
                 owner_notify = (
                     f"✅ *Cita confirmada por el cliente*\n"
                     f"👤 {pending_appt.customer_name} ({from_number})\n"
@@ -799,6 +802,7 @@ async def process_inbound_message(
             Order.advertiser_id == advertiser.id,
             Order.contact_id == contact.id,
             Order.state.not_in(["confirmed", "cancelled"]),
+            Order.created_at > datetime.now(timezone.utc) - ORDER_RESUME_WINDOW,
         ).order_by(Order.created_at.desc())
     )
     pending_order = pending_order_result.scalars().first()
@@ -868,6 +872,7 @@ async def process_inbound_message(
                 f"💳 {pending_order.payment_method}\n\n"
                 "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
             )
+            order_reply += portal_footer(pending_order.contact_id)
 
             _tpl_owner = await get_template(db, str(advertiser.id), "Pedido", "order_owner_notify")
             _on = {

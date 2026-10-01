@@ -34,6 +34,7 @@ from app.api.v1 import (
     meta_whatsapp,
     orders,
     payments,
+    portal,
     products,
     profile,
     public_api,
@@ -263,6 +264,7 @@ app.include_router(public_api.router, prefix=settings.API_PREFIX)
 app.include_router(public_api_routes.router, prefix=settings.API_PREFIX)
 app.include_router(public_site.router, prefix=settings.API_PREFIX)
 app.include_router(public_site.product_router, prefix=settings.API_PREFIX)
+app.include_router(portal.router, prefix=settings.API_PREFIX)
 app.include_router(chat_demo.router, prefix=settings.API_PREFIX)
 app.include_router(copilot.router, prefix=settings.API_PREFIX)
 

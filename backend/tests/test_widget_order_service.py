@@ -286,3 +286,60 @@ class TestOrderItemMatching:
             assert items == []
         finally:
             await _cleanup([user_id])
+
+
+class TestStalePendingOrder:
+    """Un pedido a medias abandonado no debe "comerse" el siguiente mensaje —
+    bug visto 2026-10-01 en el portal del cliente: "Me interesa la promo" se
+    guardó como dirección de entrega de un pedido viejo."""
+
+    async def _seed_pending(self, user_id, contact_id, age):
+        from datetime import datetime, timezone
+        async with AsyncSessionLocal() as db:
+            order = Order(
+                advertiser_id=user_id, contact_id=contact_id, order_number=1,
+                state="collecting_address", items_raw="Aceite para barba",
+                created_at=datetime.now(timezone.utc) - age,
+            )
+            db.add(order)
+            await db.commit()
+            return order.id
+
+    @pytest.mark.asyncio
+    async def test_stale_order_is_not_resumed(self):
+        from datetime import timedelta
+        user_id = await _seed_user()
+        try:
+            contact_id = await _seed_contact(user_id)
+            order_id = await self._seed_pending(user_id, contact_id, timedelta(days=3))
+            with patch("app.services.widget_order_service.detect_order_intent", return_value=False):
+                async with AsyncSessionLocal() as db:
+                    user = await db.get(User, user_id)
+                    contact = await db.get(Contact, contact_id)
+                    reply = await handle_widget_order(db, user, contact, "Me interesa la promo del viernes")
+            assert reply is None
+            async with AsyncSessionLocal() as db:
+                order = await db.get(Order, order_id)
+                assert order.state == "collecting_address"
+                assert order.delivery_address is None
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_recent_order_is_still_resumed(self):
+        from datetime import timedelta
+        user_id = await _seed_user()
+        try:
+            contact_id = await _seed_contact(user_id)
+            order_id = await self._seed_pending(user_id, contact_id, timedelta(minutes=10))
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                contact = await db.get(Contact, contact_id)
+                reply = await handle_widget_order(db, user, contact, "Calle Reforma 123")
+            assert reply is not None and "pagar" in reply
+            async with AsyncSessionLocal() as db:
+                order = await db.get(Order, order_id)
+                assert order.delivery_address == "Calle Reforma 123"
+                assert order.state == "collecting_payment"
+        finally:
+            await _cleanup([user_id])

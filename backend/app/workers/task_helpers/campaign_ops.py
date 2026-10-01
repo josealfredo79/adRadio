@@ -18,6 +18,7 @@ from app.models.send_block_log import (
     REASON_NO_UTILITY_TEMPLATE,
     REASON_RECIPIENT_CAP,
 )
+from app.services.portal_service import promo_footer
 from app.services.send_block_log_service import log_send_block
 
 logger = logging.getLogger(__name__)
@@ -450,6 +451,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             continue
 
         body_text = caption or f"¡Hola {contact_name}! Mira lo que tenemos para ti 👆"
+        body_text += promo_footer(contact.id, campaign.id)
 
         if outcome == "invited":
             # Window's still closed — the opt-in template only asked the
@@ -712,6 +714,10 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         except Exception as tts_err:
             logger.error("[CAMPAIGN] TTS failed for contact %s: %s", contact.id, tts_err)
 
+        # El link va en el texto (que ya acompaña a la nota de voz), nunca en
+        # el guion del TTS — el locutor no debe leer una URL en voz alta.
+        text_body = body + promo_footer(contact.id, campaign.id)
+
         if outcome == "invited":
             # Window's still closed — defer the real send until the contact
             # actually replies (see inbound_pipeline.py's generic
@@ -720,10 +726,10 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             # charged 1 message to the advertiser's quota for the reopen
             # template; the deferred send fires with charge=False.
             if audio_url:
-                payload = {"audio_url": audio_url, "script": body}
+                payload = {"audio_url": audio_url, "script": text_body}
                 kind = "voice"
             else:
-                payload = {"body": body}
+                payload = {"body": text_body}
                 kind = "text"
             await _supersede_stale_pending(db, advertiser.id, contact.id)
             db.add(Message(
@@ -753,7 +759,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             await db.flush()
 
             send_whatsapp_voice_note.apply_async(
-                args=[str(msg.id), contact.phone, audio_url, body],
+                args=[str(msg.id), contact.phone, audio_url, text_body],
                 countdown=ban_delay,
                 queue="whatsapp",
             )
@@ -764,7 +770,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
                 contact_id=contact.id,
                 advertiser_id=campaign.advertiser_id,
                 direction="outbound",
-                content=body,
+                content=text_body,
                 status="queued",
                 scheduled_for=datetime.now(timezone.utc),
             )
@@ -772,7 +778,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             await db.flush()
 
             send_whatsapp_message.apply_async(
-                args=[str(msg.id), contact.phone, body],
+                args=[str(msg.id), contact.phone, text_body],
                 countdown=ban_delay,
                 queue="whatsapp",
             )
