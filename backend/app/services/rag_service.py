@@ -33,8 +33,14 @@ async def answer_with_rag(
     bot_personality: str = "amigable y profesional",
     time_gap_note: str = "",
     ask_owner: bool = False,
+    conversation_key: str | None = None,
+    redis=None,
 ) -> str:
     """
+    `conversation_key` (contacto o sesión del chat web) activa la cuota de
+    conversaciones del plan (plan_usage.py): se cuenta solo si de verdad se
+    llama a la IA, y pasado el límite se contesta con el modelo económico.
+
     1. Generate embedding for the user query.
     2. Find top-k similar chunks from the advertiser's knowledge base.
     3. Build context string.
@@ -78,6 +84,11 @@ async def answer_with_rag(
     # ask_owner, also with neither: a brand-new business with nothing loaded
     # yet is exactly when the bot must ask the owner instead of greeting.
     if bot_instructions or context or ask_owner:
+        economy = False
+        if conversation_key:
+            from app.services.plan_usage import register_bot_conversation
+            usage = await register_bot_conversation(uuid.UUID(str(advertiser_id)), conversation_key, redis)
+            economy = usage.economy
         return await generate_bot_response(
             advertiser_context=context,
             conversation_history=conversation_history,
@@ -88,6 +99,7 @@ async def answer_with_rag(
             bot_instructions=bot_instructions,
             time_gap_note=time_gap_note,
             ask_owner=ask_owner,
+            economy=economy,
         )
 
     # Pure fallback — no instructions, no context

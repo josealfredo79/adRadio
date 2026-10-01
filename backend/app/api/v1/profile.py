@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import check_feature_access, get_current_user
+from app.api.deps import check_feature_access, get_current_user, plan_required_message
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.core.redis import get_redis_optional
 from app.database import get_db
@@ -503,7 +503,7 @@ async def get_white_label(
     current_user: User = Depends(get_current_user),
 ):
     if not check_feature_access(current_user, "white_label"):
-        raise HTTPException(status_code=402, detail="Tu plan no incluye white-label. Actualiza a Enterprise.")
+        raise HTTPException(status_code=402, detail=plan_required_message("white_label"))
     wl = current_user.white_label or {}
     return WhiteLabelOut(**wl)
 
@@ -515,7 +515,7 @@ async def update_white_label(
     current_user: User = Depends(get_current_user),
 ):
     if not check_feature_access(current_user, "white_label"):
-        raise HTTPException(status_code=402, detail="Tu plan no incluye white-label. Actualiza a Enterprise.")
+        raise HTTPException(status_code=402, detail=plan_required_message("white_label"))
     wl = dict(current_user.white_label or {})
     for field, value in body.model_dump(exclude_none=True).items():
         wl[field] = value

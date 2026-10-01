@@ -1,55 +1,65 @@
 import { describe, it, expect } from 'vitest'
-import { PLANS_CONFIG, PLANS_MAP, LANDING_PLANS } from '../plans'
+import { ADDONS_CONFIG, LANDING_PLANS, PLANS_CONFIG, PLANS_MAP, planDisplayName } from '../plans'
 
+// Debe coincidir con backend/app/core/plans.py (rediseño 2026-10-01).
 describe('PLANS_CONFIG', () => {
-  it('has 6 plans', () => {
-    expect(PLANS_CONFIG).toHaveLength(6)
+  it('has the 4 current plans with their new names', () => {
+    expect(PLANS_CONFIG.map((p) => [p.key, p.name])).toEqual([
+      ['starter', 'Arranque'],
+      ['growth', 'Negocio'],
+      ['pro', 'Crecimiento'],
+      ['enterprise', 'Empresa'],
+    ])
   })
 
   it('every plan has required fields', () => {
     for (const plan of PLANS_CONFIG) {
       expect(plan.key).toBeTruthy()
-      expect(plan.name).toBeTruthy()
       expect(typeof plan.price_mxn).toBe('number')
       expect(typeof plan.messages).toBe('number')
-      expect(Array.isArray(plan.features)).toBe(true)
+      expect(typeof plan.conversations).toBe('number')
       expect(plan.features.length).toBeGreaterThan(0)
     }
   })
 
-  it('growth is marked popular', () => {
-    const growth = PLANS_CONFIG.find((p) => p.key === 'growth')
-    expect(growth?.popular).toBe(true)
+  it('prices and quotas match the backend', () => {
+    expect(PLANS_CONFIG.map((p) => p.price_mxn)).toEqual([449, 899, 1799, 4999])
+    expect(PLANS_CONFIG.map((p) => p.conversations)).toEqual([300, 1000, 3000, -1])
+    expect(PLANS_CONFIG.map((p) => p.messages)).toEqual([150, 500, 1500, 5000])
   })
 
-  it('micro has lowest price', () => {
-    const prices = PLANS_CONFIG.map((p) => p.price_mxn)
-    expect(Math.min(...prices)).toBe(299)
+  it('Negocio is the popular one and Empresa is quoted', () => {
+    expect(PLANS_MAP.growth.popular).toBe(true)
+    expect(PLANS_MAP.enterprise.custom).toBe(true)
   })
 
-  it('enterprise has highest price', () => {
-    const prices = PLANS_CONFIG.map((p) => p.price_mxn)
-    expect(Math.max(...prices)).toBe(19999)
-  })
-})
-
-describe('PLANS_MAP', () => {
-  it('maps all keys', () => {
-    expect(Object.keys(PLANS_MAP)).toEqual(
-      expect.arrayContaining(['micro', 'starter', 'growth', 'pro', 'business', 'enterprise']),
-    )
-  })
-
-  it('returns correct plan by key', () => {
-    expect(PLANS_MAP.starter.name).toBe('Starter')
-    expect(PLANS_MAP.enterprise.messages).toBe(10000)
+  it('has no fake reference prices', () => {
+    for (const plan of PLANS_CONFIG) {
+      expect(plan).not.toHaveProperty('referencePriceMxn')
+    }
   })
 })
 
 describe('LANDING_PLANS', () => {
-  it('excludes enterprise', () => {
-    const keys = LANDING_PLANS.map((p) => p.key)
-    expect(keys).not.toContain('enterprise')
-    expect(keys).toHaveLength(5)
+  it('shows the 3 self-serve plans', () => {
+    expect(LANDING_PLANS.map((p) => p.key)).toEqual(['starter', 'growth', 'pro'])
+  })
+})
+
+describe('planDisplayName', () => {
+  it('names current, retired and trial plans', () => {
+    expect(planDisplayName('growth')).toBe('Negocio')
+    expect(planDisplayName('trial')).toBe('Prueba gratis')
+    expect(planDisplayName(undefined)).toBe('Prueba gratis')
+    expect(planDisplayName('micro')).toContain('Micro')
+  })
+})
+
+describe('ADDONS_CONFIG', () => {
+  it('matches backend add-ons', () => {
+    expect(ADDONS_CONFIG.map((a) => [a.key, a.price_mxn])).toEqual([
+      ['conversations_500', 149],
+      ['messages_500', 99],
+    ])
   })
 })

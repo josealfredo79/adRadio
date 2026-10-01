@@ -130,6 +130,13 @@ class User(Base):
     # de invoice.payment_succeeded (ver replenish_annual_message_quota en tasks.py).
     billing_cycle: Mapped[str] = mapped_column(String(10), default="monthly", server_default="monthly")
     messages_refill_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Conversaciones del bot con IA (ver app/services/plan_usage.py): cuota
+    # mensual por mes calendario. `bot_conv_extra` son paquetes comprados, no
+    # vencen; `bot_conv_alert` = último aviso enviado este mes (0/80/100 %).
+    bot_conv_month: Mapped[str | None] = mapped_column(String(7))
+    bot_conv_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    bot_conv_extra: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    bot_conv_alert: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     # Referidos — código propio + quién lo trajo (si vino por referido)
     referral_code: Mapped[str | None] = mapped_column(String(8), unique=True)

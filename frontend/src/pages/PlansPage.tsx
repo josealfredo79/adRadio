@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { CheckCircle, Zap, Sparkles, Rocket } from 'lucide-react'
-import { PLANS_CONFIG, type PlanDefinition } from '@/lib/plans'
+import { CheckCircle, Zap, Sparkles, Rocket, Bot, Send, Bell, Info } from 'lucide-react'
+import { ADDONS_CONFIG, INCLUDED_IN_ALL, META_FEES_NOTE, PLANS_CONFIG, planDisplayName, type PlanDefinition } from '@/lib/plans'
 import SEO from '@/components/SEO'
 
 interface BackendPlan {
@@ -22,7 +22,17 @@ interface FounderStatus {
   prices: Record<string, { price_mxn: number; price_usd: number }>
 }
 
+interface PlanUsage {
+  plan: string
+  plan_name: string
+  conversations: { used: number; limit: number; extra: number; cap: number; economy: boolean }
+  messages_remaining: number
+  radio_limit: number
+  team_limit: number
+}
+
 const FOUNDER_ELIGIBLE_PLANS = ['starter', 'growth']
+const SALES_EMAIL = 'iaradio@iaradio.online'
 
 export default function PlansPage() {
   const { user } = useAuth()
@@ -43,6 +53,23 @@ export default function PlansPage() {
     queryFn: () => api.get('/founder-status').then((r) => r.data),
     staleTime: 30_000,
   })
+
+  const { data: usage } = useQuery<PlanUsage>({
+    queryKey: ['plan-usage'],
+    queryFn: () => api.get('/usage').then((r) => r.data),
+  })
+
+  const handleAddon = async (addon: string) => {
+    setLoading(addon)
+    try {
+      const { data } = await api.post('/checkout/addon', { addon })
+      window.location.href = data.checkout_url
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: getApiError(err, 'Error al iniciar pago'), variant: 'error' })
+    } finally {
+      setLoading(null)
+    }
+  }
 
   const handleSubscribe = async (planKey: string) => {
     setLoading(planKey)
@@ -136,6 +163,8 @@ export default function PlansPage() {
         </div>
       </div>
 
+      {usage && <UsagePanel usage={usage} isActive={user?.subscription_status === 'active'} loading={loading} onAddon={handleAddon} />}
+
       {/* Banner programa Fundadores */}
       {founderStatus?.available && (
         <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -146,14 +175,14 @@ export default function PlansPage() {
                 Programa Fundadores — quedan {founderStatus.slots_left} de {founderStatus.slots_total} lugares
               </p>
               <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-                Precio bloqueado por 12 meses en Starter y Growth, a cambio de un testimonio o caso de estudio.
+                Precio bloqueado por 12 meses en Arranque y Negocio, a cambio de un testimonio o caso de estudio.
               </p>
             </div>
           </div>
           <button
             onClick={() => {
               // Fundadores es siempre mensual — si el usuario ya tenía "Anual"
-              // seleccionado, los planes no elegibles (Micro/Pro/Business)
+              // seleccionado, los planes no elegibles (Crecimiento/Empresa)
               // quedarían mostrando precio anual aunque el toggle se vea
               // deshabilitado. Forzar a mensual evita ese estado inconsistente.
               setUseFounderPricing((v) => !v)
@@ -171,7 +200,7 @@ export default function PlansPage() {
       )}
 
       {/* Plan cards */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         {PLANS_CONFIG.map((plan) => {
           const isPopular = plan.popular
           const isCurrentPlan = user?.current_plan === plan.key
@@ -208,6 +237,7 @@ export default function PlansPage() {
                 <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{plan.name}</h3>
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{plan.tagline}</p>
                 <div className="mt-3 flex items-baseline gap-1">
+                  {plan.custom && <span className="text-sm text-gray-500 dark:text-gray-400">desde</span>}
                   <span className="text-3xl font-extrabold text-gray-900 dark:text-gray-100">{formatPrice(plan)}</span>
                   <span className="text-gray-400 dark:text-gray-500 text-sm">{priceFor(plan).perLabel}</span>
                 </div>
@@ -217,7 +247,9 @@ export default function PlansPage() {
                   </p>
                 )}
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {plan.messages.toLocaleString()} mensajes incluidos
+                  {plan.conversations < 0
+                    ? 'Conversaciones y envíos a la medida'
+                    : `${plan.conversations.toLocaleString()} conversaciones del bot · ${plan.messages.toLocaleString()} envíos`}
                 </p>
               </div>
 
@@ -240,7 +272,15 @@ export default function PlansPage() {
                 })}
               </ul>
 
-              {/* CTA */}
+              {/* CTA — Empresa se cotiza, no se compra con un clic */}
+              {plan.custom ? (
+                <a
+                  href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent('Plan Empresa — IaRadio')}`}
+                  className="block w-full rounded-xl border border-gray-300 dark:border-gray-700 py-2.5 text-center text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900"
+                >
+                  Hablar con nosotros
+                </a>
+              ) : (
               <button
                 id={`plan-cta-${plan.key}`}
                 onClick={() => handleSubscribe(plan.key)}
@@ -259,9 +299,27 @@ export default function PlansPage() {
                   ? 'Plan activo'
                   : `Empezar con ${plan.name}`}
               </button>
+              )}
             </div>
           )
         })}
+      </div>
+
+      {/* Incluido en todos + transparencia con Meta */}
+      <div className="rounded-xl border border-brand-200 dark:border-brand-900 bg-brand-50/60 dark:bg-brand-950/20 p-5">
+        <p className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <Bell className="h-4 w-4 text-brand-500" /> Incluido en todos los planes, sin límite
+        </p>
+        <ul className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600 dark:text-gray-400">
+          {INCLUDED_IN_ALL.map((f) => (
+            <li key={f} className="flex items-center gap-1.5">
+              <CheckCircle className="h-4 w-4 text-green-500" /> {f}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {META_FEES_NOTE}
+        </p>
       </div>
 
       {/* Footer strip */}
@@ -270,5 +328,86 @@ export default function PlansPage() {
       </div>
     </div>
     </>
+  )
+}
+
+function UsageBar({ used, cap }: { used: number; cap: number }) {
+  const pct = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0
+  const color = pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-500' : 'bg-brand-500'
+  return (
+    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+      <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+    </div>
+  )
+}
+
+// Uso del mes — para que el dueño vea lo que lleva antes de que se le acabe,
+// y pueda comprar un paquete sin cambiar de plan.
+function UsagePanel({
+  usage,
+  isActive,
+  loading,
+  onAddon,
+}: {
+  usage: PlanUsage
+  isActive: boolean
+  loading: string | null
+  onAddon: (addon: string) => void
+}) {
+  const conv = usage.conversations
+  const unlimited = conv.cap < 0
+  return (
+    <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">Tu uso este mes</h2>
+        <span className="text-sm text-gray-500 dark:text-gray-400">Plan {planDisplayName(usage.plan)}</span>
+      </div>
+      <div className="mt-4 grid gap-5 sm:grid-cols-2">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <Bot className="h-4 w-4 text-brand-500" /> Conversaciones del bot
+          </p>
+          <p className="mt-1 text-2xl font-extrabold text-gray-900 dark:text-gray-100">
+            {conv.used.toLocaleString()}
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              {unlimited ? ' · sin límite' : ` de ${conv.cap.toLocaleString()}`}
+            </span>
+          </p>
+          {!unlimited && <UsageBar used={conv.used} cap={conv.cap} />}
+          {conv.extra > 0 && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Incluye {conv.extra.toLocaleString()} de paquetes extra</p>
+          )}
+          {conv.economy && (
+            <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+              Tu bot sigue contestando, con un modelo más económico hasta el próximo mes.
+            </p>
+          )}
+        </div>
+        <div>
+          <p className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <Send className="h-4 w-4 text-brand-500" /> Envíos de campaña disponibles
+          </p>
+          <p className="mt-1 text-2xl font-extrabold text-gray-900 dark:text-gray-100">{usage.messages_remaining.toLocaleString()}</p>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Los clientes con notificaciones web reciben tus campañas gratis y no gastan envíos.
+          </p>
+        </div>
+      </div>
+      {isActive && (
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-gray-100 dark:border-gray-800 pt-4">
+          {ADDONS_CONFIG.map((a) => (
+            <button
+              key={a.key}
+              onClick={() => onAddon(a.key)}
+              disabled={loading === a.key}
+              className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-60"
+            >
+              {loading === a.key ? 'Procesando…' : `${a.name} · $${a.price_mxn} MXN`}
+              <span className="ml-1 text-xs text-gray-400">({a.note})</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

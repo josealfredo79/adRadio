@@ -345,3 +345,45 @@ async def send_campaign_failed_email(
     subject = f"❌ Campaña fallida — {campaign_name}"
     return await send_email(to, subject, html)
 
+
+
+async def send_plan_usage_email(to: str, business_name: str, used: int, cap: int, level: int) -> bool:
+    """Aviso al 80 % y al 100 % de las conversaciones del bot del mes (ver
+    plan_usage.py). Al 100 % el bot NO se apaga — sigue con un modelo más
+    económico — y eso es lo que el correo debe dejar claro."""
+    plan_url = f"{settings.FRONTEND_URL}/app/plans"
+    if level >= 100:
+        title = "Usaste todas las conversaciones del bot de este mes"
+        body = (
+            "Tu bot <strong>sigue contestando</strong>, pero con un modelo de IA más económico "
+            "hasta que inicie el siguiente mes. Para mantener las respuestas de máxima calidad, "
+            "agrega un paquete de conversaciones o sube de plan."
+        )
+    else:
+        title = f"Llevas el {level} % de las conversaciones del bot de este mes"
+        body = (
+            "Vas muy bien de clientes. Si crees que te van a faltar, puedes agregar un paquete "
+            "de conversaciones o subir de plan cuando quieras."
+        )
+    html = f"""
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);padding:24px 28px">
+        <h1 style="margin:0;color:#fff;font-size:20px;font-weight:800">🤖 {title}</h1>
+        <p style="margin:4px 0 0;color:rgba(255,255,255,0.85);font-size:14px">{business_name}</p>
+      </div>
+      <div style="padding:24px 28px">
+        <p style="font-size:28px;font-weight:800;color:#1e293b;margin:0">{used:,} <span style="font-size:16px;color:#64748b;font-weight:600">de {cap:,} conversaciones</span></p>
+        <p style="font-size:15px;color:#1e293b;line-height:1.5">{body}</p>
+        <a href="{plan_url}"
+           style="display:block;text-align:center;padding:14px 24px;background:#6366f1;
+                  color:white;border-radius:10px;text-decoration:none;margin:20px 0;
+                  font-size:16px;font-weight:700">
+          Ver mi plan y paquetes →
+        </a>
+        <p style="font-size:13px;color:#64748b;text-align:center">
+          Recuerda: el portal del cliente y las notificaciones web son ilimitados en tu plan.
+        </p>
+      </div>
+    </div>
+    """
+    return await send_email(to, f"🤖 {title}", html)

@@ -27,9 +27,15 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 describe('PlansPage', () => {
   it('renders plan cards', () => {
     render(<PlansPage />, { wrapper: Wrapper })
-    expect(screen.getByText('Starter')).toBeDefined()
-    expect(screen.getByText('Growth')).toBeDefined()
-    expect(screen.getByText('Pro')).toBeDefined()
+    expect(screen.getByText('Arranque')).toBeDefined()
+    expect(screen.getByText('Negocio')).toBeDefined()
+    expect(screen.getByText('Crecimiento')).toBeDefined()
+    expect(screen.getByText('Empresa')).toBeDefined()
+  })
+
+  it('tells upfront that Meta charges WhatsApp separately', () => {
+    render(<PlansPage />, { wrapper: Wrapper })
+    expect(screen.getByText(/los cobra Meta directo en tu cuenta/)).toBeDefined()
   })
 
   it('renders pricing info', () => {

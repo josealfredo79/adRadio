@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.email import send_password_reset_email, send_verification_email
+from app.core.plans import TRIAL_DAYS
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis
 from app.core.security import (
@@ -116,7 +117,7 @@ async def verify_email(
     # Grant trial credits on first verification
     if user.messages_remaining == 0:
         user.messages_remaining = 50
-        user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+        user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)
     await db.commit()
 
     # Seed demo data so dashboard is not empty

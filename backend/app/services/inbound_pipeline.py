@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.redis import get_redis_optional
 from app.models.appointment import Appointment
 from app.models.campaign import Campaign
 from app.models.contact import Contact
@@ -751,7 +752,6 @@ async def process_inbound_message(
     # Appointment self-service booking (channel-agnostic, shared with the
     # widget) — checked before the order state machine so "quiero pedir una
     # cita" resolves to booking, not to detect_order_intent's bare "pedir".
-    from app.core.redis import get_redis_optional
 
     _appt_redis = await get_redis_optional()
     appointment_reply = await handle_appointment_booking(db, advertiser, contact, body_text, _appt_redis, channel="whatsapp")
@@ -1142,6 +1142,8 @@ async def process_inbound_message(
                 bot_personality=advertiser.bot_personality or "amigable y profesional",
                 time_gap_note=time_gap_note,
                 ask_owner=can_ask_owner,
+                conversation_key=str(contact.id),
+                redis=await get_redis_optional(),
             )
             owner_question = parse_owner_question(reply, fallback_question=body_text) if can_ask_owner else None
             if owner_question:

@@ -28,7 +28,7 @@ from app.models.user import User
 async def _seed_user():
     await engine.dispose()
     async with AsyncSessionLocal() as db:
-        user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x")
+        user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x", current_plan="growth")  # automatizaciones: desde Negocio
         db.add(user)
         await db.commit()
         return user.id

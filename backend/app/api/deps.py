@@ -69,28 +69,36 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 # Plan hierarchy (higher = more features)
 PLAN_ORDER = ["trial", "micro", "starter", "growth", "pro", "business", "enterprise"]
 
-# Minimum plan required for each feature
+# Minimum plan required for each feature (claves internas; los nombres de
+# venta — Arranque/Negocio/Crecimiento/Empresa — están en app/core/plans.py).
 FEATURE_PLAN = {
-    "rag": "growth",           # Bot con catálogo (RAG)
+    "rag": "growth",           # Bot que conoce tu catálogo e información (RAG)
     "radio_cuna": "growth",    # Cuñas de radio
+    "banner": "growth",        # Banners y flyers con IA
+    "automations": "growth",   # Automatizaciones
     "sequence": "pro",         # Campañas secuencia (3 mensajes)
-    "saga": "business",        # Campañas saga (4 episodios)
-    "ab_testing": "business",  # A/B testing
-    "api_access": "business",  # API de integración
+    "saga": "pro",             # Campañas saga (4 episodios)
+    "ab_testing": "pro",       # A/B testing
+    "api_access": "pro",       # API de integración
     "white_label": "enterprise", # White-label
     "multi_number": "enterprise", # Multi-número WhatsApp
 }
 
-# Maximum radio ads per billing period (-1 = unlimited)
-PLAN_RADIO_LIMITS = {
-    "trial": 3,
-    "micro": 0,
-    "starter": 0,
-    "growth": 3,
-    "pro": -1,
-    "business": -1,
-    "enterprise": -1,
-}
+
+# Cuñas de radio por periodo (-1 = sin límite), derivado de app/core/plans.py.
+def _radio_limits() -> dict[str, int]:
+    from app.core.plans import PLANS, TRIAL_LIMITS
+
+    return {"trial": TRIAL_LIMITS["radio"], **{key: p["radio"] for key, p in PLANS.items()}}
+
+
+PLAN_RADIO_LIMITS = _radio_limits()
+
+
+def plan_required_message(feature: str) -> str:
+    from app.core.plans import plan_name
+
+    return f"Tu plan no incluye esta función. Está disponible desde el plan {plan_name(FEATURE_PLAN[feature])}."
 
 
 def _plan_index(plan: str) -> int:
@@ -113,11 +121,13 @@ async def require_feature(feature: str, user: User = Depends(get_current_user)) 
     if not check_feature_access(user, feature):
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Tu plan {user.current_plan} no incluye esta función. Actualiza tu plan para acceder.",
+            detail=plan_required_message(feature),
         )
     return user
 
 
 def get_radio_limit(user: User) -> int:
     """Returns max radio ads per billing period (-1 = unlimited)."""
-    return PLAN_RADIO_LIMITS.get(user.current_plan or "trial", 0)
+    from app.core.plans import plan_limit
+
+    return plan_limit(user.current_plan, "radio")

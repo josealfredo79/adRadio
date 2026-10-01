@@ -9,7 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import (
+    check_feature_access,
+    get_current_user,
+    get_db,
+    plan_required_message,
+)
 from app.models.automation import AutomationEnrollment, AutomationFlow, AutomationStep
 from app.models.contact import Contact
 from app.models.user import User
@@ -87,6 +92,8 @@ async def create_flow(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> FlowOut:
+    if not check_feature_access(current_user, "automations"):
+        raise HTTPException(status_code=402, detail=plan_required_message("automations"))
     if body.trigger not in ("new_contact", "keyword", "tag_added"):
         raise HTTPException(status_code=400, detail="trigger inválido")
 

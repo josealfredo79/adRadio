@@ -13,6 +13,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.config import settings
+
+# Planes, precios y cuotas viven en app/core/plans.py (fuente única). PLANS y
+# PLAN_MESSAGES se re-exportan desde aquí porque stripe.py, chat_demo.py,
+# admin.py y tasks.py los importan de este módulo.
+from app.core.plans import (  # noqa: F401
+    ADDONS,
+    FOUNDER_PRICES,
+    PLAN_MESSAGES,
+    PLANS,
+    plan_limit,
+    plan_name,
+)
 from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.founder_program import FounderProgram
@@ -31,29 +43,6 @@ class CheckoutSessionBody(BaseModel):
     billing_cycle: str = "monthly"  # "monthly" | "annual"
 
 stripe_lib.api_key = settings.STRIPE_SECRET_KEY
-
-PLANS = {
-    "micro":      {"name": "Micro",      "price_mxn": 299,   "price_usd": 18,   "messages": 100,   "days": 30},
-    "starter":    {"name": "Starter",    "price_mxn": 499,   "price_usd": 29,   "messages": 200,   "days": 30},
-    "growth":     {"name": "Growth",     "price_mxn": 999,   "price_usd": 59,   "messages": 500,   "days": 30},
-    "pro":        {"name": "Pro",        "price_mxn": 2499,  "price_usd": 149,  "messages": 1000,  "days": 30},
-    "business":   {"name": "Business",   "price_mxn": 6799,  "price_usd": 399,  "messages": 3000,  "days": 30},
-    "enterprise": {"name": "Enterprise", "price_mxn": 19999, "price_usd": 1199, "messages": 10000, "days": 30},
-}
-
-# Programa "Fundadores" — precio bloqueado por 12 meses para los primeros
-# FOUNDER_SLOTS_TOTAL clientes (ver migración 0048), solo en Starter/Growth.
-# No es un "antes/ahora" inventado (ver auditoría de precios) — es un precio
-# real y honesto, distinto del de lista, con cupo limitado real en la DB.
-FOUNDER_PRICES = {
-    "starter": {"price_mxn": 349, "price_usd": 21},
-    "growth":  {"price_mxn": 699, "price_usd": 41},
-}
-
-# Fuente de verdad para cuotas de mensajes.
-# Importado por webhooks.py para evitar duplicar esta tabla.
-PLAN_MESSAGES: dict[str, int] = {key: val["messages"] for key, val in PLANS.items()}
-
 
 @router.get("/plans")
 async def list_plans() -> dict:
@@ -104,7 +93,7 @@ async def create_checkout_session(
 ) -> dict:
     try:
         plan_key = body.plan
-        if plan_key not in PLANS:
+        if plan_key not in PLANS or not PLANS[plan_key].get("sellable"):
             raise HTTPException(status_code=400, detail="Plan inválido")
 
         if body.billing_cycle not in ("monthly", "annual"):
@@ -122,7 +111,7 @@ async def create_checkout_session(
 
         if body.founder:
             if plan_key not in FOUNDER_PRICES:
-                raise HTTPException(status_code=400, detail="El programa Fundadores solo aplica a Starter y Growth")
+                raise HTTPException(status_code=400, detail="El programa Fundadores solo aplica a Arranque y Negocio")
             # No reclamar dos veces si esto es un reintento tras "No such customer"
             # (ver except InvalidRequestError abajo) — ya se reclamó en el intento original.
             if not _founder_slot_claimed and not await _claim_founder_slot(db):
@@ -203,6 +192,74 @@ async def _resolve_stripe_customer(user: User, db: AsyncSession) -> str:
     user.stripe_customer_id = customer.id
     await db.commit()
     return customer.id
+
+
+class AddonCheckoutBody(BaseModel):
+    addon: str
+
+
+@router.post("/checkout/addon")
+async def create_addon_checkout(
+    body: AddonCheckoutBody,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Paquete extra de pago único (conversaciones del bot o envíos de
+    campaña). Se acredita en el webhook (checkout.session.completed con
+    metadata.addon), igual que una suscripción."""
+    addon = ADDONS.get(body.addon)
+    if addon is None:
+        raise HTTPException(status_code=400, detail="Paquete inválido")
+    if current_user.subscription_status != "active":
+        raise HTTPException(status_code=402, detail="Los paquetes extra son para planes activos")
+    if not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Pagos no configurados")
+    try:
+        customer_id = await _resolve_stripe_customer(current_user, db)
+        session = stripe_lib.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": f"IaRadio {addon['name']}"},
+                    "unit_amount": addon["price_usd"] * 100,
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            success_url=f"{settings.FRONTEND_URL}/app/plans?addon=1",
+            cancel_url=f"{settings.FRONTEND_URL}/app/plans",
+            metadata={"addon": body.addon, "user_id": str(current_user.id)},
+        )
+    except stripe_lib.error.StripeError:
+        logger.exception("Stripe error creating addon checkout")
+        raise HTTPException(status_code=502, detail="Error al procesar el pago")
+    capture_event("addon_checkout_created", user_id=current_user.id, properties={"addon": body.addon})
+    return {"checkout_url": session.url}
+
+
+@router.get("/usage")
+async def plan_usage(current_user: User = Depends(get_current_user)) -> dict:
+    """Uso del plan este mes — lo que ve el dueño en Planes."""
+    from app.services.plan_usage import usage_snapshot
+
+    conv = usage_snapshot(current_user)
+    return {
+        "plan": current_user.current_plan or "trial",
+        "plan_name": plan_name(current_user.current_plan),
+        "conversations": {
+            "used": conv.used,
+            "limit": plan_limit(current_user.current_plan, "conversations"),
+            "extra": current_user.bot_conv_extra or 0,
+            "cap": conv.cap,
+            "economy": conv.economy,
+        },
+        "messages_remaining": current_user.messages_remaining or 0,
+        "radio_limit": plan_limit(current_user.current_plan, "radio"),
+        "team_limit": plan_limit(current_user.current_plan, "team"),
+        "addons": ADDONS,
+    }
 
 
 @router.post("/cancel-subscription")

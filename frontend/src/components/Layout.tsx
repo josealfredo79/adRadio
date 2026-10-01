@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { planDisplayName } from '@/lib/plans'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
@@ -104,7 +105,7 @@ export default function Layout() {
             ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
             : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300'
         )}>
-          {user?.current_plan?.toUpperCase() ?? 'TRIAL'} · {user?.messages_remaining ?? 0} msgs
+          {planDisplayName(user?.current_plan)} · {user?.messages_remaining ?? 0} envíos
         </span>
         <button
           onClick={toggleTheme}

@@ -26,7 +26,9 @@ from app.models.user import User
 async def _seed_user():
     await engine.dispose()
     async with AsyncSessionLocal() as db:
-        user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x")
+        # Plan sin tope de usuarios: estos tests son de la mecánica de las
+        # invitaciones; el límite por plan se prueba en test_plans.py.
+        user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x", current_plan="enterprise")
         db.add(user)
         await db.commit()
         return user.id

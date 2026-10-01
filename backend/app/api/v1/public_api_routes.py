@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.api_key_auth import require_api_key_scope
-from app.api.deps import check_feature_access
+from app.api.deps import check_feature_access, plan_required_message
 from app.database import get_db
 from app.models.campaign import Campaign
 from app.models.contact import Contact
@@ -26,7 +26,7 @@ async def public_list_campaigns(
     current_user: User = Depends(require_api_key_scope("campaigns:read")),
 ) -> dict:
     if not check_feature_access(current_user, "api_access"):
-        raise HTTPException(status_code=402, detail="Tu plan no incluye acceso a la API. Actualiza a Business o superior.")
+        raise HTTPException(status_code=402, detail=plan_required_message("api_access"))
     q = select(Campaign).where(Campaign.advertiser_id == current_user.id)
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar_one()
@@ -51,7 +51,7 @@ async def public_list_contacts(
     current_user: User = Depends(require_api_key_scope("contacts:read")),
 ) -> ContactListResponse:
     if not check_feature_access(current_user, "api_access"):
-        raise HTTPException(status_code=402, detail="Tu plan no incluye acceso a la API. Actualiza a Business o superior.")
+        raise HTTPException(status_code=402, detail=plan_required_message("api_access"))
     q = select(Contact).where(Contact.advertiser_id == current_user.id)
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar_one()

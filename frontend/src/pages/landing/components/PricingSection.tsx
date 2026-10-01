@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Zap, CheckCircle, Sparkles } from 'lucide-react'
-import { LANDING_PLANS, type PlanDefinition } from '@/lib/plans'
+import { INCLUDED_IN_ALL, LANDING_PLANS, META_FEES_NOTE, PLANS_MAP, type PlanDefinition } from '@/lib/plans'
 
 interface BackendPlan {
   price_mxn: number
@@ -35,12 +35,10 @@ export default function PricingSection() {
             Configuración de tu bot incluida en todos los planes — otros cobran hasta $35,900 MXN aparte solo por el setup
           </p>
         </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5 items-start">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3 items-start">
           {LANDING_PLANS.map(plan => {
             const mxn = planPrice(plan, 'price_mxn')
             const usd = planPrice(plan, 'price_usd')
-            const refPrice = plan.referencePriceMxn
-            const savings = refPrice ? Math.round((1 - mxn / refPrice) * 100) : null
             return (
               <div
                 key={plan.key}
@@ -50,21 +48,10 @@ export default function PricingSection() {
                     : 'glass'
                 }`}
               >
-                {/* Discount badge */}
-                {savings && savings > 0 && (
-                  <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-3 py-1 text-xs font-bold text-green-400 w-fit">
-                    <Zap className="h-3 w-3" />
-                    Ahorra {savings}%
-                  </div>
-                )}
-
                 <div className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-1">{plan.name}</div>
                 <div className="text-xs text-gray-500 mb-4">{plan.tagline}</div>
 
                 <div className="flex items-baseline gap-2 mb-1">
-                  {refPrice && (
-                    <span className="text-sm text-gray-500 line-through">${refPrice.toLocaleString()}</span>
-                  )}
                   <span className="text-4xl font-black text-white">${mxn.toLocaleString()}</span>
                   <span className="text-xs text-gray-500">MXN/mes</span>
                 </div>
@@ -116,9 +103,16 @@ export default function PricingSection() {
             )
           })}
         </div>
-        <p className="mt-8 text-center text-sm text-gray-600">
-          ¿Más de 10,000 mensajes/mes?{' '}
-          <Link to="/register" className="text-indigo-400 hover:text-indigo-300">Contáctanos para Enterprise</Link>
+        <div className="mt-10 rounded-2xl glass p-6 text-center">
+          <p className="text-sm font-bold text-white">Incluido en todos los planes, sin límite</p>
+          <p className="mt-2 text-sm text-gray-300">{INCLUDED_IN_ALL.join(' · ')}</p>
+          <p className="mx-auto mt-3 max-w-2xl text-xs text-gray-500">{META_FEES_NOTE}</p>
+        </div>
+        <p className="mt-6 text-center text-sm text-gray-600">
+          ¿Cadena o franquicia? Plan {PLANS_MAP.enterprise.name} desde ${PLANS_MAP.enterprise.price_mxn.toLocaleString()} MXN/mes —{' '}
+          <a href="mailto:iaradio@iaradio.online?subject=Plan%20Empresa" className="text-indigo-400 hover:text-indigo-300">
+            hablemos
+          </a>
         </p>
       </div>
     </section>

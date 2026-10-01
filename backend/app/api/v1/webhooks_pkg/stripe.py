@@ -66,6 +66,34 @@ async def _reward_referral(db: AsyncSession, referred_user: User, amount_total_c
     )
 
 
+async def _apply_addon(
+    db: AsyncSession, customer_id: str | None, addon_key: str, payment_intent: str, amount_total: int, currency: str,
+) -> None:
+    """Paquete extra pagado (payments.py:/checkout/addon): conversaciones del
+    bot (no vencen) o envíos de campaña (se suman al saldo)."""
+    from app.core.plans import ADDONS
+
+    addon = ADDONS.get(addon_key)
+    user = await _lookup_user(customer_id, db)
+    if addon is None or user is None:
+        logger.warning("[WEBHOOK] addon %s for unknown user/addon (customer=%s)", addon_key, customer_id)
+        return
+    user.bot_conv_extra = (user.bot_conv_extra or 0) + addon.get("conversations", 0)
+    user.messages_remaining = (user.messages_remaining or 0) + addon.get("messages", 0)
+    db.add(Transaction(
+        advertiser_id=user.id,
+        stripe_payment_id=payment_intent,
+        amount=amount_total / 100,
+        currency=currency.upper(),
+        # "+conversations_500": transactions.plan es varchar(20) en la BD.
+        plan=f"+{addon_key}"[:20],
+        status="succeeded",
+    ))
+    await db.commit()
+    logger.info("[WEBHOOK] Addon %s applied for user %s", addon_key, user.id)
+    capture_event("addon_purchased", user_id=user.id, properties={"addon": addon_key, "amount": amount_total / 100})
+
+
 async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -116,6 +144,11 @@ async def stripe_webhook(
         )
         if existing.scalar_one_or_none():
             logger.info("[WEBHOOK] Duplicate checkout event %s, skipped", payment_intent)
+            return {"received": True}
+
+        addon_key = metadata.get("addon")
+        if addon_key:
+            await _apply_addon(db, customer_id, addon_key, payment_intent, amount_total, currency)
             return {"received": True}
 
         is_founder = metadata.get("founder") == "true"

@@ -86,6 +86,7 @@ async def chat_completion(
     anthropic_model: str | None = None,
     judge: bool = False,
     force_anthropic: bool = False,
+    economy: bool = False,
 ) -> str:
     """Genera una respuesta de chat con el proveedor configurado.
 
@@ -102,6 +103,11 @@ async def chat_completion(
     usa OPENROUTER_JUDGE_MODEL si está configurado (si no, cae en
     OPENROUTER_MODEL) — solo aplica en la rama OpenRouter.
 
+    `economy=True` (negocio que ya usó las conversaciones de su plan, ver
+    plan_usage.py) prueba primero OpenRouter — configurado con un modelo
+    gratuito — y deja Groq como respaldo: el bot sigue contestando, solo que
+    más barato.
+
     `force_anthropic=True` salta las ramas Groq y OpenRouter aunque estén
     configuradas — para un call site puntual que necesita un fallback
     confiable (no gratis), sin cambiar el proveedor default de todo el
@@ -113,24 +119,29 @@ async def chat_completion(
     siguiente en la cadena, terminando en Anthropic si ambos fallan.
     """
     if not force_anthropic:
-        if is_groq_configured():
-            try:
-                return await _openai_compatible_completion(
-                    _get_groq_client(), settings.GROQ_CHAT_MODEL,
-                    messages, system, max_tokens, temperature,
-                )
-            except Exception as e:
-                logger.warning("[LLM] Groq falló, probando siguiente proveedor: %s", e)
+        async def _groq() -> str:
+            return await _openai_compatible_completion(
+                _get_groq_client(), settings.GROQ_CHAT_MODEL,
+                messages, system, max_tokens, temperature,
+            )
 
-        if is_openrouter_configured():
+        async def _openrouter() -> str:
             model = (settings.OPENROUTER_JUDGE_MODEL or settings.OPENROUTER_MODEL) if judge else settings.OPENROUTER_MODEL
+            return await _openai_compatible_completion(
+                _get_openrouter_client(), model,
+                messages, system, max_tokens, temperature,
+            )
+
+        chain = [("Groq", is_groq_configured, _groq), ("OpenRouter", is_openrouter_configured, _openrouter)]
+        if economy:
+            chain.reverse()
+        for name, configured, call in chain:
+            if not configured():
+                continue
             try:
-                return await _openai_compatible_completion(
-                    _get_openrouter_client(), model,
-                    messages, system, max_tokens, temperature,
-                )
+                return await call()
             except Exception as e:
-                logger.warning("[LLM] OpenRouter falló, usando Anthropic: %s", e)
+                logger.warning("[LLM] %s falló, probando siguiente proveedor: %s", name, e)
 
     client = _get_anthropic_client()
     response = await client.messages.create(

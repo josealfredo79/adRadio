@@ -41,10 +41,15 @@ def _format_plans() -> str:
     """PLANS (app.api.v1.payments) es la fuente única de verdad de precios."""
     lines = []
     for plan in PLANS.values():
-        lines.append(
-            f"- {plan['name']}: ${plan['price_mxn']} MXN / ${plan['price_usd']} USD "
-            f"por mes, {plan['messages']} mensajes"
-        )
+        if not plan.get("sellable"):
+            continue
+        conv = "conversaciones del bot a medida" if plan["conversations"] < 0 else f"{plan['conversations']:,} conversaciones del bot"
+        price = f"desde ${plan['price_mxn']:,} MXN" if plan["name"] == "Empresa" else f"${plan['price_mxn']:,} MXN"
+        lines.append(f"- {plan['name']}: {price} al mes — {conv}, {plan['messages']:,} envíos de campaña por WhatsApp")
+    lines.append(
+        "- Todos incluyen portal del cliente y notificaciones web ilimitadas. "
+        "Los cargos de Meta por WhatsApp se pagan aparte, directo a Meta."
+    )
     return "\n".join(lines)
 
 

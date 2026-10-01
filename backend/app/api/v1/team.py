@@ -5,10 +5,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.core.plans import plan_limit
 from app.models.team_member import TeamMember
 from app.models.user import User
 
@@ -68,6 +69,19 @@ async def invite_member(
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Ya existe una invitación para ese email")
+
+    # El dueño cuenta como 1 usuario del plan (Arranque 1, Negocio 2, Crecimiento 5).
+    seats = plan_limit(current_user.current_plan, "team")
+    if seats >= 0:
+        members = await db.scalar(
+            select(func.count()).select_from(TeamMember).where(TeamMember.owner_id == current_user.id)
+        )
+        if 1 + (members or 0) >= seats:
+            raise HTTPException(
+                status_code=402,
+                detail=f"Tu plan incluye {seats} usuario{'s' if seats != 1 else ''}. "
+                       "Sube de plan para invitar a más personas de tu equipo.",
+            )
 
     member = TeamMember(
         owner_id=current_user.id,

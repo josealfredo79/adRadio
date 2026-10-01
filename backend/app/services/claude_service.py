@@ -109,6 +109,7 @@ async def generate_bot_response(
     bot_instructions: str | None = None,
     time_gap_note: str = "",
     ask_owner: bool = False,
+    economy: bool = False,
 ) -> str:
     """Generate a RAG-based bot response.
 
@@ -203,7 +204,7 @@ Tu personalidad es: {bot_personality}.
         # proveedores, cayendo al pagado solo si ambos gratis fallan.
         return await chat_completion(
             messages, system=system, max_tokens=500, temperature=0.3,
-            anthropic_model="claude-haiku-4-5-20251001",
+            anthropic_model="claude-haiku-4-5-20251001", economy=economy,
         )
     except Exception as e:
         logger.warning("[CLAUDE] generate_bot_response failed on every provider: %s", e, exc_info=True)
@@ -407,6 +408,13 @@ def detect_appointment_intent(message: str) -> bool:
 _PLAN_TIERS = ("starter", "growth", "pro", "business", "enterprise")
 # \b en "pro" evita matchear dentro de "promocionar"/"producto"/"proyecto".
 _PLAN_TIER_PATTERNS = {tier: re.compile(rf"\b{tier}\b") for tier in _PLAN_TIERS}
+# Nombres de venta desde el rediseño 2026-10-01 (app/core/plans.py). "Negocio"
+# y "Empresa" NO se detectan por nombre: son palabras de todos los días ("quiero
+# promocionar mi negocio") y causarían justo el falso positivo de abajo.
+_PLAN_NAME_ALIASES = {
+    "starter": re.compile(r"\barranque\b"),
+    "pro": re.compile(r"\bcrecimiento\b"),
+}
 
 # Verbos/frases de intención de compra o contratación — solos NO bastan
 # (ver docstring abajo), solo cuentan combinados con el nombre de un tier.
@@ -460,6 +468,10 @@ def detect_plan_purchase_intent(message: str) -> str | None:
     for tier, pattern in _PLAN_TIER_PATTERNS.items():
         if pattern.search(text) and has_intent_verb:
             return tier
+    if "plan" in text and has_intent_verb:
+        for tier, pattern in _PLAN_NAME_ALIASES.items():
+            if pattern.search(text):
+                return tier
 
     if any(p in text for p in _ADVERTISING_INTENT_PATTERNS):
         return "starter"

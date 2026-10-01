@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { planDisplayName } from '@/lib/plans'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import api from '@/lib/api'
@@ -136,13 +137,13 @@ export default function AdminUsersPage() {
         >
           Todos los planes
         </button>
-        {['trial', 'starter', 'growth', 'pro', 'business', 'enterprise'].map((p) => (
+        {['trial', 'starter', 'growth', 'pro', 'enterprise', 'micro', 'business'].map((p) => (
           <button
             key={p}
             onClick={() => setParam('plan', plan === p ? '' : p)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${plan === p ? 'bg-brand-500 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
           >
-            {p.charAt(0).toUpperCase() + p.slice(1)}
+            {planDisplayName(p)}
           </button>
         ))}
       </div>
@@ -181,7 +182,7 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${planColors[u.current_plan] || 'bg-gray-100 text-gray-700'}`}>
-                        {u.current_plan.toUpperCase()}
+                        {planDisplayName(u.current_plan)}
                       </span>
                     </td>
                     <td className="px-4 py-3">

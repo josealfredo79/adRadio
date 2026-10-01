@@ -34,12 +34,14 @@ class TestStripeWebhookLogic:
 
     def test_plan_messages_mapping(self):
         from app.api.v1.payments import PLAN_MESSAGES
+        from app.core.plans import PLANS
 
-        assert PLAN_MESSAGES["starter"] == 200
-        assert PLAN_MESSAGES["growth"] == 500
-        assert PLAN_MESSAGES["pro"] == 1000
+        # Rediseño 2026-10-01: Arranque 150, Negocio 500, Crecimiento 1,500.
+        assert PLAN_MESSAGES["starter"] == PLANS["starter"]["messages"] == 150
+        assert PLAN_MESSAGES["growth"] == PLANS["growth"]["messages"] == 500
+        assert PLAN_MESSAGES["pro"] == PLANS["pro"]["messages"] == 1500
         assert PLAN_MESSAGES["business"] == 3000
-        assert PLAN_MESSAGES["enterprise"] == 10000
+        assert PLAN_MESSAGES["enterprise"] == PLANS["enterprise"]["messages"] == 5000
 
     def test_plan_days_uses_config_not_hardcoded(self):
         """Verifica que cada plan tenga su propio days configurado."""

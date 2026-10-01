@@ -110,7 +110,7 @@ export function CreateCampaignModal({
   const isRadioMode = AUDIO_MODES.includes(mode)
   const isBannerMode = mode === 'banner'
   const isVocesMode = mode === 'voces'
-  const planSupportsRadio = !['starter'].includes(currentUser?.current_plan ?? '')
+  const planSupportsRadio = !['starter', 'micro'].includes(currentUser?.current_plan ?? '')
 
   const readyToCreate =
     form.name &&

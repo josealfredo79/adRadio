@@ -16,7 +16,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import check_feature_access, get_current_user, get_radio_limit
+from app.api.deps import (
+    check_feature_access,
+    get_current_user,
+    get_radio_limit,
+    plan_required_message,
+)
 from app.api.idempotency import idempotent_post, store_idempotency_response
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
@@ -137,6 +142,9 @@ async def create_campaign(
 
     if not body.message_text or not body.message_text.strip():
         raise HTTPException(status_code=422, detail="El mensaje de la campaña es obligatorio")
+
+    if (body.ab_test or {}).get("campaign_mode") == "banner" and not check_feature_access(current_user, "banner"):
+        raise HTTPException(status_code=402, detail=plan_required_message("banner"))
 
     valid_types = {"promo", "reminder", "launch", "event", "voces"}
     if body.type not in valid_types:
@@ -460,7 +468,7 @@ async def setup_ab_test(
 ) -> CampaignOut:
     """Enable A/B testing on a campaign with an alternate message variant."""
     if not check_feature_access(current_user, "ab_testing"):
-        raise HTTPException(status_code=402, detail="Tu plan no incluye A/B testing. Actualiza a Business o superior.")
+        raise HTTPException(status_code=402, detail=plan_required_message("ab_testing"))
     result = await db.execute(
         select(Campaign).where(Campaign.id == campaign_id, Campaign.advertiser_id == current_user.id)
     )
@@ -494,6 +502,8 @@ async def preview_banner(
     current_user: User = Depends(get_current_user),
 ) -> Response:
     """Generate and return a preview PNG banner (no R2 upload, no DB write)."""
+    if not check_feature_access(current_user, "banner"):
+        raise HTTPException(status_code=402, detail=plan_required_message("banner"))
     from fastapi.responses import Response as FastAPIResponse
 
     design = select_design(body.business_category or current_user.business_category, None)
@@ -532,6 +542,8 @@ async def generate_image(
     body: GenerateImageRequest,
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
+    if not check_feature_access(current_user, "banner"):
+        raise HTTPException(status_code=402, detail=plan_required_message("banner"))
     image_url = await generate_flyer(
         campaign_name=body.campaign_name,
         message_text=body.message_text,
@@ -548,7 +560,7 @@ async def generate_sequence(
 ) -> GenerateSequenceResponse:
     """Genera una secuencia de 3 mensajes para campaña en días distintos."""
     if not check_feature_access(current_user, "sequence"):
-        raise HTTPException(status_code=402, detail="Tu plan no incluye campañas secuencia. Actualiza a Pro o superior.")
+        raise HTTPException(status_code=402, detail=plan_required_message("sequence"))
     messages = await generate_sequence_messages(
         business_name=body.business_name,
         intent=body.intent,
@@ -564,7 +576,7 @@ async def generate_saga(
 ) -> GenerateSequenceResponse:
     """Genera 4 episodios de radionovela de marketing para campaña saga."""
     if not check_feature_access(current_user, "saga"):
-        raise HTTPException(status_code=402, detail="Tu plan no incluye campañas saga. Actualiza a Business o superior.")
+        raise HTTPException(status_code=402, detail=plan_required_message("saga"))
     episodes = await generate_saga_episodes(
         business_name=body.business_name,
         product_description=body.product_description,
@@ -586,7 +598,7 @@ async def generate_radio_ad_endpoint(
     """
     limit = get_radio_limit(current_user)
     if limit == 0:
-        raise HTTPException(status_code=402, detail="Tu plan no incluye cuñas de radio. Actualiza a Growth o superior.")
+        raise HTTPException(status_code=402, detail=plan_required_message("radio_cuna"))
     if limit > 0:
         from datetime import datetime, timedelta, timezone
 
@@ -601,11 +613,11 @@ async def generate_radio_ad_endpoint(
         )
         used = count_result.scalar() or 0
         if used >= limit:
-            if limit == 1:
-                msg = "Ya usaste tu única cuña de radio disponible en tu plan. Actualiza a Growth para más."
-            else:
-                msg = f"Has alcanzado el límite de {limit} cuñas de radio de tu plan. Actualiza a Pro para cuñas ilimitadas."
-            raise HTTPException(status_code=402, detail=msg)
+            raise HTTPException(
+                status_code=402,
+                detail=f"Ya usaste las {limit} cuñas de radio de tu plan este mes. "
+                       "Sube de plan para tener más (Negocio: 4, Crecimiento: 15).",
+            )
     script = await generate_radio_script(
         business_name=body.business_name,
         message_or_intent=body.intent,

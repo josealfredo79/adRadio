@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { planDisplayName } from '@/lib/plans'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { formatDate, formatCurrency } from '@/lib/utils'
@@ -136,7 +137,7 @@ export default function AdminSubscriptionsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-brand-100 text-brand-700 dark:bg-brand-900/50 dark:text-brand-300">
-                        {u.current_plan.toUpperCase()}
+                        {planDisplayName(u.current_plan)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -211,8 +212,8 @@ export default function AdminSubscriptionsPage() {
                   onChange={(e) => setEditForm({ ...editForm, current_plan: e.target.value })}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
                 >
-                  {['trial', 'starter', 'growth', 'pro', 'business', 'enterprise'].map((p) => (
-                    <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                  {['trial', 'starter', 'growth', 'pro', 'enterprise', 'micro', 'business'].map((p) => (
+                    <option key={p} value={p}>{planDisplayName(p)}</option>
                   ))}
                 </select>
               </div>
