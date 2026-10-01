@@ -41,17 +41,28 @@ Un link personal `/c/{token}` que el bot agrega al final de cada confirmación d
 
 ---
 
-## Fase 2 — Notificaciones web (siguiente)
+## Fase 2 — Notificaciones web ✅ (construido 2026-10-01)
 
-Campañas y recordatorios que llegan a la pantalla del celular **gratis**, para los clientes que acepten.
+Avisos que llegan a la pantalla del celular **gratis**, para los clientes que los aceptan en su portal.
 
-- Botón "🔔 Avísame" en el portal. El mejor momento para pedirlo es justo después de agendar: *"¿Te aviso un día antes de tu cita?"* — así cada cliente que acepta deja de costar en recordatorios.
-- Android: funciona directo desde el navegador. iPhone: solo si el cliente agrega el portal a su pantalla de inicio (iOS 16.4+), hay que guiarlo.
-- Al crear una campaña, el dashboard elige solo el canal más barato por cliente: notificación web si aceptó, WhatsApp con link si no.
+- Tarjeta en el portal: *"¿Te aviso un día antes de tu cita?"* (o *"…de promociones y cupones?"* si no tiene cita). Un toque y listo.
+- **Android**: funciona directo desde el navegador. **iPhone**: la tarjeta explica cómo "Agregar a inicio"; el portal se instala como la app del negocio (manifest propio con su nombre y color) y desde ahí se activan.
+- **Recordatorios de cita** (24 h y 1 h): si el cliente tiene avisos activos, van por notificación y no por WhatsApp. La notificación lleva al portal, donde ahora también hay **"Confirmar asistencia"** (el "responde 1" de WhatsApp).
+- **Campañas**: el ruteo es automático por cliente — notificación si la activó, WhatsApp si no. Por notificación no se manda plantilla, no se descuenta del saldo del plan, y no se genera audio ni banner. Si el negocio se queda sin saldo de WhatsApp, los clientes con notificaciones siguen recibiendo la campaña.
+- Si la notificación falla (navegador dado de baja, servicio caído), se cae a WhatsApp como antes. Las suscripciones muertas (404/410) se borran solas.
+- **Estadísticas**: cada envío por notificación cuenta como "enviado"; cuando el cliente la toca pasa a "leído".
 
-**Qué hay que construir:** service worker + manifest (PWA), llaves VAPID, tabla de suscripciones por contacto, envío con `pywebpush` desde Celery, y el ruteo por canal en `campaign_ops.py` y en los recordatorios de citas.
+**Bug encontrado y corregido:** los recordatorios de WhatsApp mostraban la hora en UTC (6 h adelantada) y el día en inglés.
 
-**Estimado:** 1–2 semanas. Sin dependencias externas ni costos.
+**Configuración:** `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` en Railway (adRadio y worker). Generar con `python -m app.services.web_push --generate`. Sin llaves, todo queda apagado y sigue saliendo por WhatsApp. **No rotar las llaves sin necesidad**: cambiarlas invalida todas las suscripciones existentes.
+
+**Archivos:** `app/models/push_subscription.py` (migración 0061), `app/services/web_push.py`, endpoints en `app/api/v1/portal.py`, ruteo en `campaign_ops.py` y `appointment_ops.py`, `frontend/public/portal-sw.js`, tarjeta en `PortalPage.tsx`. Tests: `tests/test_web_push.py`.
+
+**Probado de punta a punta** con Chromium real: activar avisos → se guarda la suscripción → el backend manda la notificación por el servicio de push de Google → el navegador la recibe.
+
+**Qué medir:** % de clientes del portal que activan avisos; recordatorios y campañas enviados por notificación vs. WhatsApp (ahorro directo); tasa de "leído" de las notificaciones.
+
+**Siguiente mejora posible:** mostrarle al dueño en el dashboard cuántos clientes tienen avisos activos y cuánto se ahorró.
 
 ---
 

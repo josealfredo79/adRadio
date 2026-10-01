@@ -12,6 +12,7 @@ from app.models.lab import LabConversation, LabRun
 from app.models.message import Message
 from app.models.order import Order
 from app.models.owner_question import OwnerQuestion
+from app.models.push_subscription import PushSubscription
 from app.models.recipient_send import RecipientSend
 from app.models.send_block_log import SendBlockLog
 from app.models.team_member import TeamMember
@@ -39,6 +40,7 @@ __all__ = [
     "MessageTemplate",
     "Order",
     "OwnerQuestion",
+    "PushSubscription",
     "RecipientSend",
     "SendBlockLog",
     "TeamMember",

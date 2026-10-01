@@ -73,6 +73,14 @@ class Settings(BaseSettings):
     IARADIO_OWNER_TEMPLATE_NAME: str = "aviso_dueno"
     IARADIO_OWNER_TEMPLATE_LANG: str = "es_MX"
 
+    # Notificaciones web (Web Push, estándar VAPID) para los clientes que las
+    # aceptan en su portal — gratis, a diferencia de WhatsApp. Generar con
+    # `python -m app.services.web_push --generate`. Vacío = apagado: el portal
+    # no ofrece el botón y todo sigue saliendo por WhatsApp.
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_SUBJECT: str = "mailto:soporte@iaradio.online"
+
     # Stripe
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""

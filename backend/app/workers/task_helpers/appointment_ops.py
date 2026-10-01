@@ -9,6 +9,41 @@ from sqlalchemy import select
 logger = logging.getLogger(__name__)
 
 
+def _when(appt) -> tuple[str, str]:
+    """(fecha, hora) en hora de México y en español. Antes se formateaba
+    scheduled_at tal cual — llega en UTC, así que el recordatorio decía una
+    hora 6 h adelantada, y strftime ponía el día en inglés sin locale es_MX."""
+    from app.services.appointment_booking_service import (
+        _format_slot_time,
+        format_spanish_date,
+    )
+    from app.services.availability_service import TZ
+
+    local = appt.scheduled_at.astimezone(TZ)
+    return format_spanish_date(local), _format_slot_time(local)
+
+
+async def _push_reminder(db, appt, advertiser, title: str, body: str) -> bool:
+    """Notificación web gratis si el cliente la activó en su portal. True si
+    algún navegador la aceptó — entonces no hace falta el WhatsApp (cobrado)."""
+    if not appt.contact_id:
+        return False
+    from app.services.portal_service import portal_url
+    from app.services.web_push import push_to_contact
+
+    try:
+        accepted = await push_to_contact(
+            db, appt.contact_id, title=title, body=body,
+            url=portal_url(appt.contact_id), tag=f"appt-{appt.id}",
+        )
+    except Exception:
+        logger.exception("[APPT] push reminder failed appt=%s — falling back to WhatsApp", appt.id)
+        return False
+    if accepted:
+        logger.info("[APPT] Reminder sent by web push (free) appt=%s", appt.id)
+    return accepted > 0
+
+
 async def send_24h_reminders(db, now):
     """Send 24h appointment reminders."""
     from app.models.appointment import Appointment
@@ -40,10 +75,21 @@ async def send_24h_reminders(db, now):
             if contact:
                 phone = contact.phone
 
-        if phone and advertiser:
+        pushed = False
+        if advertiser:
+            fecha, hora = _when(appt)
+            # Sin awaiting_confirmation: eso es para el "responde 1/2" de
+            # WhatsApp; la notificación lleva al portal, que tiene sus botones.
+            pushed = await _push_reminder(
+                db, appt, advertiser,
+                title=f"Mañana: {appt.service}",
+                body=f"{fecha.capitalize()} a las {hora} en {advertiser.business_name or 'tu cita'}. "
+                     "Toca para confirmar o cancelar.",
+            )
+
+        if phone and advertiser and not pushed:
             contact_name = appt.customer_name.split()[0] if appt.customer_name else ""
-            hora = appt.scheduled_at.strftime("%I:%M %p").lstrip("0")
-            fecha = appt.scheduled_at.strftime("%A %d de %B")
+            fecha, hora = _when(appt)
             biz_name = advertiser.business_name or "tu cita"
             msg = (
                 f"📅 *Recordatorio de cita*\n\n"
@@ -135,8 +181,14 @@ async def send_1h_reminders(db, now):
             if contact:
                 phone = contact.phone
 
-        if phone and advertiser:
-            hora = appt.scheduled_at.strftime("%I:%M %p").lstrip("0")
+        if advertiser and await _push_reminder(
+            db, appt, advertiser,
+            title=f"Tu cita es en 1 hora: {appt.service}",
+            body=f"A las {_when(appt)[1]} en {advertiser.business_name or 'tu cita'}. ¡Te esperamos!",
+        ):
+            appt.awaiting_confirmation = False
+        elif phone and advertiser:
+            hora = _when(appt)[1]
             biz_name = advertiser.business_name or "tu cita"
             status_emoji = "✅" if appt.status == "confirmed" else "📅"
             msg = (

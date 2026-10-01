@@ -5,6 +5,8 @@ import api from '@/lib/api'
 import SEO from '@/components/SEO'
 import {
   ArrowLeft,
+  Bell,
+  BellOff,
   CalendarDays,
   Check,
   ChevronDown,
@@ -15,6 +17,7 @@ import {
   ShoppingBag,
   Sparkles,
   Store,
+  Share,
   Ticket,
   X,
 } from 'lucide-react'
@@ -83,7 +86,14 @@ interface PromoDetail {
   coupon: PortalCoupon | null
 }
 
+interface PortalPush {
+  available: boolean
+  public_key: string
+  subscribed_devices: number
+}
+
 interface PortalData {
+  push: PortalPush
   business: Business
   customer: { first_name: string }
   promotions: PromoSummary[]
@@ -132,6 +142,32 @@ export default function PortalPage() {
     enabled: !!token,
     retry: false,
   })
+
+  // El index.html trae el manifest del dashboard; aquí va uno por cliente para
+  // que "Agregar a inicio" instale la app del negocio (requisito en iPhone
+  // para recibir avisos). Se restaura al salir.
+  useEffect(() => {
+    if (!data || !token) return
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')
+    const previous = link?.href
+    if (link) link.href = `/api/v1/public/portal/${token}/manifest.webmanifest`
+    return () => {
+      if (link && previous) link.href = previous
+    }
+  }, [data, token])
+
+  // ?n=<message_id>: llegó tocando una notificación de campaña — contarla
+  // como "leída" y limpiar la URL para que recargar no la cuente dos veces.
+  useEffect(() => {
+    if (!token) return
+    const params = new URLSearchParams(window.location.search)
+    const n = params.get('n')
+    if (!n) return
+    api.post(`/public/portal/${token}/opened`, { message_id: n }).catch(() => {})
+    params.delete('n')
+    const qs = params.toString()
+    window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
+  }, [token])
 
   const openChat = (prefill?: string) => {
     setChatPrefill(prefill ?? null)
@@ -283,6 +319,16 @@ function PortalHome({
           <QuickAction theme={theme} color={color} icon={<Sparkles size={20} />} label="Preguntar" onClick={() => onChat()} />
         )}
       </div>
+
+      {data.push.available && (
+        <NotifyCard
+          token={token}
+          push={data.push}
+          theme={theme}
+          color={color}
+          hasUpcoming={data.upcoming_appointments.length > 0}
+        />
+      )}
 
       {data.promotions.length > 0 && (
         <>
@@ -470,6 +516,25 @@ function AppointmentCard({ token, appt, theme, color }: { token: string; appt: P
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const confirmAttendance = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const { data } = await api.post(`/public/portal/${token}/appointments/${appt.id}/confirm`)
+      queryClient.setQueryData<PortalData>(['portal', token], (old) =>
+        old && {
+          ...old,
+          upcoming_appointments: old.upcoming_appointments.map((a) => (a.id === appt.id ? data.appointment : a)),
+        },
+      )
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(detail || 'No se pudo confirmar. Intenta de nuevo.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const cancel = async () => {
     setBusy(true)
     setError(null)
@@ -537,13 +602,183 @@ function AppointmentCard({ token, appt, theme, color }: { token: string; appt: P
               </div>
             </div>
           ) : (
-            <button onClick={() => setConfirming(true)} className="text-sm font-semibold text-rose-500">
-              Cancelar cita
-            </button>
+            <div className="flex items-center justify-between gap-2">
+              <button onClick={() => setConfirming(true)} className="text-sm font-semibold text-rose-500">
+                Cancelar cita
+              </button>
+              {appt.status === 'pending' && (
+                <button
+                  onClick={confirmAttendance}
+                  disabled={busy}
+                  className="rounded-full px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
+                  style={{ background: color }}
+                >
+                  {busy ? 'Confirmando…' : 'Confirmar asistencia'}
+                </button>
+              )}
+            </div>
           )}
           {error && <p className="mt-2 text-sm text-rose-500">{error}</p>}
         </div>
       )}
+    </Card>
+  )
+}
+
+function urlBase64ToUint8Array(base64: string): Uint8Array {
+  const padded = (base64 + '='.repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/')
+  return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0))
+}
+
+type NotifyState = 'loading' | 'unsupported' | 'ios-install' | 'denied' | 'off' | 'on'
+
+function detectNotifyState(): NotifyState | Promise<NotifyState> {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const standalone =
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  // En iPhone, Safari solo ofrece push a la app ya agregada a la pantalla de inicio.
+  if (ios && !standalone) return 'ios-install'
+  if (!supported) return 'unsupported'
+  if (Notification.permission === 'denied') return 'denied'
+  return navigator.serviceWorker
+    .getRegistration('/c/')
+    .then((reg) => reg?.pushManager.getSubscription())
+    .then((sub): NotifyState => (sub ? 'on' : 'off'))
+    .catch((): NotifyState => 'off')
+}
+
+// "¿Te aviso?" — avisos gratis (Web Push) en vez de WhatsApp cobrado. El
+// mejor momento para pedirlo es con una cita en puerta: el recordatorio de
+// mañana es la razón concreta para aceptar.
+function NotifyCard({
+  token,
+  push,
+  theme,
+  color,
+  hasUpcoming,
+}: {
+  token: string
+  push: PortalPush
+  theme: SiteThemeDef
+  color: string
+  hasUpcoming: boolean
+}) {
+  const [state, setState] = useState<NotifyState>('loading')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    Promise.resolve(detectNotifyState()).then((s) => alive && setState(s))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const enable = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        setState(permission === 'denied' ? 'denied' : 'off')
+        return
+      }
+      await navigator.serviceWorker.register('/portal-sw.js', { scope: '/c/' })
+      const reg = await navigator.serviceWorker.ready
+      const sub =
+        (await reg.pushManager.getSubscription()) ??
+        (await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(push.public_key) as BufferSource,
+        }))
+      await api.post(`/public/portal/${token}/push/subscribe`, sub.toJSON())
+      setState('on')
+    } catch {
+      setError('No se pudieron activar. Intenta de nuevo en un momento.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const disable = async () => {
+    setBusy(true)
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/c/')
+      const sub = await reg?.pushManager.getSubscription()
+      if (sub) {
+        await api.post(`/public/portal/${token}/push/unsubscribe`, { endpoint: sub.endpoint })
+        await sub.unsubscribe()
+      }
+      setState('off')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (state === 'loading' || state === 'unsupported') return null
+
+  const pitch = hasUpcoming ? '¿Te aviso un día antes de tu cita?' : '¿Te aviso de promociones y cupones?'
+
+  return (
+    <Card theme={theme} className="mt-6 p-4">
+      <div className="flex items-start gap-3">
+        <span
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+          style={{ background: `${color}1f`, color }}
+        >
+          {state === 'denied' ? <BellOff size={20} /> : <Bell size={20} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          {state === 'on' && (
+            <>
+              <p className="font-semibold">Avisos activados en este celular ✓</p>
+              <p className="mt-0.5 text-sm" style={{ color: theme.muted }}>
+                Te llegarán tus recordatorios y promociones aquí.
+              </p>
+              <button onClick={disable} disabled={busy} className="mt-2 text-sm font-semibold" style={{ color: theme.muted }}>
+                Desactivar
+              </button>
+            </>
+          )}
+          {state === 'off' && (
+            <>
+              <p className="font-semibold">{pitch}</p>
+              <p className="mt-0.5 text-sm" style={{ color: theme.muted }}>
+                Te llega directo a tu celular, como una app. Puedes quitarlo cuando quieras.
+              </p>
+              <button
+                onClick={enable}
+                disabled={busy}
+                className="mt-3 rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: color }}
+              >
+                {busy ? 'Activando…' : 'Sí, avísame'}
+              </button>
+            </>
+          )}
+          {state === 'denied' && (
+            <>
+              <p className="font-semibold">Los avisos están bloqueados</p>
+              <p className="mt-0.5 text-sm" style={{ color: theme.muted }}>
+                Para activarlos, permite las notificaciones de este sitio en los ajustes de tu navegador.
+              </p>
+            </>
+          )}
+          {state === 'ios-install' && (
+            <>
+              <p className="font-semibold">{pitch}</p>
+              <p className="mt-0.5 text-sm" style={{ color: theme.muted }}>
+                En iPhone: toca <Share size={14} className="inline -mt-0.5" /> <b>Compartir</b> y luego{' '}
+                <b>Agregar a inicio</b>. Abre el ícono nuevo y activa los avisos desde ahí.
+              </p>
+            </>
+          )}
+          {error && <p className="mt-2 text-sm text-rose-500">{error}</p>}
+        </div>
+      </div>
     </Card>
   )
 }

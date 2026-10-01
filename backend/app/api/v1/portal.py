@@ -10,8 +10,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from redis.asyncio import Redis as AsyncRedis
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.public_site import _first_name, _public_whatsapp_number
@@ -20,6 +21,7 @@ from app.api.v1.widget import (
     CHAT_REDIS_TTL,
     SESSION_CONTACT_REDIS_PREFIX,
 )
+from app.config import settings
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
@@ -29,10 +31,12 @@ from app.models.contact import Contact
 from app.models.coupon import Coupon
 from app.models.message import Message
 from app.models.order import Order
+from app.models.push_subscription import PushSubscription
 from app.models.user import User
 from app.services.availability_service import TZ
 from app.services.claude_service import personalize_message
 from app.services.portal_service import read_portal_token
+from app.services.web_push import push_enabled
 from app.services.widget_order_service import ORDER_RESUME_WINDOW
 
 logger = logging.getLogger(__name__)
@@ -130,7 +134,16 @@ async def get_portal(request: Request, token: str, db: AsyncSession = Depends(ge
 
     promotions = [_promo_summary(p) for p in await _received_promos(db, contact, advertiser, now)]
 
+    push_count = (
+        await db.execute(select(PushSubscription.id).where(PushSubscription.contact_id == contact.id))
+    ).scalars().all()
+
     return {
+        "push": {
+            "available": push_enabled(),
+            "public_key": settings.VAPID_PUBLIC_KEY if push_enabled() else "",
+            "subscribed_devices": len(push_count),
+        },
         "promotions": promotions,
         "business": {
             "advertiser_id": str(advertiser.id),
@@ -365,3 +378,122 @@ async def get_promo(request: Request, token: str, campaign_id: uuid.UUID, db: As
         "image_url": p["image_url"] or "",
         "coupon": _coupon_out(p["coupon"]),
     }
+
+
+
+@router.post("/{token}/appointments/{appointment_id}/confirm")
+@limiter.limit("10/minute")
+async def confirm_appointment(
+    request: Request, token: str, appointment_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """El "Responde 1 para confirmar" del recordatorio de WhatsApp, pero desde
+    el portal — es a donde lleva la notificación web del recordatorio."""
+    contact, advertiser = await _resolve(db, token)
+    appt = await db.get(Appointment, appointment_id)
+    if appt is None or appt.contact_id != contact.id or appt.advertiser_id != advertiser.id:
+        raise HTTPException(status_code=404, detail="Cita no encontrada")
+    if appt.status not in ACTIVE_APPOINTMENT_STATUSES or appt.scheduled_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=409, detail="Esta cita ya no se puede confirmar")
+    appt.status = "confirmed"
+    appt.awaiting_confirmation = False
+    await db.commit()
+    return {"message": "Cita confirmada", "appointment": _appointment_out(appt, datetime.now(timezone.utc))}
+
+
+def _valid_subscription(body: dict) -> tuple[str, str, str]:
+    endpoint = str(body.get("endpoint") or "")
+    keys = body.get("keys") or {}
+    p256dh, auth = str(keys.get("p256dh") or ""), str(keys.get("auth") or "")
+    # Solo https: el servidor le hace POST a este endpoint, no debe poder
+    # apuntar a cualquier cosa (ej. un host interno).
+    if not endpoint.startswith("https://") or len(endpoint) > 1000:
+        raise HTTPException(status_code=400, detail="Suscripción no válida")
+    if not (0 < len(p256dh) <= 255 and 0 < len(auth) <= 255):
+        raise HTTPException(status_code=400, detail="Suscripción no válida")
+    return endpoint, p256dh, auth
+
+
+@router.post("/{token}/push/subscribe")
+@limiter.limit("10/minute")
+async def push_subscribe(request: Request, token: str, body: dict, db: AsyncSession = Depends(get_db)) -> dict:
+    if not push_enabled():
+        raise HTTPException(status_code=404, detail="Notificaciones no disponibles")
+    contact, advertiser = await _resolve(db, token)
+    endpoint, p256dh, auth = _valid_subscription(body)
+
+    sub = (await db.execute(select(PushSubscription).where(PushSubscription.endpoint == endpoint))).scalar_one_or_none()
+    if sub is None:
+        sub = PushSubscription(endpoint=endpoint, advertiser_id=advertiser.id, contact_id=contact.id, p256dh=p256dh, auth=auth)
+        db.add(sub)
+    else:
+        # Mismo navegador, otro link (ej. celular compartido): el último que
+        # activó los avisos es el dueño de este navegador.
+        sub.advertiser_id, sub.contact_id = advertiser.id, contact.id
+        sub.p256dh, sub.auth = p256dh, auth
+        sub.failure_count = 0
+    sub.user_agent = (request.headers.get("user-agent") or "")[:300] or None
+    await db.commit()
+    return {"message": "Notificaciones activadas"}
+
+
+@router.post("/{token}/push/unsubscribe")
+@limiter.limit("10/minute")
+async def push_unsubscribe(request: Request, token: str, body: dict, db: AsyncSession = Depends(get_db)) -> dict:
+    contact, _advertiser = await _resolve(db, token)
+    endpoint = str(body.get("endpoint") or "")
+    await db.execute(
+        delete(PushSubscription).where(PushSubscription.endpoint == endpoint, PushSubscription.contact_id == contact.id)
+    )
+    await db.commit()
+    return {"message": "Notificaciones desactivadas"}
+
+
+@router.post("/{token}/opened")
+@limiter.limit("30/minute")
+async def notification_opened(request: Request, token: str, body: dict, db: AsyncSession = Depends(get_db)) -> dict:
+    """El cliente tocó una notificación web — el equivalente al "leído" de
+    WhatsApp, para que las estadísticas de la campaña lo cuenten."""
+    contact, _advertiser = await _resolve(db, token)
+    try:
+        message_id = uuid.UUID(str(body.get("message_id")))
+    except ValueError:
+        return {"ok": False}
+    msg = await db.get(Message, message_id)
+    if msg is None or msg.contact_id != contact.id or not (msg.content or "").startswith("[PUSH]"):
+        return {"ok": False}
+    if msg.status != "read":
+        msg.status = "read"
+        msg.read_at = datetime.now(timezone.utc)
+        await db.commit()
+    return {"ok": True}
+
+
+@router.get("/{token}/manifest.webmanifest")
+@limiter.limit("30/minute")
+async def portal_manifest(request: Request, token: str, db: AsyncSession = Depends(get_db)) -> JSONResponse:
+    """Manifest por cliente: "Agregar a inicio" instala el portal como la app
+    del negocio (su nombre, su color) y abre directo en /c/{token}. En
+    iPhone es requisito para recibir notificaciones web."""
+    _contact, advertiser = await _resolve(db, token)
+    name = advertiser.business_name or "Mi negocio"
+    color = advertiser.widget_color or "#25D366"
+    icons = [
+        {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+        {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    ]
+    if advertiser.logo_url:
+        icons.insert(0, {"src": advertiser.logo_url, "sizes": "any"})
+    return JSONResponse(
+        {
+            "name": name,
+            "short_name": name[:12],
+            "start_url": f"/c/{token}",
+            "scope": "/c/",
+            "display": "standalone",
+            "background_color": "#ffffff",
+            "theme_color": color,
+            "lang": "es-MX",
+            "icons": icons,
+        },
+        media_type="application/manifest+json",
+    )

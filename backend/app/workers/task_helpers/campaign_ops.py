@@ -20,6 +20,7 @@ from app.models.send_block_log import (
 )
 from app.services.portal_service import promo_footer
 from app.services.send_block_log_service import log_send_block
+from app.services.web_push import contacts_with_push
 
 logger = logging.getLogger(__name__)
 
@@ -366,6 +367,61 @@ async def _preload_conversations(db, advertiser_id: uuid.UUID, contacts) -> dict
     return {str(c.contact_id): c for c in convs}
 
 
+async def _push_campaign(db, campaign, advertiser, contact, ab) -> bool:
+    """La campaña como notificación web, para el cliente que las activó en su
+    portal: gratis — sin plantilla de reapertura, sin descontar mensajes del
+    plan, sin generar audio ni banner. True si algún navegador la aceptó; si
+    no, el que llama sigue con WhatsApp como siempre.
+
+    El Message "[PUSH]" cuenta como enviado en las estadísticas, y pasa a
+    "read" cuando el cliente toca la notificación (portal.py:/opened)."""
+    from app.models.coupon import Coupon
+    from app.models.message import Message
+    from app.services.claude_service import personalize_message
+    from app.services.coupon_service import default_expiry, generate_coupon_code
+    from app.services.portal_service import promo_url
+    from app.services.web_push import push_to_contact
+
+    text = personalize_message(
+        campaign.message_text or "",
+        {"name": contact.name, "city": getattr(contact, "city", None)},
+        {"business_name": advertiser.business_name, "city": advertiser.city},
+    )
+    now = datetime.now(timezone.utc)
+    msg = Message(
+        campaign_id=campaign.id, contact_id=contact.id, advertiser_id=campaign.advertiser_id,
+        direction="outbound", content=f"[PUSH] {campaign.name}", status="sent", sent_at=now,
+    )
+    db.add(msg)
+    await db.flush()
+
+    try:
+        accepted = await push_to_contact(
+            db, contact.id,
+            title=advertiser.business_name or campaign.name,
+            body=f"{campaign.name} — {text}" if campaign.name else text,
+            url=f"{promo_url(contact.id, campaign.id)}?n={msg.id}",
+            image=campaign.image_url,
+            tag=f"campaign-{campaign.id}",
+        )
+    except Exception:
+        logger.exception("[CAMPAIGN] push failed contact=%s — falling back to WhatsApp", contact.id)
+        accepted = 0
+    if not accepted:
+        await db.delete(msg)
+        await db.flush()
+        return False
+
+    if ab.get("has_coupon"):
+        db.add(Coupon(
+            advertiser_id=campaign.advertiser_id, campaign_id=campaign.id, contact_id=contact.id,
+            code=generate_coupon_code(), description=ab.get("coupon_description") or None,
+            expires_at=default_expiry(hours=ab.get("coupon_hours", 72)),
+        ))
+    contact.last_campaign_sent_at = now
+    return True
+
+
 async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay):
     """Send banner-style campaign messages."""
     from app.models.message import Message
@@ -405,9 +461,20 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     # already sees the reduced balance. Conservative: an open-window task that
     # later fails to send won't have decremented, so at worst we stop early.
     charged = 0
+    push_contacts = await contacts_with_push(db, [c.id for c in contacts])
+    pushed_count = 0
 
     for idx_b, contact in enumerate(contacts):
+        if (
+            contact.id in push_contacts
+            and _is_contact_active(contact)[0]
+            and await _push_campaign(db, campaign, advertiser, contact, ab)
+        ):
+            pushed_count += 1
+            continue
         if advertiser.messages_remaining - charged <= 0:
+            if push_contacts:
+                continue  # sin saldo de WhatsApp, pero las notificaciones siguen siendo gratis
             break
 
         active, block_reason = _is_contact_active(contact)
@@ -496,6 +563,9 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         charged += 1
         ban_delay += anti_ban_delay()
         sent_count += 1
+
+    if pushed_count:
+        logger.info("[CAMPAIGN] %s: %d sent free by web push", campaign.id, pushed_count)
 
     # Auto-pause if failure rate is too high
     total_attempted = sent_count + invited_count + skipped_count
@@ -650,9 +720,20 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     # task (counted here); "invited" sends decrement synchronously in
     # _offer_or_queue (not counted here). This only gates the loop.
     charged = 0
+    push_contacts = await contacts_with_push(db, [c.id for c in contacts])
+    pushed_count = 0
 
     for i, contact in enumerate(contacts):
+        if (
+            contact.id in push_contacts
+            and _is_contact_active(contact)[0]
+            and await _push_campaign(db, campaign, advertiser, contact, ab)
+        ):
+            pushed_count += 1
+            continue
         if advertiser.messages_remaining - charged <= 0:
+            if push_contacts:
+                continue  # sin saldo de WhatsApp, pero las notificaciones siguen siendo gratis
             break
 
         active, block_reason = _is_contact_active(contact)
@@ -792,6 +873,9 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
         charged += 1
         ban_delay += anti_ban_delay()
         sent_count += 1
+
+    if pushed_count:
+        logger.info("[CAMPAIGN] %s: %d sent free by web push", campaign.id, pushed_count)
 
     # Auto-pause if failure rate is too high
     total_attempted = sent_count + invited_count + skipped_count
