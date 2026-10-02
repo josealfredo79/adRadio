@@ -15,7 +15,7 @@ from sqlalchemy import delete, select
 from starlette.datastructures import Headers
 from starlette.requests import Request
 
-from app.api.v1.voice_setup import ApplyBody, apply, listen
+from app.api.v1.voice_setup import ApplyBody, SpeakBody, apply, listen, speak
 from app.database import AsyncSessionLocal, engine
 from app.models.product import Product
 from app.models.user import User
@@ -113,7 +113,7 @@ class TestListenEndpoint:
     async def test_text_fallback(self):
         user = User(id=uuid.uuid4(), email="x@test.com", password_hash="x", bot_instructions="viejas")
         with patch("app.api.v1.voice_setup.extract_profile", AsyncMock(return_value=vs.sanitize_profile(MODEL_JSON))):
-            out = await listen(request=_request(), audio=None, text="Abrimos de 10 a 8", draft=None, current_user=user)
+            out = await listen(request=_request(), audio=None, text="Abrimos de 10 a 8", draft=None, question=None, asked=None, current_user=user)
         assert out["transcript"] == "Abrimos de 10 a 8"
         assert out["replaces_existing_instructions"] is True
         assert "Lunes 10:00–20:00" in out["hours_text"]
@@ -125,7 +125,7 @@ class TestListenEndpoint:
         with patch("app.api.v1.voice_setup.transcribe_audio_bytes", whisper), \
              patch("app.api.v1.voice_setup.extract_profile", AsyncMock(return_value=vs.sanitize_profile({}))):
             out = await listen(request=_request(), audio=_audio(b"ogg-bytes", "audio/webm;codecs=opus"),
-                               text=None, draft=None, current_user=user)
+                               text=None, draft=None, question=None, asked=None, current_user=user)
         assert whisper.await_args.args == (b"ogg-bytes", "audio/webm")
         assert out["transcript"].startswith("Somos barbería")
 
@@ -134,17 +134,17 @@ class TestListenEndpoint:
         user = User(id=uuid.uuid4(), email="x@test.com", password_hash="x")
         with patch("app.api.v1.voice_setup.transcribe_audio_bytes", AsyncMock(return_value=None)), \
              pytest.raises(HTTPException) as exc:
-            await listen(request=_request(), audio=_audio(b"ruido"), text=None, draft=None, current_user=user)
+            await listen(request=_request(), audio=_audio(b"ruido"), text=None, draft=None, question=None, asked=None, current_user=user)
         assert exc.value.status_code == 422 and "escuchar" in exc.value.detail
 
     @pytest.mark.asyncio
     async def test_too_long_and_empty(self):
         user = User(id=uuid.uuid4(), email="x@test.com", password_hash="x")
         with pytest.raises(HTTPException) as exc:
-            await listen(request=_request(), audio=_audio(b"x" * (10 * 1024 * 1024 + 1)), text=None, draft=None, current_user=user)
+            await listen(request=_request(), audio=_audio(b"x" * (10 * 1024 * 1024 + 1)), text=None, draft=None, question=None, asked=None, current_user=user)
         assert exc.value.status_code == 413
         with pytest.raises(HTTPException) as exc:
-            await listen(request=_request(), audio=None, text="   ", draft=None, current_user=user)
+            await listen(request=_request(), audio=None, text="   ", draft=None, question=None, asked=None, current_user=user)
         assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
@@ -152,7 +152,7 @@ class TestListenEndpoint:
         user = User(id=uuid.uuid4(), email="x@test.com", password_hash="x")
         with patch("app.api.v1.voice_setup.extract_profile", AsyncMock(side_effect=ValueError("no json"))), \
              pytest.raises(HTTPException) as exc:
-            await listen(request=_request(), audio=None, text="hola", draft=None, current_user=user)
+            await listen(request=_request(), audio=None, text="hola", draft=None, question=None, asked=None, current_user=user)
         assert exc.value.status_code == 502
 
 
@@ -193,3 +193,73 @@ class TestApply:
         with pytest.raises(HTTPException) as exc:
             await apply(body=ApplyBody(profile={}), db=AsyncMock(), current_user=user)
         assert exc.value.status_code == 400
+
+
+
+class TestConversation:
+    """La carita que platica: pregunta lo que falta, de a una cosa, sin repetir."""
+
+    def test_asks_in_priority_order_and_never_repeats(self):
+        empty = vs.sanitize_profile({})
+        assert vs.next_question(empty, [])["field"] == "services"
+        assert vs.next_question(empty, ["services"])["field"] == "hours"
+        assert vs.next_question(vs.sanitize_profile(MODEL_JSON), []) is None
+        assert vs.next_question(empty, ["services", "hours", "location", "payments"]) is None
+
+    @pytest.mark.parametrize("hhmm,said", [("19:00", "7"), ("09:30", "9 y media"), ("12:00", "12"), ("00:00", "12"), ("08:15", "8:15")])
+    def test_times_are_said_like_people_say_them(self, hhmm, said):
+        assert vs.speak_time(hhmm) == said
+
+    def test_hours_are_grouped_when_spoken(self):
+        h = {"mon": None, "tue": ["09:00", "19:00"], "wed": ["09:00", "19:00"], "thu": ["09:00", "19:00"],
+             "fri": ["09:00", "19:00"], "sat": ["09:00", "19:00"], "sun": ["10:00", "14:00"]}
+        assert vs._speak_hours(h) == "Abres de martes a sábado de 9 a 7, y el domingo de 10 a 2; los lunes cierras"
+
+    def test_closed_days_are_plural(self):
+        h = {d: ["09:00", "19:00"] for d in ("mon", "tue", "wed", "thu", "fri", "sat")} | {"sun": None}
+        assert vs._speak_hours(h) == "Abres de lunes a sábado de 9 a 7; los domingos cierras"
+        h2 = {d: ["09:00", "19:00"] for d in ("mon", "tue", "wed", "thu", "fri")} | {"sat": None, "sun": None}
+        assert vs._speak_hours(h2).endswith("los sábados y domingos cierras")
+
+    def test_reply_says_what_was_noted_then_asks(self):
+        p = {"services": [{"name": "Corte", "price": 150}]}
+        reply = vs.spoken_reply(p, None, vs.next_question(p, []))
+        assert reply.startswith("¡Muy bien! Ya anoté 1 servicio.") and "horario" in reply
+
+    def test_reply_when_nothing_new_was_understood(self):
+        assert vs.spoken_reply(MODEL_JSON, MODEL_JSON, None).startswith("¡Anotado!")
+        assert "no alcancé" in vs.spoken_reply({}, None, vs.next_question({}, []))
+
+    def test_spoken_summary_reads_naturally(self):
+        text = vs.spoken_summary(MODEL_JSON)
+        assert "Vendes corte en 150 pesos, barba en 100 pesos." in text
+        assert "Te pagan con efectivo y transferencia." in text
+
+    @pytest.mark.asyncio
+    async def test_answer_to_a_question_carries_the_question_and_moves_on(self):
+        user = User(id=uuid.uuid4(), email="x@test.com", password_hash="x")
+        only_services = vs.sanitize_profile({"services": [{"name": "Corte", "price": 150}]})
+        extract = AsyncMock(return_value=only_services)
+        with patch("app.api.v1.voice_setup.extract_profile", extract):
+            out = await listen(request=_request(), audio=None, text="de 9 a 7", draft=json.dumps(only_services),
+                               question="hours", asked="services", current_user=user)
+        assert extract.await_args.kwargs["question_text"].startswith("¿En qué horario")
+        # Contestó (aunque no se entendiera el horario): no se vuelve a preguntar; sigue la ubicación.
+        assert out["next_question"]["field"] == "location"
+        assert out["say"].startswith("¡Anotado!")
+
+    @pytest.mark.asyncio
+    async def test_speak_returns_audio(self):
+        user = User(id=uuid.uuid4(), email="x@test.com", password_hash="x")
+        with patch("app.services.radio.tts._tts_edge", AsyncMock(return_value=b"mp3")) as tts:
+            resp = await speak(request=_request(), body=SpeakBody(text="  ¡Hola!   ¿qué vendes? "), current_user=user)
+        assert resp.body == b"mp3" and resp.media_type == "audio/mpeg"
+        assert tts.await_args.args[:2] == ("¡Hola! ¿qué vendes?", "es-MX-DaliaNeural")
+
+    @pytest.mark.asyncio
+    async def test_speak_failure_lets_the_browser_voice_take_over(self):
+        user = User(id=uuid.uuid4(), email="x@test.com", password_hash="x")
+        with patch("app.services.radio.tts._tts_edge", AsyncMock(side_effect=RuntimeError("down"))), \
+             pytest.raises(HTTPException) as exc:
+            await speak(request=_request(), body=SpeakBody(text="hola"), current_user=user)
+        assert exc.value.status_code == 503

@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
+import BotFace, { type FaceMood } from '@/components/BotFace'
 import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
-import { Check, ChevronDown, Keyboard, Loader2, Mic, PartyPopper, Square, X } from 'lucide-react'
+import { useSpeaker } from '@/lib/useSpeaker'
+import { Check, ChevronDown, Keyboard, Mic, PartyPopper, SkipForward, Square, Volume2, VolumeX, X } from 'lucide-react'
 
-// "Cuéntale a tu bot de tu negocio": el dueño habla (o escribe), la IA ordena
-// lo que dijo y él lo aprueba antes de guardar. Backend: api/v1/voice_setup.py.
-// Lecciones de las pruebas de campo de Raíz (TecNM Tlaxiaco): un solo botón
-// grande, que se vea que es seguro tocarlo, y nada se guarda sin su "sí".
+// "Cuéntale a tu bot de tu negocio", como una plática: una carita escucha,
+// piensa, contesta en voz alta y pregunta lo que falta, de a una cosa. El
+// dueño aprueba antes de guardar. Backend: api/v1/voice_setup.py.
+// Lecciones de las pruebas de campo de Raíz (TecNM Tlaxiaco): un botón grande
+// que se vea seguro, letra grande, y nada se publica sin su "sí".
 
 interface Service {
   name: string
@@ -28,9 +31,18 @@ interface Profile {
   notes: string[]
 }
 
+interface Question {
+  field: string
+  text: string
+}
+
 interface ListenResult {
   transcript: string
   profile: Profile
+  next_question: Question | null
+  pending_questions: Question[]
+  say: string
+  spoken_summary: string
   hours_text: string | null
   instructions_preview: string
   replaces_existing_instructions: boolean
@@ -42,13 +54,17 @@ interface ApplyResult {
   hours_set: boolean
 }
 
-type Step = 'intro' | 'recording' | 'processing' | 'review' | 'saving' | 'done'
+type Step = 'intro' | 'recording' | 'processing' | 'asking' | 'review' | 'saving' | 'done'
 
 const MAX_SECONDS = 300
 const DAY_LABELS: Record<string, string> = {
   mon: 'Lunes', tue: 'Martes', wed: 'Miércoles', thu: 'Jueves', fri: 'Viernes', sat: 'Sábado', sun: 'Domingo',
 }
 const PROMPTS = ['Qué vendes y a qué precio', 'Tu horario', 'Dónde estás', 'Cómo te pagan', 'Lo que siempre te preguntan']
+const GREETING =
+  '¡Hola! Soy tu asistente de IaRadio. Cuéntame de tu negocio como si platicaras conmigo: qué vendes, tus precios y tu horario.'
+const REVIEW_LINE = 'Esto es lo que entendí. ¿Está bien? Revísalo aquí abajo.'
+const DONE_LINE = '¡Listo! Tu bot ya conoce tu negocio y está listo para atender.'
 
 const money = (p: number | null) =>
   p === null ? 'Sin precio' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: p % 1 ? 2 : 0 }).format(p)
@@ -59,6 +75,10 @@ export default function VoiceSetupPage() {
   const [result, setResult] = useState<ListenResult | null>(null)
   const [applied, setApplied] = useState<ApplyResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [bubble, setBubble] = useState(GREETING)
+  const [question, setQuestion] = useState<Question | null>(null)
+  const [pending, setPending] = useState<Question[]>([])
+  const [asked, setAsked] = useState<string[]>([])
   const [typing, setTyping] = useState(false)
   const [text, setText] = useState('')
   const [seconds, setSeconds] = useState(0)
@@ -66,6 +86,7 @@ export default function VoiceSetupPage() {
   const [showTranscript, setShowTranscript] = useState(false)
   const session = useRef<VoiceSession | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const speaker = useSpeaker()
   const micAvailable = canRecordVoice()
 
   useEffect(() => () => {
@@ -73,19 +94,42 @@ export default function VoiceSetupPage() {
     if (timer.current) clearInterval(timer.current)
   }, [])
 
+  const say = (line: string) => {
+    setBubble(line)
+    void speaker.speak(line)
+  }
+
+  const mood: FaceMood =
+    step === 'recording' ? 'listening'
+      : step === 'processing' || step === 'saving' ? 'thinking'
+        : error ? 'confused'
+          : step === 'done' ? 'happy'
+            : speaker.speaking ? 'speaking'
+              : 'idle'
+
   const send = async (form: FormData) => {
     setStep('processing')
     setError(null)
+    setBubble('Déjame ordenar lo que me contaste…')
     if (result) form.append('draft', JSON.stringify(result.profile))
+    const nowAsked = question && !asked.includes(question.field) ? [...asked, question.field] : asked
+    if (question) form.append('question', question.field)
+    if (nowAsked.length) form.append('asked', nowAsked.join(','))
     try {
       const { data } = await api.post<ListenResult>('/voice-setup/listen', form)
       setResult(data)
-      setStep('review')
+      setAsked(nowAsked)
+      setQuestion(data.next_question)
+      setPending(data.pending_questions ?? [])
       setTyping(false)
       setText('')
+      setStep(data.next_question ? 'asking' : 'review')
+      say(data.say)
     } catch (err) {
-      setError(getApiError(err, 'No pude ordenar lo que me contaste. Intenta de nuevo.'))
-      setStep(result ? 'review' : 'intro')
+      const msg = getApiError(err, 'No pude ordenar lo que me contaste. Intenta de nuevo.')
+      setError(msg)
+      say(msg)
+      setStep(result ? (question ? 'asking' : 'review') : 'intro')
     }
   }
 
@@ -96,8 +140,10 @@ export default function VoiceSetupPage() {
     if (!s) return
     const rec = await s.stop()
     if (rec.seconds < 2) {
-      setError('Fue muy cortito. Toca el micrófono y cuéntame un poco más.')
-      setStep(result ? 'review' : 'intro')
+      const msg = 'Fue muy cortito. Toca el micrófono y cuéntame un poco más.'
+      setError(msg)
+      say(msg)
+      setStep(result ? (question ? 'asking' : 'review') : 'intro')
       return
     }
     const form = new FormData()
@@ -107,15 +153,20 @@ export default function VoiceSetupPage() {
   }
 
   const startRecording = async () => {
+    speaker.unlock() // dentro del toque: iPhone deja hablar a la carita después
+    speaker.stop()
     setError(null)
     try {
       session.current = await startVoiceRecording(setVolume)
     } catch (err) {
-      setError(micErrorMessage(err))
+      const msg = micErrorMessage(err)
+      setError(msg)
+      setBubble(msg)
       setTyping(true)
       return
     }
     setSeconds(0)
+    setBubble(question ? `Te escucho… ${question.text}` : 'Te escucho… cuéntame con calma.')
     setStep('recording')
     timer.current = setInterval(() => setSeconds((s) => s + 1), 1000)
   }
@@ -130,14 +181,39 @@ export default function VoiceSetupPage() {
     if (timer.current) clearInterval(timer.current)
     session.current?.cancel()
     session.current = null
-    setStep(result ? 'review' : 'intro')
+    setStep(result ? (question ? 'asking' : 'review') : 'intro')
+    setBubble(question?.text ?? (result ? REVIEW_LINE : GREETING))
   }
 
   const sendText = async () => {
+    speaker.unlock()
     if (!text.trim()) return
     const form = new FormData()
     form.append('text', text)
     await send(form)
+  }
+
+  const skipQuestion = () => {
+    if (!question) return
+    speaker.unlock()
+    setAsked((a) => [...a, question.field])
+    const rest = pending.filter((q) => q.field !== question.field)
+    setPending(rest)
+    setTyping(false)
+    if (rest.length) {
+      setQuestion(rest[0])
+      say(`Va, lo dejamos. ${rest[0].text}`)
+    } else {
+      finishQuestions()
+    }
+  }
+
+  const finishQuestions = () => {
+    speaker.unlock()
+    setQuestion(null)
+    setTyping(false)
+    setStep('review')
+    say(REVIEW_LINE)
   }
 
   const removeService = (i: number) =>
@@ -145,86 +221,123 @@ export default function VoiceSetupPage() {
 
   const applyProfile = async () => {
     if (!result) return
+    speaker.unlock()
     setStep('saving')
     setError(null)
+    setBubble('Configurando tu bot…')
     try {
       const { data } = await api.post<ApplyResult>('/voice-setup/apply', { profile: result.profile })
       setApplied(data)
       setStep('done')
+      say(DONE_LINE)
     } catch (err) {
-      setError(getApiError(err, 'No se pudo guardar. Intenta de nuevo.'))
+      const msg = getApiError(err, 'No se pudo guardar. Intenta de nuevo.')
+      setError(msg)
+      say(msg)
       setStep('review')
     }
   }
 
+  const showTyping = typing && (step === 'intro' || step === 'asking' || step === 'review')
+
   return (
     <>
       <SEO title="Cuéntale a tu bot" noIndex />
-      <div className="mx-auto max-w-2xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Cuéntale a tu bot de tu negocio</h1>
-          <p className="mt-2 text-base text-muted-foreground">
-            Habla como si le explicaras a un empleado nuevo. En un par de minutos tu bot queda listo para atender.
-          </p>
-          {step === 'intro' && (
-            <p className="mt-1 text-base text-muted-foreground">No se publica nada hasta que tú lo apruebes.</p>
+      <div className="mx-auto max-w-2xl space-y-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Cuéntale a tu bot de tu negocio</h1>
+            {step === 'intro' && (
+              <p className="mt-1 text-base text-muted-foreground">No se publica nada hasta que tú lo apruebes.</p>
+            )}
+          </div>
+          <button
+            onClick={() => speaker.setMuted(!speaker.muted)}
+            aria-label={speaker.muted ? 'Activar la voz' : 'Silenciar la voz'}
+            title={speaker.muted ? 'Activar la voz' : 'Silenciar la voz'}
+            className="shrink-0 rounded-full border border-border p-3 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {speaker.muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+          </button>
+        </div>
+
+        {/* El escenario: la carita y lo que dice */}
+        <div className="flex flex-col items-center rounded-3xl border border-border bg-card px-5 pb-6 pt-4 text-center sm:px-8">
+          <BotFace mood={mood} volume={volume} />
+          <SpeechBubble text={bubble} onReplay={() => { speaker.unlock(); void speaker.speak(bubble) }} />
+
+          {step === 'intro' && !typing && (
+            <>
+              <ul className="mt-5 flex flex-wrap justify-center gap-2">
+                {PROMPTS.map((p) => (
+                  <li key={p} className="rounded-full bg-muted px-3 py-1.5 text-sm font-medium text-foreground">{p}</li>
+                ))}
+              </ul>
+              <MicButton onClick={startRecording} label="Tocar y hablar" available={micAvailable} onType={() => setTyping(true)} />
+            </>
+          )}
+
+          {step === 'recording' && (
+            <div className="mt-5 flex flex-col items-center">
+              <button
+                onClick={stopRecording}
+                aria-label="Terminar de grabar"
+                className="flex h-24 w-24 items-center justify-center rounded-full bg-rose-500 text-white shadow-xl transition-transform hover:bg-rose-600 active:scale-95"
+              >
+                <Square className="h-9 w-9" fill="currentColor" />
+              </button>
+              <p className="mt-3 text-lg font-semibold text-foreground">{clock(seconds)}</p>
+              <p className="text-base text-muted-foreground">Cuando termines, toca el botón rojo.</p>
+              <button onClick={cancelRecording} className="mt-2 text-base font-medium text-muted-foreground underline">Cancelar</button>
+            </div>
+          )}
+
+          {step === 'asking' && !typing && (
+            <>
+              <MicButton onClick={startRecording} label="Tocar y responder" available={micAvailable} onType={() => setTyping(true)} />
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                <button onClick={skipQuestion} className="inline-flex items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-base font-medium text-foreground hover:bg-muted">
+                  <SkipForward className="h-4 w-4" /> Saltar pregunta
+                </button>
+                <button onClick={finishQuestions} className="inline-flex items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-base font-medium text-foreground hover:bg-muted">
+                  <Check className="h-4 w-4" /> Ya terminé
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === 'review' && result && !typing && (
+            <button
+              onClick={() => { speaker.unlock(); say(result.spoken_summary) }}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-base font-medium text-foreground hover:bg-muted"
+            >
+              <Volume2 className="h-5 w-5" /> Escúchalo
+            </button>
           )}
         </div>
 
-        {error && (
-          <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-base text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
-            {error}
-          </div>
-        )}
-
-        {(step === 'intro' || step === 'recording') && !typing && (
-          <RecorderCard
-            recording={step === 'recording'}
-            seconds={seconds}
-            volume={volume}
-            micAvailable={micAvailable}
-            isCorrection={!!result}
-            onStart={startRecording}
-            onStop={stopRecording}
-            onCancel={cancelRecording}
-            onType={() => setTyping(true)}
-          />
-        )}
-
-        {typing && (step === 'intro' || step === 'review') && (
+        {showTyping && (
           <div className="rounded-2xl border border-border bg-card p-5">
             <label htmlFor="voice-setup-text" className="text-base font-semibold text-foreground">
-              {result ? 'Escribe lo que quieres corregir o agregar' : 'Escríbelo como lo dirías'}
+              {question ? question.text : result ? 'Escribe lo que quieres corregir o agregar' : 'Escríbelo como lo dirías'}
             </label>
             <textarea
               id="voice-setup-text"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              rows={6}
+              rows={5}
               maxLength={6000}
-              placeholder="Ej. Abrimos de lunes a sábado de 10 a 8. El corte cuesta 150 y la barba 100. Aceptamos efectivo y transferencia…"
+              placeholder="Ej. Abrimos de lunes a sábado de 10 a 8. El corte cuesta 150 y la barba 100…"
               className="mt-2 w-full rounded-xl border border-border bg-background p-3 text-base text-foreground"
             />
             <div className="mt-3 flex flex-wrap gap-2">
               <button onClick={sendText} disabled={!text.trim()} className="rounded-xl bg-brand-500 px-5 py-3 text-base font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
-                {result ? 'Aplicar cambio' : 'Ordenar mi información'}
+                {question ? 'Responder' : result ? 'Aplicar cambio' : 'Ordenar mi información'}
               </button>
-              {micAvailable && (
-                <button onClick={() => setTyping(false)} className="rounded-xl border border-border px-5 py-3 text-base font-semibold text-foreground hover:bg-muted">
-                  Mejor lo digo en voz
-                </button>
-              )}
+              <button onClick={() => setTyping(false)} className="rounded-xl border border-border px-5 py-3 text-base font-semibold text-foreground hover:bg-muted">
+                {micAvailable ? 'Mejor lo digo en voz' : 'Cerrar'}
+              </button>
             </div>
-          </div>
-        )}
-
-        {(step === 'processing' || step === 'saving') && (
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card p-10 text-center">
-            <Loader2 className="h-10 w-10 animate-spin text-brand-500" />
-            <p className="text-lg font-semibold text-foreground">
-              {step === 'processing' ? 'Ordenando lo que me contaste…' : 'Configurando tu bot…'}
-            </p>
-            {step === 'processing' && <p className="text-base text-muted-foreground">Tarda unos segundos.</p>}
           </div>
         )}
 
@@ -246,71 +359,46 @@ export default function VoiceSetupPage() {
   )
 }
 
-function RecorderCard({
-  recording, seconds, volume, micAvailable, isCorrection, onStart, onStop, onCancel, onType,
-}: {
-  recording: boolean
-  seconds: number
-  volume: number
-  micAvailable: boolean
-  isCorrection: boolean
-  onStart: () => void
-  onStop: () => void
-  onCancel: () => void
-  onType: () => void
-}) {
+function SpeechBubble({ text, onReplay }: { text: string; onReplay: () => void }) {
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-border bg-card p-6 text-center sm:p-8">
-      {!recording && !isCorrection && (
-        <ul className="mb-6 flex flex-wrap justify-center gap-2">
-          {PROMPTS.map((p) => (
-            <li key={p} className="rounded-full bg-muted px-3 py-1.5 text-sm font-medium text-foreground">{p}</li>
-          ))}
-        </ul>
-      )}
-
-      {micAvailable ? (
-        <>
-          <div className="relative flex h-32 w-32 items-center justify-center">
-            {/* Pulso suave: le dice al dueño que es seguro tocarlo (prueba de campo, Tijaltepec). */}
-            {!recording && <span className="absolute inset-2 animate-ping rounded-full bg-brand-500/20" />}
-            {recording && (
-              <span
-                className="absolute rounded-full bg-rose-500/20 transition-all duration-100"
-                style={{ inset: `${Math.max(0, 12 - volume * 12)}px` }}
-              />
-            )}
-            <button
-              onClick={recording ? onStop : onStart}
-              aria-label={recording ? 'Terminar de grabar' : 'Tocar y hablar'}
-              className={`relative flex h-28 w-28 items-center justify-center rounded-full text-white shadow-xl transition-transform active:scale-95 ${
-                recording ? 'bg-rose-500 hover:bg-rose-600' : 'bg-brand-500 hover:bg-brand-600'
-              }`}
-            >
-              {recording ? <Square className="h-10 w-10" fill="currentColor" /> : <Mic className="h-12 w-12" />}
-            </button>
-          </div>
-          <p className="mt-4 text-lg font-semibold text-foreground">
-            {recording ? `Te escucho… ${clock(seconds)}` : isCorrection ? 'Toca y dime qué cambiar' : 'Toca y habla'}
-          </p>
-          <p className="mt-1 text-base text-muted-foreground">
-            {recording ? 'Cuando termines, toca el botón rojo.' : 'Habla con calma, como en una nota de voz.'}
-          </p>
-          {recording ? (
-            <button onClick={onCancel} className="mt-4 text-base font-medium text-muted-foreground underline">
-              Cancelar
-            </button>
-          ) : (
-            <button onClick={onType} className="mt-5 inline-flex items-center gap-2 text-base font-medium text-muted-foreground hover:text-foreground">
-              <Keyboard className="h-5 w-5" /> ¿Prefieres escribir?
-            </button>
-          )}
-        </>
-      ) : (
-        <button onClick={onType} className="rounded-xl bg-brand-500 px-5 py-3 text-base font-semibold text-white">
-          Este navegador no permite grabar — escríbelo aquí
+    <div className="relative mt-3 w-full max-w-lg rounded-2xl bg-brand-50 px-5 py-4 text-left dark:bg-brand-950/40" aria-live="polite">
+      {/* Piquito del globo, apuntando a la carita */}
+      <span className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 bg-brand-50 dark:bg-brand-950/40" />
+      <div className="relative flex items-start gap-3">
+        <p className="flex-1 text-lg leading-relaxed text-foreground">{text}</p>
+        <button onClick={onReplay} aria-label="Escuchar otra vez" title="Escuchar otra vez" className="shrink-0 rounded-full p-1.5 text-brand-600 hover:bg-brand-100 dark:hover:bg-brand-900/40">
+          <Volume2 className="h-5 w-5" />
         </button>
-      )}
+      </div>
+    </div>
+  )
+}
+
+function MicButton({ onClick, label, available, onType }: { onClick: () => void; label: string; available: boolean; onType: () => void }) {
+  if (!available) {
+    return (
+      <button onClick={onType} className="mt-5 rounded-xl bg-brand-500 px-5 py-3 text-base font-semibold text-white">
+        Este navegador no permite grabar — escríbelo aquí
+      </button>
+    )
+  }
+  return (
+    <div className="mt-5 flex flex-col items-center">
+      <div className="relative flex h-28 w-28 items-center justify-center">
+        {/* Pulso suave: le dice al dueño que es seguro tocarlo (prueba de campo, Tijaltepec). */}
+        <span className="absolute inset-2 animate-ping rounded-full bg-brand-500/20" />
+        <button
+          onClick={onClick}
+          aria-label={label}
+          className="relative flex h-24 w-24 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl transition-transform hover:bg-brand-600 active:scale-95"
+        >
+          <Mic className="h-11 w-11" />
+        </button>
+      </div>
+      <p className="mt-2 text-lg font-semibold text-foreground">{label}</p>
+      <button onClick={onType} className="mt-2 inline-flex items-center gap-2 text-base font-medium text-muted-foreground hover:text-foreground">
+        <Keyboard className="h-5 w-5" /> ¿Prefieres escribir?
+      </button>
     </div>
   )
 }

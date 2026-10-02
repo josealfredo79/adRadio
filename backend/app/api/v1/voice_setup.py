@@ -8,7 +8,16 @@ Dos pasos para que nada se guarde sin que el dueño lo vea:
 import json
 import logging
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,10 +28,14 @@ from app.database import get_db
 from app.models.product import Product
 from app.models.user import User
 from app.services.voice_setup import (
+    QUESTION_TEXT,
     extract_profile,
+    pending_questions,
     render_hours,
     render_instructions,
     sanitize_profile,
+    spoken_reply,
+    spoken_summary,
 )
 from app.services.whisper_service import transcribe_audio_bytes
 
@@ -34,10 +47,17 @@ MAX_AUDIO_BYTES = 10 * 1024 * 1024  # ~5 min de voz comprimida sobra con esto
 MAX_TEXT = 6000
 
 
-def _out(profile: dict, transcript: str, user: User) -> dict:
+def _out(profile: dict, transcript: str, user: User, previous: dict | None = None, asked: list[str] | None = None) -> dict:
+    pending = pending_questions(profile, asked or [])
+    question = pending[0] if pending else None
     return {
         "transcript": transcript,
         "profile": profile,
+        "next_question": question,
+        # Para que "Saltar" pase a la siguiente sin otra llamada al servidor.
+        "pending_questions": pending,
+        "say": spoken_reply(profile, previous, question),
+        "spoken_summary": spoken_summary(profile),
         "hours_text": render_hours(profile["business_hours"]),
         "instructions_preview": render_instructions(profile),
         "replaces_existing_instructions": bool(user.bot_instructions),
@@ -51,8 +71,13 @@ async def listen(
     audio: UploadFile | None = File(None),
     text: str | None = Form(None),
     draft: str | None = Form(None),
+    question: str | None = Form(None),
+    asked: str | None = Form(None),
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    """`question`: la pregunta de la carita que esto contesta (services,
+    hours, location, payments). `asked`: las que ya se hicieron o se
+    saltaron, para no repetirlas."""
     if audio is not None:
         data = await audio.read()
         if not data:
@@ -79,13 +104,40 @@ async def listen(
             raise HTTPException(status_code=400, detail="Borrador inválido")
 
     try:
-        profile = await extract_profile(transcript, current, current_user.business_name or "")
+        profile = await extract_profile(
+            transcript, current, current_user.business_name or "", question_text=QUESTION_TEXT.get(question or ""),
+        )
     except Exception:
         logger.exception("[VOICE-SETUP] extraction failed user=%s", current_user.id)
         raise HTTPException(
             status_code=502, detail="No pude ordenar lo que me contaste. Intenta de nuevo en un momento.",
         )
-    return _out(profile, transcript, current_user)
+    asked_list = [a for a in (asked or "").split(",") if a in QUESTION_TEXT]
+    if question in QUESTION_TEXT and question not in asked_list:
+        asked_list.append(question)
+    return _out(profile, transcript, current_user, previous=current, asked=asked_list)
+
+
+class SpeakBody(BaseModel):
+    text: str
+
+
+@router.post("/speak")
+@limiter.limit("30/minute")
+async def speak(request: Request, body: SpeakBody, current_user: User = Depends(get_current_user)) -> Response:
+    """La voz de la carita: voz mexicana (edge-tts, la misma tecnología de las
+    cuñas, sin costo). Si falla, el navegador usa su propia voz."""
+    from app.services.radio.tts import _tts_edge
+
+    text = " ".join(body.text.split())[:600]
+    if not text:
+        raise HTTPException(status_code=400, detail="Nada que decir")
+    try:
+        audio = await _tts_edge(text, "es-MX-DaliaNeural", rate="+0%", pitch="+0Hz")
+    except Exception:
+        logger.warning("[VOICE-SETUP] TTS failed", exc_info=True)
+        raise HTTPException(status_code=503, detail="Voz no disponible")
+    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=3600"})
 
 
 class ApplyBody(BaseModel):

@@ -25,6 +25,28 @@ const PROFILE = {
   notes: [],
 }
 
+const HOURS_Q = { field: 'hours', text: '¿En qué horario atiendes?' }
+const LOCATION_Q = { field: 'location', text: '¿Dónde está tu negocio?' }
+
+function listenResponse(over: Record<string, unknown> = {}) {
+  return {
+    data: {
+      transcript: 'Abrimos de 10 a 8', profile: PROFILE, next_question: null, pending_questions: [],
+      say: '¡Muy bien! Ya anoté 2 servicios. Ya tengo lo principal. Revisa que esté bien.',
+      spoken_summary: 'Vendes corte en 150 pesos.', hours_text: 'Lunes 10:00–20:00',
+      instructions_preview: 'Servicios…', replaces_existing_instructions: true, ...over,
+    },
+  }
+}
+
+function mockApi(listen: () => unknown) {
+  post.mockImplementation((url: string) => {
+    if (url === '/voice-setup/listen') return Promise.resolve(listen())
+    if (url === '/voice-setup/speak') return Promise.resolve({ data: new Blob(['x'], { type: 'audio/mpeg' }) })
+    return Promise.resolve({ data: { products_created: 1, products_updated: 0, hours_set: true } })
+  })
+}
+
 function renderPage() {
   return render(
     <HelmetProvider>
@@ -35,33 +57,31 @@ function renderPage() {
   )
 }
 
+async function typeAndSend(textValue: string, button: string) {
+  fireEvent.click(screen.getAllByText(/Prefieres escribir|escríbelo aquí|^Escribir$/)[0])
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: textValue } })
+  fireEvent.click(screen.getByText(button))
+}
+
 describe('VoiceSetupPage', () => {
   beforeEach(() => post.mockReset())
 
-  it('invites to talk and reassures nothing is published without approval', () => {
+  it('greets like a person and reassures nothing is published without approval', () => {
     renderPage()
-    expect(screen.getByText('Cuéntale a tu bot de tu negocio')).toBeDefined()
+    expect(screen.getByText(/Soy tu asistente de IaRadio/)).toBeDefined()
+    expect(screen.getByRole('img', { name: 'Asistente sonriendo' })).toBeDefined()
     expect(screen.getByText(/No se publica nada hasta que tú lo apruebes/)).toBeDefined()
     expect(screen.getByText('Tu horario')).toBeDefined()
   })
 
-  it('typed fallback → review → remove a service → apply', async () => {
-    post.mockImplementation((url: string) => {
-      if (url === '/voice-setup/listen') {
-        return Promise.resolve({
-          data: { transcript: 'Abrimos de 10 a 8', profile: PROFILE, hours_text: 'Lunes 10:00–20:00',
-                  instructions_preview: 'Servicios…', replaces_existing_instructions: true },
-        })
-      }
-      return Promise.resolve({ data: { products_created: 1, products_updated: 0, hours_set: true } })
-    })
+  it('typed fallback → review → remove a service → apply, and the face speaks', async () => {
+    mockApi(() => listenResponse())
     renderPage()
-    fireEvent.click(screen.getByText(/Prefieres escribir|escríbelo aquí/))
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Abrimos de 10 a 8, corte 150' } })
-    fireEvent.click(screen.getByText('Ordenar mi información'))
+    await typeAndSend('Abrimos de 10 a 8, corte 150', 'Ordenar mi información')
 
     await screen.findByText('Esto es lo que entendí. ¿Está bien?')
-    expect(screen.getByText('Corte')).toBeDefined()
+    expect(screen.getByText(/Ya anoté 2 servicios/)).toBeDefined()
+    await waitFor(() => expect(post.mock.calls.some(([url]) => url === '/voice-setup/speak')).toBe(true))
     expect(screen.getByText(/reemplaza las instrucciones/)).toBeDefined()
 
     fireEvent.click(screen.getByLabelText('Quitar Barba'))
@@ -69,27 +89,56 @@ describe('VoiceSetupPage', () => {
 
     fireEvent.click(screen.getByText('Así está bien, configura mi bot'))
     await screen.findByText('¡Listo! Tu bot quedó configurado')
+    expect(screen.getByRole('img', { name: 'Asistente contento' })).toBeDefined()
     const applied = post.mock.calls.find(([url]) => url === '/voice-setup/apply')![1] as { profile: typeof PROFILE }
     expect(applied.profile.services.map((s) => s.name)).toEqual(['Corte'])
-    await waitFor(() => expect(screen.getByText(/Agregamos 1 producto a tu catálogo/)).toBeDefined())
   })
 
-  it('a correction sends the current draft', async () => {
-    post.mockResolvedValue({
-      data: { transcript: 'x', profile: PROFILE, hours_text: null, instructions_preview: 'algo', replaces_existing_instructions: false },
+  it('asks what is missing, one thing at a time; skip and finish work', async () => {
+    mockApi(() =>
+      listenResponse({
+        next_question: HOURS_Q, pending_questions: [HOURS_Q, LOCATION_Q],
+        say: `¡Muy bien! Ya anoté 2 servicios. ${HOURS_Q.text}`,
+      }),
+    )
+    renderPage()
+    await typeAndSend('corte 150, barba 100', 'Ordenar mi información')
+
+    await screen.findByText(/Ya anoté 2 servicios\. ¿En qué horario atiendes\?/)
+    // Sin micrófono (jsdom) se ofrece escribir; con micrófono sería 'Tocar y responder'.
+    expect(screen.getByText('Saltar pregunta')).toBeDefined()
+
+    fireEvent.click(screen.getByText('Saltar pregunta'))
+    expect(screen.getByText(/Va, lo dejamos\. ¿Dónde está tu negocio\?/)).toBeDefined()
+
+    fireEvent.click(screen.getByText('Ya terminé'))
+    await screen.findByText('Esto es lo que entendí. ¿Está bien?')
+  })
+
+  it('an answer carries the question and what was already asked, plus the draft', async () => {
+    let calls = 0
+    mockApi(() => {
+      calls += 1
+      return calls === 1
+        ? listenResponse({ next_question: HOURS_Q, pending_questions: [HOURS_Q], say: HOURS_Q.text })
+        : listenResponse()
     })
     renderPage()
-    fireEvent.click(screen.getByText(/Prefieres escribir|escríbelo aquí/))
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'primera versión' } })
-    fireEvent.click(screen.getByText('Ordenar mi información'))
-    await screen.findByText('Esto es lo que entendí. ¿Está bien?')
+    await typeAndSend('corte 150', 'Ordenar mi información')
+    await screen.findByText('Saltar pregunta')
 
-    fireEvent.click(screen.getByText('Escribir'))
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'el sábado cerramos a las 5' } })
-    fireEvent.click(screen.getByText('Aplicar cambio'))
-    await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
-    const form = post.mock.calls[1][1] as FormData
-    expect(form.get('text')).toBe('el sábado cerramos a las 5')
-    expect(JSON.parse(form.get('draft') as string).city).toBe('Tlaxiaco')
+    await typeAndSend('de 9 a 7', 'Responder')
+    await screen.findByText('Esto es lo que entendí. ¿Está bien?')
+    const second = post.mock.calls.filter(([url]) => url === '/voice-setup/listen')[1][1] as FormData
+    expect(second.get('text')).toBe('de 9 a 7')
+    expect(second.get('question')).toBe('hours')
+    expect(second.get('asked')).toBe('hours')
+    expect(JSON.parse(second.get('draft') as string).city).toBe('Tlaxiaco')
+  })
+
+  it('the mute button is remembered', () => {
+    renderPage()
+    fireEvent.click(screen.getByLabelText('Silenciar la voz'))
+    expect(screen.getByLabelText('Activar la voz')).toBeDefined()
   })
 })
