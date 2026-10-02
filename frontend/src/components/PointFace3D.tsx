@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import BotFace, { type FaceMood } from '@/components/BotFace'
+import { FACE_TRIANGLES, FACE_VERTICES } from '@/components/faceMeshData'
 
 // Rostro 3D de puntos (estilo "face mesh") que mueve los labios con la voz de
 // verdad. Estilo: puntos celestes en forma de triangulito sobre azul marino,
 // dispersos en la piel y CONCENTRADOS en las líneas que dan la expresión
-// (párpados, cejas, nariz, labios, pliegues, contorno). Sin modelos ni
-// imágenes: todo se arma con matemáticas sobre la superficie de la cara.
+// (párpados, cejas, nariz, labios, contorno). La forma es la de un rostro
+// humano real: el modelo canónico de MediaPipe Face Mesh (ver faceMeshData),
+// con un punto en cada vértice y en la mitad de cada arista, más su malla tenue.
 //
 // - Hablando: la mandíbula y el labio inferior siguen `getLevel()` (el volumen
 //   real del audio que suena, ver useSpeaker.level).
@@ -30,162 +32,124 @@ const smooth = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t)
 }
 
-// Generador pseudoaleatorio con semilla: la cara sale igual en cada visita.
-function rng(seed: number) {
-  let s = seed >>> 0
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0
-    return s / 4294967296
-  }
-}
-
-// ─── La superficie de la cara ───────────────────────────────────────────────
-// y va de -1 (mentón) a 1 (coronilla); x hacia los lados; z hacia la cámara.
-
-const narrow = (y: number) => 1 - 0.32 * smooth(-0.3, -1, y) // quijada hacia el mentón
-const halfWidth = (y: number) => Math.sqrt(Math.max(0, 1 - y * y)) * 0.74 * narrow(y)
-
-/** Relieve de las facciones (cuencas, nariz, labios, mentón…). */
-function relief(x: number, y: number): number {
-  const ax = Math.abs(x)
-  return 1.4 * (
-    -0.11 * g(ax - 0.26, y - 0.0, 0.11, 0.07) + // cuencas de los ojos
-    0.05 * g(ax - 0.26, y - 0.0, 0.06, 0.035) + // ojos
-    0.05 * g(ax - 0.27, y - 0.16, 0.15, 0.04) + // cejas
-    0.1 * g(x, y + 0.1, 0.05, 0.15) + // tabique
-    0.17 * g(x, y + 0.26, 0.07, 0.06) + // punta de la nariz
-    0.06 * g(ax - 0.1, y + 0.28, 0.045, 0.04) + // aletas
-    0.06 * g(x, y + 0.45, 0.16, 0.03) + // labio superior
-    0.07 * g(x, y + 0.52, 0.14, 0.035) + // labio inferior
-    0.06 * g(ax - 0.36, y + 0.12, 0.12, 0.12) + // pómulos
-    0.07 * g(x, y + 0.78, 0.14, 0.09) // mentón
-  )
-}
-
-/** Profundidad de la cara en (x, y): elipsoide + relieve de las facciones. */
-function surfaceZ(x: number, y: number): number {
-  const sx = x / (0.74 * narrow(y))
-  const sz = Math.sqrt(Math.max(0, 1 - sx * sx - y * y))
-  return sz * 0.82 * (1 - 0.12 * smooth(-0.35, -1, y)) + relief(x, y) * smooth(0.12, 0.6, sz)
-}
-
-// ─── Las líneas que dan la expresión ────────────────────────────────────────
-
-type Curve = (t: number) => [number, number]
-
-/** Curvas en coordenadas de la cara. Las de un solo lado se reflejan. */
-function featureCurves(): { curve: Curve; n: number; mirror?: boolean }[] {
-  const eye = (cx: number, upper: boolean): Curve => (t) => {
-    const x = cx - 0.12 + 0.24 * t
-    const lift = 0.012 * (t - 0.5) // rabito del ojo un poco más alto
-    const arc = Math.sin(Math.PI * t)
-    return [x, lift + (upper ? 0.05 * Math.pow(arc, 0.9) : -0.028 * arc)]
-  }
-  return [
-    { curve: eye(0.26, true), n: 42, mirror: true }, // párpado superior
-    { curve: eye(0.26, false), n: 30, mirror: true }, // párpado inferior
-    { curve: (t) => [0.1 + 0.34 * t, 0.15 + 0.045 * Math.sin(Math.PI * Math.pow(t, 0.8))], n: 30, mirror: true }, // ceja
-    { curve: (t) => [0.045 + 0.025 * t, -0.02 - 0.2 * t], n: 14, mirror: true }, // costados del tabique
-    {
-      // base de la nariz: una curva suave con las aletas hacia arriba
-      curve: (t) => {
-        const x = -0.13 + 0.26 * t
-        return [x, -0.3 + 0.035 * Math.pow(Math.abs(x) / 0.13, 2)]
-      },
-      n: 40,
-    },
-    { curve: (t) => [0.1 + 0.045 * Math.cos(Math.PI * (0.5 + t)), -0.27 + 0.04 * Math.sin(Math.PI * (0.5 + t))], n: 14, mirror: true }, // aleta
-    { curve: (t) => [0.025, -0.33 - 0.1 * t], n: 8, mirror: true }, // surco del labio
-    {
-      // labio superior con el arco de Cupido
-      curve: (t) => {
-        const x = -0.18 + 0.36 * t
-        const u = Math.abs(x) / 0.18
-        return [x, -0.48 + 0.055 * (1 - Math.pow(u, 1.6)) - 0.018 * Math.exp(-(x * x) / (2 * 0.025 * 0.025))]
-      },
-      n: 46,
-    },
-    {
-      // línea de la boca
-      curve: (t) => {
-        const x = -0.19 + 0.38 * t
-        return [x, -0.48 - 0.012 * (1 - Math.pow(x / 0.19, 2))]
-      },
-      n: 44,
-    },
-    {
-      // labio inferior
-      curve: (t) => {
-        const x = -0.16 + 0.32 * t
-        return [x, -0.49 - 0.06 * Math.pow(Math.max(0, 1 - Math.pow(x / 0.16, 2)), 0.8)]
-      },
-      n: 40,
-    },
-    { curve: (t) => [0.13 + 0.09 * Math.sin(Math.PI * 0.5 * t), -0.27 - 0.23 * t], n: 22, mirror: true }, // pliegue de la sonrisa
-    { curve: (t) => [-0.1 + 0.2 * t, -0.74 - 0.025 * Math.sin(Math.PI * t)], n: 16 }, // mentón
-    { curve: (t) => [0, 0.86 - 0.62 * t], n: 18 }, // línea central de la frente
-    { curve: (t) => [0, -0.6 - 0.32 * t], n: 10 }, // línea central del mentón
-    { curve: (t) => [0.95 * halfWidth(0.86 - 1.81 * t), 0.86 - 1.81 * t], n: 90, mirror: true }, // contorno
-  ]
-}
+// ─── Las líneas que dan la expresión (índices de MediaPipe Face Mesh) ──────
+// Se dibujan más brillantes que la malla: contorno, cejas, ojos, labios, nariz.
+const FEATURE_LOOPS: number[][] = [
+  [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109, 10], // contorno
+  [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185, 61], // labios por fuera
+  [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78], // labios por dentro
+  [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246, 33], // ojo
+  [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466, 263], // ojo
+  [46, 53, 52, 65, 55], [70, 63, 105, 66, 107], // ceja
+  [276, 283, 282, 295, 285], [300, 293, 334, 296, 336], // ceja
+  [168, 6, 197, 195, 5, 4, 1], // caballete de la nariz
+  [98, 97, 2, 326, 327], [64, 98], [327, 294], // base de la nariz
+]
+// Centro y semiejes de cada ojo (en cm) para dibujar el iris.
+const EYES = [
+  { x: -3.15, y: 2.6, z: 3.95 },
+  { x: 3.15, y: 2.6, z: 3.95 },
+]
+const SCALE = 1 / 10.4
 
 interface FaceGeometry {
-  base: Float32Array
-  colors: Float32Array
-  jaw: Float32Array
-  upperLip: Float32Array
-  corners: Float32Array
-  lids: Float32Array
+  /** Malla: los 468 vértices (para las líneas) */
+  mesh: Float32Array
+  meshWeights: Float32Array[]
+  allEdges: number[]
+  featureEdges: number[]
+  /** Puntos: vértices + mitad de cada arista + iris */
+  points: Float32Array
+  pointColors: Float32Array
+  pointWeights: Float32Array[]
 }
 
-function buildFace(fillCount: number): FaceGeometry {
-  const pts: number[] = []
-  const shade: number[] = []
-  const rand = rng(20261001)
+/** Pesos de animación de un punto (en cm): mandíbula, labio de arriba, comisuras, párpado. */
+function weights(x: number, y: number): [number, number, number, number] {
+  const ax = Math.abs(x)
+  // Todo lo que está bajo la línea de la boca baja con la mandíbula, menos
+  // hacia los lados (la quijada gira, no se desliza).
+  const jaw = smooth(-4.05, -4.45, y) * Math.exp(-(x * x) / (2 * 3.4 * 3.4))
+  const upper = smooth(-3.0, -3.6, y) * smooth(-4.4, -4.0, y) * Math.exp(-(x * x) / (2 * 1.6 * 1.6))
+  const corner = g(ax - 2.45, y + 4.3, 0.7, 0.6)
+  const lid = smooth(2.66, 2.8, y) * g(ax - 3.15, y - 2.9, 1.2, 0.35)
+  return [jaw, upper, corner, lid]
+}
 
-  const add = (x: number, y: number, bright: number, jitter: number) => {
-    const jx = x + (rand() - 0.5) * jitter
-    const jy = y + (rand() - 0.5) * jitter
-    pts.push(jx, jy, surfaceZ(jx, jy))
-    shade.push(bright, bright, bright)
+function buildFace(): FaceGeometry {
+  const n = FACE_VERTICES.length / 3
+  const mesh = new Float32Array(n * 3)
+  const meshW = [0, 1, 2, 3].map(() => new Float32Array(n))
+  const cm = (i: number, k: number) => FACE_VERTICES[i * 3 + k] / 100
+  for (let i = 0; i < n; i++) {
+    const x = cm(i, 0)
+    const y = cm(i, 1)
+    mesh[i * 3] = x * SCALE
+    mesh[i * 3 + 1] = (y + 0.4) * SCALE
+    mesh[i * 3 + 2] = (cm(i, 2) - 3) * SCALE
+    weights(x, y).forEach((w, k) => (meshW[k][i] = w))
   }
 
-  // Piel: puntos dispersos y desparejos (no una rejilla), más tenues.
-  let placed = 0
-  while (placed < fillCount) {
-    const y = -0.95 + rand() * 1.83
-    const x = (rand() * 2 - 1) * halfWidth(y) * 0.95
-    add(x, y, 0.55 + rand() * 0.35, 0)
-    placed++
+  // Aristas únicas de los triángulos.
+  const seen = new Set<number>()
+  const allEdges: number[] = []
+  for (let t = 0; t < FACE_TRIANGLES.length; t += 3) {
+    for (let k = 0; k < 3; k++) {
+      const a = FACE_TRIANGLES[t + k]
+      const b = FACE_TRIANGLES[t + ((k + 1) % 3)]
+      const key = Math.min(a, b) * 1000 + Math.max(a, b)
+      if (seen.has(key)) continue
+      seen.add(key)
+      allEdges.push(a, b)
+    }
   }
-
-  // Líneas de expresión: densas y más brillantes.
-  for (const { curve, n, mirror } of featureCurves()) {
-    for (let i = 0; i < n; i++) {
-      const [x, y] = curve(i / (n - 1))
-      add(x, y, 0.9 + rand() * 0.1, 0.012)
-      if (mirror) add(-x, y, 0.9 + rand() * 0.1, 0.012)
+  const featureEdges: number[] = []
+  const featureSet = new Set<number>()
+  for (const loop of FEATURE_LOOPS) {
+    for (let i = 0; i < loop.length; i++) {
+      featureSet.add(loop[i])
+      if (i > 0) featureEdges.push(loop[i - 1], loop[i])
     }
   }
 
-  // Pesos de animación según la posición de cada punto.
-  const count = pts.length / 3
-  const jaw = new Float32Array(count)
-  const upper = new Float32Array(count)
-  const corners = new Float32Array(count)
-  const lids = new Float32Array(count)
-  for (let i = 0; i < count; i++) {
-    const x = pts[i * 3]
-    const y = pts[i * 3 + 1]
-    // Todo lo que está bajo la línea de la boca baja con la mandíbula; la
-    // línea misma se queda con el labio de arriba, así se abre un hueco.
-    // Angosta (σ≈0.17): abre en óvalo como una boca, no de mejilla a mejilla.
-    jaw[i] = smooth(-0.495, -0.51, y) * smooth(-1.02, -0.62, y) * Math.exp(-(x * x) / (2 * 0.17 * 0.17))
-    upper[i] = g(x, y + 0.45, 0.17, 0.035)
-    corners[i] = g(Math.abs(x) - 0.18, y + 0.48, 0.045, 0.04)
-    lids[i] = g(Math.abs(x) - 0.26, y - 0.035, 0.12, 0.025)
+  // Puntos: cada vértice, la mitad de cada arista y un anillo de iris. Los
+  // pesos de los puntos intermedios salen del promedio de sus extremos.
+  const pts: number[] = []
+  const col: number[] = []
+  const w: number[][] = [[], [], [], []]
+  const push = (x: number, y: number, z: number, bright: number, ws: number[]) => {
+    pts.push(x, y, z)
+    col.push(bright, bright, bright)
+    ws.forEach((v, k) => w[k].push(v))
   }
-  return { base: new Float32Array(pts), colors: new Float32Array(shade), jaw, upperLip: upper, corners, lids }
+  for (let i = 0; i < n; i++) {
+    push(mesh[i * 3], mesh[i * 3 + 1], mesh[i * 3 + 2], featureSet.has(i) ? 1 : 0.75, meshW.map((m) => m[i]))
+  }
+  for (let e = 0; e < allEdges.length; e += 2) {
+    const a = allEdges[e]
+    const b = allEdges[e + 1]
+    const mid = (k: number) => (mesh[a * 3 + k] + mesh[b * 3 + k]) / 2
+    push(mid(0), mid(1), mid(2), 0.45, meshW.map((m) => (m[a] + m[b]) / 2))
+  }
+  for (const eye of EYES) {
+    const ring = 12
+    for (let i = 0; i < ring; i++) {
+      const ang = (i / ring) * Math.PI * 2
+      const y = eye.y + Math.sin(ang) * 0.3
+      if (y > 2.93 || y < 2.32) continue // el párpado tapa arriba y abajo
+      push((eye.x + Math.cos(ang) * 0.3) * SCALE, (y + 0.4) * SCALE, (eye.z - 3) * SCALE, 0.95, [0, 0, 0, 0])
+    }
+    push(eye.x * SCALE, (eye.y + 0.4) * SCALE, (eye.z - 3) * SCALE, 1, [0, 0, 0, 0]) // pupila
+  }
+  return {
+    mesh,
+    meshWeights: meshW,
+    allEdges,
+    featureEdges,
+    points: new Float32Array(pts),
+    pointColors: new Float32Array(col),
+    pointWeights: w.map((a) => new Float32Array(a)),
+  }
 }
 
 /** Triangulito como "sprite" de cada punto, como en la referencia. */
@@ -253,21 +217,47 @@ export default function PointFace3D({ mood, volume = 0, getLevel, size = 280 }: 
     const camera = new THREE.PerspectiveCamera(30, W / H, 0.1, 20)
     camera.position.set(0, -0.05, 4.2)
 
-    const face = buildFace(small ? 2200 : 3000)
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(face.base, 3))
-    geo.setAttribute('color', new THREE.BufferAttribute(face.colors, 3))
-    // Pesos por punto (mandíbula, labio de arriba, sonrisa, parpadeo). La
-    // deformación la hace la GPU: por cuadro solo cambian 3 números.
-    geo.setAttribute('aJaw', new THREE.BufferAttribute(face.jaw, 1))
-    geo.setAttribute('aUpper', new THREE.BufferAttribute(face.upperLip, 1))
-    geo.setAttribute('aCorner', new THREE.BufferAttribute(face.corners, 1))
-    geo.setAttribute('aLid', new THREE.BufferAttribute(face.lids, 1))
+    const face = buildFace()
     const uniforms = { uOpen: { value: 0 }, uSmile: { value: 0 }, uBlink: { value: 0 } }
+    // Pesos por punto (mandíbula, labio de arriba, sonrisa, parpadeo). La
+    // deformación la hace la GPU: por cuadro solo cambian 3 números. Puntos y
+    // líneas usan el mismo shader, así se mueven juntos.
+    const withWeights = (geo: THREE.BufferGeometry, w: Float32Array[]) => {
+      ;['aJaw', 'aUpper', 'aCorner', 'aLid'].forEach((name, k) => geo.setAttribute(name, new THREE.BufferAttribute(w[k], 1)))
+      return geo
+    }
+    const deform = (mat: THREE.Material) => {
+      mat.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, uniforms)
+        shader.vertexShader = shader.vertexShader
+          .replace(
+            '#include <common>',
+            `#include <common>
+attribute float aJaw;
+attribute float aUpper;
+attribute float aCorner;
+attribute float aLid;
+uniform float uOpen;
+uniform float uSmile;
+uniform float uBlink;`,
+          )
+          .replace(
+            '#include <begin_vertex>',
+            `#include <begin_vertex>
+transformed.y += -uOpen * 0.11 * aJaw + uOpen * 0.015 * aUpper + uSmile * 0.025 * aCorner - uBlink * 0.06 * aLid;
+transformed.x += uSmile * 0.012 * aCorner * sign(transformed.x);
+transformed.z -= uOpen * 0.03 * aJaw;`,
+          )
+      }
+      return mat
+    }
 
+    const pointGeo = withWeights(new THREE.BufferGeometry(), face.pointWeights)
+    pointGeo.setAttribute('position', new THREE.BufferAttribute(face.points, 3))
+    pointGeo.setAttribute('color', new THREE.BufferAttribute(face.pointColors, 3))
     const sprite = triangleTexture()
-    const mat = new THREE.PointsMaterial({
-      size: 0.042,
+    const pointMat = deform(new THREE.PointsMaterial({
+      size: 0.04,
       sizeAttenuation: true,
       vertexColors: true,
       map: sprite,
@@ -276,29 +266,30 @@ export default function PointFace3D({ mood, volume = 0, getLevel, size = 280 }: 
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       color: MOOD_COLOR.idle.clone(),
-    })
-    mat.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, uniforms)
-      shader.vertexShader = shader.vertexShader
-        .replace(
-          '#include <common>',
-          `#include <common>
-attribute float aJaw;
-attribute float aUpper;
-attribute float aCorner;
-attribute float aLid;
-uniform float uOpen;
-uniform float uSmile;
-uniform float uBlink;`,
-        )
-        .replace(
-          '#include <begin_vertex>',
-          `#include <begin_vertex>
-transformed.y += -uOpen * 0.15 * aJaw + uOpen * 0.022 * aUpper + uSmile * 0.03 * aCorner - uBlink * 0.04 * aLid;
-transformed.z -= uOpen * 0.03 * aJaw;`,
-        )
+    })) as THREE.PointsMaterial
+
+    // Malla tenue (todas las aristas) y líneas de expresión más marcadas.
+    const lineGeo = (edges: number[]) => {
+      const geo = withWeights(new THREE.BufferGeometry(), face.meshWeights)
+      geo.setAttribute('position', new THREE.BufferAttribute(face.mesh, 3))
+      geo.setIndex(edges)
+      return geo
     }
-    const head = new THREE.Points(geo, mat)
+    const meshGeo = lineGeo(face.allEdges)
+    const featureGeo = lineGeo(face.featureEdges)
+    const lineMat = (opacity: number) =>
+      deform(new THREE.LineBasicMaterial({
+        color: MOOD_COLOR.idle.clone(),
+        transparent: true,
+        opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })) as THREE.LineBasicMaterial
+    const meshMat = lineMat(0.13)
+    const featureMat = lineMat(0.55)
+
+    const head = new THREE.Group()
+    head.add(new THREE.LineSegments(meshGeo, meshMat), new THREE.LineSegments(featureGeo, featureMat), new THREE.Points(pointGeo, pointMat))
     scene.add(head)
 
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
@@ -348,7 +339,7 @@ transformed.z -= uOpen * 0.03 * aJaw;`,
       head.rotation.y += (yaw - head.rotation.y) * 0.06
       head.rotation.x += (pitch - head.rotation.x) * 0.06
       head.rotation.z += (roll - head.rotation.z) * 0.06
-      mat.color.lerp(MOOD_COLOR[m], 0.06)
+      for (const mt of [pointMat, meshMat, featureMat]) mt.color.lerp(MOOD_COLOR[m], 0.06)
 
       renderer.render(scene, camera)
     }
@@ -357,8 +348,7 @@ transformed.z -= uOpen * 0.03 * aJaw;`,
     return () => {
       cancelAnimationFrame(raf)
       io.disconnect()
-      geo.dispose()
-      mat.dispose()
+      for (const d of [pointGeo, meshGeo, featureGeo, pointMat, meshMat, featureMat]) d.dispose()
       sprite.dispose()
       renderer.dispose()
       if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement)
