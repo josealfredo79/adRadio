@@ -10,11 +10,20 @@ export default function LandingNav() {
           <span className="text-lg font-black tracking-tight">IaRadio</span>
         </div>
         <div className="hidden items-center gap-7 text-sm text-gray-400 sm:flex">
+          <a href="#pruebalo" className="font-semibold text-indigo-300 hover:text-white transition-colors">🎤 Pruébalo</a>
           <a href="#como-funciona" className="hover:text-white transition-colors">Cómo funciona</a>
           <a href="#precios" className="hover:text-white transition-colors">Precios</a>
           <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
         </div>
         <div className="flex items-center gap-3">
+          {/* En celular el menú se oculta: la demo de voz no debe perderse. */}
+          <a
+            href="#pruebalo"
+            aria-label="Pruébalo con tu voz"
+            className="sm:hidden flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-base"
+          >
+            🎤
+          </a>
           <Link to="/login" className="text-sm text-gray-400 hover:text-white transition-colors">
             Iniciar sesión
           </Link>

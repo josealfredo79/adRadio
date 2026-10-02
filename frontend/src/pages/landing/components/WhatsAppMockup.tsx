@@ -37,9 +37,11 @@ export default function WhatsAppMockup() {
   }, [visible, messages.length])
 
   useEffect(() => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
+    // Desplazar SOLO la caja del chat. scrollIntoView movía toda la página
+    // con cada mensaje animado: quien entraba al sitio era arrastrado a media
+    // página sin tocar nada.
+    const box = chatEndRef.current?.closest('.overflow-y-auto')
+    box?.scrollTo({ top: box.scrollHeight, behavior: 'smooth' })
   }, [visible, isTyping, showOptions])
 
   const handleOptionClick = (userMsg: string, botMsg: string) => {

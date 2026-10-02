@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { CheckCircle, ArrowRight, Zap, Sparkles } from 'lucide-react'
 import WhatsAppMockup from './WhatsAppMockup'
+import BotFace from '@/components/BotFace'
 import { AnimatedStat } from '../hooks/useCountUp'
 
 export default function HeroSection() {
@@ -79,6 +80,18 @@ export default function HeroSection() {
                 Producto en vivo
               </div>
               <WhatsAppMockup />
+              {/* La carita se asoma desde la primera pantalla: la demo de voz
+                  vive más abajo y, sin esto, casi nadie bajaba a encontrarla. */}
+              <a
+                href="#pruebalo"
+                aria-label="Platica con la carita de IaRadio"
+                className="group absolute right-full top-40 z-20 mr-3 hidden items-end gap-1 lg:flex"
+              >
+                <span className="mb-10 whitespace-nowrap rounded-2xl rounded-br-sm bg-white px-3 py-2 text-sm font-bold text-gray-900 shadow-xl transition-transform group-hover:scale-105">
+                  ¿Tienes un negocio?<br />¡Platícame! 🎤
+                </span>
+                <BotFace mood="idle" size={92} />
+              </a>
             </div>
           </div>
         </div>

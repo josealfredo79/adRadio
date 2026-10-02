@@ -79,7 +79,9 @@ export default function ChatWidget() {
   }, [open, messages.length])
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Solo la caja del chat, nunca la página (ver WhatsAppMockup).
+    const box = endRef.current?.closest('.overflow-y-auto')
+    box?.scrollTo({ top: box.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
   useEffect(() => {
