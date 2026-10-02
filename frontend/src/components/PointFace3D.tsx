@@ -23,14 +23,14 @@ import { weights } from '@/components/headWeights'
 //
 // - Hablando: la mandíbula y el labio inferior siguen `getLevel()` (el volumen
 //   real del audio que suena, ver useSpeaker.level).
-// - Escuchando: la boca sigue tu voz (`volume`) y la cabeza asiente un poco.
+// - Escuchando: boca cerrada y la cabeza asiente un poco.
 // - Pensando: mira hacia arriba. Contento: sonrisa. Parpadea solo.
 // La deformación y la luz corren en el shader: por cuadro solo cambian 3
 // números. Sin WebGL (o si no carga el modelo) se muestra la carita (BotFace).
 
 interface Props {
   mood: FaceMood
-  /** 0–1: volumen del micrófono mientras escucha */
+  /** 0–1: volumen del micrófono mientras escucha (solo lo usa la carita de respaldo) */
   volume?: number
   /** 0–1: apertura de boca mientras habla (voz real) */
   getLevel?: () => number
@@ -107,11 +107,9 @@ const HEAD_Y = -0.31
 export default function PointFace3D({ mood, volume = 0, getLevel, size = 280 }: Props) {
   const mount = useRef<HTMLDivElement>(null)
   const moodRef = useRef(mood)
-  const volumeRef = useRef(volume)
   const levelRef = useRef(getLevel)
   const [failed, setFailed] = useState(false)
   moodRef.current = mood
-  volumeRef.current = volume
   levelRef.current = getLevel
 
   useEffect(() => {
@@ -224,15 +222,15 @@ diffuseColor.rgb *= vShade;`)
       const t = now / 1000
       const m = moodRef.current
 
-      // Boca: voz real al hablar, tu voz al escuchar.
+      // Boca: solo se mueve con su propia voz; mientras te escucha, cerrada
+      // (si siguiera tu micrófono parecería que habla encima de ti).
       // window.__iaradioFaceTest (0–1) solo lo pone una prueba automática: el
       // navegador de pruebas no tiene bocina y el volumen medido sería 0.
       const forced = (window as Window & { __iaradioFaceTest?: number }).__iaradioFaceTest
       const target =
         typeof forced === 'number' ? forced
           : m === 'speaking' ? (levelRef.current?.() ?? 0)
-            : m === 'listening' ? volumeRef.current * 0.7
-              : 0
+            : 0
       open += (target - open) * (target > open ? 0.55 : 0.22)
       smile += ((m === 'happy' ? 1 : m === 'idle' ? 0.2 : 0) - smile) * 0.08
       if (now > nextBlink) {

@@ -18,7 +18,7 @@ import headMeshUrl from '@/assets/models/head-mesh.bin?url'
 
 interface Props {
   mood: FaceMood
-  /** 0–1: volumen del micrófono mientras escucha */
+  /** 0–1: volumen del micrófono mientras escucha (solo lo usa la carita de respaldo) */
   volume?: number
   /** 0–1: apertura de boca mientras habla (voz real) */
   getLevel?: () => number
@@ -119,11 +119,9 @@ const EYE_RADIUS = 0.3
 export default function MeshHead3D({ mood, volume = 0, getLevel, size = 280 }: Props) {
   const mount = useRef<HTMLDivElement>(null)
   const moodRef = useRef(mood)
-  const volumeRef = useRef(volume)
   const levelRef = useRef(getLevel)
   const [failed, setFailed] = useState(false)
   moodRef.current = mood
-  volumeRef.current = volume
   levelRef.current = getLevel
 
   useEffect(() => {
@@ -302,13 +300,13 @@ if (!gl_FrontFacing) diffuseColor.rgb *= 0.3;`,
       const t = now / 1000
       const m = moodRef.current
 
-      // Boca: voz real al hablar, tu voz al escuchar (igual que PointFace3D).
+      // Boca: solo se mueve con su propia voz; mientras te escucha, cerrada
+      // (si siguiera tu micrófono parecería que habla encima de ti).
       const forced = (window as Window & { __iaradioFaceTest?: number }).__iaradioFaceTest
       const target =
         typeof forced === 'number' ? forced
           : m === 'speaking' ? (levelRef.current?.() ?? 0)
-            : m === 'listening' ? volumeRef.current * 0.7
-              : 0
+            : 0
       open += (target - open) * (target > open ? 0.55 : 0.22)
       smile += ((m === 'happy' ? 1 : m === 'idle' ? 0.2 : 0) - smile) * 0.08
       if (now > nextBlink) {
