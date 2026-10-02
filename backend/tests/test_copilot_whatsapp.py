@@ -173,3 +173,53 @@ async def test_webhook_passes_voice_and_photo_to_the_owner_flow():
         await mi._handle_platform_message(None, {"from": "5215512345678", "type": "image", "image": {"id": "m2", "caption": "tinte a 450"}})
         assert hom.call_args.kwargs["photo"] == (b"bytes", "image/jpeg")
         assert hom.call_args.kwargs["text"] == "tinte a 450" and hom.call_args.kwargs["voice"] is False
+
+
+async def _webhook(monkeypatch, *, bot_on_number: bool, owners: set[str]):
+    """Mensajes al número central: uno de un dueño registrado y uno de alguien más."""
+    from unittest.mock import MagicMock
+
+    from starlette.requests import Request
+
+    from app.api.v1.webhooks_pkg import meta_incoming as mi
+
+    monkeypatch.setattr(mi.settings, "IARADIO_WA_PHONE_NUMBER_ID", "999")
+    monkeypatch.setattr(mi.settings, "IARADIO_WA_TOKEN", "tok")
+    payload = {"entry": [{"id": "waba", "changes": [{"field": "messages", "value": {
+        "metadata": {"phone_number_id": "999"},
+        "messages": [
+            {"from": "5215511111111", "id": "w1", "type": "text", "text": {"body": "¿qué citas tengo?"}},
+            {"from": "5215522222222", "id": "w2", "type": "text", "text": {"body": "¿cuánto cuesta IaRadio?"}},
+        ],
+    }}]}]}
+    body = json.dumps(payload).encode()
+
+    async def receive():
+        return {"type": "http.request", "body": body}
+
+    request = Request({"type": "http", "method": "POST", "path": "/", "headers": [], "client": ("t", 1), "query_string": b""}, receive)
+    result = MagicMock()
+    result.first.return_value = ("bot-user-id",) if bot_on_number else None
+    result.scalar_one_or_none.return_value = None  # el pipeline normal se detiene aquí
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=result)
+    with (
+        patch.object(mi, "_validate_signature", AsyncMock(return_value=True)),
+        patch.object(mi, "is_registered_owner", AsyncMock(side_effect=lambda _db, n: n in owners)),
+        patch.object(mi, "_handle_platform_message", AsyncMock()) as hpm,
+    ):
+        await mi.meta_incoming.__wrapped__(request, db=db)
+    return hpm, db
+
+
+async def test_central_number_owner_gets_copilot_and_others_get_the_bot(monkeypatch):
+    hpm, db = await _webhook(monkeypatch, bot_on_number=True, owners={"+5215511111111"})
+    assert [c.args[1]["id"] for c in hpm.call_args_list] == ["w1"]
+    # El otro mensaje siguió al pipeline del bot (búsqueda del negocio por número).
+    assert db.execute.await_count == 2
+
+
+async def test_central_number_without_a_bot_keeps_everything_in_the_owner_channel(monkeypatch):
+    hpm, db = await _webhook(monkeypatch, bot_on_number=False, owners={"+5215511111111"})
+    assert [c.args[1]["id"] for c in hpm.call_args_list] == ["w1", "w2"]
+    assert db.execute.await_count == 1

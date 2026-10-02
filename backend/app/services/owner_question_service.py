@@ -62,6 +62,16 @@ def _number_variants(number: str) -> list[str]:
     return sorted({v for b in bases for v in (b, "+" + b)})
 
 
+async def is_registered_owner(db: AsyncSession, number: str) -> bool:
+    """¿Este número es el de un dueño con cuenta en IaRadio? (mismo criterio
+    que handle_owner_message para encontrar su cuenta)."""
+    variants = _number_variants(number)
+    found = await db.execute(
+        select(User.id).where(or_(User.whatsapp_number.in_(variants), User.phone.in_(variants))).limit(1)
+    )
+    return found.first() is not None
+
+
 def holding_reply(business_name: str) -> str:
     return (
         f"Déjame confirmarlo con el equipo de {business_name} y te respondo "

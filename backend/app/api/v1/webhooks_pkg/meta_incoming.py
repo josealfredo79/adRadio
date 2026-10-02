@@ -28,7 +28,10 @@ from app.services.message_status_service import apply_status_update
 from app.services.meta_client import download_media
 from app.services.meta_quality_service import apply_quality_signal
 from app.services.meta_service import send_typing_indicator, send_whatsapp
-from app.services.owner_question_service import handle_owner_message
+from app.services.owner_question_service import (
+    handle_owner_message,
+    is_registered_owner,
+)
 from app.services.platform_whatsapp import platform_enabled, send_platform_text
 from app.services.storage_service import upload_bytes
 from app.services.whisper_service import transcribe_audio_bytes
@@ -271,14 +274,26 @@ async def meta_incoming(
                 continue
 
             if platform_enabled() and phone_number_id == settings.IARADIO_WA_PHONE_NUMBER_ID:
-                # Un DUEÑO le escribió al número central de IaRadio — no es un
-                # cliente de ningún negocio, no entra al pipeline del bot.
+                # Número central de IaRadio. Si escribe un DUEÑO registrado, es
+                # su Copiloto (no entra al pipeline del bot). Si escribe
+                # cualquier otra persona y este número también es el bot de
+                # una cuenta (la de IaRadio, que atiende a interesados), le
+                # contesta ese bot como siempre.
+                bot_owner = (await db.execute(
+                    select(User.id).where(User.meta_phone_number_id == phone_number_id)
+                )).first()
+                others = []
                 for msg in messages:
+                    if bot_owner and not await is_registered_owner(db, f"+{msg.get('from', '')}"):
+                        others.append(msg)
+                        continue
                     try:
                         await _handle_platform_message(db, msg)
                     except Exception:
                         logger.exception("[META WEBHOOK] Owner channel failed for wamid=%s", msg.get("id"))
-                continue
+                if not others:
+                    continue
+                messages = others
 
             result = await db.execute(select(User).where(User.meta_phone_number_id == phone_number_id))
             advertiser = result.scalar_one_or_none()
