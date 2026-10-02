@@ -56,10 +56,10 @@ export default function HeroSection() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
-                href="#como-funciona"
+                href="#pruebalo"
                 className="flex items-center gap-2 rounded-xl glass px-6 py-3.5 text-base font-semibold text-gray-300 hover:text-white hover:border-white/20 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300"
               >
-                Ver demo
+                🎤 Pruébalo con tu voz
               </a>
             </div>
 

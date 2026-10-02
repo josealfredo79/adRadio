@@ -15,7 +15,15 @@ from sqlalchemy import delete, select
 from starlette.datastructures import Headers
 from starlette.requests import Request
 
-from app.api.v1.voice_setup import ApplyBody, SpeakBody, apply, listen, speak
+from app.api.v1.voice_setup import (
+    ApplyBody,
+    PreviewBody,
+    SpeakBody,
+    apply,
+    listen,
+    preview,
+    speak,
+)
 from app.database import AsyncSessionLocal, engine
 from app.models.product import Product
 from app.models.user import User
@@ -263,3 +271,17 @@ class TestConversation:
              pytest.raises(HTTPException) as exc:
             await speak(request=_request(), body=SpeakBody(text="hola"), current_user=user)
         assert exc.value.status_code == 503
+
+
+
+class TestPreview:
+    @pytest.mark.asyncio
+    async def test_resumes_a_landing_draft_without_calling_the_ai(self):
+        user = User(id=uuid.uuid4(), email="x@test.com", password_hash="x")
+        with patch("app.api.v1.voice_setup.extract_profile", AsyncMock()) as ai:
+            out = await preview(body=PreviewBody(profile={"services": [{"name": "Taco", "price": 15}], "bogus": 1}),
+                                current_user=user)
+        ai.assert_not_awaited()
+        assert out["profile"]["services"] == [{"name": "Taco", "price": 15.0, "description": None}]
+        assert "bogus" not in out["profile"]
+        assert out["next_question"]["field"] == "hours"

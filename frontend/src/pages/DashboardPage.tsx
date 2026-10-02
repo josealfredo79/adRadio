@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
+import { loadDemoDraft } from '@/lib/demoDraft'
 import SEO from '@/components/SEO'
 import {
   LineChart,
@@ -46,6 +47,7 @@ const DAYS_ES: Record<string, string> = {
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const [hasDemoDraft] = useState(() => loadDemoDraft() !== null)
   const [searchParams, setSearchParams] = useSearchParams()
   const paymentSuccess = searchParams.get('success') === '1'
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
@@ -134,9 +136,13 @@ export default function DashboardPage() {
             <Mic className="h-7 w-7" />
           </span>
           <span>
-            <span className="block text-lg font-bold text-foreground">Cuéntale a tu bot de tu negocio</span>
+            <span className="block text-lg font-bold text-foreground">
+              {hasDemoDraft ? 'Termina de configurar tu bot' : 'Cuéntale a tu bot de tu negocio'}
+            </span>
             <span className="block text-base text-muted-foreground">
-              Háblale 2 minutos: qué vendes, tus precios y tu horario. Él se encarga del resto.
+              {hasDemoDraft
+                ? 'Ya tengo lo que me contaste en la página. Revísalo y queda listo en un toque.'
+                : 'Háblale 2 minutos: qué vendes, tus precios y tu horario. Él se encarga del resto.'}
             </span>
           </span>
         </Link>

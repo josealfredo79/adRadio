@@ -255,9 +255,10 @@ def speak_time(hhmm: str) -> str:
     return f"{h12}:{m:02d}"
 
 
-def _speak_hours(hours: dict | None) -> str | None:
+def _speak_hours(hours: dict | None, we: bool = False) -> str | None:
     """Agrupa días seguidos con el mismo horario: 'de martes a sábado de 9 a
-    7, y el domingo de 10 a 2; los lunes cierras'."""
+    7, y el domingo de 10 a 2; los lunes cierras'. `we=True` lo dice como el
+    negocio a su cliente ("Abrimos… cerramos")."""
     if not hours:
         return None
     groups: list[tuple[list[str], list | None]] = []
@@ -276,9 +277,10 @@ def _speak_hours(hours: dict | None) -> str | None:
             continue
         when = f"el {names[0]}" if len(names) == 1 else f"de {names[0]} a {names[-1]}"
         open_parts.append(f"{when} de {speak_time(rng[0])} a {speak_time(rng[1])}")
-    text = "Abres " + ", y ".join(open_parts) if open_parts else ""
+    opens, closes = ("Abrimos", "cerramos") if we else ("Abres", "cierras")
+    text = f"{opens} " + ", y ".join(open_parts) if open_parts else ""
     if closed:
-        text += ("; " if text else "") + "los " + " y ".join(closed) + " cierras"
+        text += ("; " if text else "") + "los " + " y ".join(closed) + f" {closes}"
     return text or None
 
 
@@ -330,3 +332,64 @@ def spoken_reply(profile: dict, previous: dict | None, question: dict | None) ->
     if question:
         return f"{opener} {question['text']}"
     return f"{opener} Ya tengo lo principal. Revisa que esté bien."
+
+
+
+# ─── Demo pública en la landing ("Pruébalo en 30 segundos") ─────────────────
+# Un visitante sin cuenta dicta su negocio y ve cómo contestaría SU bot.
+
+DEMO_GREETING = (
+    "¡Hola! ¿Tienes un negocio? Cuéntame de él: qué vendes, tus precios y tu horario, "
+    "y te enseño cómo contestaría tu bot."
+)
+DEMO_CLOSING = "Así contestaría tu bot a tus clientes, día y noche. Crea tu cuenta y quédatelo: ya guardé lo que me contaste."
+_SIGN_DOMAIN = b"voice-demo-line:v1:"
+
+
+def sign_line(text: str) -> str:
+    """Firma una frase que generó el servidor. /public/voice-demo/speak solo
+    pronuncia frases firmadas: sin esto sería un servicio de voz gratis y
+    abierto para cualquier texto."""
+    import hashlib
+    import hmac
+
+    from app.config import settings
+
+    return hmac.new(settings.SECRET_KEY.encode(), _SIGN_DOMAIN + text.encode(), hashlib.sha256).hexdigest()[:24]
+
+
+def verify_line(text: str, sig: str) -> bool:
+    import hmac
+
+    from app.config import settings
+
+    return bool(settings.SECRET_KEY) and hmac.compare_digest(sign_line(text), sig or "")
+
+
+def demo_chat(profile: dict) -> list[dict]:
+    """Una plática de ejemplo cliente ↔ bot con los datos que dictó el
+    visitante. Determinista (sin IA): instantánea, gratis y fiel a lo que dijo."""
+    p = sanitize_profile(profile)
+    turns: list[dict] = []
+    if p["services"]:
+        s = p["services"][0]
+        turns.append({"from": "cliente", "text": f"Hola, ¿cuánto cuesta {s['name'].lower()}?"})
+        if s["price"] is not None:
+            price = f"${s['price']:,.0f}" if float(s["price"]).is_integer() else f"${s['price']:,.2f}"
+            turns.append({"from": "bot", "text": f"¡Hola! {s['name']} cuesta {price}. ¿Te lo aparto? 😊"})
+        else:
+            turns.append({"from": "bot", "text": f"¡Hola! Sí tenemos {s['name'].lower()}. Te confirmo el precio enseguida. 😊"})
+    if hours := _speak_hours(p["business_hours"], we=True):
+        turns.append({"from": "cliente", "text": "¿A qué hora abren?"})
+        turns.append({"from": "bot", "text": hours + "."})
+    if p["payment_methods"]:
+        methods = [m.lower() for m in p["payment_methods"]]
+        turns.append({"from": "cliente", "text": "¿Aceptan tarjeta?"})
+        if any("tarjeta" in m for m in methods):
+            turns.append({"from": "bot", "text": "¡Sí! Aceptamos " + " y ".join(methods) + "."})
+        else:
+            turns.append({"from": "bot", "text": "Por ahora aceptamos " + " y ".join(methods) + "."})
+    elif p["address"] or p["city"]:
+        turns.append({"from": "cliente", "text": "¿Dónde están?"})
+        turns.append({"from": "bot", "text": "Estamos en " + ", ".join(x for x in (p["address"], p["city"]) if x) + "."})
+    return turns

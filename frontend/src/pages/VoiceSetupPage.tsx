@@ -5,6 +5,7 @@ import SEO from '@/components/SEO'
 import BotFace, { type FaceMood } from '@/components/BotFace'
 import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 import { useSpeaker } from '@/lib/useSpeaker'
+import { clearDemoDraft, loadDemoDraft } from '@/lib/demoDraft'
 import { Check, ChevronDown, Keyboard, Mic, PartyPopper, SkipForward, Square, Volume2, VolumeX, X } from 'lucide-react'
 
 // "Cuéntale a tu bot de tu negocio", como una plática: una carita escucha,
@@ -92,6 +93,24 @@ export default function VoiceSetupPage() {
   useEffect(() => () => {
     session.current?.cancel()
     if (timer.current) clearInterval(timer.current)
+  }, [])
+
+  // ¿Viene de la demo de la landing? Retomar lo que ya dictó, sin repetir nada.
+  useEffect(() => {
+    const draft = loadDemoDraft<Profile>()
+    if (!draft) return
+    api.post<ListenResult>('/voice-setup/preview', { profile: draft })
+      .then(({ data }) => {
+        setResult(data)
+        setQuestion(data.next_question)
+        setPending(data.pending_questions ?? [])
+        setStep(data.next_question ? 'asking' : 'review')
+        setBubble(
+          '¡Qué gusto verte de nuevo! Ya tengo lo que me contaste en la página. ' +
+            (data.next_question ? data.next_question.text : '¿Lo guardo en tu bot?'),
+        )
+      })
+      .catch(() => clearDemoDraft())
   }, [])
 
   const say = (line: string) => {
@@ -228,6 +247,7 @@ export default function VoiceSetupPage() {
     try {
       const { data } = await api.post<ApplyResult>('/voice-setup/apply', { profile: result.profile })
       setApplied(data)
+      clearDemoDraft()
       setStep('done')
       say(DONE_LINE)
     } catch (err) {

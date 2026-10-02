@@ -1,6 +1,7 @@
 import SEO from '@/components/SEO'
 import LandingNav from './components/LandingNav'
 import HeroSection from './components/HeroSection'
+import VoiceDemoSection from './components/VoiceDemoSection'
 import ProblemSection from './components/ProblemSection'
 import HowItWorksSection from './components/HowItWorksSection'
 import FeaturesSection from './components/FeaturesSection'
@@ -61,6 +62,7 @@ export default function LandingPage() {
 
         <LandingNav />
         <HeroSection />
+        <VoiceDemoSection />
         <ProblemSection />
         <HowItWorksSection />
         <FeaturesSection />

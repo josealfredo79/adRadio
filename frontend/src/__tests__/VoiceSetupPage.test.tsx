@@ -136,6 +136,18 @@ describe('VoiceSetupPage', () => {
     expect(JSON.parse(second.get('draft') as string).city).toBe('Tlaxiaco')
   })
 
+  it('resumes what a visitor dictated on the landing demo', async () => {
+    localStorage.setItem('iaradio-demo-draft', JSON.stringify({ profile: PROFILE, at: Date.now() }))
+    post.mockImplementation((url: string) =>
+      url === '/voice-setup/preview' ? Promise.resolve(listenResponse()) : Promise.resolve({ data: new Blob() }),
+    )
+    renderPage()
+    await screen.findByText(/Qué gusto verte de nuevo/)
+    expect(post.mock.calls[0][0]).toBe('/voice-setup/preview')
+    expect(screen.getByText('Esto es lo que entendí. ¿Está bien?')).toBeDefined()
+    localStorage.clear()
+  })
+
   it('the mute button is remembered', () => {
     renderPage()
     fireEvent.click(screen.getByLabelText('Silenciar la voz'))

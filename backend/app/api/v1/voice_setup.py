@@ -47,6 +47,30 @@ MAX_AUDIO_BYTES = 10 * 1024 * 1024  # ~5 min de voz comprimida sobra con esto
 MAX_TEXT = 6000
 
 
+async def read_transcript(
+    audio: UploadFile | None, text: str | None, max_bytes: int, max_text: int, max_label: str,
+) -> str:
+    """Audio (→ Whisper) o texto escrito; compartido con la demo pública
+    (voice_demo.py), que usa límites más chicos."""
+    if audio is not None:
+        data = await audio.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="El audio llegó vacío. Intenta grabar de nuevo.")
+        if len(data) > max_bytes:
+            raise HTTPException(status_code=413, detail=f"El audio es muy largo. Intenta con menos de {max_label}.")
+        content_type = (audio.content_type or "audio/webm").split(";")[0]
+        transcript = await transcribe_audio_bytes(data, content_type)
+        if not transcript:
+            raise HTTPException(
+                status_code=422,
+                detail="No alcancé a escuchar bien. Intenta de nuevo cerca del celular, o escríbelo.",
+            )
+        return transcript
+    if text and text.strip():
+        return text.strip()[:max_text]
+    raise HTTPException(status_code=400, detail="Mándame un audio o escríbelo")
+
+
 def _out(profile: dict, transcript: str, user: User, previous: dict | None = None, asked: list[str] | None = None) -> dict:
     pending = pending_questions(profile, asked or [])
     question = pending[0] if pending else None
@@ -78,23 +102,7 @@ async def listen(
     """`question`: la pregunta de la carita que esto contesta (services,
     hours, location, payments). `asked`: las que ya se hicieron o se
     saltaron, para no repetirlas."""
-    if audio is not None:
-        data = await audio.read()
-        if not data:
-            raise HTTPException(status_code=400, detail="El audio llegó vacío. Intenta grabar de nuevo.")
-        if len(data) > MAX_AUDIO_BYTES:
-            raise HTTPException(status_code=413, detail="El audio es muy largo. Intenta con menos de 5 minutos.")
-        content_type = (audio.content_type or "audio/webm").split(";")[0]
-        transcript = await transcribe_audio_bytes(data, content_type)
-        if not transcript:
-            raise HTTPException(
-                status_code=422,
-                detail="No alcancé a escuchar bien. Intenta de nuevo cerca del celular, o escríbelo.",
-            )
-    elif text and text.strip():
-        transcript = text.strip()[:MAX_TEXT]
-    else:
-        raise HTTPException(status_code=400, detail="Mándame un audio o escríbelo")
+    transcript = await read_transcript(audio, text, MAX_AUDIO_BYTES, MAX_TEXT, "5 minutos")
 
     current = None
     if draft:
@@ -116,6 +124,19 @@ async def listen(
     if question in QUESTION_TEXT and question not in asked_list:
         asked_list.append(question)
     return _out(profile, transcript, current_user, previous=current, asked=asked_list)
+
+
+class PreviewBody(BaseModel):
+    profile: dict
+
+
+@router.post("/preview")
+async def preview(body: PreviewBody, current_user: User = Depends(get_current_user)) -> dict:
+    """Vista previa de un borrador que ya existe — el que el visitante dictó en
+    la demo de la landing antes de tener cuenta (voice_demo.py). Sin IA:
+    solo valida y arma la vista, para retomar la plática donde se quedó."""
+    profile = sanitize_profile(body.profile)
+    return _out(profile, "(lo que me contaste en la página de IaRadio)", current_user, previous=profile)
 
 
 class SpeakBody(BaseModel):
