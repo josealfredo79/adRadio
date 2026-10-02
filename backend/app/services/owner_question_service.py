@@ -195,8 +195,12 @@ async def handle_owner_message(
     from_number: str,
     text: str,
     context_wamid: str | None,
+    voice: bool = False,
+    photo: tuple[bytes, str] | None = None,
 ) -> None:
-    """Mensaje que un dueño le mandó al número central de IaRadio."""
+    """Mensaje que un dueño le mandó al número central de IaRadio. `voice`:
+    llegó como nota de voz (se le contesta igual). `photo`: (bytes, mime) de
+    una foto que mandó — siempre es para el Copiloto (un producto)."""
     variants = _number_variants(from_number)
     owners = (
         await db.execute(
@@ -213,6 +217,18 @@ async def handle_owner_message(
         return
 
     message = text.strip()
+    if photo is not None:
+        from app.services.copilot_whatsapp_service import (
+            handle_owner_command,
+            save_owner_photo,
+        )
+
+        photo_url = await save_owner_photo(owners[0], *photo)
+        if not photo_url:
+            await send_platform_text(from_number, "No pude guardar esa foto 🙏 Mándala de nuevo como foto (JPG o PNG).")
+            return
+        await handle_owner_command(db, owner=owners[0], from_number=from_number, text=message, photo_url=photo_url)
+        return
     if not message or message.startswith(("[audio", "[media:", "[interactive:")):
         # Nota de voz sin transcripción, sticker, foto… — no hay qué procesar.
         await send_platform_text(
@@ -242,13 +258,13 @@ async def handle_owner_message(
 
         # "Sí"/"No" a una acción que el Copiloto le pidió confirmar.
         if parse_decision(message) is not None and await has_pending_confirmation(primary):
-            await handle_owner_command(db, owner=primary, from_number=from_number, text=message)
+            await handle_owner_command(db, owner=primary, from_number=from_number, text=message, voice=voice)
             return
 
         pending = (await db.execute(base.order_by(OwnerQuestion.created_at.desc()))).scalars().all()
         if not pending or not await _answers_question(pending[0].question, message):
             # No contesta a un cliente: es una instrucción para el Copiloto.
-            await handle_owner_command(db, owner=primary, from_number=from_number, text=message)
+            await handle_owner_command(db, owner=primary, from_number=from_number, text=message, voice=voice)
             return
         if len(pending) > 1:
             await send_platform_text(

@@ -178,20 +178,34 @@ async def _send_platform_owner(to: str, body: str) -> tuple[str | None, str | No
 
 async def _handle_platform_message(db: AsyncSession, msg: dict) -> None:
     """Mensaje al número central: el dueño contesta una pregunta de un
-    cliente, por texto o nota de voz."""
-    body_text, media_id = _extract_body_text(msg)
-    if media_id:
-        downloaded = await download_media(media_id, settings.IARADIO_WA_TOKEN)
-        transcription = None
-        if downloaded:
-            audio_bytes, mime_type = downloaded
-            transcription = await transcribe_audio_bytes(audio_bytes, mime_type)
-        body_text = transcription or "[audio: transcripción no disponible]"
+    cliente o le pide algo al Copiloto — por texto, nota de voz o foto (la
+    foto de un producto, con o sin texto)."""
+    photo = None
+    if msg.get("type") == "image":
+        image = msg.get("image") or {}
+        body_text = (image.get("caption") or "").strip()
+        downloaded = await download_media(image.get("id", ""), settings.IARADIO_WA_TOKEN) if image.get("id") else None
+        photo = downloaded  # (bytes, mime) o None si no se pudo bajar
+        if photo is None:
+            body_text = body_text or "[media:image]"
+        voice = False
+    else:
+        body_text, media_id = _extract_body_text(msg)
+        voice = bool(media_id)
+        if media_id:
+            downloaded = await download_media(media_id, settings.IARADIO_WA_TOKEN)
+            transcription = None
+            if downloaded:
+                audio_bytes, mime_type = downloaded
+                transcription = await transcribe_audio_bytes(audio_bytes, mime_type)
+            body_text = transcription or "[audio: transcripción no disponible]"
     await handle_owner_message(
         db,
         from_number=f"+{msg.get('from', '')}",
         text=body_text,
         context_wamid=(msg.get("context") or {}).get("id"),
+        voice=voice,
+        photo=photo,
     )
 
 

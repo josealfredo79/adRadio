@@ -115,3 +115,28 @@ async def send_platform_buttons(to: str, body: str, buttons: list[tuple[str, str
         logger.warning("[PLATFORM WA] Buttons to %s failed (%s) — sending as text", to, e)
         options = " / ".join(title for _, title in buttons)
         return await send_platform_text(to, f"{body}\n\nResponde: {options}")
+
+
+async def send_platform_audio(to: str, link: str) -> tuple[str | None, str | None]:
+    """Nota de voz al dueño (OGG/Opus por link público). Solo se usa
+    contestando una nota de voz que el dueño acaba de mandar — siempre dentro
+    de la ventana de 24h, así que no hay plantilla de respaldo: si falla,
+    quien llama manda el texto."""
+    if not platform_enabled():
+        return None, "platform_not_configured"
+    try:
+        data = await graph_request(
+            f"{settings.IARADIO_WA_PHONE_NUMBER_ID}/messages",
+            token=settings.IARADIO_WA_TOKEN,
+            method="POST",
+            body={
+                "messaging_product": "whatsapp",
+                "to": normalize_recipient(to),
+                "type": "audio",
+                "audio": {"link": link},
+            },
+        )
+        return (data.get("messages") or [{}])[0].get("id"), None
+    except MetaApiError as e:
+        logger.warning("[PLATFORM WA] Audio to %s failed: %s", to, e)
+        return None, str(e)[:100]

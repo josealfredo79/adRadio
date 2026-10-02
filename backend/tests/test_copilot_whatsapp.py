@@ -84,3 +84,92 @@ async def test_without_redis_never_leaves_an_unconfirmable_action():
     _, _, st, sb = await _run(_owner(), "lanza la promo", None, chat=chat)
     sb.assert_not_called()
     assert "panel" in st.call_args.args[1]
+
+
+# ─── Cero fricción: nota de voz → nota de voz; fotos de productos ───────────
+
+async def _run_voice(owner, text, redis, *, voice=False, photo_url=None, audio_ok=True, chat=None):
+    with (
+        patch.object(cw, "get_redis_optional", AsyncMock(return_value=redis)),
+        patch.object(cw, "handle_chat", chat or AsyncMock(return_value={"reply": "Tienes *3 citas* hoy.", "pending_confirmation": None})) as hc,
+        patch.object(cw, "_voice_note_url", AsyncMock(return_value="https://x/copilot_voice/a.ogg" if audio_ok else None)) as vn,
+        patch.object(cw, "send_platform_audio", AsyncMock(return_value=("w", None))) as sa,
+        patch.object(cw, "send_platform_text", AsyncMock(return_value=("w", None))) as st,
+        patch.object(cw, "send_platform_buttons", AsyncMock(return_value=("w", None))) as sb,
+    ):
+        await cw.handle_owner_command(None, owner=owner, from_number="+5215512345678", text=text, voice=voice, photo_url=photo_url)
+    return hc, vn, sa, st, sb
+
+
+async def test_voice_note_gets_a_voice_note_back_in_voice_mode():
+    owner = _owner()
+    hc, vn, sa, st, _ = await _run_voice(owner, "¿qué citas tengo hoy?", FakeRedis(), voice=True)
+    assert hc.call_args.kwargs["channel"] == "voz"
+    assert vn.call_args.args[1] == "Tienes *3 citas* hoy."
+    assert sa.call_args.args == ("+5215512345678", "https://x/copilot_voice/a.ogg")
+    st.assert_not_called()
+
+
+async def test_voice_reply_falls_back_to_text_and_text_stays_text():
+    _, _, sa, st, _ = await _run_voice(_owner(), "¿qué citas tengo?", FakeRedis(), voice=True, audio_ok=False)
+    sa.assert_not_called()
+    assert st.call_args.args[1] == "Tienes *3 citas* hoy."
+    hc, vn, sa, st, _ = await _run_voice(_owner(), "¿qué citas tengo?", FakeRedis())
+    assert hc.call_args.kwargs["channel"] == "whatsapp"
+    vn.assert_not_called()
+    sa.assert_not_called()
+
+
+async def test_confirmations_stay_as_buttons_even_by_voice():
+    chat = AsyncMock(return_value={"reply": "¿Agrego el tinte a 450?", "pending_confirmation": {"confirmation_id": "t"}})
+    _, _, sa, _, sb = await _run_voice(_owner(), "agrega el tinte a 450", FakeRedis(), voice=True, chat=chat)
+    sa.assert_not_called()
+    assert sb.call_args.args[2] == cw.CONFIRM_BUTTONS
+
+
+async def test_photo_alone_is_kept_and_used_by_the_next_instruction():
+    owner, redis = _owner(), FakeRedis()
+    url = f"https://x/api/v1/radio/audio/products/{owner.id}/a.jpg"
+    hc, _, _, st, _ = await _run_voice(owner, "", redis, photo_url=url)
+    hc.assert_not_called()
+    assert st.call_args.args[1] == cw._PHOTO_PROMPT
+    hc, *_ = await _run_voice(owner, "es un tinte, 450 pesos", redis, voice=True)
+    assert hc.call_args.args[2] == f"es un tinte, 450 pesos\n[Foto adjunta: {url}]"
+    # Se usa una sola vez.
+    hc, *_ = await _run_voice(owner, "¿qué citas tengo?", redis)
+    assert "[Foto adjunta" not in hc.call_args.args[2]
+
+
+async def test_photo_with_caption_goes_straight_to_the_copilot():
+    owner = _owner()
+    url = f"https://x/api/v1/radio/audio/products/{owner.id}/b.jpg"
+    hc, *_ = await _run_voice(owner, "tinte a 450", FakeRedis(), photo_url=url)
+    assert hc.call_args.args[2] == f"tinte a 450\n[Foto adjunta: {url}]"
+
+
+async def test_owner_photo_is_stored_where_the_copilot_accepts_it():
+    owner = _owner()
+    with patch.object(cw, "upload_bytes", AsyncMock(side_effect=lambda c, key, ct: f"https://x/api/v1/radio/audio/{key}")) as up:
+        url = await cw.save_owner_photo(owner, b"jpg", "image/jpeg")
+        assert f"products/{owner.id}/" in url and url.endswith(".jpg")
+        assert await cw.save_owner_photo(owner, b"gif", "image/gif") is None
+    assert up.await_count == 1
+
+
+def test_speakable_strips_whatsapp_formatting():
+    assert cw._speakable("*Hoy*:\n- Ana a las 5\n- Beto a las 6") == "Hoy: Ana a las 5 Beto a las 6"
+
+
+async def test_webhook_passes_voice_and_photo_to_the_owner_flow():
+    from app.api.v1.webhooks_pkg import meta_incoming as mi
+
+    with (
+        patch.object(mi, "download_media", AsyncMock(return_value=(b"bytes", "image/jpeg"))),
+        patch.object(mi, "transcribe_audio_bytes", AsyncMock(return_value="¿qué pedidos tengo?")),
+        patch.object(mi, "handle_owner_message", AsyncMock()) as hom,
+    ):
+        await mi._handle_platform_message(None, {"from": "5215512345678", "type": "audio", "audio": {"id": "m1"}})
+        assert hom.call_args.kwargs["text"] == "¿qué pedidos tengo?" and hom.call_args.kwargs["voice"] is True
+        await mi._handle_platform_message(None, {"from": "5215512345678", "type": "image", "image": {"id": "m2", "caption": "tinte a 450"}})
+        assert hom.call_args.kwargs["photo"] == (b"bytes", "image/jpeg")
+        assert hom.call_args.kwargs["text"] == "tinte a 450" and hom.call_args.kwargs["voice"] is False
