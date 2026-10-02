@@ -8,6 +8,7 @@ from redis.exceptions import TimeoutError as RedisTimeoutError
 from redis.retry import Retry
 
 from app.config import settings
+from app.core.redact import redact_url
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +48,10 @@ async def get_redis() -> aioredis.Redis:
                 health_check_interval=30,
             )
             await _redis_pool.ping()
-            logger.info("Conexión a Redis establecida correctamente: %s", settings.REDIS_URL)
+            logger.info("Conexión a Redis establecida correctamente: %s", redact_url(settings.REDIS_URL))
         except (RedisConnectionError, RedisTimeoutError, OSError) as exc:
             _redis_pool = None
-            logger.warning("Redis no disponible (%s): %s", settings.REDIS_URL, exc)
+            logger.warning("Redis no disponible (%s): %s", redact_url(settings.REDIS_URL), exc)
 
     return _redis_pool
 

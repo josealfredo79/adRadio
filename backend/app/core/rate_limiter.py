@@ -7,6 +7,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.config import settings
+from app.core.redact import redact_url
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def _build_limiter() -> Limiter:
             r = sync_redis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
             r.ping()
             r.close()
-            logger.info("[RateLimit] Backend: Redis (%s)", settings.REDIS_URL)
+            logger.info("[RateLimit] Backend: Redis (%s)", redact_url(settings.REDIS_URL))
         except Exception as e:
             logger.critical("[RateLimit] Redis no disponible en producción: %s", e)
             raise RuntimeError("Redis is required for rate limiting in production") from e
@@ -29,7 +30,7 @@ def _build_limiter() -> Limiter:
             r = sync_redis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
             r.ping()
             r.close()
-            logger.info("[RateLimit] Backend: Redis (%s)", settings.REDIS_URL)
+            logger.info("[RateLimit] Backend: Redis (%s)", redact_url(settings.REDIS_URL))
         except Exception:
             storage_uri = "memory://"
             logger.warning(
