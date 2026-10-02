@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api, { getApiError } from '@/lib/api'
-import BotFace, { type FaceMood } from '@/components/BotFace'
+import { type FaceMood } from '@/components/BotFace'
+import PointFace3D from '@/components/PointFace3D'
 import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { saveDemoDraft } from '@/lib/demoDraft'
@@ -208,7 +209,10 @@ export default function VoiceDemoSection() {
             >
               {speaker.muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
             </button>
-            <BotFace mood={mood} volume={volume} size={150} />
+            {/* Rostro de puntos que mueve los labios con la voz real */}
+            <div className="rounded-3xl bg-black/70 px-4 pt-2">
+              <PointFace3D mood={mood} volume={volume} getLevel={speaker.level} size={230} />
+            </div>
             <div className="relative mt-3 w-full rounded-2xl bg-white/10 px-5 py-4 text-left" aria-live="polite">
               <span className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 bg-white/10" />
               <div className="relative flex items-start gap-3">

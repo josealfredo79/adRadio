@@ -28,10 +28,15 @@ export function useSpeaker({ publicDemo = false }: { publicDemo?: boolean } = {}
   const audio = useRef<HTMLAudioElement | null>(null)
   const objectUrl = useRef<string | null>(null)
   const token = useRef(0)
+  // Para mover los labios con la voz: un analizador conectado al <audio>.
+  const analyser = useRef<AnalyserNode | null>(null)
+  const levelData = useRef<Uint8Array<ArrayBuffer> | null>(null)
+  const browserSpeaking = useRef(false)
 
   const stop = useCallback(() => {
     token.current += 1
     audio.current?.pause()
+    browserSpeaking.current = false
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel()
     setSpeaking(false)
   }, [])
@@ -41,9 +46,51 @@ export function useSpeaker({ publicDemo = false }: { publicDemo?: boolean } = {}
     if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
   }, [stop])
 
+  // Conecta el <audio> a un analizador (una sola vez por elemento). Se hace
+  // dentro de un toque: iPhone solo arranca un AudioContext así.
+  const attachAnalyser = (a: HTMLAudioElement) => {
+    if (analyser.current || typeof window === 'undefined') return
+    try {
+      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (!Ctx) return
+      const ctx = new Ctx()
+      const node = ctx.createAnalyser()
+      node.fftSize = 512
+      ctx.createMediaElementSource(a).connect(node)
+      node.connect(ctx.destination)
+      void ctx.resume().catch(() => {})
+      analyser.current = node
+      levelData.current = new Uint8Array(node.fftSize)
+    } catch {
+      // sin analizador la voz suena igual; los labios usan un ritmo genérico
+    }
+  }
+
+  /** Qué tan "abierta" va la boca ahora (0–1), según la voz que suena. */
+  const level = useCallback((): number => {
+    const node = analyser.current
+    const data = levelData.current
+    if (node && data && audio.current && !audio.current.paused) {
+      node.getByteTimeDomainData(data)
+      let sum = 0
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128
+        sum += v * v
+      }
+      return Math.min(1, Math.sqrt(sum / data.length) * 4.5)
+    }
+    if (browserSpeaking.current) {
+      // Voz del navegador: no se puede medir, así que un ritmo de habla creíble.
+      const t = performance.now() / 1000
+      return 0.35 + 0.3 * Math.abs(Math.sin(t * 9.1)) * Math.abs(Math.sin(t * 3.3 + 1))
+    }
+    return 0
+  }, [])
+
   const unlock = useCallback(() => {
     if (!audio.current) audio.current = new Audio()
     const a = audio.current
+    attachAnalyser(a)
     if (a.dataset.unlocked) return
     a.src = SILENT_WAV
     // play() regresa una promesa en navegadores actuales; en algunos viejos, nada.
@@ -62,7 +109,11 @@ export function useSpeaker({ publicDemo = false }: { publicDemo?: boolean } = {}
     u.lang = 'es-MX'
     const voice = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith('es'))
     if (voice) u.voice = voice
-    u.onend = u.onerror = () => mine === token.current && setSpeaking(false)
+    browserSpeaking.current = true
+    u.onend = u.onerror = () => {
+      browserSpeaking.current = false
+      if (mine === token.current) setSpeaking(false)
+    }
     window.speechSynthesis.speak(u)
   }
 
@@ -99,5 +150,5 @@ export function useSpeaker({ publicDemo = false }: { publicDemo?: boolean } = {}
     if (value) stop()
   }, [stop])
 
-  return { speak, stop, unlock, speaking, muted, setMuted }
+  return { speak, stop, unlock, speaking, muted, setMuted, level }
 }
