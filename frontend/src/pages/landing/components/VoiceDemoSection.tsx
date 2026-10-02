@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { type ReactElement, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import api, { getApiError } from '@/lib/api'
 import { type FaceMood } from '@/components/BotFace'
@@ -7,7 +8,7 @@ import MeshHead3D from '@/components/MeshHead3D'
 import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { saveDemoDraft } from '@/lib/demoDraft'
-import { ArrowRight, Check, Keyboard, Mic, RotateCcw, SkipForward, Square, Volume2, VolumeX } from 'lucide-react'
+import { ArrowRight, Check, Keyboard, Maximize2, Mic, RotateCcw, SkipForward, Square, Volume2, VolumeX, X } from 'lucide-react'
 
 // "Pruébalo en 30 segundos": un visitante SIN cuenta le cuenta su negocio a
 // la carita y ve cómo contestaría SU bot, con sus precios y su horario.
@@ -182,6 +183,47 @@ export default function VoiceDemoSection() {
     if (result) say(result.demo_chat.length ? result.closing : result.say)
   }
 
+  // Pantalla completa: la misma tarjeta se vuelve una capa encima de toda la
+  // página (en iPhone el navegador no deja poner en pantalla completa una
+  // parte de la página, así que la capa es lo que funciona en todos lados).
+  // En Android y computadoras además se pide la pantalla completa real, que
+  // esconde las barras del navegador.
+  const card = useRef<HTMLDivElement>(null)
+  const [full, setFull] = useState(false)
+  const faceSize = useFullscreenFaceSize(full)
+
+  const inBody = (el: ReactElement) => (full ? createPortal(el, document.body) : el)
+
+  const openFull = () => {
+    setFull(true)
+    document.documentElement.requestFullscreen?.().catch(() => {})
+  }
+  const closeFull = () => {
+    setFull(false)
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+  }
+
+  useEffect(() => {
+    if (!full) return
+    const { overflow } = document.body.style
+    document.body.style.overflow = 'hidden'
+    card.current?.scrollTo({ top: 0 })
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeFull() }
+    // Si salen de la pantalla completa real (botón atrás, gesto), se cierra la capa.
+    let wasFull = !!document.fullscreenElement
+    const onFsChange = () => {
+      if (wasFull && !document.fullscreenElement) setFull(false)
+      wasFull = !!document.fullscreenElement
+    }
+    window.addEventListener('keydown', onKey)
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => {
+      document.body.style.overflow = overflow
+      window.removeEventListener('keydown', onKey)
+      document.removeEventListener('fullscreenchange', onFsChange)
+    }
+  }, [full])
+
   const restart = () => {
     speaker.stop()
     setResult(null)
@@ -203,21 +245,41 @@ export default function VoiceDemoSection() {
         </div>
 
         <div className={`grid items-start gap-6 ${step === 'result' && result?.demo_chat.length ? 'lg:grid-cols-2' : ''}`}>
-          {/* La carita */}
-          <div className="glass relative mx-auto flex w-full max-w-xl flex-col items-center rounded-3xl px-5 pb-7 pt-5 text-center">
+          {/* La carita. En pantalla completa se dibuja directo en <body>: si
+              algún contenedor de la landing tiene una animación (transform),
+              una capa "fixed" quedaría atrapada dentro de él. */}
+          {inBody(<div
+            ref={card}
+            role={full ? 'dialog' : undefined}
+            aria-modal={full || undefined}
+            aria-label={full ? 'Demo en pantalla completa' : undefined}
+            className={full
+              ? 'fixed inset-0 z-[110] flex flex-col items-center overflow-y-auto bg-[#060a1f] px-4 pb-8 text-center'
+              : 'glass relative mx-auto flex w-full max-w-xl flex-col items-center rounded-3xl px-5 pb-7 pt-5 text-center'}
+            style={full ? { paddingTop: 'max(1rem, env(safe-area-inset-top))', paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' } : undefined}
+          >
+            <button
+              onClick={full ? closeFull : openFull}
+              aria-label={full ? 'Cerrar pantalla completa' : 'Ver en pantalla completa'}
+              className={`absolute left-4 rounded-full p-2 text-gray-400 hover:bg-white/10 hover:text-white ${full ? 'z-10 bg-white/10 text-white' : ''}`}
+              style={{ top: full ? 'max(1rem, env(safe-area-inset-top))' : '1rem' }}
+            >
+              {full ? <X className="h-6 w-6" /> : <Maximize2 className="h-5 w-5" />}
+            </button>
             <button
               onClick={() => speaker.setMuted(!speaker.muted)}
               aria-label={speaker.muted ? 'Activar la voz' : 'Silenciar la voz'}
-              className="absolute right-4 top-4 rounded-full p-2 text-gray-400 hover:bg-white/10 hover:text-white"
+              className={`absolute right-4 rounded-full p-2 text-gray-400 hover:bg-white/10 hover:text-white ${full ? 'z-10 bg-white/10 text-white' : ''}`}
+              style={{ top: full ? 'max(1rem, env(safe-area-inset-top))' : '1rem' }}
             >
               {speaker.muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
             </button>
             {/* Rostro de puntos que mueve los labios con la voz real */}
-            <div className="rounded-3xl bg-[#0a0f2e] px-4 pt-2 shadow-inner shadow-black/40">
+            <div className={`rounded-3xl bg-[#0a0f2e] px-4 pt-2 shadow-inner shadow-black/40 ${full ? 'mt-12 sm:mt-6' : ''}`}>
               {/* Prueba: ?cara=malla muestra la cabeza sólida con su malla en vez de la de puntos */}
               {meshFace
-                ? <MeshHead3D mood={mood} volume={volume} getLevel={speaker.level} size={230} />
-                : <PointFace3D mood={mood} volume={volume} getLevel={speaker.level} size={230} />}
+                ? <MeshHead3D mood={mood} volume={volume} getLevel={speaker.level} size={faceSize} />
+                : <PointFace3D mood={mood} volume={volume} getLevel={speaker.level} size={faceSize} />}
               {/* Crédito que pide la licencia CC BY 3.0 del escaneo de la cabeza */}
               <p className="pb-1.5 text-center text-[10px] text-white/30">
                 Cabeza 3D: escaneo de{' '}
@@ -226,7 +288,7 @@ export default function VoiceDemoSection() {
                 <a href="https://creativecommons.org/licenses/by/3.0/deed.es" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/60">CC BY 3.0</a>
               </p>
             </div>
-            <div className="relative mt-3 w-full rounded-2xl bg-white/10 px-5 py-4 text-left" aria-live="polite">
+            <div className={`relative mt-3 w-full rounded-2xl bg-white/10 px-5 py-4 text-left ${full ? 'max-w-xl' : ''}`} aria-live="polite">
               <span className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 bg-white/10" />
               <div className="relative flex items-start gap-3">
                 <p className="flex-1 text-lg leading-relaxed text-white">{bubble.text}</p>
@@ -310,14 +372,45 @@ export default function VoiceDemoSection() {
                 </button>
               </div>
             )}
-          </div>
+
+            {/* En pantalla completa el chat va dentro de la capa, abajo */}
+            {full && step === 'result' && result && result.demo_chat.length > 0 && (
+              <div className="mt-6 w-full text-left"><DemoChat chat={result.demo_chat} /></div>
+            )}
+          </div>)}
 
           {/* "Así contestaría tu bot" */}
-          {step === 'result' && result && result.demo_chat.length > 0 && <DemoChat chat={result.demo_chat} />}
+          {!full && step === 'result' && result && result.demo_chat.length > 0 && <DemoChat chat={result.demo_chat} />}
         </div>
       </div>
     </section>
   )
+}
+
+/** Tamaño de la cara: el de siempre, o lo que quepa en pantalla completa
+ * (dejando lugar abajo para la burbuja y el botón del micrófono). */
+function useFullscreenFaceSize(full: boolean): number {
+  const fit = () => Math.round(Math.max(230, Math.min(window.innerWidth - 64, (window.innerHeight * 0.5) / 1.15, 480)))
+  const [size, setSize] = useState(230)
+  useEffect(() => {
+    if (!full) {
+      setSize(230)
+      return
+    }
+    // Espera a que se acomode la pantalla completa (las barras se esconden).
+    let timer = 0
+    const onResize = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => setSize(fit()), 150)
+    }
+    setSize(fit())
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [full])
+  return size
 }
 
 function DemoMic({ label, available, onClick, onType }: { label: string; available: boolean; onClick: () => void; onType: () => void }) {
