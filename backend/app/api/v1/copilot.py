@@ -9,6 +9,7 @@ app.
 """
 import json
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
@@ -16,17 +17,20 @@ from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.api.v1.products import ALLOWED_PHOTO_MIME_TYPES, MAX_PHOTO_SIZE
 from app.api.v1.voice_setup import read_transcript
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.user import User
+from app.services.copilot_business_tools import PHOTO_KEY_PREFIX
 from app.services.copilot_service import (
     handle_chat,
     handle_confirm,
     handle_tool_preview,
     parse_spoken_yes_no,
 )
+from app.services.storage_service import upload_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +146,7 @@ async def voice(
     text: str | None = Form(None),
     history: str | None = Form(None),
     confirmation_id: str | None = Form(None),
+    photo_url: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     redis: AsyncRedis | None = Depends(get_redis_optional),
@@ -178,5 +183,38 @@ async def voice(
                 for h in raw[-MAX_HISTORY:]
                 if isinstance(h, dict)
             ]
-    result = await handle_chat(db, current_user, transcript, past, channel="voz")
+    message = transcript
+    # Foto que tomó con el botón de la cámara (POST /copilot/photo): va con
+    # lo que dijo, para que "agrega este producto" sepa cuál es la foto.
+    if photo_url and PHOTO_KEY_PREFIX.format(user_id=current_user.id) in photo_url:
+        message = f"{transcript}\n[Foto adjunta: {photo_url}]"
+    result = await handle_chat(db, current_user, message, past, channel="voz")
     return VoiceResponse(transcript=transcript, **result)
+
+
+class PhotoOut(BaseModel):
+    url: str
+
+
+@router.post("/photo", response_model=PhotoOut)
+@limiter.limit("20/minute")
+async def photo(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> PhotoOut:
+    """Foto de un producto tomada en "Habla con IaRadio". Solo se guarda el
+    archivo; el producto se crea o cambia hasta que el dueño dice "sí"."""
+    content_type = (file.content_type or "").split(";")[0]
+    if content_type not in ALLOWED_PHOTO_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Esa foto no se puede usar. Intenta con JPG o PNG.")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="La foto llegó vacía.")
+    if len(content) > MAX_PHOTO_SIZE:
+        raise HTTPException(status_code=413, detail="La foto pesa más de 5 MB.")
+    key = PHOTO_KEY_PREFIX.format(user_id=current_user.id) + f"{uuid.uuid4()}.{ALLOWED_PHOTO_MIME_TYPES[content_type]}"
+    url = await upload_bytes(content, key, content_type)
+    if not url:
+        raise HTTPException(status_code=502, detail="No se pudo guardar la foto. Intenta de nuevo.")
+    return PhotoOut(url=url)

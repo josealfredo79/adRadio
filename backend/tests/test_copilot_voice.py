@@ -30,7 +30,7 @@ def _user() -> User:
 
 
 async def _call(**form):
-    args = {"audio": None, "text": None, "history": None, "confirmation_id": None, **form}
+    args = {"audio": None, "text": None, "history": None, "confirmation_id": None, "photo_url": None, **form}
     return await voice(request=_request(), db=None, current_user=_user(), redis=None, **args)
 
 
@@ -100,3 +100,17 @@ def test_voice_prompt_asks_for_speakable_answers():
     prompt = _build_system_prompt(_user(), "voz")
     assert "en voz alta" in prompt and "Nada de listas" in prompt
     assert "en voz alta" not in _build_system_prompt(_user())
+
+
+@pytest.mark.asyncio
+async def test_own_photo_goes_with_the_message_and_foreign_ones_do_not():
+    chat = AsyncMock(return_value=REPLY)
+    user = _user()
+    own = f"https://x/api/v1/radio/audio/products/{user.id}/a.jpg"
+    with patch("app.api.v1.copilot.handle_chat", chat):
+        await voice(request=_request(), audio=None, text="agrega este producto, tinte a 450", history=None,
+                    confirmation_id=None, photo_url=own, db=None, current_user=user, redis=None)
+        assert chat.await_args.args[2] == f"agrega este producto, tinte a 450\n[Foto adjunta: {own}]"
+        await voice(request=_request(), audio=None, text="agrega este", history=None, confirmation_id=None,
+                    photo_url="https://evil.example/x.jpg", db=None, current_user=user, redis=None)
+        assert chat.await_args.args[2] == "agrega este"

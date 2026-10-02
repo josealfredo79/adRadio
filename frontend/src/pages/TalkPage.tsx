@@ -6,13 +6,13 @@ import MeshHead3D from '@/components/MeshHead3D'
 import { useAuth } from '@/contexts/AuthContext'
 import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 import { useSpeaker } from '@/lib/useSpeaker'
-import { Check, CheckCircle2, Keyboard, Mic, Square, Volume2, VolumeX, X } from 'lucide-react'
+import { Camera, Check, CheckCircle2, Keyboard, Mic, Square, Volume2, VolumeX, X } from 'lucide-react'
 
 // "Habla con IaRadio": el dueño trabaja con IaRadio hablando, sin buscar en el
 // menú. Le pide algo con su voz ("¿qué citas tengo hoy?", "crea un cupón del
 // 10 %"), el Copiloto lo hace y le contesta en voz alta con la cabeza que
-// mueve los labios. Lo importante (campañas, cupones, citas) siempre espera su
-// "sí": con la voz o con dos botones grandes. Backend: POST /copilot/voice
+// mueve los labios. Lo importante (campañas, cupones, citas, productos,
+// horario) siempre espera su "sí": con la voz o con dos botones grandes. Backend: POST /copilot/voice
 // (api/v1/copilot.py), que transcribe y usa el mismo Copiloto que el chat.
 
 interface PendingConfirmation {
@@ -44,8 +44,9 @@ const MAX_SECONDS = 120
 const MAX_HISTORY = 20
 const SUGGESTIONS = [
   '¿Qué citas tengo hoy?',
-  '¿Cuántos clientes tengo?',
-  '¿Cómo van mis campañas?',
+  '¿Llegaron pedidos hoy?',
+  '¿Cuánto tengo mis productos?',
+  'El sábado abro de 9 a 2',
   'Crea un cupón del 10 % para esta semana',
 ]
 
@@ -58,7 +59,8 @@ export default function TalkPage() {
   const { user } = useAuth()
   const greeting =
     `¡Hola${user?.business_name ? `, ${user.business_name}` : ''}! Soy IaRadio. Dime qué necesitas: ` +
-    'puedo ver tus citas, tus clientes y tus campañas, crear cupones o lanzar una promoción.'
+    'puedo ver tus citas, pedidos y clientes, cambiar precios u horario, agregar un producto con foto, ' +
+    'crear cupones o lanzar una promoción.'
   const [step, setStep] = useState<Step>('idle')
   const [bubble, setBubble] = useState(greeting)
   const [heard, setHeard] = useState('')
@@ -69,6 +71,11 @@ export default function TalkPage() {
   const [typing, setTyping] = useState(false)
   const [text, setText] = useState('')
   const [seconds, setSeconds] = useState(0)
+  // Foto de un producto, tomada con el botón de la cámara: se sube luego luego
+  // y viaja con lo siguiente que diga ("agrega este producto, tinte a 450").
+  const [photo, setPhoto] = useState<{ url: string; preview: string } | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const photoInput = useRef<HTMLInputElement>(null)
   const session = useRef<VoiceSession | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const speaker = useSpeaker()
@@ -117,11 +124,13 @@ export default function TalkPage() {
     setBubble('Déjame ver…')
     if (history.length) form.append('history', JSON.stringify(history))
     if (pending) form.append('confirmation_id', pending.confirmation_id)
+    if (photo) form.append('photo_url', photo.url)
     try {
       const { data } = await api.post<VoiceResult>('/copilot/voice', form)
       handle(data.transcript, data)
       setTyping(false)
       setText('')
+      clearPhoto()
     } catch (err) {
       fail(err)
     } finally {
@@ -135,6 +144,30 @@ export default function TalkPage() {
     const form = new FormData()
     form.append('text', value.trim())
     await send(form)
+  }
+
+  const clearPhoto = () => {
+    if (photo) URL.revokeObjectURL(photo.preview)
+    setPhoto(null)
+  }
+
+  const pickPhoto = async (file: File | undefined) => {
+    if (!file) return
+    speaker.unlock()
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const { data } = await api.post<{ url: string }>('/copilot/photo', form)
+      clearPhoto()
+      setPhoto({ url: data.url, preview: URL.createObjectURL(file) })
+      say('¡Buena foto! Ahora dime qué es y en cuánto lo vendes, por ejemplo: “agrega este producto, tinte a 450”.')
+    } catch (err) {
+      fail(err)
+    } finally {
+      setUploading(false)
+      if (photoInput.current) photoInput.current.value = ''
+    }
   }
 
   const startRecording = async () => {
@@ -195,7 +228,7 @@ export default function TalkPage() {
     }
   }
 
-  const busy = step !== 'idle'
+  const busy = step !== 'idle' || uploading
 
   return (
     <>
@@ -272,6 +305,16 @@ export default function TalkPage() {
             </div>
           )}
 
+          {photo && (
+            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-border p-2 pr-3">
+              <img src={photo.preview} alt="Foto del producto" className="h-16 w-16 rounded-xl object-cover" />
+              <p className="text-sm text-muted-foreground">Foto lista: dime qué producto es.</p>
+              <button onClick={clearPhoto} aria-label="Quitar la foto" className="rounded-full p-1.5 text-muted-foreground hover:bg-muted">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
           {step === 'recording' ? (
             <div className="mt-5 flex flex-col items-center">
               <button
@@ -301,9 +344,18 @@ export default function TalkPage() {
               <p className="mt-1 text-lg font-semibold text-foreground">
                 {step === 'processing' ? 'Pensando…' : pending ? 'O dímelo: “sí” o “no”' : 'Tocar y hablar'}
               </p>
-              <button onClick={() => setTyping(true)} className="mt-1 inline-flex items-center gap-2 text-base text-muted-foreground hover:text-foreground">
-                <Keyboard className="h-5 w-5" /> ¿Prefieres escribir?
-              </button>
+              <div className="mt-1 flex flex-wrap justify-center gap-x-5 gap-y-1">
+                <button onClick={() => setTyping(true)} className="inline-flex items-center gap-2 text-base text-muted-foreground hover:text-foreground">
+                  <Keyboard className="h-5 w-5" /> ¿Prefieres escribir?
+                </button>
+                <button
+                  onClick={() => photoInput.current?.click()}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 text-base text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  <Camera className="h-5 w-5" /> {uploading ? 'Subiendo foto…' : 'Foto de un producto'}
+                </button>
+              </div>
             </div>
           ) : (
             <form
@@ -323,6 +375,15 @@ export default function TalkPage() {
                 <button type="submit" disabled={busy || !text.trim()} className="rounded-xl bg-brand-500 px-5 py-3 text-base font-semibold text-white disabled:opacity-50">
                   Enviar
                 </button>
+                <button
+                  type="button"
+                  onClick={() => photoInput.current?.click()}
+                  disabled={busy}
+                  aria-label="Foto de un producto"
+                  className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-base text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  <Camera className="h-5 w-5" /> {uploading ? 'Subiendo…' : 'Foto'}
+                </button>
                 {micAvailable && (
                   <button type="button" onClick={() => setTyping(false)} className="rounded-xl border border-border px-5 py-3 text-base text-foreground hover:bg-muted">
                     Mejor lo digo
@@ -331,6 +392,15 @@ export default function TalkPage() {
               </div>
             </form>
           )}
+
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => void pickPhoto(e.target.files?.[0])}
+          />
 
           {/* Para arrancar: ejemplos que se mandan con un toque */}
           {!history.length && !busy && (

@@ -1,0 +1,193 @@
+"""Copiloto, paso 2 (copilot_business_tools.py): citas, pedidos, catálogo y
+horario, contra la BD real (mismo patrón que test_copilot_service_actions.py).
+
+Lo crítico: los cambios solo pasan por la confirmación firmada; cambiar un
+precio o el horario también corrige lo que dicen las instrucciones del bot;
+un nombre que coincide con dos productos no cambia "el que sea"; y solo se
+aceptan fotos que subió el propio dueño."""
+import uuid
+from datetime import datetime, time, timedelta
+from decimal import Decimal
+
+import pytest
+from sqlalchemy import delete, select
+
+from app.database import AsyncSessionLocal, engine
+from app.models.appointment import Appointment
+from app.models.order import Order
+from app.models.product import Product
+from app.models.user import User
+from app.services import copilot_business_tools as biz
+from app.services.availability_service import TZ
+from app.services.copilot_service import (
+    CONFIRM_TOOLS,
+    TOOLS,
+    _build_system_prompt,
+    _execute_confirm_tool,
+    _execute_immediate_tool,
+    _preview_confirm_tool,
+)
+
+INSTRUCTIONS = "Horario: Lunes 10:00–20:00\nServicios y precios:\n- Corte — $150\n- Barba — $100"
+WEEK = {d: ["10:00", "20:00"] for d in ("mon", "tue", "wed", "thu", "fri")} | {"sat": ["10:00", "18:00"], "sun": None}
+
+
+async def _seed_user(**overrides) -> uuid.UUID:
+    await engine.dispose()
+    async with AsyncSessionLocal() as db:
+        user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x", **overrides)
+        db.add(user)
+        await db.commit()
+        return user.id
+
+
+async def _user(db, user_id) -> User:
+    return (await db.execute(select(User).where(User.id == user_id))).scalar_one()
+
+
+async def _cleanup(user_id):
+    await engine.dispose()
+    async with AsyncSessionLocal() as db:
+        for model in (Appointment, Order, Product):
+            await db.execute(delete(model).where(model.advertiser_id == user_id))
+        await db.execute(delete(User).where(User.id == user_id))
+        await db.commit()
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_appointments_today_skip_cancelled_and_other_days():
+    user_id = await _seed_user()
+    try:
+        today = datetime.now(TZ).date()
+        at = lambda d, h: datetime.combine(d, time(h, 0), tzinfo=TZ)
+        async with AsyncSessionLocal() as db:
+            for name, when, status in [
+                ("Ana", at(today, 23), "confirmed"),
+                ("Beto", at(today, 22), "cancelled"),
+                ("Carla", at(today + timedelta(days=1), 10), "pending"),
+            ]:
+                db.add(Appointment(advertiser_id=user_id, customer_name=name, service="Corte",
+                                   scheduled_at=when, status=status))
+            await db.commit()
+            user = await _user(db, user_id)
+            out = await _execute_immediate_tool(db, user, "list_appointments", {})
+            assert [a["customer"] for a in out["items"]] == ["Ana"]
+            assert out["items"][0]["time"] == "23:00"
+            nxt = await _execute_immediate_tool(db, user, "list_appointments", {"date_from": (today + timedelta(days=1)).isoformat()})
+            assert [a["customer"] for a in nxt["items"]] == ["Carla"]
+    finally:
+        await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_orders_filter_in_progress_vs_confirmed():
+    user_id = await _seed_user()
+    try:
+        async with AsyncSessionLocal() as db:
+            db.add(Order(advertiser_id=user_id, order_number=1, state="confirmed", items_raw="2 pizzas", customer_name="Ana"))
+            db.add(Order(advertiser_id=user_id, order_number=2, state="collecting_address", items_raw="1 refresco"))
+            await db.commit()
+            user = await _user(db, user_id)
+            done = await biz.list_orders(db, user, {"state": "confirmed"})
+            going = await biz.list_orders(db, user, {"state": "in_progress"})
+            everything = await biz.list_orders(db, user, {})
+        assert [o["items"] for o in done["items"]] == ["2 pizzas"]
+        assert [o["state"] for o in going["items"]] == ["in_progress"]
+        assert everything["count"] == 2
+    finally:
+        await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_create_product_waits_for_yes_and_only_takes_own_photos():
+    user_id = await _seed_user()
+    try:
+        assert {"create_product", "update_product", "update_business_hours"} <= CONFIRM_TOOLS
+        own = f"https://x/api/v1/radio/audio/products/{user_id}/a.jpg"
+        foreign = f"https://x/api/v1/radio/audio/products/{uuid.uuid4()}/b.jpg"
+        async with AsyncSessionLocal() as db:
+            user = await _user(db, user_id)
+            summary, args, err = await _preview_confirm_tool(
+                db, user, "create_product", {"name": "Tinte", "price": "$450", "photo_url": own},
+            )
+            assert err is None and "Tinte" in summary and "$450" in summary and "foto" in summary
+            # Nada se guarda en la vista previa.
+            assert (await db.execute(select(Product).where(Product.advertiser_id == user_id))).first() is None
+            data, err = await _execute_confirm_tool(db, user, "create_product", args)
+            assert err is None and data["has_photo"] is True
+            _, other, _ = await _preview_confirm_tool(db, user, "create_product", {"name": "X", "photo_url": foreign})
+            assert other["photo_url"] is None
+        async with AsyncSessionLocal() as db:
+            p = (await db.execute(select(Product).where(Product.advertiser_id == user_id))).scalar_one()
+            assert p.price == Decimal("450.00") and p.photo_url == own and p.active
+    finally:
+        await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_price_change_also_fixes_the_bot_instructions():
+    user_id = await _seed_user(bot_instructions=INSTRUCTIONS)
+    try:
+        async with AsyncSessionLocal() as db:
+            db.add(Product(advertiser_id=user_id, name="Corte", price=Decimal(150), active=True))
+            await db.commit()
+            user = await _user(db, user_id)
+            summary, args, err = await _preview_confirm_tool(db, user, "update_product", {"product": "corte", "price": 180})
+            assert err is None and "$150" in summary and "$180" in summary
+            _, err = await _execute_confirm_tool(db, user, "update_product", args)
+            assert err is None
+        async with AsyncSessionLocal() as db:
+            user = await _user(db, user_id)
+            assert "- Corte — $180" in user.bot_instructions and "- Barba — $100" in user.bot_instructions
+            p = (await db.execute(select(Product).where(Product.advertiser_id == user_id))).scalar_one()
+            assert p.price == Decimal("180.00")
+    finally:
+        await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_product_name_is_not_changed():
+    user_id = await _seed_user()
+    try:
+        async with AsyncSessionLocal() as db:
+            db.add(Product(advertiser_id=user_id, name="Corte niño", price=Decimal(100), active=True))
+            db.add(Product(advertiser_id=user_id, name="Corte adulto", price=Decimal(150), active=True))
+            await db.commit()
+            user = await _user(db, user_id)
+            summary, args, err = await _preview_confirm_tool(db, user, "update_product", {"product": "corte", "price": 1})
+        assert summary is None and args is None and "nombre exacto" in err
+    finally:
+        await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_hours_change_only_touches_the_days_said():
+    user_id = await _seed_user(business_hours=WEEK, bot_instructions=INSTRUCTIONS)
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await _user(db, user_id)
+            summary, args, err = await _preview_confirm_tool(
+                db, user, "update_business_hours", {"changes": {"sat": ["09:00", "14:00"], "sun": None}},
+            )
+            assert err is None and "Sábado 09:00 a 14:00" in summary
+            assert user.business_hours == WEEK  # todavía nada
+            _, err = await _execute_confirm_tool(db, user, "update_business_hours", args)
+            assert err is None
+            _, _, bad = await _preview_confirm_tool(db, user, "update_business_hours", {"changes": {"mon": ["20:00", "10:00"]}})
+            assert "no es válido" in bad
+        async with AsyncSessionLocal() as db:
+            user = await _user(db, user_id)
+            assert user.business_hours["sat"] == ["09:00", "14:00"] and user.business_hours["mon"] == ["10:00", "20:00"]
+            assert "Horario: Lunes 10:00–20:00; Martes" in user.bot_instructions
+            assert "Sábado 09:00–14:00" in user.bot_instructions
+    finally:
+        await _cleanup(user_id)
+
+
+def test_tools_registered_and_prompt_knows_today():
+    names = {t["name"] for t in TOOLS}
+    assert {"list_appointments", "list_orders", "list_products", "create_product", "update_product",
+            "update_business_hours"} <= names
+    prompt = _build_system_prompt(User(id=uuid.uuid4(), email="a@b.c", password_hash="x"))
+    assert f"fecha {datetime.now(TZ):%Y-%m-%d}" in prompt

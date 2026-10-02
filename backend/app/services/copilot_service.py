@@ -42,6 +42,7 @@ from app.models.contact import Contact
 from app.models.coupon import Coupon
 from app.models.user import User
 from app.schemas.contact import ContactCreate
+from app.services import copilot_business_tools as biz_tools
 from app.services.analytics_service import capture_event, compute_analytics_summary
 from app.services.availability_service import TZ
 from app.services.campaign_stats_service import compute_campaign_stats, merge_stats
@@ -54,7 +55,7 @@ MAX_ITERATIONS = 5
 CONFIRMATION_TTL_MINUTES = 5
 _MAX_TARGET_CONTACTS = 2000
 
-CONFIRM_TOOLS = {"launch_campaign", "create_coupon", "schedule_appointment"}
+CONFIRM_TOOLS = {"launch_campaign", "create_coupon", "schedule_appointment"} | biz_tools.CHANGE_TOOLS
 
 
 # ─── Cliente Anthropic ────────────────────────────────────────────────────────
@@ -95,14 +96,25 @@ IaRadio: si te presentas, di "Soy IaRadio" (no "Copiloto CRM" ni "AdRadio").
 """
 
 _CHANNEL_NOTES = {"whatsapp": _WHATSAPP_CHANNEL_NOTE, "voz": _VOICE_CHANNEL_NOTE}
+_WEEKDAYS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+_MONTHS = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+           "septiembre", "octubre", "noviembre", "diciembre")
 
 
 def _build_system_prompt(user: User, channel: str = "panel") -> str:
     business = user.business_name or "tu negocio"
     channel_note = _CHANNEL_NOTES.get(channel, "")
+    now = datetime.now(TZ)
+    today = f"{_WEEKDAYS[now.weekday()]} {now.day} de {_MONTHS[now.month - 1]} de {now.year}, {now:%H:%M}"
     return f"""Eres el Copiloto CRM de AdRadio, el asistente interno del panel de {business}.
-Ayudas al dueño del negocio a operar SU PROPIO CRM (contactos, campañas, cupones y citas)
-en lenguaje natural, usando ÚNICAMENTE las herramientas que tienes disponibles.
+Ayudas al dueño del negocio a operar SU PROPIO CRM (contactos, campañas, cupones, citas,
+pedidos, catálogo de productos y horario) en lenguaje natural, usando ÚNICAMENTE las
+herramientas que tienes disponibles.
+
+Hoy es {today} (hora del centro de México, fecha {now:%Y-%m-%d}). Calcula "hoy", "mañana",
+"el sábado" o "esta semana" a partir de esta fecha.
+Si el mensaje trae "[Foto adjunta: URL]", es una foto que el dueño acaba de tomar: úsala
+como photo_url al crear o cambiar el producto del que habla.
 
 Reglas estrictas:
 1. Habla siempre en español, con tono claro, profesional y directo. Sé breve.
@@ -294,6 +306,7 @@ TOOLS = [
             "required": ["contact_id", "datetime_iso"],
         },
     },
+    *biz_tools.TOOLS,
 ]
 
 
@@ -371,6 +384,8 @@ def _summarize(tool_name: str, data: dict) -> str:
         return f"Se creó {data.get('count', 0)} cupón(es) de {data.get('discount_percent')}% de descuento."
     if tool_name == "schedule_appointment":
         return f"Cita agendada para {data.get('customer_name', '')} el {data.get('scheduled_at', '')}."
+    if tool_name in biz_tools.READ_TOOLS | biz_tools.CHANGE_TOOLS:
+        return biz_tools.summarize(tool_name, data)
     return tool_name
 
 
@@ -513,6 +528,8 @@ async def _execute_immediate_tool(db: AsyncSession, user: User, tool_name: str, 
             return await _tool_get_campaign_stats(db, user, args)
         if tool_name == "create_contact":
             return await _tool_create_contact(db, user, args)
+        if tool_name in biz_tools.READ_TOOLS:
+            return await biz_tools.run_read_tool(db, user, tool_name, args)
         return {"error": f"Herramienta desconocida: {tool_name}"}
     except Exception as e:
         logger.warning("[COPILOT] Tool %s failed: %s", tool_name, e, exc_info=True)
@@ -895,6 +912,8 @@ async def _preview_confirm_tool(db: AsyncSession, user: User, tool_name: str, ar
             return await _preview_create_coupon(db, user, args)
         if tool_name == "schedule_appointment":
             return await _preview_schedule_appointment(db, user, args)
+        if tool_name in biz_tools.CHANGE_TOOLS:
+            return await biz_tools.preview_change(db, user, tool_name, args)
         return None, None, "No reconozco esa acción."
     except Exception as e:
         logger.warning("[COPILOT] Preview failed for %s: %s", tool_name, e, exc_info=True)
@@ -909,6 +928,8 @@ async def _execute_confirm_tool(db: AsyncSession, user: User, tool_name: str, ar
             return await _execute_create_coupon(db, user, args)
         if tool_name == "schedule_appointment":
             return await _execute_schedule_appointment(db, user, args)
+        if tool_name in biz_tools.CHANGE_TOOLS:
+            return await biz_tools.execute_change(db, user, tool_name, args)
         return None, "No reconozco esa acción."
     except Exception as e:
         logger.warning("[COPILOT] Confirm execution failed for %s: %s", tool_name, e, exc_info=True)

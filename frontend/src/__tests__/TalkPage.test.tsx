@@ -74,4 +74,26 @@ describe('TalkPage (Habla con IaRadio)', () => {
     expect(second.get('confirmation_id')).toBe('tok-1')
     expect(JSON.parse(second.get('history') as string).length).toBe(2)
   })
+
+  it('a product photo is uploaded and goes with the next request', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+    post.mockImplementation((url: string) => {
+      if (url === '/copilot/photo') return Promise.resolve({ data: { url: 'https://x/api/v1/radio/audio/products/u1/a.jpg' } })
+      if (url === '/copilot/voice') return Promise.resolve({ data: PENDING })
+      return Promise.resolve({ data: new Blob() })
+    })
+    const { container } = render(<TalkPage />)
+    const input = container.querySelector('input[type=file]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [new File(['jpg'], 'tinte.jpg', { type: 'image/jpeg' })] } })
+    await screen.findByText('Foto lista: dime qué producto es.')
+    expect((post.mock.calls.find(([u]) => u === '/copilot/photo')?.[1] as FormData).get('file')).toBeInstanceOf(File)
+
+    fireEvent.change(screen.getByLabelText('Escribe lo que necesitas'), { target: { value: 'agrega este producto, tinte a 450' } })
+    fireEvent.click(screen.getByText('Enviar'))
+    const form = post.mock.calls.find(([u]) => u === '/copilot/voice')?.[1] as FormData
+    expect(form.get('photo_url')).toBe('https://x/api/v1/radio/audio/products/u1/a.jpg')
+    await screen.findByText('¿Lo hago?')
+    expect(screen.queryByText('Foto lista: dime qué producto es.')).toBeNull()
+  })
 })
