@@ -64,6 +64,38 @@ def lip_line(x):
     return 0.405 + 0.03 * (1 - (x / MOUTH_HALF) ** 2)
 
 
+def _smooth(a, b, x):
+    t = np.clip((x - a) / (b - a), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+def mouth_open_offset(p, role):
+    """Desplazamiento de cada vértice con la boca abierta del todo (uOpen=1).
+    Copia de headWeights.ts (mandíbula, labio de arriba, comisuras) y del
+    shader de MeshHead3D; si cambian allá, hay que cambiarlo aquí."""
+    x, y, z = p[:, 0], p[:, 1], p[:, 2]
+    ax = np.abs(x)
+    corner = np.exp(-((ax - MOUTH_HALF) ** 2 / (2 * 0.1**2) + (y - 0.4) ** 2 / (2 * 0.08**2))) * _smooth(1.4, 1.8, z)
+    opening = np.exp(-(x * x) / (2 * 0.27**2))
+    band = 0.006 + 0.25 * _smooth(0.25, 0.45, ax)
+    jaw = (
+        _smooth(lip_line(x) + 0.002, lip_line(x) - band, y) * _smooth(-1.1, -0.6, y)
+        * opening * _smooth(0.9, 1.7, z)
+    )
+    upper = (
+        _smooth(0.75, 0.55, y) * _smooth(lip_line(x) - 0.02, lip_line(x) + 0.04, y)
+        * np.exp(-(x * x) / (2 * 0.35**2)) * _smooth(1.6, 2.0, z) * 0.5
+    )
+    lower = (role & 0x0F) == 2
+    jaw = np.where(lower, opening, jaw)
+    upper = np.where(lower, 0, upper)
+    off = np.zeros_like(p)
+    off[:, 0] = -0.05 * corner * np.sign(x)
+    off[:, 1] = -0.42 * jaw + 0.06 * upper
+    off[:, 2] = -0.08 * jaw
+    return off
+
+
 def eye_slit(x):
     """Línea donde se juntan los párpados (cerrados en el escaneo), igual en
     los dos ojos: más alta en el lagrimal que en el rabito del ojo. Se midió
@@ -216,6 +248,25 @@ def main():
     above = my - eye_slit(mx)
     eye = np.where(above > -0.01, np.clip(1 - (above - 0.06) / 0.18, 0, 1), 0) * in_eye
 
+    # Con la boca abierta, los triángulos de adentro de los labios que
+    # cruzan de un labio al otro (sobre todo en las comisuras) se estiran
+    # como tiras claras. Se simula la boca bien abierta con los mismos pesos
+    # que el navegador (headWeights.ts + el shader de MeshHead3D) y se quitan
+    # los que se estiran mucho: detrás queda la cavidad oscura.
+    opened = mesh_pos + mouth_open_offset(mesh_pos, role)
+    def longest_edge(p):
+        t = p[tris]
+        return np.max(np.linalg.norm(t - np.roll(t, 1, axis=1), axis=2), axis=1)
+    before, after = longest_edge(mesh_pos), longest_edge(opened)
+    tri_c = mesh_pos[tris].mean(axis=1)
+    in_mouth = (np.abs(tri_c[:, 0]) < MOUTH_HALF + 0.12) & (np.abs(tri_c[:, 1] - lip_line(tri_c[:, 0])) < 0.2)
+    t = mesh_pos[tris]
+    tri_n = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
+    facing = np.abs(tri_n[:, 2]) / (np.linalg.norm(tri_n, axis=1) + 1e-12)
+    # Solo lo de adentro (no mira al frente): la piel de afuera se queda.
+    torn = in_mouth & (facing < 0.5) & (after > 2.2 * before) & (after - before > 0.05)
+    tris = tris[~torn]
+
     # Adentro de la boca (el revés de los labios, que mira hacia arriba, abajo
     # o atrás): bandera 0x10 en el rol para pintarlo en sombra; si no, al
     # abrir la boca se ven tiras claras en las comisuras.
@@ -238,7 +289,8 @@ def main():
     with open(OUT_MESH, "wb") as f:
         f.write(mesh)
     print(
-        f"malla: {len(used)} vértices ({n_lip} de labios descosidos, {cut.sum()} triángulos de los ojos fuera), "
+        f"malla: {len(used)} vértices ({n_lip} de labios descosidos, {cut.sum()} triángulos de los ojos "
+        f"y {torn.sum()} de la boca fuera), "
         f"{len(tris)} triángulos, {len(mesh)} bytes → {os.path.normpath(OUT_MESH)}"
     )
 

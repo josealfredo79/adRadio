@@ -82,6 +82,29 @@ function edgeIndex(index: Uint16Array): Uint32Array {
   return new Uint32Array(edges)
 }
 
+/**
+ * Qué tanto se separa cada vértice de sus vecinos al abrir la boca (0–1). En
+ * las comisuras, la orilla de adentro de los labios se estira como tiras
+ * claras; con esto se pinta en sombra solo mientras la boca está abierta.
+ */
+function gapWeights(geo: THREE.BufferGeometry, edges: Uint32Array): Float32Array {
+  const jaw = geo.getAttribute('aJaw').array
+  const upper = geo.getAttribute('aUpper').array
+  const n = jaw.length
+  // Cuánto baja cada vértice con la boca abierta del todo (como en el shader).
+  const drop = new Float32Array(n)
+  for (let i = 0; i < n; i++) drop[i] = 0.42 * jaw[i] - 0.06 * upper[i]
+  const gap = new Float32Array(n)
+  for (let e = 0; e < edges.length; e += 2) {
+    const a = edges[e]
+    const b = edges[e + 1]
+    const d = Math.min(1, Math.max(0, (Math.abs(drop[a] - drop[b]) - 0.1) / 0.15))
+    if (d > gap[a]) gap[a] = d
+    if (d > gap[b]) gap[b] = d
+  }
+  return gap
+}
+
 /** Puntito redondo para los vértices. */
 function dotTexture(): THREE.Texture {
   const c = document.createElement('canvas')
@@ -168,16 +191,19 @@ attribute float aJaw;
 attribute float aUpper;
 attribute float aCorner;
 attribute float aEye;
+attribute float aGap;
 uniform float uOpen;
 uniform float uSmile;
-uniform float uBlink;`,
+uniform float uBlink;
+varying float vGap;`,
           )
           .replace(
             '#include <begin_vertex>',
             `#include <begin_vertex>
 transformed.y += -uOpen * 0.42 * aJaw + uOpen * 0.06 * aUpper + uSmile * 0.05 * aCorner + uBlink * -0.16 * aEye;
 transformed.x += (uSmile * 0.03 - uOpen * 0.05) * aCorner * sign(transformed.x);
-transformed.z -= uOpen * 0.08 * aJaw;`,
+transformed.z -= uOpen * 0.08 * aJaw;
+vGap = aGap * uOpen;`,
           )
       }
       return mat
@@ -202,11 +228,14 @@ transformed.z -= uOpen * 0.08 * aJaw;`,
       polygonOffset: true,
       polygonOffsetFactor: 1,
       polygonOffsetUnits: 1,
-    }), (glsl) => glsl.replace(
+    }), (glsl) => glsl.replace('#include <common>', `#include <common>
+varying float vGap;`).replace(
       '#include <color_fragment>',
       // El revés (adentro de los labios) en sombra, no iluminado como la cara.
       `#include <color_fragment>
-if (!gl_FrontFacing) diffuseColor.rgb *= 0.3;`,
+if (!gl_FrontFacing) diffuseColor.rgb *= 0.3;
+// Donde los labios se separan, sombra mientras la boca está abierta.
+diffuseColor.rgb *= 1.0 - min(vGap * 2.5, 0.85);`,
     ))
     const wireMat = deform(new THREE.LineBasicMaterial({ color: 0x0e4a2a, vertexColors: true, transparent: true, opacity: 0.35 }))
     const dot = dotTexture()
@@ -242,10 +271,12 @@ if (!gl_FrontFacing) diffuseColor.rgb *= 0.3;`,
         geo.setAttribute('color', new THREE.BufferAttribute(rgba, 4, true))
         geo.setIndex(new THREE.BufferAttribute(data.index, 1))
         weightAttributes(geo, data.positions, data.role, data.eye)
+        const edges = edgeIndex(data.index)
+        geo.setAttribute('aGap', new THREE.BufferAttribute(gapWeights(geo, edges), 1))
 
         const wireGeo = new THREE.BufferGeometry()
         for (const name of ['position', 'color', 'aJaw', 'aUpper', 'aCorner', 'aEye']) wireGeo.setAttribute(name, geo.getAttribute(name))
-        wireGeo.setIndex(new THREE.BufferAttribute(edgeIndex(data.index), 1))
+        wireGeo.setIndex(new THREE.BufferAttribute(edges, 1))
 
         // Ojos: un globo en cada hueco, con iris y pupila al frente.
         const eyeGeo = new THREE.SphereGeometry(EYE_RADIUS, 24, 16)
