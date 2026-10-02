@@ -32,7 +32,11 @@ from app.services.owner_question_service import (
     handle_owner_message,
     is_registered_owner,
 )
-from app.services.platform_whatsapp import platform_enabled, send_platform_text
+from app.services.platform_whatsapp import (
+    platform_enabled,
+    platform_token,
+    send_platform_text,
+)
 from app.services.storage_service import upload_bytes
 from app.services.whisper_service import transcribe_audio_bytes
 
@@ -187,7 +191,8 @@ async def _handle_platform_message(db: AsyncSession, msg: dict) -> None:
     if msg.get("type") == "image":
         image = msg.get("image") or {}
         body_text = (image.get("caption") or "").strip()
-        downloaded = await download_media(image.get("id", ""), settings.IARADIO_WA_TOKEN) if image.get("id") else None
+        token = await platform_token()
+        downloaded = await download_media(image["id"], token) if image.get("id") and token else None
         photo = downloaded  # (bytes, mime) o None si no se pudo bajar
         if photo is None:
             body_text = body_text or "[media:image]"
@@ -196,7 +201,8 @@ async def _handle_platform_message(db: AsyncSession, msg: dict) -> None:
         body_text, media_id = _extract_body_text(msg)
         voice = bool(media_id)
         if media_id:
-            downloaded = await download_media(media_id, settings.IARADIO_WA_TOKEN)
+            token = await platform_token()
+            downloaded = await download_media(media_id, token) if token else None
             transcription = None
             if downloaded:
                 audio_bytes, mime_type = downloaded

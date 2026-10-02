@@ -164,6 +164,7 @@ async def test_webhook_passes_voice_and_photo_to_the_owner_flow():
     from app.api.v1.webhooks_pkg import meta_incoming as mi
 
     with (
+        patch.object(mi, "platform_token", AsyncMock(return_value="tok")),
         patch.object(mi, "download_media", AsyncMock(return_value=(b"bytes", "image/jpeg"))),
         patch.object(mi, "transcribe_audio_bytes", AsyncMock(return_value="¿qué pedidos tengo?")),
         patch.object(mi, "handle_owner_message", AsyncMock()) as hom,
