@@ -99,14 +99,15 @@ function dotTexture(): THREE.Texture {
   return tex
 }
 
-// Tono de la piel según el ánimo (suave: la luz hace el resto).
+// Tono de la piel según el ánimo: verde, con variaciones suaves (la luz hace
+// el resto).
 const MOOD_SKIN: Record<FaceMood, THREE.Color> = {
-  idle: new THREE.Color('#c7d2e0'),
-  listening: new THREE.Color('#c4dcec'),
-  thinking: new THREE.Color('#cdcde8'),
-  speaking: new THREE.Color('#c7d6e6'),
-  happy: new THREE.Color('#c8e2d4'),
-  confused: new THREE.Color('#e2cdd2'),
+  idle: new THREE.Color('#5fd08a'),
+  listening: new THREE.Color('#5fd6a4'),
+  thinking: new THREE.Color('#6fc99a'),
+  speaking: new THREE.Color('#62d892'),
+  happy: new THREE.Color('#74e08a'),
+  confused: new THREE.Color('#9ccf7a'),
 }
 
 const HEAD_SCALE = 0.33
@@ -146,11 +147,11 @@ export default function MeshHead3D({ mood, volume = 0, getLevel, size = 280 }: P
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(30, W / H, 0.1, 20)
     camera.position.set(0, -0.05, 4.2)
-    scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x1a2238, 0.9))
+    scene.add(new THREE.HemisphereLight(0xe6fff0, 0x10261c, 0.9))
     const key = new THREE.DirectionalLight(0xffffff, 2.2)
     key.position.set(-2, 2.5, 3)
     scene.add(key)
-    const rim = new THREE.DirectionalLight(0x9fd8ff, 0.8)
+    const rim = new THREE.DirectionalLight(0xa8ffd0, 0.8)
     rim.position.set(3, 1, -2)
     scene.add(rim)
 
@@ -209,10 +210,10 @@ transformed.z -= uOpen * 0.08 * aJaw;`,
       `#include <color_fragment>
 if (!gl_FrontFacing) diffuseColor.rgb *= 0.3;`,
     ))
-    const wireMat = deform(new THREE.LineBasicMaterial({ color: 0x334460, vertexColors: true, transparent: true, opacity: 0.35 }))
+    const wireMat = deform(new THREE.LineBasicMaterial({ color: 0x0e4a2a, vertexColors: true, transparent: true, opacity: 0.35 }))
     const dot = dotTexture()
     const dotMat = deform(new THREE.PointsMaterial({
-      color: 0x233149,
+      color: 0x0b3a20,
       vertexColors: true,
       size: 0.016,
       sizeAttenuation: true,
@@ -221,7 +222,7 @@ if (!gl_FrontFacing) diffuseColor.rgb *= 0.3;`,
       transparent: true,
     }))
     const eyeMat = deform(new THREE.MeshStandardMaterial({ color: 0xe9eef5, roughness: 0.35 }))
-    const irisMat = new THREE.MeshStandardMaterial({ color: 0x5d6f88, roughness: 0.4 })
+    const irisMat = new THREE.MeshStandardMaterial({ color: 0x2f7a4c, roughness: 0.4 })
     const pupilMat = new THREE.MeshStandardMaterial({ color: 0x151c2a, roughness: 0.3 })
     const mouthMat = deform(new THREE.MeshStandardMaterial({ color: 0x2a141c, roughness: 1, side: THREE.DoubleSide }))
     const disposables: { dispose: () => void }[] = [skinMat, wireMat, dot, dotMat, eyeMat, irisMat, pupilMat, mouthMat]
