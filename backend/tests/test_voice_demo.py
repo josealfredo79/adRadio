@@ -53,7 +53,7 @@ class TestDemoChat:
         chat = vs.demo_chat(PROFILE)
         texts = [t["text"] for t in chat]
         assert texts[0] == "Hola, ¿cuánto cuesta taco de pastor?"
-        assert texts[1] == "¡Hola! Taco de pastor cuesta $15. ¿Te lo aparto? 😊"
+        assert texts[1] == "¡Hola! Taco de pastor cuesta $15. ¿Te gustaría apartar? 😊"
         assert "Abrimos de lunes a sábado de 9 a 7; los domingos cerramos." in texts
         assert "¡Sí! Aceptamos efectivo y tarjeta." in texts
         assert [t["from"] for t in chat] == ["cliente", "bot"] * 3

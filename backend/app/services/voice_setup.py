@@ -376,7 +376,7 @@ def demo_chat(profile: dict) -> list[dict]:
         turns.append({"from": "cliente", "text": f"Hola, ¿cuánto cuesta {s['name'].lower()}?"})
         if s["price"] is not None:
             price = f"${s['price']:,.0f}" if float(s["price"]).is_integer() else f"${s['price']:,.2f}"
-            turns.append({"from": "bot", "text": f"¡Hola! {s['name']} cuesta {price}. ¿Te lo aparto? 😊"})
+            turns.append({"from": "bot", "text": f"¡Hola! {s['name']} cuesta {price}. ¿Te gustaría apartar? 😊"})
         else:
             turns.append({"from": "bot", "text": f"¡Hola! Sí tenemos {s['name'].lower()}. Te confirmo el precio enseguida. 😊"})
     if hours := _speak_hours(p["business_hours"], we=True):

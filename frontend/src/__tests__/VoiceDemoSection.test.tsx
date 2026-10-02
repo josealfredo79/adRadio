@@ -37,7 +37,7 @@ describe('VoiceDemoSection (landing)', () => {
               profile: PROFILE, say: line('¡Muy bien!'), pending_questions: [], spoken_summary: line('Vendes…'),
               demo_chat: [
                 { from: 'cliente', text: 'Hola, ¿cuánto cuesta taco de pastor?' },
-                { from: 'bot', text: '¡Hola! Taco de pastor cuesta $15. ¿Te lo aparto? 😊' },
+                { from: 'bot', text: '¡Hola! Taco de pastor cuesta $15. ¿Te gustaría apartar? 😊' },
               ],
               closing: line('Así contestaría tu bot a tus clientes.'),
             },
@@ -49,7 +49,7 @@ describe('VoiceDemoSection (landing)', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'taquería, el pastor a 15' } })
     fireEvent.click(screen.getByText('Enséñame mi bot'))
 
-    await screen.findByText('¡Hola! Taco de pastor cuesta $15. ¿Te lo aparto? 😊')
+    await screen.findByText('¡Hola! Taco de pastor cuesta $15. ¿Te gustaría apartar? 😊')
     expect(screen.getByText('Así contestaría tu bot')).toBeDefined()
     expect(screen.getByText('Crea tu cuenta y quédatelo').closest('a')?.getAttribute('href')).toBe('/register')
     expect(loadDemoDraft()).toEqual(PROFILE)
