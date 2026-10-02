@@ -8,7 +8,7 @@ import { FACE_TRIANGLES, FACE_VERTICES } from '@/components/faceMeshData'
 // dispersos en la piel y CONCENTRADOS en las líneas que dan la expresión
 // (párpados, cejas, nariz, labios, contorno). La forma es la de un rostro
 // humano real: el modelo canónico de MediaPipe Face Mesh (ver faceMeshData),
-// con un punto en cada vértice y en la mitad de cada arista, más su malla tenue.
+// con puntos en sus vértices, aristas y triángulos, sombreados por una luz.
 //
 // - Hablando: la mandíbula y el labio inferior siguen `getLevel()` (el volumen
 //   real del audio que suena, ver useSpeaker.level).
@@ -53,12 +53,11 @@ const EYES = [
 const SCALE = 1 / 10.4
 
 interface FaceGeometry {
-  /** Malla: los 468 vértices (para las líneas) */
+  /** Los 468 vértices (para las líneas de las facciones) */
   mesh: Float32Array
   meshWeights: Float32Array[]
-  allEdges: number[]
   featureEdges: number[]
-  /** Puntos: vértices + mitad de cada arista + iris */
+  /** Puntos: vértices + mitad de cada arista + centro de cada triángulo + iris */
   points: Float32Array
   pointColors: Float32Array
   pointWeights: Float32Array[]
@@ -90,19 +89,30 @@ function buildFace(): FaceGeometry {
     weights(x, y).forEach((w, k) => (meshW[k][i] = w))
   }
 
-  // Aristas únicas de los triángulos.
-  const seen = new Set<number>()
-  const allEdges: number[] = []
+  // Normales por vértice, para sombrear los puntos con una luz desde arriba a
+  // la izquierda: así la cara tiene volumen (frente, pómulos y nariz claros,
+  // cuencas y costados en penumbra) en vez de verse como una red plana.
+  const normals = new Float32Array(n * 3)
+  const v = (i: number) => new THREE.Vector3(mesh[i * 3], mesh[i * 3 + 1], mesh[i * 3 + 2])
   for (let t = 0; t < FACE_TRIANGLES.length; t += 3) {
-    for (let k = 0; k < 3; k++) {
-      const a = FACE_TRIANGLES[t + k]
-      const b = FACE_TRIANGLES[t + ((k + 1) % 3)]
-      const key = Math.min(a, b) * 1000 + Math.max(a, b)
-      if (seen.has(key)) continue
-      seen.add(key)
-      allEdges.push(a, b)
+    const [a, b, c] = [FACE_TRIANGLES[t], FACE_TRIANGLES[t + 1], FACE_TRIANGLES[t + 2]]
+    const nrm = v(b).sub(v(a)).cross(v(c).sub(v(a)))
+    if (nrm.z < 0) nrm.negate()
+    for (const i of [a, b, c]) {
+      normals[i * 3] += nrm.x
+      normals[i * 3 + 1] += nrm.y
+      normals[i * 3 + 2] += nrm.z
     }
   }
+  const light = new THREE.Vector3(-0.45, 0.55, 1).normalize()
+  const lit = (...ids: number[]) => {
+    const nrm = new THREE.Vector3()
+    for (const i of ids) nrm.add(new THREE.Vector3(normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2]).normalize())
+    return 0.4 + 0.6 * Math.pow(Math.max(0, nrm.normalize().dot(light)), 1.4)
+  }
+  const avgPos = (k: number, ...ids: number[]) => ids.reduce((sum, i) => sum + mesh[i * 3 + k], 0) / ids.length
+  const avgW = (...ids: number[]) => meshW.map((m) => ids.reduce((sum, i) => sum + m[i], 0) / ids.length)
+
   const featureEdges: number[] = []
   const featureSet = new Set<number>()
   for (const loop of FEATURE_LOOPS) {
@@ -112,8 +122,9 @@ function buildFace(): FaceGeometry {
     }
   }
 
-  // Puntos: cada vértice, la mitad de cada arista y un anillo de iris. Los
-  // pesos de los puntos intermedios salen del promedio de sus extremos.
+  // Puntos: cada vértice, la mitad de cada arista, el centro de cada triángulo
+  // y un anillo de iris. Posición, pesos y luz de los puntos intermedios salen
+  // del promedio de sus vértices.
   const pts: number[] = []
   const col: number[] = []
   const w: number[][] = [[], [], [], []]
@@ -123,13 +134,22 @@ function buildFace(): FaceGeometry {
     ws.forEach((v, k) => w[k].push(v))
   }
   for (let i = 0; i < n; i++) {
-    push(mesh[i * 3], mesh[i * 3 + 1], mesh[i * 3 + 2], featureSet.has(i) ? 1 : 0.75, meshW.map((m) => m[i]))
+    push(mesh[i * 3], mesh[i * 3 + 1], mesh[i * 3 + 2], Math.min(1, lit(i) + (featureSet.has(i) ? 0.25 : 0)), avgW(i))
   }
-  for (let e = 0; e < allEdges.length; e += 2) {
-    const a = allEdges[e]
-    const b = allEdges[e + 1]
-    const mid = (k: number) => (mesh[a * 3 + k] + mesh[b * 3 + k]) / 2
-    push(mid(0), mid(1), mid(2), 0.45, meshW.map((m) => (m[a] + m[b]) / 2))
+  // La piel: la mitad de cada arista y el centro de cada triángulo. La malla
+  // es más fina donde hay facciones, así los puntos se juntan en ojos, nariz
+  // y boca, y se abren en frente y mejillas, como en una cara de verdad.
+  const seen = new Set<number>()
+  for (let t = 0; t < FACE_TRIANGLES.length; t += 3) {
+    const tri = [FACE_TRIANGLES[t], FACE_TRIANGLES[t + 1], FACE_TRIANGLES[t + 2]]
+    push(avgPos(0, ...tri), avgPos(1, ...tri), avgPos(2, ...tri), lit(...tri) * 0.8, avgW(...tri))
+    for (let k = 0; k < 3; k++) {
+      const [a, b] = [tri[k], tri[(k + 1) % 3]]
+      const key = Math.min(a, b) * 1000 + Math.max(a, b)
+      if (seen.has(key)) continue
+      seen.add(key)
+      push(avgPos(0, a, b), avgPos(1, a, b), avgPos(2, a, b), lit(a, b) * 0.9, avgW(a, b))
+    }
   }
   for (const eye of EYES) {
     const ring = 12
@@ -144,7 +164,6 @@ function buildFace(): FaceGeometry {
   return {
     mesh,
     meshWeights: meshW,
-    allEdges,
     featureEdges,
     points: new Float32Array(pts),
     pointColors: new Float32Array(col),
@@ -257,7 +276,7 @@ transformed.z -= uOpen * 0.03 * aJaw;`,
     pointGeo.setAttribute('color', new THREE.BufferAttribute(face.pointColors, 3))
     const sprite = triangleTexture()
     const pointMat = deform(new THREE.PointsMaterial({
-      size: 0.04,
+      size: 0.042,
       sizeAttenuation: true,
       vertexColors: true,
       map: sprite,
@@ -268,14 +287,13 @@ transformed.z -= uOpen * 0.03 * aJaw;`,
       color: MOOD_COLOR.idle.clone(),
     })) as THREE.PointsMaterial
 
-    // Malla tenue (todas las aristas) y líneas de expresión más marcadas.
+    // Solo las líneas de expresión, suaves; la piel la dan los puntos.
     const lineGeo = (edges: number[]) => {
       const geo = withWeights(new THREE.BufferGeometry(), face.meshWeights)
       geo.setAttribute('position', new THREE.BufferAttribute(face.mesh, 3))
       geo.setIndex(edges)
       return geo
     }
-    const meshGeo = lineGeo(face.allEdges)
     const featureGeo = lineGeo(face.featureEdges)
     const lineMat = (opacity: number) =>
       deform(new THREE.LineBasicMaterial({
@@ -285,11 +303,10 @@ transformed.z -= uOpen * 0.03 * aJaw;`,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })) as THREE.LineBasicMaterial
-    const meshMat = lineMat(0.13)
-    const featureMat = lineMat(0.55)
+    const featureMat = lineMat(0.4)
 
     const head = new THREE.Group()
-    head.add(new THREE.LineSegments(meshGeo, meshMat), new THREE.LineSegments(featureGeo, featureMat), new THREE.Points(pointGeo, pointMat))
+    head.add(new THREE.LineSegments(featureGeo, featureMat), new THREE.Points(pointGeo, pointMat))
     scene.add(head)
 
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
@@ -339,7 +356,7 @@ transformed.z -= uOpen * 0.03 * aJaw;`,
       head.rotation.y += (yaw - head.rotation.y) * 0.06
       head.rotation.x += (pitch - head.rotation.x) * 0.06
       head.rotation.z += (roll - head.rotation.z) * 0.06
-      for (const mt of [pointMat, meshMat, featureMat]) mt.color.lerp(MOOD_COLOR[m], 0.06)
+      for (const mt of [pointMat, featureMat]) mt.color.lerp(MOOD_COLOR[m], 0.06)
 
       renderer.render(scene, camera)
     }
@@ -348,7 +365,7 @@ transformed.z -= uOpen * 0.03 * aJaw;`,
     return () => {
       cancelAnimationFrame(raf)
       io.disconnect()
-      for (const d of [pointGeo, meshGeo, featureGeo, pointMat, meshMat, featureMat]) d.dispose()
+      for (const d of [pointGeo, featureGeo, pointMat, featureMat]) d.dispose()
       sprite.dispose()
       renderer.dispose()
       if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement)
