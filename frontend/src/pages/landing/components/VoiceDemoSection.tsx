@@ -212,6 +212,13 @@ export default function VoiceDemoSection() {
             {/* Rostro de puntos que mueve los labios con la voz real */}
             <div className="rounded-3xl bg-[#0a0f2e] px-4 pt-2 shadow-inner shadow-black/40">
               <PointFace3D mood={mood} volume={volume} getLevel={speaker.level} size={230} />
+              {/* Crédito que pide la licencia CC BY 3.0 del escaneo de la cabeza */}
+              <p className="pb-1.5 text-center text-[10px] text-white/30">
+                Cabeza 3D: escaneo de{' '}
+                <a href="https://www.ir-ltd.net/" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/60">Lee Perry-Smith</a>
+                {' · '}
+                <a href="https://creativecommons.org/licenses/by/3.0/deed.es" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/60">CC BY 3.0</a>
+              </p>
             </div>
             <div className="relative mt-3 w-full rounded-2xl bg-white/10 px-5 py-4 text-left" aria-live="polite">
               <span className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 bg-white/10" />
