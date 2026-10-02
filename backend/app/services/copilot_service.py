@@ -18,6 +18,8 @@ dueño es toda la validación que necesita /confirm, sin estado compartido.
 """
 import json
 import logging
+import re
+import unicodedata
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -80,9 +82,23 @@ Canal: WhatsApp. El dueño te escribe desde su celular al número de IaRadio.
 """
 
 
+_VOICE_CHANNEL_NOTE = """
+Canal: voz ("Habla con IaRadio"). El dueño te habla con su voz y tu respuesta
+se le lee en voz alta, con una cara que mueve los labios.
+- Contesta en 1 a 3 oraciones cortas, como en una plática. Nada de listas,
+  viñetas, asteriscos, tablas, encabezados ni emojis: todo se va a pronunciar.
+- Di las cantidades como se dicen ("quinientos pesos", "el 15 de octubre").
+- Si hay muchos resultados, di cuántos son y menciona solo los 3 más importantes.
+- Cuando el sistema pida confirmación, el dueño contestará "sí" o "no" con la
+  voz o con dos botones grandes — no expliques cómo confirmar.
+"""
+
+_CHANNEL_NOTES = {"whatsapp": _WHATSAPP_CHANNEL_NOTE, "voz": _VOICE_CHANNEL_NOTE}
+
+
 def _build_system_prompt(user: User, channel: str = "panel") -> str:
     business = user.business_name or "tu negocio"
-    channel_note = _WHATSAPP_CHANNEL_NOTE if channel == "whatsapp" else ""
+    channel_note = _CHANNEL_NOTES.get(channel, "")
     return f"""Eres el Copiloto CRM de AdRadio, el asistente interno del panel de {business}.
 Ayudas al dueño del negocio a operar SU PROPIO CRM (contactos, campañas, cupones y citas)
 en lenguaje natural, usando ÚNICAMENTE las herramientas que tienes disponibles.
@@ -902,7 +918,7 @@ async def _execute_confirm_tool(db: AsyncSession, user: User, tool_name: str, ar
         return None, "Ocurrió un error al ejecutar la acción. Intenta de nuevo."
 
 
-async def _phrase_confirmed_result(user: User, tool_name: str, data: dict) -> str:
+async def _phrase_confirmed_result(user: User, tool_name: str, data: dict, channel: str = "panel") -> str:
     """Una sola llamada a Claude (sin tools) para redactar la confirmación final
     en lenguaje natural a partir del resultado REAL de la acción — mismo
     principio anti-fabricación que el loop principal, solo que aquí no hay
@@ -913,7 +929,7 @@ async def _phrase_confirmed_result(user: User, tool_name: str, data: dict) -> st
             model=settings.ANTHROPIC_MODEL,
             max_tokens=300,
             temperature=0.3,
-            system=_build_system_prompt(user),
+            system=_build_system_prompt(user, channel),
             messages=[
                 {
                     "role": "user",
@@ -1043,7 +1059,9 @@ async def handle_tool_preview(db: AsyncSession, user: User, tool_name: str, args
     }
 
 
-async def handle_confirm(db: AsyncSession, user: User, confirmation_id: str, approve: bool, redis=None) -> dict:
+async def handle_confirm(
+    db: AsyncSession, user: User, confirmation_id: str, approve: bool, redis=None, channel: str = "panel",
+) -> dict:
     payload = _decode_confirmation_token(confirmation_id)
     if not payload or payload.get("sub") != str(user.id):
         raise ValueError("Esta confirmación ya expiró, no es válida, o no pertenece a tu cuenta. Pide la acción de nuevo.")
@@ -1067,5 +1085,33 @@ async def handle_confirm(db: AsyncSession, user: User, confirmation_id: str, app
         return {"reply": error, "actions": [], "pending_confirmation": None}
 
     action = {"tool": tool_name, "summary": _summarize(tool_name, data), "data": data}
-    reply = await _phrase_confirmed_result(user, tool_name, data)
+    reply = await _phrase_confirmed_result(user, tool_name, data, channel)
     return {"reply": reply, "actions": [action], "pending_confirmation": None}
+
+
+# ─── Confirmar con la voz ──────────────────────────────────────────────────────
+
+_SPOKEN_NO = re.compile(
+    r"\b(no|nel|cancela|cancelalo|cancelala|mejor no|todavia no|aun no|espera|detente|alto)\b"
+)
+_SPOKEN_YES = re.compile(
+    r"\b(si|sip|claro|dale|hazlo|hazla|adelante|va|vale|ok|okay|sale|orale|andale|simon|"
+    r"de acuerdo|confirmo|confirmado|correcto|perfecto|esta bien|por favor|mandala|mandalo|lanzala|lanzalo)\b"
+)
+
+
+def parse_spoken_yes_no(transcript: str) -> bool | None:
+    """¿El dueño dijo "sí" o "no" a una acción pendiente? None si no queda
+    claro (dijo las dos cosas, o pidió otra cosa): entonces se trata como un
+    mensaje nuevo y la acción pendiente no se ejecuta."""
+    text = unicodedata.normalize("NFKD", transcript.lower())
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    said_no = bool(_SPOKEN_NO.search(text))
+    said_yes = bool(_SPOKEN_YES.search(text))
+    if said_yes == said_no:
+        return None
+    # Una respuesta de sí/no es corta; si habló mucho, es otra petición.
+    if len(text.split()) > 8:
+        return None
+    return said_yes
+

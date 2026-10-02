@@ -27,6 +27,7 @@ const PublicSitePage = lazy(() => import('@/pages/PublicSitePage'))
 const ProductDetailPage = lazy(() => import('@/pages/ProductDetailPage'))
 const PortalPage = lazy(() => import('@/pages/PortalPage'))
 const VoiceSetupPage = lazy(() => import('@/pages/VoiceSetupPage'))
+const TalkPage = lazy(() => import('@/pages/TalkPage'))
 const TeamPage = lazy(() => import('@/pages/TeamPage'))
 const WidgetPage = lazy(() => import('@/pages/WidgetPage'))
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
@@ -98,6 +99,7 @@ export default function App() {
               <Route path="knowledge-base" element={<KnowledgeBasePage />} />
               <Route path="lab" element={<LabPage />} />
               <Route path="voice-setup" element={<VoiceSetupPage />} />
+              <Route path="hablar" element={<TalkPage />} />
               <Route path="plans" element={<PlansPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="automations" element={<AutomationsPage />} />

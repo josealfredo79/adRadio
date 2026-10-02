@@ -1,0 +1,77 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import TalkPage from '@/pages/TalkPage'
+
+const post = vi.fn()
+vi.mock('@/lib/api', () => ({
+  default: { post: (...a: unknown[]) => post(...a) },
+  getApiError: (_e: unknown, fallback: string) => fallback,
+}))
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { business_name: 'Barbería Don Pepe' } }),
+}))
+vi.mock('@/components/SEO', () => ({ default: () => null }))
+
+const PENDING = {
+  transcript: 'Crea un cupón del 10 % para esta semana',
+  reply: 'Antes de hacerlo, confirmemos: cupón del 10 % válido hasta el domingo.',
+  actions: [],
+  pending_confirmation: { confirmation_id: 'tok-1', tool: 'create_coupon', summary: 'Cupón del 10 % válido hasta el domingo.' },
+}
+
+describe('TalkPage (Habla con IaRadio)', () => {
+  beforeEach(() => {
+    post.mockReset()
+    localStorage.clear()
+  })
+
+  it('greets the owner by business name', () => {
+    render(<TalkPage />)
+    expect(screen.getByText(/Hola, Barbería Don Pepe/)).toBeDefined()
+  })
+
+  it('asks before acting and confirms with the big "Sí" button', async () => {
+    post.mockImplementation((url: string) => {
+      if (url === '/copilot/voice') return Promise.resolve({ data: PENDING })
+      if (url === '/copilot/confirm') {
+        return Promise.resolve({
+          data: { reply: 'Listo, el cupón ya está activo.', actions: [{ tool: 'create_coupon', summary: 'Cupón creado: DIEZ.' }], pending_confirmation: null },
+        })
+      }
+      return Promise.resolve({ data: new Blob() }) // la voz
+    })
+    render(<TalkPage />)
+
+    fireEvent.click(screen.getByText('Crea un cupón del 10 % para esta semana'))
+    const form = post.mock.calls.find(([url]) => url === '/copilot/voice')?.[1] as FormData
+    expect(form.get('text')).toBe('Crea un cupón del 10 % para esta semana')
+
+    await screen.findByText('¿Lo hago?')
+    expect(screen.getByText('Cupón del 10 % válido hasta el domingo.')).toBeDefined()
+
+    fireEvent.click(screen.getByText('Sí, hazlo'))
+    await screen.findByText('Listo, el cupón ya está activo.')
+    expect(post).toHaveBeenCalledWith('/copilot/confirm', { confirmation_id: 'tok-1', approve: true })
+    expect(screen.getByText('Cupón creado: DIEZ.')).toBeDefined()
+    expect(screen.queryByText('¿Lo hago?')).toBeNull()
+  })
+
+  it('a spoken or typed answer while something is pending carries the confirmation id', async () => {
+    post.mockImplementation((url: string) =>
+      url === '/copilot/voice' ? Promise.resolve({ data: PENDING }) : Promise.resolve({ data: new Blob() }),
+    )
+    render(<TalkPage />)
+    fireEvent.click(screen.getByText('Crea un cupón del 10 % para esta semana'))
+    await screen.findByText('¿Lo hago?')
+
+    // Sin micrófono (jsdom) la caja para escribir ya está abierta.
+    const typeInstead = screen.queryByText('¿Prefieres escribir?')
+    if (typeInstead) fireEvent.click(typeInstead)
+    fireEvent.change(screen.getByLabelText('Escribe lo que necesitas'), { target: { value: 'sí' } })
+    fireEvent.click(screen.getByText('Enviar'))
+    const calls = post.mock.calls.filter(([url]) => url === '/copilot/voice')
+    const second = calls[1][1] as FormData
+    expect(second.get('confirmation_id')).toBe('tok-1')
+    expect(JSON.parse(second.get('history') as string).length).toBe(2)
+  })
+})

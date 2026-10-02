@@ -148,6 +148,24 @@ export default function DashboardPage() {
         </Link>
       )}
 
+      {/* Habla con IaRadio: trabajar con la voz, sin buscar en el menú. */}
+      {user?.bot_instructions && (
+        <Link
+          to="/app/hablar"
+          className="flex items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50 p-5 transition-shadow hover:shadow-md dark:border-brand-900 dark:bg-brand-950/30"
+        >
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-500 text-white">
+            <Mic className="h-7 w-7" />
+          </span>
+          <span>
+            <span className="block text-lg font-bold text-foreground">Habla con IaRadio</span>
+            <span className="block text-base text-muted-foreground">
+              Pídele lo que necesites con tu voz: “¿qué citas tengo hoy?”, “crea un cupón”, “lanza una promoción”.
+            </span>
+          </span>
+        </Link>
+      )}
+
       {/* Payment success banner — visible even while loading */}
       {paymentSuccess && (
         <div className="flex items-center justify-between rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-5 py-4">
