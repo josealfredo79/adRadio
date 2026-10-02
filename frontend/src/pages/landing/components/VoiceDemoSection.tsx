@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import api, { getApiError } from '@/lib/api'
 import { type FaceMood } from '@/components/BotFace'
 import PointFace3D from '@/components/PointFace3D'
+import MeshHead3D from '@/components/MeshHead3D'
 import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { saveDemoDraft } from '@/lib/demoDraft'
@@ -46,6 +47,8 @@ export default function VoiceDemoSection() {
   const [asked, setAsked] = useState<string[]>([])
   const [error, setError] = useState(false)
   const [typing, setTyping] = useState(false)
+  // Solo se lee una vez: la cara de prueba se elige por la URL (?cara=malla).
+  const [meshFace] = useState(() => new URLSearchParams(window.location.search).get('cara') === 'malla')
   const [text, setText] = useState('')
   const [seconds, setSeconds] = useState(0)
   const [volume, setVolume] = useState(0)
@@ -211,7 +214,10 @@ export default function VoiceDemoSection() {
             </button>
             {/* Rostro de puntos que mueve los labios con la voz real */}
             <div className="rounded-3xl bg-[#0a0f2e] px-4 pt-2 shadow-inner shadow-black/40">
-              <PointFace3D mood={mood} volume={volume} getLevel={speaker.level} size={230} />
+              {/* Prueba: ?cara=malla muestra la cabeza sólida con su malla en vez de la de puntos */}
+              {meshFace
+                ? <MeshHead3D mood={mood} volume={volume} getLevel={speaker.level} size={230} />
+                : <PointFace3D mood={mood} volume={volume} getLevel={speaker.level} size={230} />}
               {/* Crédito que pide la licencia CC BY 3.0 del escaneo de la cabeza */}
               <p className="pb-1.5 text-center text-[10px] text-white/30">
                 Cabeza 3D: escaneo de{' '}

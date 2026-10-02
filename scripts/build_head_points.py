@@ -1,11 +1,18 @@
-"""Genera frontend/src/assets/models/head-points.bin para la cabeza de puntos
-de la landing (frontend/src/components/PointFace3D.tsx).
+"""Genera los modelos de la cabeza de la landing en frontend/src/assets/models:
+head-points.bin (PointFace3D.tsx, cabeza de puntos) y head-mesh.bin
+(MeshHead3D.tsx, cabeza sólida con su malla).
 
 Fuente: "Infinite, 3D Head Scan" de Lee Perry-Smith (Infinite Realities,
 www.ir-ltd.net), basado en un trabajo de www.triplegangers.com, licencia
 Creative Commons Attribution 3.0. Se descarga del ejemplo de three.js.
 
-Formato (little endian):
+Formato de head-mesh.bin (little endian):
+  uint32 nv · uint32 nt · int16[nv·3] posición (milésimas) · int8[nv·3]
+  normal (·127) · uint8[nv] desvanecido · int8[nv] párpado de arriba (·127,
+  cuánto baja al parpadear) · uint8[nv] rol (0 piel, 2 labio de abajo; +0x10
+  si es adentro de la boca) · uint16[nt·3] índices de los triángulos
+
+Formato de head-points.bin (little endian):
   uint32 n · int16[n·3] posición (milésimas) · int8[n·3] normal (·127) ·
   uint8[n] brillo · uint8[n] rol (0 piel, 1 labio de arriba, 2 labio de abajo)
 
@@ -21,6 +28,7 @@ import numpy as np
 
 URL = "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/LeePerrySmith/LeePerrySmith.glb"
 OUT = os.path.join(os.path.dirname(__file__), "..", "frontend", "src", "assets", "models", "head-points.bin")
+OUT_MESH = os.path.join(os.path.dirname(__file__), "..", "frontend", "src", "assets", "models", "head-mesh.bin")
 
 # El escaneo tiene la cara un poco corrida: este x es el centro de la cara.
 FACE_CENTER_X = -0.09
@@ -54,6 +62,14 @@ def load_glb(data: bytes):
 def lip_line(x):
     """Línea donde se juntan los labios (un poco más alta al centro)."""
     return 0.405 + 0.03 * (1 - (x / MOUTH_HALF) ** 2)
+
+
+def eye_slit(x):
+    """Línea donde se juntan los párpados (cerrados en el escaneo), igual en
+    los dos ojos: más alta en el lagrimal que en el rabito del ojo. Se midió
+    en el ojo derecho, donde el pliegue de los párpados es más limpio."""
+    ax = np.abs(x)
+    return 0.0962 * ax**2 - 0.2687 * ax + 1.8021
 
 
 def upper_lip(x):
@@ -144,6 +160,87 @@ def main():
         f.write(blob)
     print(f"{n} puntos ({n - len(skin_pos)} de labios), {len(blob)} bytes → {os.path.normpath(OUT)}")
 
+    # Malla sólida (cabeza con piel, líneas y puntos: MeshHead3D.tsx). Se
+    # queda con los triángulos de la cabeza y el cuello; el brillo de cada
+    # vértice sirve para desvanecer el corte de abajo.
+    keep_v = pos[:, 1] > -2.2
+    tris = idx[keep_v[idx].all(axis=1)].astype(np.int64)
+    mesh_pos, mesh_nrm = pos.copy(), nrm.copy()
+    role = np.zeros(len(pos), np.uint8)
+
+    # En el escaneo los labios están "cosidos": el de arriba y el de abajo
+    # comparten vértices en la línea donde se juntan. Para que puedan
+    # separarse, los triángulos de abajo de esa línea reciben una copia de cada
+    # vértice de la costura (rol 2).
+    def unstitch(near, line_y, new_role):
+        nonlocal mesh_pos, mesh_nrm, role
+        cand = np.zeros(len(mesh_pos), bool)
+        cand[: len(near)] = near
+        centroid = mesh_pos[tris].mean(axis=1)
+        below = centroid[:, 1] < line_y(centroid[:, 0])
+        copies = {}
+        for t in np.nonzero(below)[0]:
+            for k in range(3):
+                v = tris[t, k]
+                if cand[v]:
+                    if v not in copies:
+                        copies[v] = len(mesh_pos) + len(copies)
+                    tris[t, k] = copies[v]
+        src = np.array(list(copies.keys()), dtype=np.int64)
+        mesh_pos = np.concatenate([mesh_pos, mesh_pos[src]])
+        mesh_nrm = np.concatenate([mesh_nrm, mesh_nrm[src]])
+        role = np.concatenate([role, np.full(len(src), new_role, np.uint8)])
+        return len(src)
+
+    x, y, z = pos[:, 0], pos[:, 1], pos[:, 2]
+    n_lip = unstitch(
+        (np.abs(x) < MOUTH_HALF + 0.05) & (np.abs(y - lip_line(x)) < 0.05) & (z > 1.55),
+        lip_line, 2,
+    )
+    # Ojos: el escaneo los trae cerrados, con el pliegue de los párpados
+    # adentro. Se corta una almendra a lo largo de la línea de los párpados
+    # (con todo lo que hay detrás) y por ahí se ve el globo ocular.
+    def almond(px, py):
+        ax = np.abs(px)
+        half = 0.09 * np.clip(1 - ((ax - 0.615) / 0.29) ** 2, 0, 1) ** 0.7
+        return np.abs(py - eye_slit(px)) < half
+
+    centroid = mesh_pos[tris].mean(axis=1)
+    cut = almond(centroid[:, 0], centroid[:, 1]) & (centroid[:, 2] > 1.2)
+    tris = tris[~cut]
+
+    # Párpado de arriba: cuánto baja al parpadear (cierra la almendra).
+    mx, my, mz = mesh_pos[:, 0], mesh_pos[:, 1], mesh_pos[:, 2]
+    max_ = np.abs(mx)
+    in_eye = np.clip(1 - ((max_ - 0.615) / 0.36) ** 2, 0, 1) * np.clip((mz - 1.45) / 0.2, 0, 1)
+    above = my - eye_slit(mx)
+    eye = np.where(above > -0.01, np.clip(1 - (above - 0.06) / 0.18, 0, 1), 0) * in_eye
+
+    # Adentro de la boca (el revés de los labios, que mira hacia arriba, abajo
+    # o atrás): bandera 0x10 en el rol para pintarlo en sombra; si no, al
+    # abrir la boca se ven tiras claras en las comisuras.
+    mouth_zone = (max_ < MOUTH_HALF + 0.08) & (np.abs(my - lip_line(mx)) < 0.16) & (mz > 1.4)
+    role = np.where(mouth_zone & (mesh_nrm[:, 2] < 0.35), role | 0x10, role).astype(np.uint8)
+
+    used = np.unique(tris)
+    remap = np.full(len(mesh_pos), -1)
+    remap[used] = np.arange(len(used))
+    fade = np.clip((mesh_pos[used, 1] + 2.05) / 0.9, 0, 1)
+    mesh = (
+        struct.pack("<II", len(used), len(tris))
+        + np.round(mesh_pos[used] * 1000).astype("<i2").tobytes()
+        + np.round(mesh_nrm[used] * 127).astype("i1").tobytes()
+        + np.round(fade * 255).astype("u1").tobytes()
+        + np.round(eye[used] * 127).astype("i1").tobytes()
+        + role[used].tobytes()
+        + remap[tris].astype("<u2").tobytes()
+    )
+    with open(OUT_MESH, "wb") as f:
+        f.write(mesh)
+    print(
+        f"malla: {len(used)} vértices ({n_lip} de labios descosidos, {cut.sum()} triángulos de los ojos fuera), "
+        f"{len(tris)} triángulos, {len(mesh)} bytes → {os.path.normpath(OUT_MESH)}"
+    )
 
 if __name__ == "__main__":
     main()
