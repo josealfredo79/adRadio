@@ -210,6 +210,7 @@ diffuseColor.rgb *= vShade;`)
     const io = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting })
     io.observe(el)
 
+    let voice = 0
     let open = 0
     let smile = 0
     let blink = 0
@@ -231,7 +232,11 @@ diffuseColor.rgb *= vShade;`)
         typeof forced === 'number' ? forced
           : m === 'speaking' ? (levelRef.current?.() ?? 0)
             : 0
-      open += (target - open) * (target > open ? 0.55 : 0.22)
+      // Suave: primero se promedia la voz (quita el temblor del volumen) y
+      // luego la boca la sigue sin brincos; en los picos abre un poco menos.
+      voice += (target - voice) * 0.3
+      const goal = Math.pow(voice, 1.2) * 0.85
+      open += (goal - open) * (goal > open ? 0.2 : 0.13)
       smile += ((m === 'happy' ? 1 : m === 'idle' ? 0.2 : 0) - smile) * 0.08
       if (now > nextBlink) {
         blink = 1
