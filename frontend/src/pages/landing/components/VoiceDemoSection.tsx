@@ -210,7 +210,7 @@ export default function VoiceDemoSection() {
               {speaker.muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
             </button>
             {/* Rostro de puntos que mueve los labios con la voz real */}
-            <div className="rounded-3xl bg-black/70 px-4 pt-2">
+            <div className="rounded-3xl bg-[#0a0f2e] px-4 pt-2 shadow-inner shadow-black/40">
               <PointFace3D mood={mood} volume={volume} getLevel={speaker.level} size={230} />
             </div>
             <div className="relative mt-3 w-full rounded-2xl bg-white/10 px-5 py-4 text-left" aria-live="polite">
