@@ -211,6 +211,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             csp_parts.append("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com")
         csp_parts.append("font-src 'self' https://fonts.gstatic.com")
         csp_parts.append("img-src 'self' data: blob: https:")
+        # La voz de la carita llega como blob: (audio del servidor) y el
+        # desbloqueo de audio en iPhone usa un WAV data:.
+        csp_parts.append("media-src 'self' blob: data:")
         csp_parts.append("frame-src 'self' https://js.stripe.com https://www.facebook.com https://facebook.com")
         connect_src = ["'self'"]
         if api_url:

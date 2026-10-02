@@ -127,8 +127,8 @@ const MOOD_COLOR: Record<FaceMood, THREE.Color> = {
 }
 
 // Escala y posición de la cabeza en la escena (unidades del modelo → mundo).
-const HEAD_SCALE = 0.28
-const HEAD_Y = -0.33
+const HEAD_SCALE = 0.33
+const HEAD_Y = -0.31
 
 export default function PointFace3D({ mood, volume = 0, getLevel, size = 280 }: Props) {
   const mount = useRef<HTMLDivElement>(null)
@@ -195,7 +195,7 @@ varying float vShade;`,
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
-transformed.y += -uOpen * 0.34 * aJaw + uOpen * 0.06 * aUpper + uSmile * 0.05 * aCorner - uBlink * 0.1 * aLid;
+transformed.y += -uOpen * 0.42 * aJaw + uOpen * 0.06 * aUpper + uSmile * 0.05 * aCorner - uBlink * 0.1 * aLid;
 transformed.x += (uSmile * 0.03 - uOpen * 0.05) * aCorner * sign(transformed.x);
 transformed.z -= uOpen * 0.08 * aJaw;
 // Luz fija respecto a la cámara: al girar la cabeza, la sombra se mueve con
