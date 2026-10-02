@@ -12,12 +12,13 @@ import headPointsUrl from '@/assets/models/head-points.bin?url'
 // trabajo de www.triplegangers.com, licencia Creative Commons Attribution 3.0
 // (https://creativecommons.org/licenses/by/3.0/). Se tomó del ejemplo de
 // three.js (examples/models/gltf/LeePerrySmith) y se redujo a sus vértices
-// (cabeza, orejas y cuello) en `head-points.bin`:
+// (cabeza, orejas y cuello) más unos labios dibujados encima, porque el
+// escaneo casi no tiene puntos en la boca. Lo genera
+// scripts/build_head_points.py en `head-points.bin`:
 //   uint32 n · int16[n·3] posición (milésimas) · int8[n·3] normal (·127) ·
-//   uint8[n] brillo (más bajo donde la malla es más densa, para que ojos y
-//   orejas no se encandilen, y desvanecido hacia los hombros).
+//   uint8[n] brillo · uint8[n] rol (0 piel, 1 labio de arriba, 2 de abajo).
 // Unidades del modelo: x a los lados (0 = centro de la cara), y hacia arriba
-// (ojos ≈ 1.68, línea de la boca ≈ 0.39, mentón ≈ -0.6), z hacia la cámara.
+// (ojos ≈ 1.68, línea de la boca ≈ 0.42, mentón ≈ -0.6), z hacia la cámara.
 //
 // - Hablando: la mandíbula y el labio inferior siguen `getLevel()` (el volumen
 //   real del audio que suena, ver useSpeaker.level).
@@ -41,15 +42,23 @@ const smooth = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t)
 }
 
+const MOUTH_HALF = 0.4
+/** Línea donde se juntan los labios (igual que en build_head_points.py). */
+const lipLine = (x: number) => 0.405 + 0.03 * (1 - (x / MOUTH_HALF) ** 2)
+
 /** Pesos de animación de un punto: mandíbula, labio de arriba, comisuras, párpado. */
-function weights(x: number, y: number, z: number): [number, number, number, number] {
+function weights(x: number, y: number, z: number, role: number): [number, number, number, number] {
   const ax = Math.abs(x)
-  // Todo lo que está bajo la línea de la boca baja con la mandíbula, menos
+  const corner = g(ax - MOUTH_HALF, y - 0.4, 0.1, 0.08) * smooth(1.4, 1.8, z)
+  // Los labios abren en óvalo: el centro se mueve todo, las comisuras nada.
+  const oval = Math.pow(Math.max(0, 1 - (x / MOUTH_HALF) ** 2), 0.6)
+  if (role === 1) return [0, oval, corner, 0]
+  if (role === 2) return [oval, 0, corner, 0]
+  // Piel: lo que está bajo la línea de la boca baja con la mandíbula, menos
   // hacia los lados y hacia atrás (la quijada gira, no se desliza); el cuello
   // se queda en su lugar.
-  const jaw = smooth(0.37, 0.33, y) * smooth(-1.1, -0.6, y) * Math.exp(-(x * x) / (2 * 0.7 * 0.7)) * smooth(0.9, 1.7, z)
-  const upper = smooth(0.75, 0.55, y) * smooth(0.3, 0.42, y) * Math.exp(-(x * x) / (2 * 0.35 * 0.35)) * smooth(1.6, 2.0, z)
-  const corner = g(ax - 0.38, y - 0.39, 0.12, 0.1) * smooth(1.4, 1.8, z)
+  const jaw = smooth(lipLine(x), lipLine(x) - 0.05, y) * smooth(-1.1, -0.6, y) * Math.exp(-(x * x) / (2 * 0.6 * 0.6)) * smooth(0.9, 1.7, z)
+  const upper = smooth(0.75, 0.55, y) * smooth(lipLine(x) - 0.02, lipLine(x) + 0.04, y) * Math.exp(-(x * x) / (2 * 0.35 * 0.35)) * smooth(1.6, 2.0, z) * 0.5
   const lid = smooth(1.68, 1.76, y) * g(ax - 0.59, y - 1.8, 0.2, 0.08) * smooth(1.5, 1.9, z)
   return [jaw, upper, corner, lid]
 }
@@ -69,6 +78,7 @@ async function loadHead(): Promise<HeadGeometry> {
   const raw = new Int16Array(buf, 4, n * 3)
   const normals = new Int8Array(buf, 4 + n * 6, n * 3)
   const bright = new Uint8Array(buf, 4 + n * 9, n)
+  const role = new Uint8Array(buf, 4 + n * 10, n)
   const positions = new Float32Array(n * 3)
   const w = [0, 1, 2, 3].map(() => new Float32Array(n))
   for (let i = 0; i < n; i++) {
@@ -78,7 +88,7 @@ async function loadHead(): Promise<HeadGeometry> {
     positions[i * 3] = x
     positions[i * 3 + 1] = y
     positions[i * 3 + 2] = z
-    weights(x, y, z).forEach((v, k) => (w[k][i] = v))
+    weights(x, y, z, role[i]).forEach((v, k) => (w[k][i] = v))
   }
   return { positions, normals, bright, weights: w }
 }
@@ -185,9 +195,9 @@ varying float vShade;`,
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
-transformed.y += -uOpen * 0.32 * aJaw + uOpen * 0.04 * aUpper + uSmile * 0.06 * aCorner - uBlink * 0.1 * aLid;
-transformed.x += uSmile * 0.03 * aCorner * sign(transformed.x);
-transformed.z -= uOpen * 0.1 * aJaw;
+transformed.y += -uOpen * 0.34 * aJaw + uOpen * 0.06 * aUpper + uSmile * 0.05 * aCorner - uBlink * 0.1 * aLid;
+transformed.x += (uSmile * 0.03 - uOpen * 0.05) * aCorner * sign(transformed.x);
+transformed.z -= uOpen * 0.08 * aJaw;
 // Luz fija respecto a la cámara: al girar la cabeza, la sombra se mueve con
 // ella. Los puntos de la cara de atrás se apagan (no se transparenta la nuca).
 vec3 vn = normalize(normalMatrix * aNormal);

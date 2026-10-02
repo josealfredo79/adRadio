@@ -70,7 +70,8 @@ export function useSpeaker({ publicDemo = false }: { publicDemo?: boolean } = {}
   const level = useCallback((): number => {
     const node = analyser.current
     const data = levelData.current
-    if (node && data && audio.current && !audio.current.paused) {
+    const playing = !!audio.current && !audio.current.paused && !audio.current.ended
+    if (playing && node && data) {
       node.getByteTimeDomainData(data)
       let sum = 0
       for (let i = 0; i < data.length; i++) {
@@ -79,8 +80,9 @@ export function useSpeaker({ publicDemo = false }: { publicDemo?: boolean } = {}
       }
       return Math.min(1, Math.sqrt(sum / data.length) * 4.5)
     }
-    if (browserSpeaking.current) {
-      // Voz del navegador: no se puede medir, así que un ritmo de habla creíble.
+    if (playing || browserSpeaking.current) {
+      // Voz del navegador, o audio que empezó antes del primer toque (sin
+      // analizador todavía): no se puede medir, así que un ritmo de habla creíble.
       const t = performance.now() / 1000
       return 0.35 + 0.3 * Math.abs(Math.sin(t * 9.1)) * Math.abs(Math.sin(t * 3.3 + 1))
     }
