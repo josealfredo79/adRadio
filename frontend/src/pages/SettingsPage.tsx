@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -655,7 +656,12 @@ export default function SettingsPage() {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Instrucciones personalizadas</label>
+          <div className="flex items-center justify-between gap-3 mb-1">
+            <label className="block text-sm font-medium text-foreground">Instrucciones personalizadas</label>
+            <Link to="/app/voice-setup" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700">
+              🎤 Dictar con voz
+            </Link>
+          </div>
           <p className="text-xs text-muted-foreground mb-2">
             Estas instrucciones tienen prioridad sobre cualquier otra regla. Úsalas para definir comportamientos específicos del bot.
           </p>

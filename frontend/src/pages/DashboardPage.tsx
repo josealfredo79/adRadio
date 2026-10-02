@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket } from 'lucide-react'
+import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
 import SEO from '@/components/SEO'
@@ -122,6 +122,25 @@ export default function DashboardPage() {
     <>
       <SEO title="Dashboard" description="Panel de control de IaRadio." noIndex />
       <div className="space-y-8">
+
+      {/* Configurar el bot por voz: lo primero que necesita un negocio nuevo.
+          Sin instrucciones el bot solo saluda — esto lo deja listo en 2 minutos. */}
+      {user && !user.bot_instructions && (
+        <Link
+          to="/app/voice-setup"
+          className="flex items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50 p-5 transition-shadow hover:shadow-md dark:border-brand-900 dark:bg-brand-950/30"
+        >
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-500 text-white">
+            <Mic className="h-7 w-7" />
+          </span>
+          <span>
+            <span className="block text-lg font-bold text-foreground">Cuéntale a tu bot de tu negocio</span>
+            <span className="block text-base text-muted-foreground">
+              Háblale 2 minutos: qué vendes, tus precios y tu horario. Él se encarga del resto.
+            </span>
+          </span>
+        </Link>
+      )}
 
       {/* Payment success banner — visible even while loading */}
       {paymentSuccess && (
