@@ -13,9 +13,12 @@ siguiente confirmación).
 import base64
 import hashlib
 import hmac
+import logging
 import uuid
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Separa estas firmas de cualquier otro HMAC hecho con la misma SECRET_KEY
 # (ej. el state de OAuth de Google Calendar en appointments.py), para que una
@@ -90,6 +93,8 @@ def promo_footer(contact_id: uuid.UUID | None, campaign_id: uuid.UUID | None) ->
 # WhatsApp se gastan, y ahí el link no salía nunca. Una vez al día por
 # cliente, al final de una respuesta del bot (mismo mensaje, sin costo extra):
 # en su 3er mensaje del día, o antes si pregunta precios o el catálogo.
+# Solo cuando el negocio ya va cerca de lo gratis de Meta
+# (whatsapp_near_free_limit): antes de eso no ahorra nada y es un paso extra.
 INVITE_AFTER_MESSAGES = 3
 _INVITE_TTL_SECONDS = 2 * 24 * 3600
 _SHOPPING_WORDS = (
@@ -124,3 +129,48 @@ async def maybe_portal_invite(redis, contact_id: uuid.UUID | None, customer_text
     except Exception:
         return ""
     return portal_invite_line(contact_id) if first_today else ""
+
+
+_REPLIES_CACHE_SECONDS = 600
+
+
+async def whatsapp_replies_this_month(db, redis, advertiser_id: uuid.UUID) -> int:
+    """Respuestas por WhatsApp de este negocio en el mes (las que Meta cuenta
+    como mensajes de servicio: salientes, sin campaña). Se guarda 10 minutos
+    en Redis para no contar en cada mensaje."""
+    from datetime import datetime, timezone
+
+    from sqlalchemy import func, select
+
+    from app.models.message import Message
+
+    now = datetime.now(timezone.utc)
+    key = f"wa_replies_month:{advertiser_id}:{now:%Y-%m}"
+    if redis is not None:
+        try:
+            cached = await redis.get(key)
+            if cached is not None:
+                return int(cached)
+        except Exception:
+            logger.debug("[PORTAL] replies cache read failed", exc_info=True)
+    first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    count = (await db.execute(
+        select(func.count()).where(
+            Message.advertiser_id == advertiser_id,
+            Message.direction == "outbound",
+            Message.channel.is_(None),
+            Message.campaign_id.is_(None),
+            Message.created_at >= first_of_month,
+        )
+    )).scalar_one()
+    if redis is not None:
+        try:
+            await redis.set(key, str(count), ex=_REPLIES_CACHE_SECONDS)
+        except Exception:
+            logger.debug("[PORTAL] replies cache write failed", exc_info=True)
+    return count
+
+
+async def whatsapp_near_free_limit(db, redis, advertiser_id: uuid.UUID) -> bool:
+    return await whatsapp_replies_this_month(db, redis, advertiser_id) >= settings.PORTAL_INVITE_FROM_WA_REPLIES
+

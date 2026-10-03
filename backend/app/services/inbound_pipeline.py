@@ -55,7 +55,11 @@ from app.services.lead_score import calculate_lead_score
 from app.services.owner_question_service import escalate_to_owner
 from app.services.owner_question_service import owner_number as get_owner_number
 from app.services.platform_whatsapp import platform_enabled
-from app.services.portal_service import maybe_portal_invite, portal_footer
+from app.services.portal_service import (
+    maybe_portal_invite,
+    portal_footer,
+    whatsapp_near_free_limit,
+)
 from app.services.rag_service import answer_with_rag
 from app.services.realtime import publish_conversation_event
 from app.services.template_lookup import get_template
@@ -1196,11 +1200,15 @@ async def process_inbound_message(
             logger.warning("[CLOSER] build_closer_offer failed", exc_info=True)
 
     # Invitación a seguir en la web (portal del cliente): una vez al día, al
-    # final de una respuesta real del bot — mismo mensaje, sin costo extra.
+    # final de una respuesta real del bot — mismo mensaje, sin costo extra —
+    # y solo si el negocio ya va cerca de los mensajes gratis de Meta.
     if reply and conv.status != "escalated" and not story_ack_reply and not pending_resume and not asked_owner:
-        reply += await maybe_portal_invite(
-            await get_redis_optional(), contact.id, audio_transcription or body_text, reply,
-        )
+        _redis = await get_redis_optional()
+        try:
+            if await whatsapp_near_free_limit(db, _redis, advertiser.id):
+                reply += await maybe_portal_invite(_redis, contact.id, audio_transcription or body_text, reply)
+        except Exception:
+            logger.warning("[PIPELINE] portal invite check failed", exc_info=True)
 
     updated_msgs = conv.messages + [
         {"role": "user", "content": body_text},

@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     # para cuando el dueño no le ha escrito al número central en 24h.
     IARADIO_OWNER_TEMPLATE_NAME: str = "aviso_dueno"
     IARADIO_OWNER_TEMPLATE_LANG: str = "es_MX"
+    # Invitar a los clientes al portal web solo cuando el negocio ya va cerca
+    # de los mensajes de servicio gratis de Meta (1,000 al mes por número,
+    # desde 2026-10-01): antes de eso, pasarlos a la web es fricción sin ahorro.
+    PORTAL_INVITE_FROM_WA_REPLIES: int = 800
 
     # Notificaciones web (Web Push, estándar VAPID) para los clientes que las
     # aceptan en su portal — gratis, a diferencia de WhatsApp. Generar con

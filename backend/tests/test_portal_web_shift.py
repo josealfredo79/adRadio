@@ -154,3 +154,46 @@ class TestPortalVoice:
             res = await portal.portal_speak(request=_request(), token="t", body={"text": "El *corte* cuesta $150."}, db=None)
         assert res.body == b"mp3" and res.media_type == "audio/mpeg"
         assert tts.await_args.args[0] == "El corte cuesta $150."
+
+
+@pytest.mark.asyncio
+async def test_only_whatsapp_bot_replies_count_toward_the_free_limit(monkeypatch):
+    """Antes de acercarse a lo gratis de Meta no se invita a nadie: pasarlos a
+    la web sería un paso extra sin ahorro. Cuentan solo las respuestas por
+    WhatsApp (no campañas, no el chat web)."""
+    from app.models.campaign import Campaign
+
+    await engine.dispose()
+    async with AsyncSessionLocal() as db:
+        user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x")
+        db.add(user)
+        await db.commit()
+        contact = Contact(advertiser_id=user.id, name="Ana", phone=f"+52155{uuid.uuid4().int % 10**8:08d}")
+        campaign = Campaign(advertiser_id=user.id, name="Promo", type="promo", status="completed", message_text="2x1")
+        db.add_all([contact, campaign])
+        await db.flush()
+        for kw in ({}, {}, {"channel": "web"}, {"campaign_id": campaign.id}, {"direction": "inbound"}):
+            db.add(Message(advertiser_id=user.id, contact_id=contact.id, content="x", status="sent",
+                           direction=kw.pop("direction", "outbound"), **kw))
+        await db.commit()
+        uid = user.id
+    try:
+        async with AsyncSessionLocal() as db:
+            assert await ps.whatsapp_replies_this_month(db, None, uid) == 2
+            monkeypatch.setattr(ps.settings, "PORTAL_INVITE_FROM_WA_REPLIES", 3)
+            assert await ps.whatsapp_near_free_limit(db, None, uid) is False
+            monkeypatch.setattr(ps.settings, "PORTAL_INVITE_FROM_WA_REPLIES", 2)
+            assert await ps.whatsapp_near_free_limit(db, None, uid) is True
+            # Con Redis, el conteo se guarda unos minutos.
+            redis = FakeRedis()
+            assert await ps.whatsapp_replies_this_month(db, redis, uid) == 2
+            assert any(k.startswith(f"wa_replies_month:{uid}:") for k in redis.store)
+    finally:
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(Message).where(Message.advertiser_id == uid))
+            await db.execute(delete(Campaign).where(Campaign.advertiser_id == uid))
+            await db.execute(delete(Contact).where(Contact.advertiser_id == uid))
+            await db.execute(delete(User).where(User.id == uid))
+            await db.commit()
+        await engine.dispose()
