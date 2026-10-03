@@ -48,8 +48,9 @@ export default function VoiceDemoSection() {
   const [asked, setAsked] = useState<string[]>([])
   const [error, setError] = useState(false)
   const [typing, setTyping] = useState(false)
-  // Solo se lee una vez: la cara de prueba se elige por la URL (?cara=malla).
-  const [meshFace] = useState(() => new URLSearchParams(window.location.search).get('cara') === 'malla')
+  // La cabeza verde (malla) es la de siempre, igual que en "Habla con IaRadio"
+  // y el portal; ?cara=puntos muestra la versión de puntos.
+  const [meshFace] = useState(() => new URLSearchParams(window.location.search).get('cara') !== 'puntos')
   const [text, setText] = useState('')
   const [seconds, setSeconds] = useState(0)
   const [volume, setVolume] = useState(0)
@@ -276,7 +277,7 @@ export default function VoiceDemoSection() {
             </button>
             {/* Rostro de puntos que mueve los labios con la voz real */}
             <div className={`rounded-3xl bg-[#0a0f2e] px-4 pt-2 shadow-inner shadow-black/40 ${full ? 'mt-12 sm:mt-6' : ''}`}>
-              {/* Prueba: ?cara=malla muestra la cabeza sólida con su malla en vez de la de puntos */}
+              {/* Cabeza sólida con su malla; ?cara=puntos muestra la de puntos */}
               {meshFace
                 ? <MeshHead3D mood={mood} volume={volume} getLevel={speaker.level} size={faceSize} />
                 : <PointFace3D mood={mood} volume={volume} getLevel={speaker.level} size={faceSize} />}
