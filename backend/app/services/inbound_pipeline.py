@@ -55,7 +55,7 @@ from app.services.lead_score import calculate_lead_score
 from app.services.owner_question_service import escalate_to_owner
 from app.services.owner_question_service import owner_number as get_owner_number
 from app.services.platform_whatsapp import platform_enabled
-from app.services.portal_service import portal_footer
+from app.services.portal_service import maybe_portal_invite, portal_footer
 from app.services.rag_service import answer_with_rag
 from app.services.realtime import publish_conversation_event
 from app.services.template_lookup import get_template
@@ -1123,6 +1123,7 @@ async def process_inbound_message(
         # arriba, o cae al bot normal abajo.
         reply = "¡Perfecto! 🙌"
 
+    asked_owner = False
     if reply is None:
         # "Déjame preguntarle al dueño": solo con el número central de IaRadio
         # configurado y un número del dueño a dónde escribirle.
@@ -1147,6 +1148,7 @@ async def process_inbound_message(
             )
             owner_question = parse_owner_question(reply, fallback_question=body_text) if can_ask_owner else None
             if owner_question:
+                asked_owner = True
                 reply = await escalate_to_owner(
                     db,
                     advertiser=advertiser,
@@ -1192,6 +1194,13 @@ async def process_inbound_message(
                 reply = f"{reply}\n\n{offer_text}"
         except Exception:
             logger.warning("[CLOSER] build_closer_offer failed", exc_info=True)
+
+    # Invitación a seguir en la web (portal del cliente): una vez al día, al
+    # final de una respuesta real del bot — mismo mensaje, sin costo extra.
+    if reply and conv.status != "escalated" and not story_ack_reply and not pending_resume and not asked_owner:
+        reply += await maybe_portal_invite(
+            await get_redis_optional(), contact.id, audio_transcription or body_text, reply,
+        )
 
     updated_msgs = conv.messages + [
         {"role": "user", "content": body_text},

@@ -153,6 +153,23 @@ async def widget_chat(
     if redis:
         await redis.setex(redis_key, CHAT_REDIS_TTL, json.dumps(history))
 
+    if contact is not None:
+        # Cliente que entró desde su portal (/c/...): la plática queda en su
+        # historial (el dueño la ve en el Inbox) marcada como "web" — cada
+        # respuesta aquí es un mensaje de WhatsApp que no se pagó.
+        db.add(Message(advertiser_id=user.id, contact_id=contact.id, direction="inbound",
+                       content=message, status="delivered", channel="web"))
+        db.add(Message(advertiser_id=user.id, contact_id=contact.id, direction="outbound",
+                       content=reply, status="delivered", channel="web"))
+        try:
+            await db.commit()
+            from app.services.realtime import publish_conversation_event
+
+            await publish_conversation_event(user.id, {"type": "message", "contact_id": str(contact.id)})
+        except Exception:
+            await db.rollback()
+            logger.warning("[WIDGET-CHAT] Could not save web chat turn for contact=%s", contact.id, exc_info=True)
+
     from app.services.product_card_service import extract_product_cards
     try:
         cards = await extract_product_cards(reply, db)

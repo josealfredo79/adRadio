@@ -83,3 +83,44 @@ def promo_footer(contact_id: uuid.UUID | None, campaign_id: uuid.UUID | None) ->
     if contact_id is None or campaign_id is None or not settings.SECRET_KEY:
         return ""
     return f"\n\n👉 Ve la promo completa y apártala aquí: {promo_url(contact_id, campaign_id)}"
+
+
+# ─── Invitación a seguir la plática en la web ────────────────────────────────
+# En la plática normal (precios, catálogo, horario) es donde más mensajes de
+# WhatsApp se gastan, y ahí el link no salía nunca. Una vez al día por
+# cliente, al final de una respuesta del bot (mismo mensaje, sin costo extra):
+# en su 3er mensaje del día, o antes si pregunta precios o el catálogo.
+INVITE_AFTER_MESSAGES = 3
+_INVITE_TTL_SECONDS = 2 * 24 * 3600
+_SHOPPING_WORDS = (
+    "precio", "precios", "cuanto", "cuánto", "cuesta", "cuestan", "catalogo", "catálogo",
+    "menu", "menú", "que tienen", "qué tienen", "que venden", "qué venden", "productos",
+    "servicios", "promocion", "promoción", "promociones",
+)
+
+
+def portal_invite_line(contact_id: uuid.UUID) -> str:
+    return f"\n\n💬 ¿Seguimos por aquí? Platica conmigo en la web, con fotos y precios: {portal_url(contact_id)}"
+
+
+async def maybe_portal_invite(redis, contact_id: uuid.UUID | None, customer_text: str, reply: str) -> str:
+    """La línea de invitación, o "" si hoy ya se le mandó, todavía no toca, o
+    la respuesta ya trae su link (confirmaciones de cita/pedido)."""
+    if redis is None or contact_id is None or not settings.SECRET_KEY or "/c/" in reply:
+        return ""
+    from datetime import datetime
+
+    from app.services.availability_service import TZ
+
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    try:
+        count = await redis.incr(f"portal_invite_count:{contact_id}:{today}")
+        if count == 1:
+            await redis.expire(f"portal_invite_count:{contact_id}:{today}", _INVITE_TTL_SECONDS)
+        text = (customer_text or "").lower()
+        if count < INVITE_AFTER_MESSAGES and not any(w in text for w in _SHOPPING_WORDS):
+            return ""
+        first_today = await redis.set(f"portal_invited:{contact_id}:{today}", "1", nx=True, ex=_INVITE_TTL_SECONDS)
+    except Exception:
+        return ""
+    return portal_invite_line(contact_id) if first_today else ""

@@ -22,7 +22,9 @@ function readMuted(): boolean {
 
 // `publicDemo`: la carita de la landing (sin cuenta). Ese endpoint solo
 // pronuncia frases firmadas por el servidor; sin firma, voz del navegador.
-export function useSpeaker({ publicDemo = false }: { publicDemo?: boolean } = {}) {
+// `endpoint`: otra ruta que convierte texto en voz (ej. el chat del portal
+// del cliente, /public/portal/{token}/speak).
+export function useSpeaker({ publicDemo = false, endpoint }: { publicDemo?: boolean; endpoint?: string } = {}) {
   const [speaking, setSpeaking] = useState(false)
   const [muted, setMutedState] = useState(readMuted)
   const audio = useRef<HTMLAudioElement | null>(null)
@@ -125,10 +127,12 @@ export function useSpeaker({ publicDemo = false }: { publicDemo?: boolean } = {}
     const mine = token.current
     setSpeaking(true)
     try {
-      if (publicDemo && !sig) throw new Error('frase sin firma')
-      const { data } = publicDemo
-        ? await api.post('/public/voice-demo/speak', { text, sig }, { responseType: 'blob' })
-        : await api.post('/voice-setup/speak', { text }, { responseType: 'blob' })
+      if (publicDemo && !sig && !endpoint) throw new Error('frase sin firma')
+      const { data } = endpoint
+        ? await api.post(endpoint, { text }, { responseType: 'blob' })
+        : publicDemo
+          ? await api.post('/public/voice-demo/speak', { text, sig }, { responseType: 'blob' })
+          : await api.post('/voice-setup/speak', { text }, { responseType: 'blob' })
       if (mine !== token.current) return
       if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
       objectUrl.current = URL.createObjectURL(data as Blob)
@@ -140,7 +144,7 @@ export function useSpeaker({ publicDemo = false }: { publicDemo?: boolean } = {}
     } catch {
       if (mine === token.current) browserVoice(text, mine)
     }
-  }, [stop, publicDemo])
+  }, [stop, publicDemo, endpoint])
 
   const setMuted = useCallback((value: boolean) => {
     setMutedState(value)

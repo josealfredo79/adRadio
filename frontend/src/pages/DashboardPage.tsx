@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic } from 'lucide-react'
+import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic, Globe } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
 import { loadDemoDraft } from '@/lib/demoDraft'
@@ -23,6 +23,8 @@ interface DashboardData {
   campaigns_active: number
   automations_active: number
   messages_sent_this_month: number
+  /** Respuestas en el chat web del portal: WhatsApp que no se pagó */
+  web_replies_this_month?: number
   messages_remaining: number
   plan: string
   subscription_status: string
@@ -103,11 +105,18 @@ export default function DashboardPage() {
       bg: 'bg-orange-50 dark:bg-orange-950/30',
     },
     {
-      label: 'Mensajes este mes',
+      label: 'Mensajes de WhatsApp este mes',
       value: data?.messages_sent_this_month ?? 0,
       icon: MessageSquare,
       color: 'text-green-500 dark:text-green-400',
       bg: 'bg-green-50 dark:bg-green-950/30',
+    },
+    {
+      label: 'Respuestas por la web',
+      value: data?.web_replies_this_month ?? 0,
+      icon: Globe,
+      color: 'text-emerald-500 dark:text-emerald-400',
+      bg: 'bg-emerald-50 dark:bg-emerald-950/30',
     },
     {
       label: 'Mensajes restantes',
@@ -215,8 +224,20 @@ export default function DashboardPage() {
             </p>
           </div>
 
+          {/* Ahorro: cada respuesta por la web es un WhatsApp que no se pagó */}
+          {(data?.web_replies_this_month ?? 0) > 0 && (
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+              <Globe className="h-6 w-6 shrink-0 text-emerald-600" />
+              <p className="text-sm text-foreground">
+                Este mes tus clientes platicaron por la web y el bot les contestó{' '}
+                <strong>{formatNumber(data?.web_replies_this_month ?? 0)} veces</strong> sin usar WhatsApp:{' '}
+                son mensajes que <strong>no te cobró Meta</strong>.
+              </p>
+            </div>
+          )}
+
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {kpis.map(({ label, value, icon: Icon, color, bg }) => (
               <div key={label} className="rounded-xl bg-card p-5 shadow-sm border border-border">
                 <div className="flex items-center justify-between">

@@ -9,7 +9,16 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import delete, select
@@ -497,3 +506,49 @@ async def portal_manifest(request: Request, token: str, db: AsyncSession = Depen
         },
         media_type="application/manifest+json",
     )
+
+
+# ─── Platicar con voz en el chat del portal ──────────────────────────────────
+# Para que la web sea más cómoda que WhatsApp: el cliente habla en vez de
+# escribir y el bot le contesta en voz alta. El link del portal es la
+# credencial (igual que el resto de este archivo) y hay límites por minuto.
+PORTAL_AUDIO_MAX_BYTES = 2 * 1024 * 1024  # ~1 minuto de voz comprimida
+PORTAL_SPEAK_MAX_CHARS = 600
+
+
+@router.post("/{token}/listen")
+@limiter.limit("10/minute")
+async def portal_listen(
+    request: Request,
+    token: str,
+    audio: UploadFile | None = File(None),
+    text: str | None = Form(None),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Audio del cliente → texto (Whisper). El texto luego va por el mismo
+    chat (/widget/chat) que si lo hubiera escrito."""
+    from app.api.v1.voice_setup import read_transcript
+
+    await _resolve(db, token)
+    transcript = await read_transcript(audio, text, PORTAL_AUDIO_MAX_BYTES, 500, "1 minuto")
+    return {"transcript": transcript[:500]}
+
+
+@router.post("/{token}/speak")
+@limiter.limit("20/minute")
+async def portal_speak(request: Request, token: str, body: dict, db: AsyncSession = Depends(get_db)) -> Response:
+    """La respuesta del bot dicha en voz alta (edge-tts, voz mexicana, sin
+    costo). Si falla, el navegador usa su propia voz."""
+    from app.services.radio.tts import _tts_edge
+
+    await _resolve(db, token)
+    text = " ".join(str(body.get("text") or "").replace("*", "").split())[:PORTAL_SPEAK_MAX_CHARS]
+    if not text:
+        raise HTTPException(status_code=400, detail="Nada que decir")
+    try:
+        audio = await _tts_edge(text, "es-MX-DaliaNeural", rate="+0%", pitch="+0Hz")
+    except Exception:
+        logger.warning("[PORTAL] TTS failed", exc_info=True)
+        raise HTTPException(status_code=503, detail="Voz no disponible")
+    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=3600"})
+

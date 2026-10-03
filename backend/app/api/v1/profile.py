@@ -321,6 +321,17 @@ async def dashboard(
             Message.advertiser_id == current_user.id,
             Message.direction == "outbound",
             Message.created_at >= first_of_month,
+            Message.channel.is_(None),  # WhatsApp; el chat web va aparte
+        )
+    )
+    # Respuestas que se dieron en el chat web del portal: cada una es un
+    # mensaje de WhatsApp que no se pagó (Meta cobra desde 2026-10-01).
+    web_replies = await db.execute(
+        select(func.count()).where(
+            Message.advertiser_id == current_user.id,
+            Message.direction == "outbound",
+            Message.created_at >= first_of_month,
+            Message.channel == "web",
         )
     )
 
@@ -420,6 +431,7 @@ async def dashboard(
         "campaigns_active": campaigns_active.scalar_one(),
         "automations_active": automations_active.scalar_one(),
         "messages_sent_this_month": messages_sent.scalar_one(),
+        "web_replies_this_month": web_replies.scalar_one(),
         "messages_remaining": current_user.messages_remaining,
         "plan": current_user.current_plan,
         "subscription_status": current_user.subscription_status,
