@@ -189,7 +189,9 @@ async def handle_owner_command(
     photo = photo_url or state.pop("photo", None)
     if photo:
         message = f"{text}\n[Foto adjunta: {photo}]"
-    result = await handle_chat(db, owner, message, state["history"], channel="voz" if voice else "whatsapp")
+    result = await handle_chat(
+        db, owner, message, state["history"], channel="voz" if voice else "whatsapp", attached_photo=photo,
+    )
     reply = result.get("reply") or "Listo."
     state["history"] += [{"role": "user", "content": text}, {"role": "assistant", "content": reply}]
 

@@ -974,9 +974,20 @@ async def _phrase_confirmed_result(user: User, tool_name: str, data: dict, chann
 
 # ─── Entradas públicas ─────────────────────────────────────────────────────────
 
+_PHOTO_TOOLS = {"create_product", "update_product"}
+
+
 async def handle_chat(
-    db: AsyncSession, user: User, message: str, history: list[dict], channel: str = "panel"
+    db: AsyncSession,
+    user: User,
+    message: str,
+    history: list[dict],
+    channel: str = "panel",
+    attached_photo: str | None = None,
 ) -> dict:
+    """`attached_photo`: foto que el dueño mandó con este mensaje. Si con ella
+    se crea o cambia un producto, se le pone aunque el modelo no haya copiado
+    la URL a la herramienta (pasó en producción: el producto quedó sin foto)."""
     client = _get_client()
     system = _build_system_prompt(user, channel)
 
@@ -1024,6 +1035,8 @@ async def handle_chat(
             args = block.input or {}
 
             if tool_name in CONFIRM_TOOLS:
+                if attached_photo and tool_name in _PHOTO_TOOLS and not args.get("photo_url"):
+                    args = {**args, "photo_url": attached_photo}
                 summary, resolved_args, error = await _preview_confirm_tool(db, user, tool_name, args)
                 if error:
                     tool_results.append(_tool_result_block(block.id, {"error": error}, is_error=True))

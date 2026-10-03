@@ -186,9 +186,10 @@ async def voice(
     message = transcript
     # Foto que tomó con el botón de la cámara (POST /copilot/photo): va con
     # lo que dijo, para que "agrega este producto" sepa cuál es la foto.
-    if photo_url and PHOTO_KEY_PREFIX.format(user_id=current_user.id) in photo_url:
-        message = f"{transcript}\n[Foto adjunta: {photo_url}]"
-    result = await handle_chat(db, current_user, message, past, channel="voz")
+    own_photo = photo_url if photo_url and PHOTO_KEY_PREFIX.format(user_id=current_user.id) in photo_url else None
+    if own_photo:
+        message = f"{transcript}\n[Foto adjunta: {own_photo}]"
+    result = await handle_chat(db, current_user, message, past, channel="voz", attached_photo=own_photo)
     return VoiceResponse(transcript=transcript, **result)
 
 

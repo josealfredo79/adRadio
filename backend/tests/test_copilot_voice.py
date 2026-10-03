@@ -114,3 +114,29 @@ async def test_own_photo_goes_with_the_message_and_foreign_ones_do_not():
         await voice(request=_request(), audio=None, text="agrega este", history=None, confirmation_id=None,
                     photo_url="https://evil.example/x.jpg", db=None, current_user=user, redis=None)
         assert chat.await_args.args[2] == "agrega este"
+
+
+class _Block:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+@pytest.mark.asyncio
+async def test_attached_photo_reaches_the_product_even_if_the_model_drops_it():
+    """Pasó en producción (2026-10-02): el modelo llamó create_product sin
+    photo_url y el producto quedó sin la foto que el dueño mandó."""
+    from app.services import copilot_service as cs
+
+    user = _user()
+    photo = f"https://www.iaradio.online/api/v1/radio/audio/products/{user.id}/vaso.jpg"
+    response = _Block(content=[_Block(type="tool_use", id="t1", name="create_product",
+                                      input={"name": "Vaso Rosa", "price": 65})])
+    client = _Block(messages=_Block(create=AsyncMock(return_value=response)))
+    with patch.object(cs, "_get_client", return_value=client):
+        out = await cs.handle_chat(None, user, f"vaso rosa 65\n[Foto adjunta: {photo}]", [],
+                                   channel="whatsapp", attached_photo=photo)
+        assert out["pending_confirmation"]["args"]["photo_url"] == photo
+        assert "con la foto" in out["pending_confirmation"]["summary"]
+        # Sin foto adjunta no se inventa una.
+        out = await cs.handle_chat(None, user, "vaso rosa 65", [], channel="whatsapp")
+        assert out["pending_confirmation"]["args"]["photo_url"] is None
