@@ -364,8 +364,11 @@ class TestAppointmentStats:
         user_id = await _seed_user(google_calendar_connected=True)
         try:
             now = datetime.now(timezone.utc)
+            # Más tarde hoy (UTC), sin pasarse a mañana: a las 23:xx el viejo
+            # now.replace(hour=23) quedaba en el pasado y el test fallaba de noche.
+            later_today = min(now + timedelta(minutes=30), now.replace(hour=23, minute=59, second=59))
             async with AsyncSessionLocal() as db:
-                db.add(Appointment(advertiser_id=user_id, customer_name="Hoy", service="X", scheduled_at=now.replace(hour=min(now.hour + 1, 23)), status="pending"))
+                db.add(Appointment(advertiser_id=user_id, customer_name="Hoy", service="X", scheduled_at=later_today, status="pending"))
                 db.add(Appointment(advertiser_id=user_id, customer_name="Futura", service="X", scheduled_at=now + timedelta(days=5), status="confirmed"))
                 db.add(Appointment(advertiser_id=user_id, customer_name="Pasada", service="X", scheduled_at=now - timedelta(days=5), status="completed"))
                 await db.commit()
