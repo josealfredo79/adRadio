@@ -58,7 +58,7 @@ export default function VoiceDemoSection() {
   const [volume, setVolume] = useState(0)
   const session = useRef<VoiceSession | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
-  const speaker = useSpeaker({ publicDemo: true })
+  const speaker = useSpeaker({ publicDemo: true, robot: faceKind === 'mascota' })
   const micAvailable = canRecordVoice()
   const question = questions[0] ?? null
 

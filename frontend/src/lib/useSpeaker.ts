@@ -12,6 +12,39 @@ import api from '@/lib/api'
 const MUTE_KEY = 'iaradio-voice-muted'
 const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA='
 
+// Voz de robot para la mascota (Mascot3D): la misma voz del servidor, más
+// aguda (se reproduce más rápido sin conservar el tono), con un zumbido
+// (modulación en anillo mezclada) y un eco metálico corto (filtro peine).
+// Mismos números que las muestras hechas con ffmpeg para escoger el sonido.
+const ROBOT = { rate: 1.12, ringHz: 60, ringMix: 0.3, combMs: 6, feedback: 0.5 }
+
+/** source → [zumbido + eco metálico] → salida. Devuelve la salida. */
+function robotChain(ctx: AudioContext, source: AudioNode): AudioNode {
+  const dry = ctx.createGain()
+  dry.gain.value = 1 - ROBOT.ringMix
+  const ring = ctx.createGain()
+  ring.gain.value = 0
+  const osc = ctx.createOscillator()
+  osc.frequency.value = ROBOT.ringHz
+  const depth = ctx.createGain()
+  depth.gain.value = ROBOT.ringMix
+  osc.connect(depth).connect(ring.gain)
+  osc.start()
+  const sum = ctx.createGain()
+  source.connect(dry).connect(sum)
+  source.connect(ring).connect(sum)
+  const delay = ctx.createDelay(0.05)
+  delay.delayTime.value = ROBOT.combMs / 1000
+  const fb = ctx.createGain()
+  fb.gain.value = ROBOT.feedback
+  sum.connect(delay).connect(fb).connect(sum)
+  // Medido con la voz real: así sale al mismo volumen que sin efecto.
+  const out = ctx.createGain()
+  out.gain.value = 1.3
+  sum.connect(out)
+  return out
+}
+
 function readMuted(): boolean {
   try {
     return localStorage.getItem(MUTE_KEY) === '1'
@@ -23,8 +56,8 @@ function readMuted(): boolean {
 // `publicDemo`: la carita de la landing (sin cuenta). Ese endpoint solo
 // pronuncia frases firmadas por el servidor; sin firma, voz del navegador.
 // `endpoint`: otra ruta que convierte texto en voz (ej. el chat del portal
-// del cliente, /public/portal/{token}/speak).
-export function useSpeaker({ publicDemo = false, endpoint }: { publicDemo?: boolean; endpoint?: string } = {}) {
+// del cliente, /public/portal/{token}/speak). `robot`: voz de robot (mascota).
+export function useSpeaker({ publicDemo = false, endpoint, robot = false }: { publicDemo?: boolean; endpoint?: string; robot?: boolean } = {}) {
   const [speaking, setSpeaking] = useState(false)
   const [muted, setMutedState] = useState(readMuted)
   const audio = useRef<HTMLAudioElement | null>(null)
@@ -34,6 +67,8 @@ export function useSpeaker({ publicDemo = false, endpoint }: { publicDemo?: bool
   const analyser = useRef<AnalyserNode | null>(null)
   const levelData = useRef<Uint8Array<ArrayBuffer> | null>(null)
   const browserSpeaking = useRef(false)
+  const robotRef = useRef(robot)
+  robotRef.current = robot
 
   const stop = useCallback(() => {
     token.current += 1
@@ -58,7 +93,8 @@ export function useSpeaker({ publicDemo = false, endpoint }: { publicDemo?: bool
       const ctx = new Ctx()
       const node = ctx.createAnalyser()
       node.fftSize = 512
-      ctx.createMediaElementSource(a).connect(node)
+      const source = ctx.createMediaElementSource(a)
+      ;(robotRef.current ? robotChain(ctx, source) : source).connect(node)
       node.connect(ctx.destination)
       void ctx.resume().catch(() => {})
       analyser.current = node
@@ -113,6 +149,7 @@ export function useSpeaker({ publicDemo = false, endpoint }: { publicDemo?: bool
     u.lang = 'es-MX'
     const voice = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith('es'))
     if (voice) u.voice = voice
+    if (robotRef.current) u.pitch = 1.6
     browserSpeaking.current = true
     u.onend = u.onerror = () => {
       browserSpeaking.current = false
@@ -139,6 +176,9 @@ export function useSpeaker({ publicDemo = false, endpoint }: { publicDemo?: bool
       if (!audio.current) audio.current = new Audio()
       const a = audio.current
       a.src = objectUrl.current
+      // Más rápido sin conservar el tono = más agudo (si no, va normal).
+      a.preservesPitch = !robotRef.current
+      a.playbackRate = robotRef.current ? ROBOT.rate : 1
       a.onended = () => mine === token.current && setSpeaking(false)
       await a.play()
     } catch {
