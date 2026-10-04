@@ -427,8 +427,8 @@ def schedule_campaign(self, campaign_id: str):
 
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.campaign import Campaign
-        from app.models.contact import Contact
         from app.models.user import User
+        from app.services.campaign_reach import is_web_only, recipients_query
         from app.services.messaging_throttle import is_human_hour, next_human_hour_utc
 
         if not is_human_hour(timezone_offset=-6):
@@ -447,7 +447,10 @@ def schedule_campaign(self, campaign_id: str):
 
             adv_result = await db.execute(select(User).where(User.id == campaign.advertiser_id))
             advertiser = adv_result.scalar_one_or_none()
-            if not advertiser or advertiser.messages_remaining <= 0:
+            # Solo por web no gasta mensajes de WhatsApp ni cuenta para el tope
+            # de destinatarios de Meta: esas dos reglas no aplican.
+            web_only = is_web_only(campaign)
+            if not advertiser or (advertiser.messages_remaining <= 0 and not web_only):
                 campaign.status = "paused"
                 log_send_block(
                     db, campaign.advertiser_id, REASON_NO_MESSAGES_REMAINING, campaign_id=campaign.id,
@@ -469,7 +472,7 @@ def schedule_campaign(self, campaign_id: str):
                 return
 
             cap_state = await get_recipient_cap_state(db, advertiser)
-            if cap_state.limit is not None and cap_state.count >= cap_state.limit:
+            if not web_only and cap_state.limit is not None and cap_state.count >= cap_state.limit:
                 campaign.status = "paused"
                 log_send_block(
                     db, campaign.advertiser_id, REASON_RECIPIENT_CAP, campaign_id=campaign.id,
@@ -486,19 +489,7 @@ def schedule_campaign(self, campaign_id: str):
             mode = ab.get("campaign_mode", "regular")
             messages_list: list[str] = ab.get("messages", [campaign.message_text])
 
-            q = select(Contact).where(
-                Contact.advertiser_id == campaign.advertiser_id,
-                Contact.status == "active",
-            )
-            segment_tags = campaign.segment.get("tags", [])
-            specific_ids = campaign.segment.get("specific_contacts", [])
-
-            if specific_ids:
-                q = q.where(Contact.id.in_([uuid.UUID(c) for c in specific_ids]))
-            elif segment_tags:
-                q = q.where(Contact.tags.overlap(segment_tags))
-
-            contacts_result = await db.execute(q)
+            contacts_result = await db.execute(recipients_query(campaign))
             contacts = contacts_result.scalars().all()
 
             campaign.status = "running"

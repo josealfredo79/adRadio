@@ -51,13 +51,17 @@ export function useCampaignMutations(callbacks?: MutationCallbacks) {
   })
 
   const resumeMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/campaigns/${id}/resume`),
-    onSuccess: () => {
+    // webOnly: solo como notificación web (gratis), sin WhatsApp.
+    mutationFn: ({ id, webOnly = false }: { id: string; webOnly?: boolean }) =>
+      api.post(`/campaigns/${id}/resume`, { web_only: webOnly }),
+    onSuccess: (_data, { webOnly }) => {
       qc.invalidateQueries({ queryKey: ['campaigns'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       toast({
         title: 'Campaña iniciada',
-        description: 'El envío ha comenzado. Puede tomar varios minutos en completarse.',
+        description: webOnly
+          ? 'Se está mandando como notificación web, gratis. No se usa WhatsApp.'
+          : 'El envío ha comenzado. Puede tomar varios minutos en completarse.',
         variant: 'success',
       })
     },

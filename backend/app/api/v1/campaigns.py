@@ -235,15 +235,44 @@ async def pause_campaign(
     return out
 
 
+class ResumeBody(BaseModel):
+    # True = mandarla solo como notificación web (gratis) a quien las activó
+    # en su portal; a los demás no les llega nada por WhatsApp.
+    web_only: bool = False
+
+
+@router.get("/{campaign_id}/reach")
+async def campaign_reach_preview(
+    campaign_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Antes de enviar: cuántos la recibirían gratis por web y cuántos por
+    WhatsApp, y cuánto cobraría Meta (aprox.)."""
+    from app.services.campaign_reach import campaign_reach
+
+    campaign = (await db.execute(
+        select(Campaign).where(Campaign.id == campaign_id, Campaign.advertiser_id == current_user.id)
+    )).scalar_one_or_none()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaña no encontrada")
+    reach = await campaign_reach(db, campaign)
+    await db.rollback()  # _is_contact_active puede tocar contactos; la vista previa no guarda nada
+    return reach
+
+
 @router.post("/{campaign_id}/resume")
 async def resume_campaign(
     campaign_id: uuid.UUID,
     request: Request,
+    body: ResumeBody | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _: None = Depends(idempotent_post),
     redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> dict[str, str]:
+    from app.services.campaign_reach import campaign_reach, supports_web
+
     result = await db.execute(
         select(Campaign).where(
             Campaign.id == campaign_id,
@@ -253,6 +282,15 @@ async def resume_campaign(
     campaign = result.scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaña no encontrada")
+    web_only = bool(body and body.web_only)
+    if web_only:
+        if not supports_web(campaign):
+            raise HTTPException(status_code=400, detail="Las campañas de radio y Voces del Barrio solo se pueden mandar por WhatsApp")
+        if (await campaign_reach(db, campaign))["web"] == 0:
+            raise HTTPException(
+                status_code=409,
+                detail="Ninguno de estos clientes tiene activadas las notificaciones en su portal todavía",
+            )
     mode = (campaign.ab_test or {}).get("campaign_mode", "regular")
     try:
         check_content_complete(campaign)
@@ -269,10 +307,14 @@ async def resume_campaign(
     advertiser = adv_res.scalar_one_or_none()
     if advertiser:
         from app.services.send_block_explain import preflight_campaign_send
-        blocked = await preflight_campaign_send(db, campaign, advertiser)
+        blocked = await preflight_campaign_send(db, campaign, advertiser, web_only=web_only)
         if blocked:
             raise HTTPException(status_code=409, detail=blocked)
 
+    # Se guarda en la campaña para que el envío (que corre aparte) lo respete;
+    # sin web_only se quita, por si antes se mandó así.
+    ab = {k: v for k, v in (campaign.ab_test or {}).items() if k != "web_only"}
+    campaign.ab_test = {**ab, "web_only": True} if web_only else ab
     campaign.status = "running"
     try:
         await db.commit()
@@ -285,6 +327,7 @@ async def resume_campaign(
         "campaign_id": str(campaign.id),
         "type": campaign.type,
         "mode": mode,
+        "web_only": web_only,
     })
     out = {"message": "Campaña reanudada"}
     await store_idempotency_response(request, redis, out)

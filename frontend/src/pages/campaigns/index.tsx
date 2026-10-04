@@ -17,6 +17,7 @@ import { CreateCampaignModal } from './components/CreateCampaignModal'
 import { ParrillaModal } from './components/ParrillaModal'
 import { AnalyticsModal } from './components/AnalyticsModal'
 import { VocesDetailModal } from './components/VocesDetailModal'
+import { SendCampaignModal } from './components/SendCampaignModal'
 
 export default function CampaignsPage() {
   const { user: currentUser } = useAuth()
@@ -28,6 +29,8 @@ export default function CampaignsPage() {
   const [vocesDetailId, setVocesDetailId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [resumingId, setResumingId] = useState<string | null>(null)
+  // Campaña a punto de enviarse: primero se muestra a quién le llega y por dónde.
+  const [sendId, setSendId] = useState<string | null>(null)
   const [pausingId, setPausingId] = useState<string | null>(null)
 
   const formState = useCampaignForm()
@@ -100,6 +103,7 @@ export default function CampaignsPage() {
 
   const analyticsTarget = campaigns?.find((c) => c.id === analyticsId)
   const vocesDetailTarget = campaigns?.find((c) => c.id === vocesDetailId)
+  const sendTarget = campaigns?.find((c) => c.id === sendId)
 
   return (
     <>
@@ -154,12 +158,7 @@ export default function CampaignsPage() {
                       onSettled: () => setPausingId(null),
                     })
                   }}
-                  onResume={(id) => {
-                    setResumingId(id)
-                    mutations.resumeMutation.mutate(id, {
-                      onSettled: () => setResumingId(null),
-                    })
-                  }}
+                  onResume={(id) => setSendId(id)}
                   onDelete={(id) => mutations.deleteMutation.mutate(id)}
                   resumingId={resumingId}
                   pausingId={pausingId}
@@ -203,6 +202,21 @@ export default function CampaignsPage() {
         <AnalyticsModal
           campaign={analyticsTarget}
           onClose={() => setAnalyticsId(null)}
+        />
+      )}
+
+      {sendTarget && (
+        <SendCampaignModal
+          campaign={sendTarget}
+          sending={resumingId === sendTarget.id}
+          onClose={() => setSendId(null)}
+          onSend={(webOnly) => {
+            setResumingId(sendTarget.id)
+            mutations.resumeMutation.mutate({ id: sendTarget.id, webOnly }, {
+              onSuccess: () => setSendId(null),
+              onSettled: () => setResumingId(null),
+            })
+          }}
         />
       )}
 

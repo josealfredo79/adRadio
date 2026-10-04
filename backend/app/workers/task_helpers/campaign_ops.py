@@ -18,6 +18,7 @@ from app.models.send_block_log import (
     REASON_NO_UTILITY_TEMPLATE,
     REASON_RECIPIENT_CAP,
 )
+from app.services.campaign_reach import is_web_only
 from app.services.portal_service import promo_footer
 from app.services.send_block_log_service import log_send_block
 from app.services.web_push import contacts_with_push
@@ -463,6 +464,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     charged = 0
     push_contacts = await contacts_with_push(db, [c.id for c in contacts])
     pushed_count = 0
+    web_only = is_web_only(campaign)
 
     for idx_b, contact in enumerate(contacts):
         if (
@@ -471,6 +473,11 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             and await _push_campaign(db, campaign, advertiser, contact, ab)
         ):
             pushed_count += 1
+            continue
+        if web_only:
+            # "Solo por web": quien no tiene notificaciones no recibe nada por
+            # WhatsApp (ni se gasta saldo ni se le cobra al negocio).
+            skipped_count += 1
             continue
         if advertiser.messages_remaining - charged <= 0:
             if push_contacts:
@@ -722,6 +729,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     charged = 0
     push_contacts = await contacts_with_push(db, [c.id for c in contacts])
     pushed_count = 0
+    web_only = is_web_only(campaign)
 
     for i, contact in enumerate(contacts):
         if (
@@ -730,6 +738,11 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             and await _push_campaign(db, campaign, advertiser, contact, ab)
         ):
             pushed_count += 1
+            continue
+        if web_only:
+            # "Solo por web": quien no tiene notificaciones no recibe nada por
+            # WhatsApp (ni se gasta saldo ni se le cobra al negocio).
+            skipped_count += 1
             continue
         if advertiser.messages_remaining - charged <= 0:
             if push_contacts:
