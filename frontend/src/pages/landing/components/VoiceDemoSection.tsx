@@ -49,10 +49,9 @@ export default function VoiceDemoSection() {
   const [asked, setAsked] = useState<string[]>([])
   const [error, setError] = useState(false)
   const [typing, setTyping] = useState(false)
-  // La cabeza verde (malla) es la de siempre, igual que en "Habla con IaRadio"
-  // y el portal; ?cara=puntos muestra la versión de puntos y ?cara=mascota el
-  // radiecito.
-  const [faceKind] = useState(() => new URLSearchParams(window.location.search).get('cara'))
+  // La mascota (radiecito con voz de robot) es la de siempre en la landing;
+  // ?cara=malla muestra la cabeza verde y ?cara=puntos la de puntos.
+  const [faceKind] = useState(() => new URLSearchParams(window.location.search).get('cara') ?? 'mascota')
   const [text, setText] = useState('')
   const [seconds, setSeconds] = useState(0)
   const [volume, setVolume] = useState(0)
@@ -277,9 +276,8 @@ export default function VoiceDemoSection() {
             >
               {speaker.muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
             </button>
-            {/* Rostro de puntos que mueve los labios con la voz real */}
+            {/* La cara que mueve la boca con la voz real */}
             <div className={`rounded-3xl bg-[#0a0f2e] px-4 pt-2 shadow-inner shadow-black/40 ${full ? 'mt-12 sm:mt-6' : ''}`}>
-              {/* Cabeza sólida con su malla; ?cara=puntos muestra la de puntos */}
               {faceKind === 'mascota'
                 ? <Mascot3D mood={mood} volume={volume} getLevel={speaker.level} size={faceSize} />
                 : faceKind === 'puntos'
