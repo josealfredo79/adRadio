@@ -5,6 +5,7 @@ import api, { getApiError } from '@/lib/api'
 import { type FaceMood } from '@/components/BotFace'
 import PointFace3D from '@/components/PointFace3D'
 import MeshHead3D from '@/components/MeshHead3D'
+import Mascot3D from '@/components/Mascot3D'
 import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { saveDemoDraft } from '@/lib/demoDraft'
@@ -49,8 +50,9 @@ export default function VoiceDemoSection() {
   const [error, setError] = useState(false)
   const [typing, setTyping] = useState(false)
   // La cabeza verde (malla) es la de siempre, igual que en "Habla con IaRadio"
-  // y el portal; ?cara=puntos muestra la versión de puntos.
-  const [meshFace] = useState(() => new URLSearchParams(window.location.search).get('cara') !== 'puntos')
+  // y el portal; ?cara=puntos muestra la versión de puntos y ?cara=mascota el
+  // radiecito.
+  const [faceKind] = useState(() => new URLSearchParams(window.location.search).get('cara'))
   const [text, setText] = useState('')
   const [seconds, setSeconds] = useState(0)
   const [volume, setVolume] = useState(0)
@@ -278,16 +280,18 @@ export default function VoiceDemoSection() {
             {/* Rostro de puntos que mueve los labios con la voz real */}
             <div className={`rounded-3xl bg-[#0a0f2e] px-4 pt-2 shadow-inner shadow-black/40 ${full ? 'mt-12 sm:mt-6' : ''}`}>
               {/* Cabeza sólida con su malla; ?cara=puntos muestra la de puntos */}
-              {meshFace
-                ? <MeshHead3D mood={mood} volume={volume} getLevel={speaker.level} size={faceSize} />
-                : <PointFace3D mood={mood} volume={volume} getLevel={speaker.level} size={faceSize} />}
+              {faceKind === 'mascota'
+                ? <Mascot3D mood={mood} volume={volume} getLevel={speaker.level} size={faceSize} />
+                : faceKind === 'puntos'
+                  ? <PointFace3D mood={mood} volume={volume} getLevel={speaker.level} size={faceSize} />
+                  : <MeshHead3D mood={mood} volume={volume} getLevel={speaker.level} size={faceSize} />}
               {/* Crédito que pide la licencia CC BY 3.0 del escaneo de la cabeza */}
-              <p className="pb-1.5 text-center text-[10px] text-white/30">
+              {faceKind !== 'mascota' && <p className="pb-1.5 text-center text-[10px] text-white/30">
                 Cabeza 3D: escaneo de{' '}
                 <a href="https://www.ir-ltd.net/" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/60">Lee Perry-Smith</a>
                 {' · '}
                 <a href="https://creativecommons.org/licenses/by/3.0/deed.es" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/60">CC BY 3.0</a>
-              </p>
+              </p>}
             </div>
             <div className={`relative mt-3 w-full rounded-2xl bg-white/10 px-5 py-4 text-left ${full ? 'max-w-xl' : ''}`} aria-live="polite">
               <span className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 bg-white/10" />
