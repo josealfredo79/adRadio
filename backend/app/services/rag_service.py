@@ -35,11 +35,13 @@ async def answer_with_rag(
     ask_owner: bool = False,
     conversation_key: str | None = None,
     redis=None,
+    contact_id: uuid.UUID | None = None,
 ) -> str:
     """
     `conversation_key` (contacto o sesión del chat web) activa la cuota de
     conversaciones del plan (plan_usage.py): se cuenta solo si de verdad se
     llama a la IA, y pasado el límite se contesta con el modelo económico.
+    `contact_id` le da al bot los sellos de ese cliente (loyalty_service.py).
 
     1. Generate embedding for the user query.
     2. Find top-k similar chunks from the advertiser's knowledge base.
@@ -79,11 +81,19 @@ async def answer_with_rag(
 
     user = await _fetch_user(advertiser_id, db)
     bot_instructions = user.bot_instructions if user else None
+    customer_note = ""
+    if user:
+        from app.services.loyalty_service import bot_note
+
+        try:
+            customer_note = await bot_note(db, user, contact_id)
+        except Exception:
+            logger.warning("[RAG] loyalty note failed", exc_info=True)
 
     # Always call Claude if there are custom instructions or KB context. With
     # ask_owner, also with neither: a brand-new business with nothing loaded
     # yet is exactly when the bot must ask the owner instead of greeting.
-    if bot_instructions or context or ask_owner:
+    if bot_instructions or context or ask_owner or customer_note:
         economy = False
         if conversation_key:
             from app.services.plan_usage import register_bot_conversation
@@ -100,6 +110,7 @@ async def answer_with_rag(
             time_gap_note=time_gap_note,
             ask_owner=ask_owner,
             economy=economy,
+            customer_note=customer_note,
         )
 
     # Pure fallback — no instructions, no context

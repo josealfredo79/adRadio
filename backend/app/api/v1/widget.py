@@ -141,6 +141,7 @@ async def widget_chat(
                 bot_personality=user.bot_personality or "amigable y profesional",
                 conversation_key=str(contact.id) if contact else f"session:{session_id}",
                 redis=redis,
+                contact_id=contact.id if contact else None,
             )
         except Exception:
             logger.exception("[WIDGET-CHAT] advertiser=%s", advertiser_id)

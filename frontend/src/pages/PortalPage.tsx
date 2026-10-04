@@ -17,6 +17,7 @@ import {
   Send,
   ShoppingBag,
   Sparkles,
+  Stamp,
   Store,
   Share,
   Square,
@@ -101,7 +102,16 @@ interface PortalPush {
   subscribed_devices: number
 }
 
+interface PortalLoyalty {
+  stamps: number
+  required: number
+  reward: string
+  rewards_ready: number
+  history: { label: string; at: string | null }[]
+}
+
 interface PortalData {
+  loyalty: PortalLoyalty | null
   push: PortalPush
   business: Business
   customer: { first_name: string }
@@ -314,6 +324,8 @@ function PortalHome({
         </p>
       </section>
 
+      {data.loyalty && <LoyaltyCardView loyalty={data.loyalty} color={color} business={business.name} />}
+
       <div className="mt-6 grid grid-cols-3 gap-2">
         <QuickAction theme={theme} color={color} icon={<CalendarDays size={20} />} label="Agendar" onClick={() => onChat('Quiero agendar una cita')} />
         {business.slug ? (
@@ -333,6 +345,7 @@ function PortalHome({
           theme={theme}
           color={color}
           hasUpcoming={data.upcoming_appointments.length > 0}
+          stampGift={!!data.loyalty && !data.loyalty.history.some((h) => h.label === 'Activaste los avisos')}
         />
       )}
 
@@ -664,13 +677,16 @@ function NotifyCard({
   theme,
   color,
   hasUpcoming,
+  stampGift,
 }: {
   token: string
   push: PortalPush
   theme: SiteThemeDef
   color: string
   hasUpcoming: boolean
+  stampGift: boolean
 }) {
+  const qc = useQueryClient()
   const [state, setState] = useState<NotifyState>('loading')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -700,8 +716,10 @@ function NotifyCard({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(push.public_key) as BufferSource,
         }))
-      await api.post(`/public/portal/${token}/push/subscribe`, sub.toJSON())
+      const { data } = await api.post(`/public/portal/${token}/push/subscribe`, sub.toJSON())
       setState('on')
+      // El sello de regalo por activar los avisos: que aparezca ya en la tarjeta.
+      if (data?.stamped) qc.invalidateQueries({ queryKey: ['portal', token] })
     } catch {
       setError('No se pudieron activar. Intenta de nuevo en un momento.')
     } finally {
@@ -726,7 +744,11 @@ function NotifyCard({
 
   if (state === 'loading' || state === 'unsupported') return null
 
-  const pitch = hasUpcoming ? '¿Te aviso un día antes de tu cita?' : '¿Te aviso de promociones y cupones?'
+  const pitch = stampGift
+    ? 'Activa los avisos y gana otro sello de regalo 🎁'
+    : hasUpcoming
+      ? '¿Te aviso un día antes de tu cita?'
+      : '¿Te aviso de promociones y cupones?'
 
   return (
     <Card theme={theme} className="mt-6 p-4">
@@ -786,6 +808,64 @@ function NotifyCard({
         </div>
       </div>
     </Card>
+  )
+}
+
+function LoyaltyCardView({
+  loyalty,
+  color,
+  business,
+}: {
+  loyalty: PortalLoyalty
+  color: string
+  business: string
+}) {
+  const full = loyalty.rewards_ready > 0
+  const missing = loyalty.required - loyalty.stamps
+  // Recién llegó: solo tiene el sello de bienvenida — que se sienta el regalo.
+  const justWelcomed = loyalty.stamps === 1 && loyalty.history[0]?.label === 'Regalo de bienvenida'
+
+  return (
+    <div
+      className="mt-6 rounded-2xl p-5 text-white shadow-lg"
+      style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)`, boxShadow: `0 12px 30px ${color}40` }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Tu tarjeta de cliente</p>
+          <p className="mt-1 text-lg font-bold leading-snug">{loyalty.reward}</p>
+        </div>
+        <Stamp size={22} className="shrink-0 opacity-80" />
+      </div>
+
+      <div className="mt-4 grid grid-cols-5 gap-2.5">
+        {Array.from({ length: loyalty.required }, (_, i) => {
+          const filled = full || i < loyalty.stamps
+          return (
+            <div
+              key={i}
+              className="aspect-square rounded-full flex items-center justify-center"
+              style={
+                filled
+                  ? { background: '#fff', color }
+                  : { border: '2px dashed rgba(255,255,255,0.55)', color: 'rgba(255,255,255,0.7)' }
+              }
+            >
+              {filled ? <Check size={18} strokeWidth={3} /> : <span className="text-xs font-semibold">{i + 1}</span>}
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="mt-4 text-sm font-medium">
+        {full
+          ? `🎁 ¡Llenaste tu tarjeta! Pide tu premio en ${business}.`
+          : justWelcomed
+            ? `🎁 ¡Tu regalo de bienvenida! Ya tienes tu primer sello. Te faltan ${missing}.`
+            : `Te faltan ${missing} ${missing === 1 ? 'sello' : 'sellos'} para tu premio.`}
+      </p>
+      <p className="mt-1 text-xs opacity-80">Ganas un sello con cada cita o pedido.</p>
+    </div>
   )
 }
 

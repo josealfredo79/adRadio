@@ -110,6 +110,7 @@ async def generate_bot_response(
     time_gap_note: str = "",
     ask_owner: bool = False,
     economy: bool = False,
+    customer_note: str = "",
 ) -> str:
     """Generate a RAG-based bot response.
 
@@ -146,6 +147,7 @@ Tu personalidad es: {bot_personality}.
 
 {custom_block}CONTEXTO DEL NEGOCIO (tu única fuente de verdad):
 {advertiser_context}
+{customer_note}
 
 ═══ REGLAS DE RESPUESTA ═══
 

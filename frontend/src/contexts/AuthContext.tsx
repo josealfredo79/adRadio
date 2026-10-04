@@ -32,6 +32,13 @@ interface User {
   landing_sections: string[] | null
   business_hours: Record<string, [string, string] | null> | null
   closer_config: CloserConfig | null
+  loyalty_config: LoyaltyConfig | null
+}
+
+export interface LoyaltyConfig {
+  enabled: boolean
+  stamps_required: number
+  reward: string
 }
 
 export interface CloserConfig {

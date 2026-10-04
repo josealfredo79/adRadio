@@ -193,6 +193,64 @@ async def get_portal_link(
     return {"url": portal_url(contact_id)}
 
 
+async def _own_contact(db: AsyncSession, current_user: User, contact_id: uuid.UUID) -> Contact:
+    contact = (
+        await db.execute(select(Contact).where(Contact.id == contact_id, Contact.advertiser_id == current_user.id))
+    ).scalar_one_or_none()
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Contacto no encontrado")
+    return contact
+
+
+@router.get("/{contact_id}/loyalty")
+async def get_contact_loyalty(
+    contact_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Tarjeta de lealtad del cliente (ver loyalty_service.py). `card` es
+    null si el negocio no tiene tarjeta activa."""
+    from app.services.loyalty_service import get_card
+
+    await _own_contact(db, current_user, contact_id)
+    return {"card": await get_card(db, current_user, contact_id)}
+
+
+@router.post("/{contact_id}/loyalty/stamp")
+async def add_contact_stamp(
+    contact_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Sello a mano — una compra en el mostrador que no pasó por el bot."""
+    from app.services.loyalty_service import add_stamp, get_card, notify_stamp
+
+    await _own_contact(db, current_user, contact_id)
+    if not await add_stamp(db, current_user, contact_id, "manual", uuid.uuid4().hex):
+        raise HTTPException(status_code=409, detail="Activa la tarjeta de lealtad en Configuración")
+    await db.commit()
+    await notify_stamp(db, current_user, contact_id)
+    return {"card": await get_card(db, current_user, contact_id)}
+
+
+@router.post("/{contact_id}/loyalty/redeem")
+async def redeem_contact_reward(
+    contact_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """El dueño le entregó el premio al cliente."""
+    from app.services.loyalty_service import NoRewardReady, get_card, redeem_reward
+
+    await _own_contact(db, current_user, contact_id)
+    try:
+        await redeem_reward(db, current_user, contact_id)
+    except NoRewardReady as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    await db.commit()
+    return {"card": await get_card(db, current_user, contact_id)}
+
+
 @router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_contact(
     contact_id: uuid.UUID,

@@ -86,5 +86,6 @@ class UserOut(BaseModel):
     landing_sections: list[str] | None = None
     business_hours: dict | None = None
     closer_config: dict | None = None
+    loyalty_config: dict | None = None
 
     model_config = {"from_attributes": True}

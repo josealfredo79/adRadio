@@ -154,6 +154,9 @@ class User(Base):
     # {"enabled": bool, "hold_hours": int, "discount_type": str,
     #  "discount_value": number, "label": str, "message": str|None}
     closer_config: Mapped[dict | None] = mapped_column(JSONB)
+    # Tarjeta de lealtad del portal (ver loyalty_service.py):
+    # {"enabled": bool, "stamps_required": int, "reward": str}
+    loyalty_config: Mapped[dict | None] = mapped_column(JSONB)
 
     # Google Calendar OAuth
     google_refresh_token: Mapped[str | None] = mapped_column(Text)

@@ -17,6 +17,7 @@ from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.order import Order
 from app.models.user import User
+from app.services.loyalty_service import add_stamp, notify_stamp, remove_stamp
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,15 @@ async def update_order_state(
     order.state = body.state
     if body.state == "confirmed" and not order.confirmed_at:
         order.confirmed_at = datetime.now(timezone.utc)
+    # Tarjeta de lealtad: pedido confirmado sella; uno cancelado (ej. un
+    # pedido de broma) pierde su sello si aún no se usó en un premio.
+    stamped = False
+    if body.state == "confirmed":
+        stamped = await add_stamp(db, current_user, order.contact_id, "order", str(order.id))
+    else:
+        await remove_stamp(db, order.contact_id, "order", str(order.id))
     await db.commit()
+    if stamped:
+        await notify_stamp(db, current_user, order.contact_id)
     logger.info("Order %s state updated to %s by user %s", order.order_number, body.state, current_user.id)
     return {"id": str(order.id), "state": order.state}

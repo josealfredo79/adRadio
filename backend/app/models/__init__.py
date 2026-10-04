@@ -9,6 +9,7 @@ from app.models.coupon import Coupon
 from app.models.customer_story import CustomerStory
 from app.models.knowledge_base import KnowledgeBase
 from app.models.lab import LabConversation, LabRun
+from app.models.loyalty_stamp import LoyaltyStamp
 from app.models.message import Message
 from app.models.order import Order
 from app.models.owner_question import OwnerQuestion
@@ -36,6 +37,7 @@ __all__ = [
     "KnowledgeBase",
     "LabConversation",
     "LabRun",
+    "LoyaltyStamp",
     "Message",
     "MessageTemplate",
     "Order",

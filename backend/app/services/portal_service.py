@@ -108,9 +108,19 @@ def portal_invite_line(contact_id: uuid.UUID) -> str:
     return f"\n\n💬 ¿Seguimos por aquí? Platica conmigo en la web, con fotos y precios: {portal_url(contact_id)}"
 
 
-async def maybe_portal_invite(redis, contact_id: uuid.UUID | None, customer_text: str, reply: str) -> str:
+def portal_gift_line(contact_id: uuid.UUID) -> str:
+    return f"\n\n🎁 Tienes un regalo de bienvenida en tu tarjeta de cliente: {portal_url(contact_id)}"
+
+
+async def maybe_portal_invite(
+    redis, contact_id: uuid.UUID | None, customer_text: str, reply: str, gift: bool = False
+) -> str:
     """La línea de invitación, o "" si hoy ya se le mandó, todavía no toca, o
-    la respuesta ya trae su link (confirmaciones de cita/pedido)."""
+    la respuesta ya trae su link (confirmaciones de cita/pedido).
+
+    `gift` (el negocio tiene tarjeta de lealtad y este cliente aún no la
+    abre): la invitación es el regalo de bienvenida y sale desde el primer
+    mensaje — un regalo no necesita esperar a que pregunte precios."""
     if redis is None or contact_id is None or not settings.SECRET_KEY or "/c/" in reply:
         return ""
     from datetime import datetime
@@ -123,12 +133,14 @@ async def maybe_portal_invite(redis, contact_id: uuid.UUID | None, customer_text
         if count == 1:
             await redis.expire(f"portal_invite_count:{contact_id}:{today}", _INVITE_TTL_SECONDS)
         text = (customer_text or "").lower()
-        if count < INVITE_AFTER_MESSAGES and not any(w in text for w in _SHOPPING_WORDS):
+        if not gift and count < INVITE_AFTER_MESSAGES and not any(w in text for w in _SHOPPING_WORDS):
             return ""
         first_today = await redis.set(f"portal_invited:{contact_id}:{today}", "1", nx=True, ex=_INVITE_TTL_SECONDS)
     except Exception:
         return ""
-    return portal_invite_line(contact_id) if first_today else ""
+    if not first_today:
+        return ""
+    return portal_gift_line(contact_id) if gift else portal_invite_line(contact_id)
 
 
 _REPLIES_CACHE_SECONDS = 600

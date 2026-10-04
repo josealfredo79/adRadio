@@ -22,6 +22,7 @@ from app.domain.appointment_actions import AppointmentConflictError, check_no_co
 from app.models.appointment import Appointment
 from app.models.user import User
 from app.schemas.appointment import AppointmentCreate, AppointmentOut, AppointmentUpdate
+from app.services.loyalty_service import add_stamp, notify_stamp, remove_stamp
 
 logger = logging.getLogger(__name__)
 
@@ -173,8 +174,16 @@ async def update_appointment(
         except AppointmentConflictError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
 
+    was_completed = appointment.status == "completed"
     for field, value in update_data.items():
         setattr(appointment, field, value)
+
+    # Tarjeta de lealtad: la cita que el dueño marca como completada sella.
+    stamped = False
+    if appointment.status == "completed" and not was_completed:
+        stamped = await add_stamp(db, current_user, appointment.contact_id, "appointment", str(appointment.id))
+    elif was_completed and appointment.status != "completed":
+        await remove_stamp(db, appointment.contact_id, "appointment", str(appointment.id))
 
     # Sync to Google Calendar
     if appointment.google_event_id and current_user.google_refresh_token:
@@ -197,6 +206,8 @@ async def update_appointment(
 
     await db.commit()
     await db.refresh(appointment)
+    if stamped:
+        await notify_stamp(db, current_user, appointment.contact_id)
     return AppointmentOut.model_validate(appointment)
 
 

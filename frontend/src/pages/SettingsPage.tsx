@@ -9,6 +9,7 @@ import WhatsappWizard from '@/components/WhatsappWizard'
 import WhatsappHealthCard from '@/components/WhatsappHealthCard'
 import ReferralCard from '@/components/ReferralCard'
 import CloserCard from '@/components/CloserCard'
+import LoyaltySettingsCard from '@/components/LoyaltySettingsCard'
 
 const CATEGORIES = [
   { value: 'restaurante', label: 'Restaurante / Bar / Taquería' },
@@ -695,6 +696,8 @@ export default function SettingsPage() {
       </div>
 
       <CloserCard />
+
+      <LoyaltySettingsCard />
 
       {/* Subscription */}
       {dashboard && (

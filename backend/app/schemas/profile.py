@@ -30,6 +30,24 @@ class ProfileUpdate(BaseModel):
     landing_sections: list[str] | None = None
     business_hours: dict[str, list[str] | None] | None = None
     closer_config: dict | None = None
+    loyalty_config: dict | None = None
+
+    @field_validator("loyalty_config")
+    @classmethod
+    def validate_loyalty_config(cls, v: dict | None) -> dict | None:
+        if v is None:
+            return None
+        enabled = bool(v.get("enabled", False))
+        try:
+            required = int(v.get("stamps_required", 8) or 8)
+        except (TypeError, ValueError):
+            raise ValueError("stamps_required debe ser un número")
+        if not (3 <= required <= 20):
+            raise ValueError("La tarjeta debe tener entre 3 y 20 sellos")
+        reward = (v.get("reward") or "").strip()[:120] if isinstance(v.get("reward"), str) else ""
+        if enabled and not reward:
+            raise ValueError("Escribe el premio que gana el cliente al llenar su tarjeta")
+        return {"enabled": enabled, "stamps_required": required, "reward": reward}
 
     @field_validator("closer_config")
     @classmethod

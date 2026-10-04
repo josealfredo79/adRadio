@@ -44,6 +44,7 @@ from app.models.push_subscription import PushSubscription
 from app.models.user import User
 from app.services.availability_service import TZ
 from app.services.claude_service import personalize_message
+from app.services.loyalty_service import add_stamp, get_card
 from app.services.portal_service import read_portal_token
 from app.services.web_push import push_enabled
 from app.services.widget_order_service import ORDER_RESUME_WINDOW
@@ -103,6 +104,11 @@ def _appointment_out(a: Appointment, now: datetime) -> dict:
 async def get_portal(request: Request, token: str, db: AsyncSession = Depends(get_db)) -> dict:
     contact, advertiser = await _resolve(db, token)
     now = datetime.now(timezone.utc)
+
+    # Regalo de bienvenida: el primer sello cae al abrir la tarjeta.
+    if await add_stamp(db, advertiser, contact.id, "welcome"):
+        await db.commit()
+    loyalty = await get_card(db, advertiser, contact.id)
 
     appts = (
         await db.execute(
@@ -181,6 +187,7 @@ async def get_portal(request: Request, token: str, db: AsyncSession = Depends(ge
             for o in orders
         ],
         "coupons": [_coupon_out(c) for c in coupons],
+        "loyalty": loyalty,
     }
 
 
@@ -441,8 +448,10 @@ async def push_subscribe(request: Request, token: str, body: dict, db: AsyncSess
         sub.p256dh, sub.auth = p256dh, auth
         sub.failure_count = 0
     sub.user_agent = (request.headers.get("user-agent") or "")[:300] or None
+    # El otro sello de regalo: los avisos web son lo que luego ahorra WhatsApp.
+    stamped = await add_stamp(db, advertiser, contact.id, "push")
     await db.commit()
-    return {"message": "Notificaciones activadas"}
+    return {"message": "Notificaciones activadas", "stamped": stamped}
 
 
 @router.post("/{token}/push/unsubscribe")

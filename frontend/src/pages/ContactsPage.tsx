@@ -5,6 +5,7 @@ import { Users, Plus, Upload, Trash2, Search, Download, Tag, X, Tags, Send, Chec
 import { formatDate } from '@/lib/utils'
 import SEO from '@/components/SEO'
 import PrintButton from '@/components/PrintButton'
+import LoyaltyContactButton from '@/components/LoyaltyContactButton'
 import { useToast } from '@/contexts/ToastContext'
 
 // Copia el link del portal del cliente (/c/:token) — el bot ya lo manda solo
@@ -522,6 +523,7 @@ export default function ContactsPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                       <PortalLinkButton contactId={contact.id} className="text-muted-foreground hover:text-brand-500 transition-colors" />
+                      <LoyaltyContactButton contactId={contact.id} contactName={contact.name} className="text-muted-foreground hover:text-amber-500 transition-colors" />
                       <button
                         onClick={() => {
                           const ids = selectedIds.size > 0 ? Array.from(selectedIds) : [contact.id]
@@ -574,6 +576,7 @@ export default function ContactsPage() {
                             className="rounded border-border bg-background text-brand-500 focus:ring-brand-500"
                           />
                           <PortalLinkButton contactId={contact.id} className="text-muted-foreground hover:text-brand-500 transition-colors p-1" />
+                          <LoyaltyContactButton contactId={contact.id} contactName={contact.name} className="text-muted-foreground hover:text-amber-500 transition-colors p-1" />
                           <button
                             onClick={() => {
                               const ids = selectedIds.size > 0 ? Array.from(selectedIds) : [contact.id]

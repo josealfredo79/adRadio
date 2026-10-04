@@ -858,6 +858,9 @@ async def process_inbound_message(
             pending_order.state = "confirmed"
             pending_order.confirmed_at = datetime.now(timezone.utc)
             await db.flush()
+            from app.services.loyalty_service import add_stamp, stamp_line
+
+            _stamped = await add_stamp(db, advertiser, pending_order.contact_id, "order", str(pending_order.id))
 
             _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_confirmed")
             _oc = {
@@ -876,6 +879,8 @@ async def process_inbound_message(
                 f"💳 {pending_order.payment_method}\n\n"
                 "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
             )
+            if _stamped:
+                order_reply += await stamp_line(db, advertiser, pending_order.contact_id)
             order_reply += portal_footer(pending_order.contact_id)
 
             _tpl_owner = await get_template(db, str(advertiser.id), "Pedido", "order_owner_notify")
@@ -1149,6 +1154,7 @@ async def process_inbound_message(
                 ask_owner=can_ask_owner,
                 conversation_key=str(contact.id),
                 redis=await get_redis_optional(),
+                contact_id=contact.id,
             )
             owner_question = parse_owner_question(reply, fallback_question=body_text) if can_ask_owner else None
             if owner_question:
@@ -1206,7 +1212,10 @@ async def process_inbound_message(
         _redis = await get_redis_optional()
         try:
             if await whatsapp_near_free_limit(db, _redis, advertiser.id):
-                reply += await maybe_portal_invite(_redis, contact.id, audio_transcription or body_text, reply)
+                from app.services.loyalty_service import has_unopened_gift
+
+                gift = await has_unopened_gift(db, advertiser, contact.id)
+                reply += await maybe_portal_invite(_redis, contact.id, audio_transcription or body_text, reply, gift=gift)
         except Exception:
             logger.warning("[PIPELINE] portal invite check failed", exc_info=True)
 
