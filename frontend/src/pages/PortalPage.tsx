@@ -32,8 +32,8 @@ import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 
-// La cabeza que habla solo se descarga si el cliente usa la voz.
-const MeshHead3D = lazy(() => import('@/components/MeshHead3D'))
+// La mascota que habla solo se descarga si el cliente usa la voz.
+const Mascot3D = lazy(() => import('@/components/Mascot3D'))
 
 // Portal del cliente (/c/:token) y página de una promo (/c/:token/promo/:promoId).
 // El token es la credencial (ver backend/app/services/portal_service.py): sin
@@ -959,11 +959,11 @@ function ChatSheet({
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   // Modo voz: el cliente habla en vez de escribir y el bot le contesta en voz
-  // alta, con la cabeza que mueve los labios. Se activa al tocar el micrófono.
+  // alta, con la mascota que mueve la boca (voz de robot). Se activa al tocar el micrófono.
   const [voiceMode, setVoiceMode] = useState(false)
   const [recording, setRecording] = useState(false)
   const recorder = useRef<VoiceSession | null>(null)
-  const speaker = useSpeaker({ endpoint: `/public/portal/${token}/speak` })
+  const speaker = useSpeaker({ endpoint: `/public/portal/${token}/speak`, robot: true })
   const micAvailable = canRecordVoice()
 
   useEffect(() => {
@@ -1069,12 +1069,10 @@ function ChatSheet({
         </div>
 
         {voiceMode && (
-          <div className="flex shrink-0 flex-col items-center bg-[#0a0f2e] pt-1">
+          <div className="flex shrink-0 flex-col items-center bg-[#0a0f2e] pt-1 pb-1">
             <Suspense fallback={<div style={{ height: 150 }} />}>
-              <MeshHead3D mood={mood} getLevel={speaker.level} size={130} />
+              <Mascot3D mood={mood} getLevel={speaker.level} size={130} />
             </Suspense>
-            {/* Crédito que pide la licencia CC BY 3.0 del escaneo de la cabeza */}
-            <p className="pb-1 text-[9px] text-white/30">Cabeza 3D: escaneo de Lee Perry-Smith · CC BY 3.0</p>
           </div>
         )}
 

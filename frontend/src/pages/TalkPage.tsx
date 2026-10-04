@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 import { type FaceMood } from '@/components/BotFace'
-import MeshHead3D from '@/components/MeshHead3D'
+import Mascot3D from '@/components/Mascot3D'
 import { useAuth } from '@/contexts/AuthContext'
 import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 import { useSpeaker } from '@/lib/useSpeaker'
@@ -10,8 +10,8 @@ import { Camera, Check, CheckCircle2, Keyboard, Mic, Square, Volume2, VolumeX, X
 
 // "Habla con IaRadio": el dueño trabaja con IaRadio hablando, sin buscar en el
 // menú. Le pide algo con su voz ("¿qué citas tengo hoy?", "crea un cupón del
-// 10 %"), el Copiloto lo hace y le contesta en voz alta con la cabeza que
-// mueve los labios. Lo importante (campañas, cupones, citas, productos,
+// 10 %"), el Copiloto lo hace y le contesta en voz alta la mascota (el
+// radiecito con voz de robot) moviendo la boca. Lo importante (campañas, cupones, citas, productos,
 // horario) siempre espera su "sí": con la voz o con dos botones grandes. Backend: POST /copilot/voice
 // (api/v1/copilot.py), que transcribe y usa el mismo Copiloto que el chat.
 
@@ -78,7 +78,7 @@ export default function TalkPage() {
   const photoInput = useRef<HTMLInputElement>(null)
   const session = useRef<VoiceSession | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
-  const speaker = useSpeaker()
+  const speaker = useSpeaker({ robot: true })
   const micAvailable = canRecordVoice()
   // En celular un poco más chica, para que el micrófono quede a la vista.
   const [faceSize] = useState(() => (window.innerWidth < 640 ? 190 : 240))
@@ -171,7 +171,7 @@ export default function TalkPage() {
   }
 
   const startRecording = async () => {
-    speaker.unlock() // dentro del toque: iPhone deja hablar a la cabeza después
+    speaker.unlock() // dentro del toque: iPhone deja hablar a la mascota después
     speaker.stop()
     setError(false)
     try {
@@ -251,15 +251,8 @@ export default function TalkPage() {
             {speaker.muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
           </button>
 
-          <div className="rounded-3xl bg-[#0a0f2e] px-3 pt-2">
-            <MeshHead3D mood={mood} getLevel={speaker.level} size={faceSize} />
-            {/* Crédito que pide la licencia CC BY 3.0 del escaneo de la cabeza */}
-            <p className="pb-1.5 text-center text-[10px] text-white/30">
-              Cabeza 3D: escaneo de{' '}
-              <a href="https://www.ir-ltd.net/" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/60">Lee Perry-Smith</a>
-              {' · '}
-              <a href="https://creativecommons.org/licenses/by/3.0/deed.es" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/60">CC BY 3.0</a>
-            </p>
+          <div className="rounded-3xl bg-[#0a0f2e] px-3 pt-2 pb-2">
+            <Mascot3D mood={mood} getLevel={speaker.level} size={faceSize} />
           </div>
 
           {heard && (
