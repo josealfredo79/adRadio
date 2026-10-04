@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getAccessToken } from '@/lib/api'
-import { MessageSquare, User, Clock, Flame, Thermometer, Snowflake, CheckCircle, X, FileText, Search, Send, Bot, BotOff } from 'lucide-react'
+import { MessageSquare, User, Clock, Flame, Thermometer, Snowflake, CheckCircle, X, FileText, Search, Send, Bot, BotOff, Globe } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import SEO from '@/components/SEO'
@@ -66,7 +66,8 @@ interface ConvSummary {
 }
 
 interface ConvDetail extends ConvSummary {
-  messages: { role: string; content: string }[]
+  // channel "web" = chat del portal del cliente; sender "owner" = tú desde aquí.
+  messages: { role: string; content: string; channel?: string; sender?: string }[]
   active_closer_offer: { code: string; expires_at: string } | null
 }
 
@@ -171,10 +172,14 @@ export default function InboxPage() {
     },
   })
 
+  // Por dónde salió tu última respuesta: por la web es gratis; por WhatsApp la cobra Meta.
+  const [sentVia, setSentVia] = useState<'web' | 'whatsapp' | null>(null)
+  useEffect(() => setSentVia(null), [selectedId])
   const replyMutation = useMutation({
     mutationFn: (text: string) =>
-      api.post(`/conversations/${selectedId}/reply`, { text }),
-    onSuccess: () => {
+      api.post(`/conversations/${selectedId}/reply`, { text }).then((r) => r.data as { channel?: 'web' | 'whatsapp' }),
+    onSuccess: (out) => {
+      setSentVia(out.channel ?? 'whatsapp')
       setReplyText('')
       qc.invalidateQueries({ queryKey: ['conversation', selectedId] })
       qc.invalidateQueries({ queryKey: ['conversations', statusFilter] })
@@ -430,15 +435,29 @@ export default function InboxPage() {
                       msg.role === 'assistant' ? 'justify-start' : 'justify-end'
                     )}
                   >
-                    <div
-                      className={cn(
-                        'max-w-[70%] rounded-2xl px-4 py-2.5 text-sm',
-                        msg.role === 'assistant'
-                          ? 'rounded-tl-sm bg-white text-gray-800 shadow-sm dark:bg-gray-800 dark:text-gray-200'
-                          : 'rounded-tr-sm bg-brand-500 text-white'
+                    <div className="max-w-[70%]">
+                      {(msg.channel === 'web' || msg.sender === 'owner') && (
+                        <p
+                          className={cn(
+                            'mb-0.5 flex items-center gap-1 text-[11px] text-gray-400',
+                            msg.role === 'assistant' ? 'justify-start' : 'justify-end'
+                          )}
+                        >
+                          {msg.channel === 'web' && <Globe className="h-3 w-3" />}
+                          {msg.sender === 'owner' ? 'Tú' : msg.role === 'assistant' ? 'Bot' : 'Cliente'}
+                          {msg.channel === 'web' ? ' · por la web' : ' · por WhatsApp'}
+                        </p>
                       )}
-                    >
-                      <MediaMessage content={msg.content} />
+                      <div
+                        className={cn(
+                          'rounded-2xl px-4 py-2.5 text-sm',
+                          msg.role === 'assistant'
+                            ? 'rounded-tl-sm bg-white text-gray-800 shadow-sm dark:bg-gray-800 dark:text-gray-200'
+                            : 'rounded-tr-sm bg-brand-500 text-white'
+                        )}
+                      >
+                        <MediaMessage content={msg.content} />
+                      </div>
                     </div>
                   </div>
                 ))
@@ -475,6 +494,13 @@ export default function InboxPage() {
                 </div>
                 {replyMutation.isError && (
                   <p className="mt-1 text-xs text-red-500">Error al enviar. Intenta de nuevo.</p>
+                )}
+                {sentVia && !replyMutation.isError && (
+                  <p className="mt-1 text-xs text-gray-400">
+                    {sentVia === 'web'
+                      ? '✓ Le llegó por la web — gratis, sin WhatsApp.'
+                      : '✓ Enviado por WhatsApp.'}
+                  </p>
                 )}
               </div>
             )}

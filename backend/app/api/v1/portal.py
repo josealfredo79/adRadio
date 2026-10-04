@@ -6,6 +6,7 @@ pedidos ni cupones de otro, aunque sean del mismo negocio.
 """
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -289,6 +290,49 @@ async def _promo_context(db: AsyncSession, contact: Contact, advertiser: User, p
         expires = coupon.expires_at.astimezone(TZ).strftime("%d/%m")
         text += f" Su cupón personal es {coupon.code} ({coupon.description or 'descuento'}), vence el {expires}."
     return text + ")"
+
+
+# Mensajes guardados con prefijo interno ("[AUDIO] url", "[BANNER] url",
+# "[PUSH] …", "[PENDING:banner] {…}") — no son plática que el cliente lea.
+_INTERNAL_MESSAGE = re.compile(r"^\[[A-Z_]+(:[a-z_]+)?\]")
+CHAT_HISTORY_LIMIT = 40
+
+
+@router.get("/{token}/messages")
+@limiter.limit("30/minute")
+async def get_messages(
+    request: Request, token: str, after: str | None = None, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """La plática del cliente con el negocio, por WhatsApp y por la web, en
+    un solo hilo. Con `after` (ISO), solo lo nuevo: el chat del portal lo
+    usa mientras está abierto para que la respuesta del dueño aparezca sola."""
+    contact, advertiser = await _resolve(db, token)
+    q = select(Message).where(
+        Message.advertiser_id == advertiser.id,
+        Message.contact_id == contact.id,
+        Message.campaign_id.is_(None),
+    )
+    if after:
+        try:
+            since = datetime.fromisoformat(after.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="after no válido")
+        q = q.where(Message.created_at > since)
+    rows = (await db.execute(q.order_by(Message.created_at.desc()).limit(CHAT_HISTORY_LIMIT))).scalars().all()
+    return {
+        "messages": [
+            {
+                "id": str(m.id),
+                "role": "user" if m.direction == "inbound" else "assistant",
+                "content": m.content,
+                "channel": m.channel or "whatsapp",
+                "from_owner": m.sender == "owner",
+                "at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in reversed(rows)
+            if m.content and not _INTERNAL_MESSAGE.match(m.content)
+        ],
+    }
 
 
 def _banner_from_message(content: str) -> str | None:

@@ -39,6 +39,8 @@ class Message(Base):
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # NULL = WhatsApp; "web" = chat del portal del cliente (no lo cobra Meta).
     channel: Mapped[str | None] = mapped_column(String(10))
+    # NULL = el bot (o una campaña); "owner" = el dueño desde el Inbox.
+    sender: Mapped[str | None] = mapped_column(String(10))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

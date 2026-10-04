@@ -181,9 +181,13 @@ export default function PortalPage() {
     if (!token) return
     const params = new URLSearchParams(window.location.search)
     const n = params.get('n')
-    if (!n) return
-    api.post(`/public/portal/${token}/opened`, { message_id: n }).catch(() => {})
+    // ?chat=1: tocó el aviso de una respuesta del dueño — abrir el chat, donde está.
+    const chat = params.get('chat')
+    if (!n && !chat) return
+    if (n) api.post(`/public/portal/${token}/opened`, { message_id: n }).catch(() => {})
+    if (chat) setChatOpen(true)
     params.delete('n')
+    params.delete('chat')
     const qs = params.toString()
     window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
   }, [token])
@@ -1007,7 +1011,23 @@ interface ChatTurn {
   role: 'user' | 'assistant'
   content: string
   cards?: ProductCard[]
+  // Lo contestó el dueño en persona (desde su Inbox), no el bot.
+  fromOwner?: boolean
+  // Aviso del sistema, no un mensaje (ej. "le llegó al negocio").
+  note?: boolean
 }
+
+interface HistoryMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  channel: string
+  from_owner: boolean
+  at: string | null
+}
+
+// Cada cuánto el chat abierto revisa si el dueño ya contestó.
+const OWNER_REPLY_POLL_MS = 8000
 
 // Para arrancar con un toque (en el celular escribir cuesta más que en WhatsApp).
 const QUICK_ASKS = ['¿Qué productos tienen?', '¿Cuál es su horario?', 'Quiero agendar una cita', 'Quiero hacer un pedido']
@@ -1058,6 +1078,47 @@ function ChatSheet({
 
   useEffect(() => () => recorder.current?.cancel(), [])
 
+  // La plática de siempre (WhatsApp y web) arriba, y mientras el chat está
+  // abierto, las respuestas que el dueño mande desde su Inbox aparecen solas.
+  const lastAtRef = useRef<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    const track = (msgs: HistoryMessage[]) => {
+      const last = msgs[msgs.length - 1]?.at
+      if (last) lastAtRef.current = last
+    }
+    api
+      .get(`/public/portal/${token}/messages`)
+      .then((r) => {
+        if (!alive) return
+        const msgs: HistoryMessage[] = r.data.messages ?? []
+        track(msgs)
+        lastAtRef.current ??= new Date().toISOString()
+        if (msgs.length)
+          setTurns((t) => [...msgs.map((m) => ({ role: m.role, content: m.content, fromOwner: m.from_owner })), ...t])
+      })
+      .catch(() => {})
+    const timer = setInterval(() => {
+      if (!lastAtRef.current) return
+      api
+        .get(`/public/portal/${token}/messages`, { params: { after: lastAtRef.current } })
+        .then((r) => {
+          if (!alive) return
+          const msgs: HistoryMessage[] = r.data.messages ?? []
+          track(msgs)
+          // Lo demás (lo que escribió el cliente y lo que contestó el bot) ya está en pantalla.
+          const owner = msgs.filter((m) => m.from_owner)
+          if (owner.length)
+            setTurns((t) => [...t, ...owner.map((m) => ({ role: 'assistant' as const, content: m.content, fromOwner: true }))])
+        })
+        .catch(() => {})
+    }, OWNER_REPLY_POLL_MS)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [token])
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [turns, sending])
@@ -1072,6 +1133,15 @@ function ChatSheet({
       const sessionId = await sessionRef.current
       const r = await api.post(`/widget/chat/${business.advertiser_id}`, { message, session_id: sessionId })
       sessionRef.current = Promise.resolve(r.data.session_id)
+      if (r.data.handoff) {
+        // El dueño está atendiendo en persona: el bot no contesta, le avisa.
+        setTurns((t) =>
+          t[t.length - 2]?.note
+            ? t
+            : [...t, { role: 'assistant', note: true, content: `Tu mensaje le llegó a ${business.name}. Te contesta aquí mismo.` }]
+        )
+        return
+      }
       const reply: string = r.data.reply
       setTurns((t) => [...t, { role: 'assistant', content: reply, cards: r.data.cards ?? [] }])
       if (spoken) void speaker.speak(reply.replace(/https?:\/\/\S+/g, ''))
@@ -1178,8 +1248,18 @@ function ChatSheet({
               </div>
             </div>
           )}
-          {turns.map((t, i) => (
+          {turns.map((t, i) =>
+            t.note ? (
+              <p key={i} className="mx-auto max-w-[85%] text-center text-xs" style={{ color: theme.muted }}>
+                {t.content}
+              </p>
+            ) : (
             <div key={i}>
+              {t.fromOwner && (
+                <p className="mb-1 text-xs font-semibold" style={{ color }}>
+                  {business.name} te respondió
+                </p>
+              )}
               <div className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
                   className="max-w-[85%] whitespace-pre-line rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed"
@@ -1227,7 +1307,8 @@ function ChatSheet({
                 </div>
               )}
             </div>
-          ))}
+            )
+          )}
           {sending && (
             <div className="flex justify-start">
               <div className="rounded-2xl px-4 py-2.5 text-sm" style={{ background: theme.cardBg, color: theme.muted }}>

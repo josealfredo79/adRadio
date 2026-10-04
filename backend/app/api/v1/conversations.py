@@ -51,6 +51,9 @@ class LeadScoreUpdateBody(BaseModel):
 
 class ReplyBody(BaseModel):
     text: str
+    # "auto": por la web si el cliente la usa (gratis), si no por WhatsApp.
+    # "whatsapp": forzar WhatsApp (ej. el cliente no ha vuelto a la web).
+    channel: Literal["auto", "whatsapp"] = "auto"
 
 
 @router.get("")
@@ -324,22 +327,43 @@ async def reply_to_conversation(
         raise HTTPException(status_code=404, detail="Conversación no encontrada")
 
     conv, contact = row
-    if not contact or not contact.phone:
+    if not contact:
         raise HTTPException(status_code=400, detail="Contacto sin número de teléfono")
 
-    # Save outbound message record
+    # ¿Por la web? Si tiene los avisos activados o está platicando en el chat
+    # del portal ahorita. Cada respuesta por ahí es un WhatsApp que no se paga.
+    from app.services.web_conversation import push_owner_reply, recently_on_web
+    from app.services.web_push import contacts_with_push
+
+    channel = "whatsapp"
+    if body.channel == "auto":
+        on_web = await recently_on_web(db, contact.id)
+        has_push = bool(await contacts_with_push(db, [contact.id]))
+        if has_push:
+            accepted = await push_owner_reply(db, current_user.business_name or "", contact.id, text)
+            if accepted or on_web:
+                channel = "web"
+        elif on_web:
+            channel = "web"
+    if channel == "whatsapp" and not contact.phone:
+        raise HTTPException(status_code=400, detail="Contacto sin número de teléfono")
+
     msg = Message(
         advertiser_id=current_user.id,
         contact_id=contact.id,
         direction="outbound",
         content=text,
-        status="queued",
+        status="sent" if channel == "web" else "queued",
+        channel="web" if channel == "web" else None,
+        sender="owner",
     )
     db.add(msg)
 
-    # Append to conversation messages array
+    turn = {"role": "assistant", "content": text, "sender": "owner"}
+    if channel == "web":
+        turn["channel"] = "web"
     messages = list(conv.messages or [])
-    messages.append({"role": "assistant", "content": text})
+    messages.append(turn)
     conv.messages = messages
     conv.last_activity = datetime.now(timezone.utc)
 
@@ -349,13 +373,13 @@ async def reply_to_conversation(
     from app.services.realtime import publish_conversation_event
     await publish_conversation_event(current_user.id, {"type": "message", "contact_id": str(contact.id)})
 
-    # Queue WhatsApp send via Celery
-    from app.workers.tasks import send_whatsapp_message
-    send_whatsapp_message.apply_async(
-        args=[str(msg.id), contact.phone, text],
-        countdown=1,
-    )
+    if channel == "whatsapp":
+        from app.workers.tasks import send_whatsapp_message
+        send_whatsapp_message.apply_async(
+            args=[str(msg.id), contact.phone, text],
+            countdown=1,
+        )
 
-    out = {"message": "ok", "msg_id": str(msg.id)}
+    out = {"message": "ok", "msg_id": str(msg.id), "channel": channel}
     await store_idempotency_response(request, redis, out)
     return out

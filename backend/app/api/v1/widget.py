@@ -111,6 +111,23 @@ async def widget_chat(
             contact_id_str = contact_id_raw.decode() if isinstance(contact_id_raw, bytes) else contact_id_raw
             contact = await db.get(Contact, UUID(contact_id_str))
 
+    if contact is not None:
+        # El dueño pausó el bot para atender en persona: en la web tampoco
+        # contesta el bot — el mensaje le llega al dueño al Inbox, igual que
+        # en WhatsApp, y él responde desde ahí (ver web_conversation.py).
+        from app.services.web_conversation import log_turns, open_conversation
+
+        conv = await open_conversation(db, user.id, contact.id)
+        if conv.status == "escalated":
+            db.add(Message(advertiser_id=user.id, contact_id=contact.id, direction="inbound",
+                           content=message, status="delivered", channel="web"))
+            log_turns(conv, {"role": "user", "content": message, "channel": "web"})
+            await db.commit()
+            from app.services.realtime import publish_conversation_event
+
+            await publish_conversation_event(user.id, {"type": "message", "contact_id": str(contact.id)})
+            return {"reply": "", "handoff": True, "session_id": session_id, "cards": []}
+
     from app.services.appointment_booking_service import handle_appointment_booking
     from app.services.catalog_service import handle_catalog_query
     from app.services.widget_order_service import handle_widget_order
@@ -163,6 +180,12 @@ async def widget_chat(
         db.add(Message(advertiser_id=user.id, contact_id=contact.id, direction="outbound",
                        content=reply, status="delivered", channel="web"))
         try:
+            conv = await open_conversation(db, user.id, contact.id)
+            log_turns(
+                conv,
+                {"role": "user", "content": message, "channel": "web"},
+                {"role": "assistant", "content": reply, "channel": "web"},
+            )
             await db.commit()
             from app.services.realtime import publish_conversation_event
 
