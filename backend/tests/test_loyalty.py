@@ -12,7 +12,11 @@ from sqlalchemy import delete, select
 from starlette.requests import Request
 
 from app.api.v1.appointments import update_appointment
-from app.api.v1.contacts import add_contact_stamp, get_contact_loyalty, redeem_contact_reward
+from app.api.v1.contacts import (
+    add_contact_stamp,
+    get_contact_loyalty,
+    redeem_contact_reward,
+)
 from app.api.v1.orders import OrderStateUpdate, update_order_state
 from app.api.v1.portal import get_portal, push_subscribe
 from app.config import settings
@@ -213,7 +217,7 @@ class TestAutomaticStamps:
 class TestOwnerCard:
     @pytest.mark.asyncio
     async def test_manual_stamps_then_redeem_carries_leftovers(self):
-        user_id, ana, beto = await _seed()
+        user_id, ana, _ = await _seed()
         try:
             with patch("app.services.web_push.push_to_contact", AsyncMock(return_value=0)):
                 for _ in range(4):
