@@ -12,6 +12,13 @@ from dotenv import load_dotenv
 # the test session, so it overrides whatever backend/.env (production) would set.
 load_dotenv(Path(__file__).resolve().parent.parent / ".env.test", override=True)
 
+import os
+
+# Fake encryption key so tests never depend on (or use) production's from
+# backend/.env, and work in CI where there is no .env at all. Env vars beat the
+# .env file in pydantic-settings, so this wins over the production value.
+os.environ.setdefault("ENCRYPTION_KEY", "dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktMzJieXQ=")
+
 import logging
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -50,6 +57,13 @@ async def _reset_async_singletons():
             redis_module._redis_pool = None
     except Exception:
         logger.debug("Redis pool reset failed during test reset", exc_info=True)
+    # Rate-limit counters (e.g. register's 3/minute) would otherwise carry over
+    # between tests that all come from the same test-client IP.
+    try:
+        from app.core.rate_limiter import limiter
+        limiter.reset()
+    except Exception:
+        logger.debug("Rate limiter reset failed during test reset", exc_info=True)
     yield
 
 

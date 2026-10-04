@@ -182,7 +182,8 @@ class TestFounderProgram:
         try:
             async with AsyncSessionLocal() as db:
                 user = await db.get(User, user_id)
-                with pytest.raises(HTTPException) as exc_info:
+                with patch("app.api.v1.payments.settings.STRIPE_SECRET_KEY", "sk_test_fake"), \
+                        pytest.raises(HTTPException) as exc_info:
                     await create_checkout_session(
                         request=_fake_request(),
                         body=CheckoutSessionBody(plan="pro", founder=True),
@@ -215,7 +216,8 @@ class TestFounderProgram:
         try:
             async with AsyncSessionLocal() as db:
                 user = await db.get(User, user_id)
-                with pytest.raises(HTTPException) as exc_info:
+                with patch("app.api.v1.payments.settings.STRIPE_SECRET_KEY", "sk_test_fake"), \
+                        pytest.raises(HTTPException) as exc_info:
                     await create_checkout_session(
                         request=_fake_request(),
                         body=CheckoutSessionBody(plan="starter", founder=True),

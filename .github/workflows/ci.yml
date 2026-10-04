@@ -63,6 +63,7 @@ jobs:
           SECRET_KEY: ci-test-secret-key
           DEBUG: "true"
         run: |
+          python -m alembic upgrade head
           python -m pytest tests/ -v --timeout=60 -x
 
   frontend:
