@@ -13,8 +13,17 @@ from app.database import AsyncSessionLocal
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.user import User
-from app.services.campaign_reach import META_MARKETING_USD_MX, USD_TO_MXN, campaign_reach
-from tests.test_web_push import _add_subs, _cleanup, _keys, _seed  # noqa: F401 — _keys es fixture autouse
+from app.services.campaign_reach import (
+    META_MARKETING_USD_MX,
+    USD_TO_MXN,
+    campaign_reach,
+)
+from tests.test_web_push import (  # noqa: F401 — _keys es fixture autouse
+    _add_subs,
+    _cleanup,
+    _keys,
+    _seed,
+)
 
 
 def _request() -> Request:
@@ -66,7 +75,7 @@ class TestCampaignReach:
 
     @pytest.mark.asyncio
     async def test_preview_endpoint_is_scoped_to_the_owner(self):
-        user_id, (cid,) = await _seed(1)
+        user_id, _ = await _seed(1)
         other_id, _ = await _seed(0)
         try:
             camp_id = await _campaign(user_id)
@@ -174,7 +183,7 @@ class TestResumeWebOnly:
 
     @pytest.mark.asyncio
     async def test_normal_send_clears_an_old_web_only(self):
-        user_id, (cid,) = await _seed(1)
+        user_id, _ = await _seed(1)
         try:
             camp_id = await _campaign(user_id)
             async with AsyncSessionLocal() as db:
