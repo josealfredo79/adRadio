@@ -50,6 +50,7 @@ interface Business {
   slug: string
   city: string
   agent: string
+  greeting: string
   whatsapp_number: string
 }
 
@@ -247,6 +248,7 @@ export default function PortalPage() {
             token={token!}
             promoId={promoId}
             business={data.business}
+            customerName={data.customer.first_name}
             theme={theme}
             prefill={chatPrefill}
             onClose={() => setChatOpen(false)}
@@ -1028,6 +1030,21 @@ interface HistoryMessage {
 
 // Cada cuánto el chat abierto revisa si el dueño ya contestó.
 const OWNER_REPLY_POLL_MS = 8000
+// Si la última plática fue hace más de esto, el bot vuelve a saludar.
+const GREET_AGAIN_AFTER_MS = 60 * 60 * 1000
+const DEFAULT_GREETING = '¡Hola! ¿En qué puedo ayudarte?'
+
+// El bot saluda primero, con su nombre y el del cliente — un chat que abre
+// vacío se siente como formulario. Si el dueño escribió su propio saludo
+// (Widget de chat), ese manda.
+function chatGreeting(business: Business, customerName: string, returning: boolean): string {
+  if (returning)
+    return `¡Qué gusto verte de nuevo${customerName ? `, ${customerName}` : ''}! ¿En qué te ayudo hoy?`
+  const hi = customerName ? `¡Hola, ${customerName}! 👋` : '¡Hola! 👋'
+  const custom = (business.greeting || '').trim()
+  if (custom && custom !== DEFAULT_GREETING) return /^¡?\s*hola/i.test(custom) ? custom : `${hi} ${custom}`
+  return `${hi} Soy ${business.agent}, de ${business.name}. ¿En qué te ayudo hoy?`
+}
 
 // Para arrancar con un toque (en el celular escribir cuesta más que en WhatsApp).
 const QUICK_ASKS = ['¿Qué productos tienen?', '¿Cuál es su horario?', 'Quiero agendar una cita', 'Quiero hacer un pedido']
@@ -1036,6 +1053,7 @@ function ChatSheet({
   token,
   promoId,
   business,
+  customerName,
   theme,
   prefill,
   onClose,
@@ -1043,6 +1061,7 @@ function ChatSheet({
   token: string
   promoId?: string
   business: Business
+  customerName: string
   theme: SiteThemeDef
   prefill: string | null
   onClose: () => void
@@ -1056,6 +1075,9 @@ function ChatSheet({
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [input, setInput] = useState(prefill ?? '')
   const [sending, setSending] = useState(false)
+  // Hasta que carga el historial no se sabe si saludar como nuevo o "de nuevo".
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [sentHere, setSentHere] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   // Modo voz: el cliente habla en vez de escribir y el bot le contesta en voz
@@ -1094,10 +1116,23 @@ function ChatSheet({
         const msgs: HistoryMessage[] = r.data.messages ?? []
         track(msgs)
         lastAtRef.current ??= new Date().toISOString()
-        if (msgs.length)
-          setTurns((t) => [...msgs.map((m) => ({ role: m.role, content: m.content, fromOwner: m.from_owner })), ...t])
+        const last = msgs[msgs.length - 1]?.at
+        const stale = !last || Date.now() - new Date(last).getTime() > GREET_AGAIN_AFTER_MS
+        const greeting: ChatTurn[] = stale
+          ? [{ role: 'assistant', content: chatGreeting(business, customerName, msgs.length > 0) }]
+          : []
+        setTurns((t) => [
+          ...msgs.map((m) => ({ role: m.role, content: m.content, fromOwner: m.from_owner })),
+          ...greeting,
+          ...t,
+        ])
       })
-      .catch(() => {})
+      .catch(() => {
+        if (alive) setTurns((t) => [{ role: 'assistant', content: chatGreeting(business, customerName, false) }, ...t])
+      })
+      .finally(() => {
+        if (alive) setHistoryLoaded(true)
+      })
     const timer = setInterval(() => {
       if (!lastAtRef.current) return
       api
@@ -1117,6 +1152,8 @@ function ChatSheet({
       alive = false
       clearInterval(timer)
     }
+    // business y customerName solo cuentan al abrir: el saludo no cambia a media plática.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   useEffect(() => {
@@ -1127,6 +1164,7 @@ function ChatSheet({
     const message = (text ?? input).trim()
     if (!message || sending) return
     if (text === undefined) setInput('')
+    setSentHere(true)
     setTurns((t) => [...t, { role: 'user', content: message }])
     setSending(true)
     try {
@@ -1227,27 +1265,6 @@ function ChatSheet({
         )}
 
         <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-          {turns.length === 0 && (
-            <div className="mx-auto mt-6 max-w-sm text-center">
-              <p className="text-sm" style={{ color: theme.muted }}>
-                {micAvailable
-                  ? 'Pregúntame lo que quieras: escríbeme o toca el micrófono y háblame.'
-                  : 'Pregúntame lo que quieras: precios, horarios, agendar o hacer un pedido.'}
-              </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                {QUICK_ASKS.map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => void send(q)}
-                    className="rounded-full px-3.5 py-2 text-sm"
-                    style={{ border: `1px solid ${theme.cardBorder}`, color: theme.text }}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
           {turns.map((t, i) =>
             t.note ? (
               <p key={i} className="mx-auto max-w-[85%] text-center text-xs" style={{ color: theme.muted }}>
@@ -1308,6 +1325,27 @@ function ChatSheet({
               )}
             </div>
             )
+          )}
+          {historyLoaded && !sentHere && (
+            <div className="mx-auto mt-2 max-w-sm text-center">
+              <p className="text-sm" style={{ color: theme.muted }}>
+                {micAvailable
+                  ? 'Pregúntame lo que quieras: escríbeme o toca el micrófono y háblame.'
+                  : 'Pregúntame lo que quieras: precios, horarios, agendar o hacer un pedido.'}
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {QUICK_ASKS.map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => void send(q)}
+                    className="rounded-full px-3.5 py-2 text-sm"
+                    style={{ border: `1px solid ${theme.cardBorder}`, color: theme.text }}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           {sending && (
             <div className="flex justify-start">

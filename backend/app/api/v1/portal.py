@@ -170,6 +170,7 @@ async def get_portal(request: Request, token: str, db: AsyncSession = Depends(ge
             "slug": advertiser.slug or "",
             "city": advertiser.city or "",
             "agent": advertiser.bot_name or "Asistente",
+            "greeting": advertiser.widget_greeting or "",
             "whatsapp_number": _public_whatsapp_number(advertiser),
         },
         "customer": {"first_name": _first_name(contact.name) or ""},
