@@ -147,8 +147,13 @@ class Settings(BaseSettings):
     GROQ_CHAT_MODEL: str = ""
 
     # Más proveedores con plan GRATIS y API compatible con OpenAI (ver
-    # llm_client.py): se prueban en orden Groq → Gemini → Mistral → OpenRouter
-    # y Claude queda al final como respaldo de pago. Sin llave = se salta.
+    # llm_client.py): se prueban en orden Groq → Cloudflare → Gemini → Mistral
+    # → OpenRouter y Claude queda al final como respaldo de pago. Sin llave = se salta.
+    # Cloudflare Workers AI: 10,000 "neuronas" gratis al día, permite uso real
+    # y no entrena con los datos. Token con la plantilla "Workers AI".
+    CLOUDFLARE_ACCOUNT_ID: str = ""
+    CLOUDFLARE_API_TOKEN: str = ""
+    CLOUDFLARE_MODEL: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
     # Gemini: llave de Google AI Studio (gratis, sin tarjeta).
     GEMINI_API_KEY: str = ""
     GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"

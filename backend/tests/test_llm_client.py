@@ -19,6 +19,9 @@ def _base_settings() -> MagicMock:
     """Settings simulados con los proveedores nuevos apagados (Gemini,
     Mistral) y el tope de espera real; cada test prende lo que necesita."""
     s = MagicMock()
+    s.CLOUDFLARE_ACCOUNT_ID = ""
+    s.CLOUDFLARE_API_TOKEN = ""
+    s.CLOUDFLARE_MODEL = ""
     s.GEMINI_API_KEY = ""
     s.GEMINI_MODEL = ""
     s.MISTRAL_API_KEY = ""
@@ -398,6 +401,8 @@ class TestFreeProvidersFirstClaudeLast:
     def _settings(self):
         s = _base_settings()
         s.GROQ_API_KEY, s.GROQ_CHAT_MODEL = "g", "openai/gpt-oss-120b"
+        s.CLOUDFLARE_ACCOUNT_ID, s.CLOUDFLARE_API_TOKEN = "acc123", "cf"
+        s.CLOUDFLARE_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
         s.GEMINI_API_KEY, s.GEMINI_MODEL = "ge", "gemini-2.5-flash-lite"
         s.MISTRAL_API_KEY, s.MISTRAL_MODEL = "mi", "mistral-small-latest"
         s.OPENROUTER_API_KEY, s.OPENROUTER_MODEL = "or", "a:free, b:free"
@@ -408,6 +413,8 @@ class TestFreeProvidersFirstClaudeLast:
     async def test_order_empty_and_hung_providers_fall_through(self):
         groq = MagicMock()
         groq.chat.completions.create = AsyncMock(side_effect=TimeoutError("se atoró"))
+        cloudflare = MagicMock()
+        cloudflare.chat.completions.create = AsyncMock(side_effect=RuntimeError("sin neuronas"))
         gemini = self._ok("")  # vacío = falla
         mistral = MagicMock()
         mistral.chat.completions.create = AsyncMock(side_effect=RuntimeError("429"))
@@ -419,6 +426,7 @@ class TestFreeProvidersFirstClaudeLast:
         anthropic_client = MagicMock()
         with patch("app.services.llm_client.settings", new=self._settings()), \
              patch("app.services.llm_client._get_groq_client", return_value=groq), \
+             patch("app.services.llm_client._get_cloudflare_client", return_value=cloudflare), \
              patch("app.services.llm_client._get_gemini_client", return_value=gemini), \
              patch("app.services.llm_client._get_mistral_client", return_value=mistral), \
              patch("app.services.llm_client._get_openrouter_client", return_value=openrouter), \
@@ -427,6 +435,7 @@ class TestFreeProvidersFirstClaudeLast:
         assert out == "hola desde b"
         assert [c.kwargs["model"] for c in openrouter.chat.completions.create.call_args_list] == ["a:free", "b:free"]
         assert groq.chat.completions.create.call_args.kwargs["timeout"] == 12.5  # 500 tokens / 40
+        cloudflare.chat.completions.create.assert_awaited_once()  # va después de Groq
         anthropic_client.messages.create.assert_not_called()
 
     @pytest.mark.asyncio
@@ -437,13 +446,14 @@ class TestFreeProvidersFirstClaudeLast:
         anthropic_client.messages.create = AsyncMock(return_value=MagicMock(content=[MagicMock(text="respaldo")]))
         with patch("app.services.llm_client.settings", new=self._settings()), \
              patch("app.services.llm_client._get_groq_client", return_value=dead), \
+             patch("app.services.llm_client._get_cloudflare_client", return_value=dead), \
              patch("app.services.llm_client._get_gemini_client", return_value=dead), \
              patch("app.services.llm_client._get_mistral_client", return_value=dead), \
              patch("app.services.llm_client._get_openrouter_client", return_value=dead), \
              patch("app.services.llm_client._get_anthropic_client", return_value=anthropic_client):
             out = await chat_completion([{"role": "user", "content": "hola"}])
         assert out == "respaldo"
-        assert dead.chat.completions.create.await_count == 5  # groq, gemini, mistral, 2 de openrouter
+        assert dead.chat.completions.create.await_count == 6  # groq, cloudflare, gemini, mistral, 2 de openrouter
         assert anthropic_client.messages.create.call_args.kwargs["timeout"] == 25.0
 
 
@@ -456,3 +466,14 @@ class TestFreeProvidersFirstClaudeLast:
              patch("app.services.llm_client._get_gemini_client", return_value=tagged):
             out = await chat_completion([{"role": "user", "content": "quiero cita"}])
         assert out == "¡Claro! ¿Qué día te acomoda?"
+
+
+def test_cloudflare_url_uses_the_account():
+    from app.services import llm_client
+
+    with patch("app.services.llm_client.settings", new=_base_settings()) as s:
+        s.CLOUDFLARE_ACCOUNT_ID, s.CLOUDFLARE_API_TOKEN = "acc123", "tok"
+        llm_client._openai_clients.pop("cloudflare", None)
+        client = llm_client._get_cloudflare_client()
+        llm_client._openai_clients.pop("cloudflare", None)
+    assert str(client.base_url).rstrip("/") == "https://api.cloudflare.com/client/v4/accounts/acc123/ai/v1"

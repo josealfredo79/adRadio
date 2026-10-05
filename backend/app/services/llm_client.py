@@ -6,7 +6,7 @@ anthropic.AsyncAnthropic().messages.create(...) directamente ahora pasa por
 chat_completion() aquí.
 
 Cadena (decisión del dueño 2026-10-05: primero todos los gratis, Claude al
-final): Groq → Gemini → Mistral → OpenRouter (uno o varios modelos) →
+final): Groq → Cloudflare → Gemini → Mistral → OpenRouter (uno o varios modelos) →
 Anthropic. Cada proveedor es opcional: sin llave se salta. Todos los gratis
 hablan el formato de chat completions de OpenAI, así que comparten el
 cliente `openai`. Si uno falla — error, cuota agotada, se atora más de
@@ -60,6 +60,11 @@ def _get_groq_client() -> AsyncOpenAI:
     return _client("groq", settings.GROQ_API_KEY, settings.GROQ_CHAT_BASE_URL)
 
 
+def _get_cloudflare_client() -> AsyncOpenAI:
+    base = f"https://api.cloudflare.com/client/v4/accounts/{settings.CLOUDFLARE_ACCOUNT_ID}/ai/v1"
+    return _client("cloudflare", settings.CLOUDFLARE_API_TOKEN, base)
+
+
 def _get_gemini_client() -> AsyncOpenAI:
     return _client("gemini", settings.GEMINI_API_KEY, settings.GEMINI_BASE_URL)
 
@@ -74,6 +79,10 @@ def _get_openrouter_client() -> AsyncOpenAI:
 
 def is_groq_configured() -> bool:
     return bool(settings.GROQ_API_KEY and settings.GROQ_CHAT_MODEL)
+
+
+def is_cloudflare_configured() -> bool:
+    return bool(settings.CLOUDFLARE_ACCOUNT_ID and settings.CLOUDFLARE_API_TOKEN and settings.CLOUDFLARE_MODEL)
 
 
 def is_gemini_configured() -> bool:
@@ -135,6 +144,7 @@ def free_chain(judge: bool = False, economy: bool = False) -> list[tuple[str, Ca
     )
     chain = [
         ("Groq", is_groq_configured, make(_get_groq_client, lambda: [settings.GROQ_CHAT_MODEL])),
+        ("Cloudflare", is_cloudflare_configured, make(_get_cloudflare_client, lambda: [settings.CLOUDFLARE_MODEL])),
         ("Gemini", is_gemini_configured, make(_get_gemini_client, lambda: [settings.GEMINI_MODEL])),
         ("Mistral", is_mistral_configured, make(_get_mistral_client, lambda: [settings.MISTRAL_MODEL])),
         ("OpenRouter", is_openrouter_configured, make(_get_openrouter_client, openrouter_models)),
