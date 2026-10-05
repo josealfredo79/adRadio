@@ -1,16 +1,27 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 import { readAccountToken, saveAccountToken } from '@/lib/customerAccount'
-import { CalendarDays, ChevronRight, LogOut, Stamp, Ticket } from 'lucide-react'
+import { CalendarDays, ChevronRight, Gift, LogOut, Search, Stamp, Ticket } from 'lucide-react'
 
 // /mi — la app del cliente: entra con su número + un código por WhatsApp
 // (backend: services/customer_account.py) y ve todos los negocios IaRadio
 // donde es cliente; cada tarjeta lo lleva al portal de ese negocio.
 
 const TZ = 'America/Mexico_City'
+
+interface DiscoverBusiness {
+  slug: string
+  name: string
+  logo_url: string
+  color: string
+  city: string
+  category: string
+  tagline: string
+  reward: string | null
+}
 
 interface MyBusiness {
   portal_path: string
@@ -198,15 +209,33 @@ function Businesses({ token, onLogout }: { token: string; onLogout: () => void }
     qc.removeQueries({ queryKey: ['my-businesses'] })
     onLogout()
   }
+  const [tab, setTab] = useState<'mine' | 'discover'>('mine')
 
   return (
     <main className="mt-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Tus negocios</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{tab === 'mine' ? 'Tus negocios' : 'Descubre'}</h1>
         <button onClick={logout} className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white">
           <LogOut size={16} /> Salir
         </button>
       </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-1 rounded-2xl bg-white/[0.06] p-1 text-sm font-semibold">
+        {(['mine', 'discover'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`rounded-xl py-2 transition-colors ${tab === t ? 'bg-white text-[#06060f]' : 'text-white/60'}`}
+          >
+            {t === 'mine' ? 'Mis negocios' : 'Descubre negocios'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'discover' ? (
+        <Discover token={token} />
+      ) : (
+        <>
 
       {isLoading && <p className="mt-8 text-white/50">Cargando…</p>}
       {error && <p className="mt-8 text-rose-400">{getApiError(error, 'No se pudieron cargar tus negocios')}</p>}
@@ -276,6 +305,106 @@ function Businesses({ token, onLogout }: { token: string; onLogout: () => void }
           </Link>
         ))}
       </div>
+        </>
+      )}
     </main>
+  )
+}
+
+// Otros negocios IaRadio: el cliente se une y les escribe gratis, sin
+// WhatsApp (backend: /public/me/discover y /connect).
+function Discover({ token }: { token: string }) {
+  const navigate = useNavigate()
+  const [q, setQ] = useState('')
+  const [term, setTerm] = useState('')
+  const [joining, setJoining] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const headers = { Authorization: `Bearer ${token}` }
+
+  useEffect(() => {
+    const t = setTimeout(() => setTerm(q.trim()), 350)
+    return () => clearTimeout(t)
+  }, [q])
+
+  const { data, isLoading } = useQuery<{ businesses: DiscoverBusiness[] }>({
+    queryKey: ['discover', token, term],
+    queryFn: () => api.get('/public/me/discover', { headers, params: { q: term } }).then((r) => r.data),
+  })
+
+  const join = async (slug: string) => {
+    setJoining(slug)
+    setError(null)
+    try {
+      const { data: out } = await api.post('/public/me/connect', { slug }, { headers })
+      navigate(`${out.portal_path}?chat=1`)
+    } catch (err) {
+      setError(getApiError(err, 'No se pudo unir a este negocio'))
+      setJoining(null)
+    }
+  }
+
+  return (
+    <div className="mt-5">
+      <div className="relative">
+        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Busca: tacos, estética, tu ciudad…"
+          className="w-full rounded-2xl border border-white/15 bg-white/5 py-3 pl-11 pr-4 text-white placeholder-white/30 focus:border-indigo-400 focus:outline-none"
+        />
+      </div>
+      <p className="mt-3 text-xs text-white/40">
+        Escríbele gratis a cualquier negocio, sin WhatsApp. Al unirte, el negocio podrá mandarte avisos y promociones.
+      </p>
+      {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
+      {isLoading && <p className="mt-6 text-white/50">Buscando…</p>}
+      {data && data.businesses.length === 0 && (
+        <p className="mt-6 text-white/60">{term ? 'No encontramos negocios con esa búsqueda.' : 'Todavía no hay otros negocios cerca.'}</p>
+      )}
+      <div className="mt-4 space-y-3">
+        {data?.businesses.map((b) => (
+          <div key={b.slug} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="flex items-center gap-3">
+              {b.logo_url ? (
+                <img src={b.logo_url} alt="" className="h-12 w-12 rounded-xl object-cover" />
+              ) : (
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-xl text-lg font-bold"
+                  style={{ background: `linear-gradient(135deg, ${b.color}, ${b.color}99)` }}
+                >
+                  {(b.name || '?')[0].toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{b.name}</p>
+                <p className="truncate text-xs text-white/50">{[b.city, b.tagline].filter(Boolean).join(' · ')}</p>
+              </div>
+            </div>
+            {b.reward && (
+              <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-white/70">
+                <Gift size={13} style={{ color: b.color }} /> Tarjeta de cliente: {b.reward}
+              </p>
+            )}
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => void join(b.slug)}
+                disabled={joining !== null}
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                style={{ background: b.color }}
+              >
+                {joining === b.slug ? 'Un momento…' : 'Unirme y escribir'}
+              </button>
+              <a
+                href={`/sitio/${b.slug}`}
+                className="rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-white/80"
+              >
+                Ver página
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -30,7 +30,7 @@ from app.services.customer_account import (
     read_account_token,
     send_code,
 )
-from app.services.loyalty_service import get_card
+from app.services.loyalty_service import get_card, loyalty_config
 from app.services.portal_service import make_portal_token
 
 logger = logging.getLogger(__name__)
@@ -101,6 +101,13 @@ async def verify_code(
     return {"token": make_account_token(phone)}
 
 
+def _account_phone(authorization: str) -> str:
+    phone = read_account_token(authorization.removeprefix("Bearer ").strip())
+    if phone is None:
+        raise HTTPException(status_code=401, detail="Vuelve a entrar con tu número")
+    return phone
+
+
 @router.get("/businesses")
 @limiter.limit("30/minute")
 async def my_businesses(
@@ -108,9 +115,7 @@ async def my_businesses(
     authorization: str = Header(default=""),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    phone = read_account_token(authorization.removeprefix("Bearer ").strip())
-    if phone is None:
-        raise HTTPException(status_code=401, detail="Vuelve a entrar con tu número")
+    phone = _account_phone(authorization)
     now = datetime.now(timezone.utc)
     out = []
     for contact, advertiser in await _contacts_for(db, phone):
@@ -149,3 +154,103 @@ async def my_businesses(
             "coupons": len(coupons),
         })
     return {"phone": phone, "businesses": out}
+
+
+# ─── Descubre negocios ───────────────────────────────────────────────────────
+# El cliente encuentra otros negocios IaRadio y les escribe gratis, sin
+# WhatsApp: al unirse queda como su cliente (con el número que ya verificó
+# con el código) y se le abre el chat. Él da el paso — ningún negocio le
+# escribe a quien no se unió.
+DISCOVER_LIMIT = 50
+# Cuentas que ya no operan: no tiene caso mandarles clientes.
+INACTIVE_SUBSCRIPTIONS = ("churned", "suspended")
+
+
+def _listed():
+    return (
+        User.directory_listed.is_(True),
+        User.slug.is_not(None),
+        func.coalesce(User.business_name, "") != "",
+        User.subscription_status.not_in(INACTIVE_SUBSCRIPTIONS),
+    )
+
+
+@router.get("/discover")
+@limiter.limit("30/minute")
+async def discover(
+    request: Request,
+    q: str = "",
+    authorization: str = Header(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    phone = _account_phone(authorization)
+    mine = await _contacts_for(db, phone)
+    mine_ids = {adv.id for _, adv in mine}
+    # Primero los de su ciudad (la de los negocios donde ya es cliente).
+    my_cities = {(adv.city or "").strip().lower() for _, adv in mine if adv.city}
+
+    query = select(User).where(*_listed())
+    if mine_ids:
+        query = query.where(User.id.not_in(mine_ids))
+    term = " ".join(q.split())[:60]
+    if term:
+        like = f"%{term}%"
+        query = query.where(or_(
+            User.business_name.ilike(like), User.city.ilike(like),
+            User.business_category.ilike(like), User.landing_tagline.ilike(like),
+        ))
+    rows = (await db.execute(query.order_by(User.business_name).limit(200))).scalars().all()
+    rows = sorted(rows, key=lambda u: (u.city or "").strip().lower() not in my_cities)[:DISCOVER_LIMIT]
+    out = []
+    for u in rows:
+        cfg = loyalty_config(u)
+        out.append({
+            "slug": u.slug,
+            "name": u.business_name,
+            "logo_url": u.logo_url or "",
+            "color": u.widget_color or "#25D366",
+            "city": u.city or "",
+            "category": u.business_category or "",
+            "tagline": u.landing_tagline or "",
+            "reward": cfg["reward"] if cfg else None,
+        })
+    return {"businesses": out}
+
+
+@router.post("/connect")
+@limiter.limit("10/minute")
+async def connect(
+    request: Request,
+    body: dict,
+    authorization: str = Header(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Unirse a un negocio del directorio: crea (o encuentra) su contacto ahí
+    y regresa el link de su portal para abrir el chat."""
+    phone = _account_phone(authorization)
+    slug = str(body.get("slug") or "")
+    business = (await db.execute(select(User).where(User.slug == slug, *_listed()))).scalar_one_or_none()
+    if business is None:
+        raise HTTPException(status_code=404, detail="Negocio no encontrado")
+
+    mine = await _contacts_for(db, phone)
+    for contact, adv in mine:
+        if adv.id == business.id:
+            return {"portal_path": f"/c/{make_portal_token(contact.id)}"}
+    blocked = (
+        await db.execute(
+            select(Contact.id).where(
+                Contact.advertiser_id == business.id, contact_phone_canonical() == phone, Contact.status == "blocked"
+            )
+        )
+    ).first()
+    if blocked:
+        raise HTTPException(status_code=403, detail="No pudimos unirte a este negocio.")
+    # El nombre con el que ya lo conocen sus otros negocios.
+    name = next((c.name for c, _ in mine if (c.name or "").strip()), "Cliente")
+    contact = Contact(advertiser_id=business.id, name=name, phone=f"+{phone}", source="directory",
+                      consent_status="confirmed")
+    db.add(contact)
+    await db.commit()
+    await db.refresh(contact)
+    return {"portal_path": f"/c/{make_portal_token(contact.id)}"}

@@ -99,3 +99,16 @@ El código es lo que impide que alguien registre el número de otra persona y
 se quede con el link de su portal. Hay un tope de 200 códigos al día por
 negocio, porque el cartel es público y Meta cobra cada código. Se enciende
 con el mismo `CUSTOMER_ACCOUNT_ENABLED`; apagado, el QR muestra "Muy pronto".
+
+## Descubre negocios (pestaña de /mi)
+
+Dentro de /mi, el cliente ve otros negocios IaRadio, primero los de su
+ciudad, y puede buscar. Con **"Unirme y escribir"** queda como cliente de
+ese negocio (origen `directory`, con el número que ya verificó) y se le
+abre el chat, gratis y sin WhatsApp. Siempre es el cliente quien da el
+paso; ningún negocio le escribe a quien no se unió.
+
+Para aparecer, el negocio necesita tener el link de su página (Widget de
+chat) y no estar `churned` ni `suspended`. Cada negocio puede salirse en
+Configuración → **Directorio de IaRadio**; viene encendido. Funciona con el
+mismo `CUSTOMER_ACCOUNT_ENABLED` de /mi.

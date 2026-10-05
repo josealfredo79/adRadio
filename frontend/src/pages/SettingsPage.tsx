@@ -11,6 +11,7 @@ import ReferralCard from '@/components/ReferralCard'
 import CloserCard from '@/components/CloserCard'
 import LoyaltySettingsCard from '@/components/LoyaltySettingsCard'
 import CounterQrCard from '@/components/CounterQrCard'
+import DirectoryCard from '@/components/DirectoryCard'
 
 const CATEGORIES = [
   { value: 'restaurante', label: 'Restaurante / Bar / Taquería' },
@@ -701,6 +702,8 @@ export default function SettingsPage() {
       <LoyaltySettingsCard />
 
       <CounterQrCard />
+
+      <DirectoryCard />
 
       {/* Subscription */}
       {dashboard && (

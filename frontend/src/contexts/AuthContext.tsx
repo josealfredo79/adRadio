@@ -33,6 +33,7 @@ interface User {
   business_hours: Record<string, [string, string] | null> | null
   closer_config: CloserConfig | null
   loyalty_config: LoyaltyConfig | null
+  directory_listed: boolean
 }
 
 export interface LoyaltyConfig {

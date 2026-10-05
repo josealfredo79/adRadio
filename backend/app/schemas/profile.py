@@ -31,6 +31,7 @@ class ProfileUpdate(BaseModel):
     business_hours: dict[str, list[str] | None] | None = None
     closer_config: dict | None = None
     loyalty_config: dict | None = None
+    directory_listed: bool | None = None
 
     @field_validator("loyalty_config")
     @classmethod

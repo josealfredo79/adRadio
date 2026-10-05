@@ -157,6 +157,9 @@ class User(Base):
     # Tarjeta de lealtad del portal (ver loyalty_service.py):
     # {"enabled": bool, "stamps_required": int, "reward": str}
     loyalty_config: Mapped[dict | None] = mapped_column(JSONB)
+    # Aparece en "Descubre negocios" de /mi (los clientes de IaRadio lo
+    # encuentran y le escriben). Se puede apagar en Configuración.
+    directory_listed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     # Google Calendar OAuth
     google_refresh_token: Mapped[str | None] = mapped_column(Text)

@@ -245,3 +245,86 @@ class TestSendCode:
     async def test_without_central_number_it_does_not_send(self, monkeypatch):
         monkeypatch.setattr(settings, "IARADIO_WA_PHONE_NUMBER_ID", "")
         assert await ca.send_code("525512345678", "482913") is False
+
+
+class TestDiscover:
+    async def _seed(self):
+        await engine.dispose()
+        tag = uuid.uuid4().hex[:6]
+        async with AsyncSessionLocal() as db:
+            def biz(name, city, **kw):
+                return User(email=f"{uuid.uuid4()}@test.com", password_hash="x", business_name=f"{name} {tag}",
+                            city=city, slug=kw.pop("slug", f"{name.lower().replace(' ', '-')}-{tag}"), **kw)
+
+            mine = biz("Barberia Pepe", "Tlaxiaco")
+            near = biz("Tacos Primo", "Tlaxiaco", loyalty_config={"enabled": True, "stamps_required": 5, "reward": "Orden gratis"})
+            far = biz("Estetica Lupita", "Oaxaca")
+            hidden = biz("Oculto", "Tlaxiaco", directory_listed=False)
+            gone = biz("Cerrado", "Tlaxiaco", subscription_status="churned")
+            noslug = biz("Sinlink", "Tlaxiaco", slug=None)
+            users = [mine, near, far, hidden, gone, noslug]
+            db.add_all(users)
+            await db.flush()
+            tail = f"{uuid.uuid4().int % 10**8:08d}"
+            db.add(Contact(advertiser_id=mine.id, name="Ana López", phone=f"+52155{tail}"))
+            await db.commit()
+            return [u.id for u in users], tag, ca.make_account_token(f"5255{tail}"), near, hidden
+
+    @pytest.mark.asyncio
+    async def test_lists_other_listed_businesses_nearby_first(self):
+        ids, tag, token, *_ = await self._seed()
+        try:
+            from app.api.v1.customer_account import discover
+
+            async with AsyncSessionLocal() as db:
+                out = await discover(request=_request(), q=tag, authorization=f"Bearer {token}", db=db)
+            names = [b["name"].removesuffix(f" {tag}") for b in out["businesses"]]
+            assert names == ["Tacos Primo", "Estetica Lupita"]
+            assert out["businesses"][0]["reward"] == "Orden gratis"
+            async with AsyncSessionLocal() as db:
+                out = await discover(request=_request(), q="Oaxaca", authorization=f"Bearer {token}", db=db)
+            assert any(b["name"] == f"Estetica Lupita {tag}" for b in out["businesses"])
+        finally:
+            await _cleanup(ids)
+
+    @pytest.mark.asyncio
+    async def test_connect_creates_one_contact_with_the_verified_number(self):
+        ids, _, token, near, hidden = await self._seed()
+        try:
+            from app.api.v1.customer_account import connect
+
+            for _ in range(2):
+                async with AsyncSessionLocal() as db:
+                    out = await connect(request=_request(), body={"slug": near.slug}, authorization=f"Bearer {token}", db=db)
+            async with AsyncSessionLocal() as db:
+                rows = (await db.execute(
+                    Contact.__table__.select().where(Contact.advertiser_id == near.id)
+                )).all()
+            assert len(rows) == 1
+            c = rows[0]
+            assert (c.name, c.source, c.consent_status) == ("Ana López", "directory", "confirmed")
+            assert c.phone == "+" + ca.read_account_token(token)
+            assert out["portal_path"].startswith("/c/")
+
+            async with AsyncSessionLocal() as db:
+                with pytest.raises(HTTPException) as exc:
+                    await connect(request=_request(), body={"slug": hidden.slug}, authorization=f"Bearer {token}", db=db)
+            assert exc.value.status_code == 404
+        finally:
+            await _cleanup(ids)
+
+    @pytest.mark.asyncio
+    async def test_blocked_by_that_business_cannot_rejoin(self):
+        ids, _, token, near, _ = await self._seed()
+        try:
+            from app.api.v1.customer_account import connect
+
+            async with AsyncSessionLocal() as db:
+                db.add(Contact(advertiser_id=near.id, name="Ana", phone="+" + ca.read_account_token(token), status="blocked"))
+                await db.commit()
+            async with AsyncSessionLocal() as db:
+                with pytest.raises(HTTPException) as exc:
+                    await connect(request=_request(), body={"slug": near.slug}, authorization=f"Bearer {token}", db=db)
+            assert exc.value.status_code == 403
+        finally:
+            await _cleanup(ids)

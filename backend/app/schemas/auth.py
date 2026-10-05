@@ -87,5 +87,6 @@ class UserOut(BaseModel):
     business_hours: dict | None = None
     closer_config: dict | None = None
     loyalty_config: dict | None = None
+    directory_listed: bool = True
 
     model_config = {"from_attributes": True}
