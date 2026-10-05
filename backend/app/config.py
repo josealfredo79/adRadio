@@ -157,7 +157,7 @@ class Settings(BaseSettings):
     # Gemini: llave de Google AI Studio (gratis, sin tarjeta).
     GEMINI_API_KEY: str = ""
     GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    GEMINI_MODEL: str = "gemini-2.5-flash-lite"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"  # la 2.5 ya no se da a cuentas nuevas (oct-2026)
     # Mistral: plan "Experiment" gratis (pide aceptar que usen los datos para entrenar).
     MISTRAL_API_KEY: str = ""
     MISTRAL_BASE_URL: str = "https://api.mistral.ai/v1"
