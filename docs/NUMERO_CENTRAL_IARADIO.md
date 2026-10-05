@@ -85,3 +85,17 @@ cobra cada uno.
    pronto" y el portal no muestra el link "Todos tus negocios en un lugar".
 3. (opcional) `IARADIO_OTP_TEMPLATE_NAME` / `IARADIO_OTP_TEMPLATE_LANG` si la
    plantilla se llama distinto.
+
+## QR de mostrador (/q/{link-del-negocio})
+
+En Configuración → **QR de mostrador**, el dueño imprime un cartel con QR.
+El cliente lo escanea, escribe nombre y WhatsApp, confirma con el mismo
+código de arriba (`codigo_acceso`) y entra directo a su tarjeta con el
+sello de bienvenida. Queda en Contactos con origen `qr` y consentimiento
+confirmado. Si ya era cliente, recupera SU tarjeta. Si se había dado de
+baja de WhatsApp, sigue dado de baja.
+
+El código es lo que impide que alguien registre el número de otra persona y
+se quede con el link de su portal. Hay un tope de 200 códigos al día por
+negocio, porque el cartel es público y Meta cobra cada código. Se enciende
+con el mismo `CUSTOMER_ACCOUNT_ENABLED`; apagado, el QR muestra "Muy pronto".

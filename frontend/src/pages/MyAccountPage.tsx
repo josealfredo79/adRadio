@@ -3,13 +3,13 @@ import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
+import { readAccountToken, saveAccountToken } from '@/lib/customerAccount'
 import { CalendarDays, ChevronRight, LogOut, Stamp, Ticket } from 'lucide-react'
 
 // /mi — la app del cliente: entra con su número + un código por WhatsApp
 // (backend: services/customer_account.py) y ve todos los negocios IaRadio
 // donde es cliente; cada tarjeta lo lleva al portal de ese negocio.
 
-const TOKEN_KEY = 'iaradio_account_token'
 const TZ = 'America/Mexico_City'
 
 interface MyBusiness {
@@ -23,30 +23,13 @@ interface MyBusiness {
   coupons: number
 }
 
-function readToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY)
-  } catch {
-    return null
-  }
-}
-
-function saveToken(token: string | null) {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token)
-    else localStorage.removeItem(TOKEN_KEY)
-  } catch {
-    // almacenamiento bloqueado (modo privado): la sesión dura lo que la pestaña
-  }
-}
-
 const fmtWhen = (iso: string) =>
   new Intl.DateTimeFormat('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: TZ }).format(
     new Date(iso)
   )
 
 export default function MyAccountPage() {
-  const [token, setToken] = useState<string | null>(readToken)
+  const [token, setToken] = useState<string | null>(readAccountToken)
   const { data: status } = useQuery<{ available: boolean }>({
     queryKey: ['account-status'],
     queryFn: () => api.get('/public/me/status').then((r) => r.data),
@@ -64,7 +47,7 @@ export default function MyAccountPage() {
   }, [])
 
   const onToken = (t: string | null) => {
-    saveToken(t)
+    saveAccountToken(t)
     setToken(t)
   }
 
