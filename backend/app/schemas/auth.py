@@ -88,5 +88,6 @@ class UserOut(BaseModel):
     closer_config: dict | None = None
     loyalty_config: dict | None = None
     directory_listed: bool = True
+    customer_agent_enabled: bool = False
 
     model_config = {"from_attributes": True}

@@ -32,6 +32,7 @@ class ProfileUpdate(BaseModel):
     closer_config: dict | None = None
     loyalty_config: dict | None = None
     directory_listed: bool | None = None
+    customer_agent_enabled: bool | None = None
 
     @field_validator("loyalty_config")
     @classmethod

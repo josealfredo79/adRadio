@@ -105,6 +105,9 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     # Modelo de Claude a usar — configurable para migrar cuando Anthropic deprecate el actual
     ANTHROPIC_MODEL: str = "claude-sonnet-4-6"
+    # Agente del chat web del cliente (customer_agent.py): muchas pláticas
+    # cortas con herramientas — Haiku por costo (decisión del dueño 2026-10-05).
+    CUSTOMER_AGENT_MODEL: str = "claude-haiku-4-5"
 
     # OpenRouter — adaptador de proveedor LLM intercambiable (port del patrón
     # de vocero-crm). Si OPENROUTER_API_KEY y OPENROUTER_MODEL están ambos

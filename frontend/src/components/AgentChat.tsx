@@ -40,6 +40,8 @@ interface ChatTurn {
   cards?: ProductCard[]
   // El bot pidió sus datos para pedir/agendar: debajo va el botón para registrarse.
   needsContact?: boolean
+  // El agente propuso algo (cita, pedido…) y espera el "sí": botones Sí / No.
+  confirm?: boolean
   // Lo contestó el dueño en persona (desde su Inbox), no el bot.
   fromOwner?: boolean
   // Aviso del sistema, no un mensaje (ej. "le llegó al negocio").
@@ -237,7 +239,13 @@ export default function AgentChat({
       const reply: string = r.data.reply
       setTurns((t) => [
         ...t,
-        { role: 'assistant', content: reply, cards: r.data.cards ?? [], needsContact: !!r.data.needs_contact },
+        {
+          role: 'assistant',
+          content: reply,
+          cards: r.data.cards ?? [],
+          needsContact: !!r.data.needs_contact,
+          confirm: !!r.data.confirm,
+        },
       ])
       if (spoken) void speaker.speak(reply.replace(/https?:\/\/\S+/g, ''))
     } catch {
@@ -349,6 +357,24 @@ export default function AgentChat({
                   {renderChatText(t.content)}
                 </div>
               </div>
+              {t.confirm && i === turns.length - 1 && !sending && (
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => void send('Sí, confírmalo')}
+                    className="press rounded-full px-4 py-2 text-sm font-semibold text-white"
+                    style={{ background: color }}
+                  >
+                    Sí, confírmalo
+                  </button>
+                  <button
+                    onClick={() => void send('No, gracias')}
+                    className="press rounded-full px-4 py-2 text-sm font-semibold"
+                    style={{ border: `1px solid ${theme.cardBorder}`, color: theme.text }}
+                  >
+                    No
+                  </button>
+                </div>
+              )}
               {t.needsContact && (joinPath || whatsappHref) && (
                 <a
                   href={joinPath || whatsappHref}

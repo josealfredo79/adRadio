@@ -160,6 +160,8 @@ class User(Base):
     # Aparece en "Descubre negocios" de /mi (los clientes de IaRadio lo
     # encuentran y le escriben). Se puede apagar en Configuración.
     directory_listed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # Agente con herramientas en el chat web del cliente (customer_agent.py), beta.
+    customer_agent_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     # Google Calendar OAuth
     google_refresh_token: Mapped[str | None] = mapped_column(Text)

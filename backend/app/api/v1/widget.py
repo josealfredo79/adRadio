@@ -150,7 +150,19 @@ async def widget_chat(
     # row. Appointment intent is checked before order intent — some
     # appointment keywords ("pedir cita") would otherwise also match the
     # order keyword "pedir" on its own.
-    channel_reply = await handle_catalog_query(db, user, message)
+    # Agente con herramientas (customer_agent.py): solo con el cliente
+    # verificado (link del portal) y si el negocio lo encendió. Si no aplica
+    # o falla, sigue la cadena de siempre.
+    channel_reply = None
+    confirm = False
+    if contact is not None and not unverified:
+        from app.services.customer_agent import handle as agent_handle
+
+        agent_reply = await agent_handle(db, redis, user, contact, message, history)
+        if agent_reply is not None:
+            channel_reply, confirm = agent_reply.text, agent_reply.confirm
+    if channel_reply is None:
+        channel_reply = await handle_catalog_query(db, user, message)
     if channel_reply is None:
         channel_reply = await handle_appointment_booking(db, user, contact, message, redis, channel="widget")
     if channel_reply is None:
@@ -227,7 +239,7 @@ async def widget_chat(
         logger.warning("[WIDGET-CHAT] Failed to extract product cards", exc_info=True)
         cards = []
 
-    return {"reply": reply, "session_id": session_id, "cards": cards, "needs_contact": needs_contact}
+    return {"reply": reply, "session_id": session_id, "cards": cards, "needs_contact": needs_contact, "confirm": confirm}
 
 
 @router.post("/lead/{advertiser_id}")

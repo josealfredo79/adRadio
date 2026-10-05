@@ -9,6 +9,7 @@ import WhatsappWizard from '@/components/WhatsappWizard'
 import WhatsappHealthCard from '@/components/WhatsappHealthCard'
 import ReferralCard from '@/components/ReferralCard'
 import CloserCard from '@/components/CloserCard'
+import AgentSettingsCard from '@/components/AgentSettingsCard'
 import LoyaltySettingsCard from '@/components/LoyaltySettingsCard'
 import CounterQrCard from '@/components/CounterQrCard'
 import DirectoryCard from '@/components/DirectoryCard'
@@ -696,6 +697,8 @@ export default function SettingsPage() {
           </span>
         )}
       </div>
+
+      <AgentSettingsCard />
 
       <CloserCard />
 

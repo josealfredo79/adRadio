@@ -34,6 +34,7 @@ interface User {
   closer_config: CloserConfig | null
   loyalty_config: LoyaltyConfig | null
   directory_listed: boolean
+  customer_agent_enabled: boolean
 }
 
 export interface LoyaltyConfig {

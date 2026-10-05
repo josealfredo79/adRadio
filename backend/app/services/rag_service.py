@@ -23,31 +23,10 @@ async def _fetch_user(
     return result.scalar_one_or_none()
 
 
-async def answer_with_rag(
-    advertiser_id: str,
-    query: str,
-    conversation_history: list[dict],
-    db: AsyncSession,
-    business_name: str = "el negocio",
-    bot_name: str = "Asistente",
-    bot_personality: str = "amigable y profesional",
-    time_gap_note: str = "",
-    ask_owner: bool = False,
-    conversation_key: str | None = None,
-    redis=None,
-    contact_id: uuid.UUID | None = None,
-) -> str:
-    """
-    `conversation_key` (contacto o sesión del chat web) activa la cuota de
-    conversaciones del plan (plan_usage.py): se cuenta solo si de verdad se
-    llama a la IA, y pasado el límite se contesta con el modelo económico.
-    `contact_id` le da al bot los sellos de ese cliente (loyalty_service.py).
-
-    1. Generate embedding for the user query.
-    2. Find top-k similar chunks from the advertiser's knowledge base.
-    3. Build context string.
-    4. Generate response with Claude (temp=0.3, only from context).
-    """
+async def search_knowledge(db: AsyncSession, advertiser_id: str, query: str) -> str:
+    """Los pedazos de la base de conocimiento del negocio que se parecen a
+    *query* (pgvector), unidos en un texto. "" si no hay nada o falla. Lo usa
+    el bot de siempre y el agente del cliente (customer_agent.py) como herramienta."""
     try:
         query_embedding = await get_embedding(query)
     except Exception as e:
@@ -78,6 +57,36 @@ async def answer_with_rag(
             context = "\n\n".join(context_parts) if context_parts else ""
         except Exception as e:
             logger.warning("[RAG] Vector search failed: %s", e)
+
+    return context
+
+
+async def answer_with_rag(
+    advertiser_id: str,
+    query: str,
+    conversation_history: list[dict],
+    db: AsyncSession,
+    business_name: str = "el negocio",
+    bot_name: str = "Asistente",
+    bot_personality: str = "amigable y profesional",
+    time_gap_note: str = "",
+    ask_owner: bool = False,
+    conversation_key: str | None = None,
+    redis=None,
+    contact_id: uuid.UUID | None = None,
+) -> str:
+    """
+    `conversation_key` (contacto o sesión del chat web) activa la cuota de
+    conversaciones del plan (plan_usage.py): se cuenta solo si de verdad se
+    llama a la IA, y pasado el límite se contesta con el modelo económico.
+    `contact_id` le da al bot los sellos de ese cliente (loyalty_service.py).
+
+    1. Generate embedding for the user query.
+    2. Find top-k similar chunks from the advertiser's knowledge base.
+    3. Build context string.
+    4. Generate response with Claude (temp=0.3, only from context).
+    """
+    context = await search_knowledge(db, advertiser_id, query)
 
     user = await _fetch_user(advertiser_id, db)
     bot_instructions = user.bot_instructions if user else None
