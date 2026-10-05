@@ -94,6 +94,37 @@ async def update_profile(
     return UserOut.model_validate(current_user)
 
 
+@router.post("/me/agent-test-link")
+async def agent_test_link(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """El link de la tarjeta del dueño como cliente de su propio negocio, para
+    probar el agente inteligente: la vista previa del widget es anónima y ahí
+    el agente no entra (solo atiende a clientes identificados). Usa su propio
+    teléfono, así que si ya es contacto de su negocio se reusa ese; los
+    recordatorios de las citas de prueba le llegan a él mismo."""
+    from app.services.customer_account import canonical_phone, contact_phone_canonical
+    from app.services.portal_service import make_portal_token
+
+    phone = canonical_phone(current_user.phone or current_user.whatsapp_number or current_user.meta_display_phone_number)
+    if phone is None:
+        raise HTTPException(status_code=400, detail="Agrega tu teléfono en tu perfil para probar como cliente")
+    contact = (await db.execute(
+        select(Contact)
+        .where(Contact.advertiser_id == current_user.id, contact_phone_canonical() == phone, Contact.status != "blocked")
+        .order_by(Contact.created_at)
+        .limit(1)
+    )).scalar_one_or_none()
+    if contact is None:
+        contact = Contact(advertiser_id=current_user.id, name="Tú (prueba)", phone=f"+{phone}",
+                          source="manual", tags=["prueba"])
+        db.add(contact)
+        await db.commit()
+    # Ruta relativa: el panel la abre en su mismo dominio (www, preview o local).
+    return {"url": f"/c/{make_portal_token(contact.id)}"}
+
+
 ALLOWED_LOGO_MIME_TYPES = {
     "image/jpeg": "jpg",
     "image/png": "png",

@@ -15,6 +15,7 @@ import {
   type LandingSectionId,
 } from '@/pages/publicSite/utils'
 import BusinessHoursEditor from '@/components/BusinessHoursEditor'
+import { AgentTestButton } from '@/components/AgentSettingsCard'
 
 const SITE_URL = (import.meta.env.VITE_SITE_URL as string | undefined) ?? (typeof window !== 'undefined' ? window.location.origin : '')
 
@@ -680,6 +681,16 @@ export default function WidgetPage() {
               </svg>
             </div>
           </div>
+          {user?.customer_agent_enabled && (
+            <div className="mt-4 rounded-lg border border-brand-100 bg-white p-3 dark:border-brand-900 dark:bg-gray-950">
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                <Sparkles size={12} className="mr-1 inline text-brand-500" />
+                Los visitantes anónimos hablan con el bot de siempre. El agente inteligente atiende a clientes con
+                tarjeta (identificados): pruébalo como cliente de tu negocio.
+              </p>
+              <AgentTestButton className="mt-2" />
+            </div>
+          )}
         </div>
 
         {/* Controls */}

@@ -287,6 +287,25 @@ class TestFallback:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
+    async def test_slow_claude_means_fixed_flows(self, monkeypatch):
+        # Una llamada colgada no puede dejar al cliente esperando: pasado el
+        # tope, el chat sigue con los flujos fijos.
+        import asyncio
+
+        async def hang(**_):
+            await asyncio.sleep(5)
+
+        monkeypatch.setattr(agent, "AGENT_BUDGET_SECONDS", 0.2)
+        user_id, ana, *_ = await _seed()
+        try:
+            client = MagicMock()
+            client.messages.create = AsyncMock(side_effect=hang)
+            with patch("app.services.customer_agent._get_client", return_value=client):
+                assert await _say(user_id, ana, "quiero agendar una cita", Redis()) is None
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
     async def test_web_chat_uses_the_agent_and_flags_the_confirmation(self):
         user_id, ana, *_ = await _seed()
         r = Redis()

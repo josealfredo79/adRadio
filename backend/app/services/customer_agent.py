@@ -18,6 +18,7 @@ Reglas (decisión del dueño 2026-10-05):
 - Si Claude falla o no está configurado → None, y el chat sigue con los
   flujos de siempre (appointment_booking_service, widget_order_service).
 """
+import asyncio
 import json
 import logging
 import re
@@ -43,6 +44,12 @@ logger = logging.getLogger(__name__)
 
 MAX_STEPS = 6
 MAX_TOKENS = 800
+# El cliente está esperando en el chat: cada llamada a Claude tiene su tope y
+# toda la vuelta del agente otro; si se pasa, siguen los flujos fijos. Visto
+# 2026-10-05: una llamada se quedó 16 min sin respuesta con el tope por
+# defecto del SDK (10 min y reintentos) y el chat ya había dicho "no me llegó".
+CALL_TIMEOUT_SECONDS = 12
+AGENT_BUDGET_SECONDS = 25
 HISTORY_TURNS = 12
 PENDING_TTL = 15 * 60
 PENDING_PREFIX = "agent_pending:"
@@ -435,7 +442,9 @@ _client: anthropic.AsyncAnthropic | None = None
 def _get_client() -> anthropic.AsyncAnthropic:
     global _client
     if _client is None:
-        _client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        _client = anthropic.AsyncAnthropic(
+            api_key=settings.ANTHROPIC_API_KEY, timeout=CALL_TIMEOUT_SECONDS, max_retries=1,
+        )
     return _client
 
 
@@ -519,7 +528,9 @@ _NUDGE_DONE = ("(Mensaje del sistema, no del cliente: en esta plática todavía 
 _NUDGE_NO_PROPOSAL = ("(Mensaje del sistema, no del cliente: preguntaste si lo confirmas, pero no usaste ninguna "
                       "herramienta proponer_*, así que no hay nada que confirmar. Úsala ahora, o no preguntes. "
                       "No te disculpes ni menciones este mensaje.)")
-_NUDGE_EMPTY = "(Mensaje del sistema, no del cliente: contesta al cliente con una o dos frases.)"
+# Sin "dile al cliente lo que encontraste", Haiku le contestaba al sistema: "Entendido, espero tu respuesta…".
+_NUDGE_EMPTY = ("(Mensaje del sistema, no del cliente: tu respuesta salió vacía. Escribe ya el mensaje para el "
+                "cliente con lo que encontraste, en una o dos frases, como si nada. No menciones este mensaje.)")
 MAX_CORRECTIONS = 2
 
 
@@ -774,7 +785,10 @@ async def handle(
 
     try:
         await register_bot_conversation(advertiser.id, str(contact.id), redis)
-        text = await _agent_loop(ctx, message, history)
+        text = await asyncio.wait_for(_agent_loop(ctx, message, history), AGENT_BUDGET_SECONDS)
+    except TimeoutError:
+        logger.warning("[AGENT] over %ss advertiser=%s — using the fixed flows", AGENT_BUDGET_SECONDS, advertiser.id)
+        return None
     except anthropic.APIError:
         logger.warning("[AGENT] Claude unavailable advertiser=%s — using the fixed flows", advertiser.id, exc_info=True)
         return None

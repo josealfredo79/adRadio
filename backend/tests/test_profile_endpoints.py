@@ -16,6 +16,7 @@ from app.api.v1.profile import (
     ChangePasswordBody,
     TaglineSuggestRequest,
     WhiteLabelUpdate,
+    agent_test_link,
     change_password,
     dashboard,
     dashboard_chart,
@@ -152,6 +153,61 @@ class TestUpdateProfile:
     async def test_rejects_landing_tagline_over_140_chars(self):
         with pytest.raises(ValueError):
             ProfileUpdate(landing_tagline="x" * 141)
+
+
+class TestAgentTestLink:
+    """La vista previa del widget es anónima y ahí el agente no entra: el
+    dueño prueba como cliente de su propio negocio con su tarjeta (/c/)."""
+
+    @pytest.mark.asyncio
+    async def test_reuses_owner_contact_when_already_a_customer(self):
+        from app.services.portal_service import read_portal_token
+
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                user.phone = "55 1234 5678"
+                existing = Contact(advertiser_id=user_id, name="Alfredo", phone="5215512345678")
+                db.add(existing)
+                await db.commit()
+                out = await agent_test_link(db=db, current_user=user)
+                again = await agent_test_link(db=db, current_user=user)
+            assert read_portal_token(out["url"].rsplit("/c/", 1)[1]) == existing.id
+            assert again == out
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_creates_a_tagged_test_contact_once(self):
+        from sqlalchemy import select
+
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                user.whatsapp_number = "+5215598765432"
+                await db.commit()
+                first = await agent_test_link(db=db, current_user=user)
+                second = await agent_test_link(db=db, current_user=user)
+                contacts = (await db.execute(select(Contact).where(Contact.advertiser_id == user_id))).scalars().all()
+            assert first == second and "/c/" in first["url"]
+            assert len(contacts) == 1
+            assert contacts[0].phone == "+525598765432" and contacts[0].tags == ["prueba"]
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_without_a_phone_asks_for_one(self):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with pytest.raises(HTTPException) as exc:
+                    await agent_test_link(db=db, current_user=user)
+            assert exc.value.status_code == 400
+        finally:
+            await _cleanup([user_id])
 
 
 class TestSuggestLandingTagline:
