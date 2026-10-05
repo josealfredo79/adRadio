@@ -16,18 +16,48 @@ interface Props {
   /** 0–1: apertura de boca mientras habla (voz real) */
   getLevel?: () => number
   size?: number
+  /** Color del negocio: el cuerpo, el marco y el brillo se tiñen con él. Sin él, el verde de IaRadio. */
+  color?: string
 }
 
-const MOOD_BODY: Record<FaceMood, THREE.Color> = {
-  idle: new THREE.Color('#4fc77f'),
-  listening: new THREE.Color('#47cf9c'),
-  thinking: new THREE.Color('#5cbf8c'),
-  speaking: new THREE.Color('#52d083'),
-  happy: new THREE.Color('#5fd879'),
-  confused: new THREE.Color('#8fc66e'),
+const DEFAULT_COLOR = '#4fc77f'
+// Cuánto cambia la luz/saturación del cuerpo con cada ánimo (sobre el color base).
+const MOOD_SHIFT: Record<FaceMood, { l: number; s: number }> = {
+  idle: { l: 0, s: 0 },
+  listening: { l: 0.03, s: 0.05 },
+  thinking: { l: -0.03, s: -0.08 },
+  speaking: { l: 0.02, s: 0.04 },
+  happy: { l: 0.06, s: 0.08 },
+  confused: { l: -0.02, s: -0.25 },
 }
 
-const GLOW = 0x8dffc8 // ojos, boca y antena
+/** La paleta de la mascota a partir de un color: el cuerpo con luz media
+ * (nunca negro ni blanco, con cualquier color de negocio), marco y perillas
+ * más oscuros, y un brillo claro para ojos, boca y antena. */
+function palette(hex?: string) {
+  const base = new THREE.Color(DEFAULT_COLOR)
+  try {
+    if (hex) base.set(hex)
+  } catch {
+    // color inválido: se queda el verde
+  }
+  const hsl = { h: 0, s: 0, l: 0 }
+  base.getHSL(hsl)
+  const s = Math.max(0.35, Math.min(0.85, hsl.s))
+  const l = Math.max(0.42, Math.min(0.6, hsl.l))
+  const body = Object.fromEntries(
+    (Object.keys(MOOD_SHIFT) as FaceMood[]).map((m) => [
+      m,
+      new THREE.Color().setHSL(hsl.h, Math.max(0.1, Math.min(1, s + MOOD_SHIFT[m].s)), l + MOOD_SHIFT[m].l),
+    ]),
+  ) as Record<FaceMood, THREE.Color>
+  return {
+    body,
+    bezel: new THREE.Color().setHSL(hsl.h, s * 0.7, 0.25),
+    knob: new THREE.Color().setHSL(hsl.h, s * 0.8, 0.36),
+    glow: new THREE.Color().setHSL(hsl.h, 0.95, 0.78),
+  }
+}
 const SCREEN_Z = 0.556 // frente del cuerpo (profundidad 1.1 / 2) + un pelito
 
 // Boca: columnas de vértices a lo ancho; arriba una curva de sonrisa y abajo
@@ -92,7 +122,7 @@ function softTexture(): THREE.Texture {
   return new THREE.CanvasTexture(c)
 }
 
-export default function Mascot3D({ mood, volume = 0, getLevel, size = 280 }: Props) {
+export default function Mascot3D({ mood, volume = 0, getLevel, size = 280, color }: Props) {
   const mount = useRef<HTMLDivElement>(null)
   const moodRef = useRef(mood)
   const levelRef = useRef(getLevel)
@@ -127,7 +157,8 @@ export default function Mascot3D({ mood, volume = 0, getLevel, size = 280 }: Pro
     const key = new THREE.DirectionalLight(0xffffff, 2.4)
     key.position.set(-2, 3, 3.5)
     scene.add(key)
-    const rim = new THREE.DirectionalLight(0xb8ffdc, 1)
+    // Luz de contorno del tono del negocio (antes menta fija: teñía de verde a los demás colores).
+    const rim = new THREE.DirectionalLight(palette(color).glow, 1)
     rim.position.set(3, 1.5, -2)
     scene.add(rim)
 
@@ -137,16 +168,19 @@ export default function Mascot3D({ mood, volume = 0, getLevel, size = 280 }: Pro
       return d
     }
 
+    const colors = palette(color)
+    const GLOW = colors.glow.getHex() // ojos, boca y antena
+
     // Todo lo que flota y gira junto.
     const bot = new THREE.Group()
     scene.add(bot)
 
     // Cuerpo: caja muy redondeada con un poco de barniz.
-    const bodyMat = keep(new THREE.MeshPhysicalMaterial({ color: MOOD_BODY.idle.clone(), roughness: 0.42, clearcoat: 0.7, clearcoatRoughness: 0.3 }))
+    const bodyMat = keep(new THREE.MeshPhysicalMaterial({ color: colors.body.idle.clone(), roughness: 0.42, clearcoat: 0.7, clearcoatRoughness: 0.3 }))
     bot.add(new THREE.Mesh(keep(new RoundedBoxGeometry(1.6, 1.4, 1.1, 6, 0.32)), bodyMat))
 
     // Pantalla-cara con su marco.
-    const bezel = new THREE.Mesh(keep(new THREE.ShapeGeometry(roundedRect(1.36, 1.0, 0.24), 8)), keep(new THREE.MeshStandardMaterial({ color: 0x1f6b45, roughness: 0.6 })))
+    const bezel = new THREE.Mesh(keep(new THREE.ShapeGeometry(roundedRect(1.36, 1.0, 0.24), 8)), keep(new THREE.MeshStandardMaterial({ color: colors.bezel, roughness: 0.6 })))
     bezel.position.set(0, 0.1, SCREEN_Z - 0.003)
     const screen = new THREE.Mesh(keep(new THREE.ShapeGeometry(roundedRect(1.26, 0.9, 0.2), 8)), keep(new THREE.MeshStandardMaterial({ color: 0x0b1b2c, roughness: 0.25, metalness: 0.1 })))
     screen.position.set(0, 0.1, SCREEN_Z)
@@ -193,7 +227,7 @@ export default function Mascot3D({ mood, volume = 0, getLevel, size = 280 }: Pro
     )
 
     // Perillas de radio a los lados.
-    const knobMat = keep(new THREE.MeshStandardMaterial({ color: 0x2e8f5c, roughness: 0.35, metalness: 0.2 }))
+    const knobMat = keep(new THREE.MeshStandardMaterial({ color: colors.knob, roughness: 0.35, metalness: 0.2 }))
     const knobGeo = keep(new THREE.CylinderGeometry(0.17, 0.17, 0.1, 32))
     const notchGeo = keep(new THREE.BoxGeometry(0.02, 0.04, 0.22))
     const knobs = [-1, 1].map((side) => {
@@ -330,7 +364,7 @@ export default function Mascot3D({ mood, volume = 0, getLevel, size = 280 }: Pro
 
       // Las perillas giran despacito, como sintonizando.
       knobs.forEach((k, i) => { k.rotation.y = t * (m === 'thinking' ? 1.5 : 0.25) * (i ? 1 : -1) })
-      bodyMat.color.lerp(MOOD_BODY[m], 0.06)
+      bodyMat.color.lerp(colors.body[m], 0.06)
 
       renderer.render(scene, camera)
     }
@@ -344,7 +378,7 @@ export default function Mascot3D({ mood, volume = 0, getLevel, size = 280 }: Pro
       renderer.dispose()
       if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement)
     }
-  }, [size])
+  }, [size, color])
 
   if (failed) return <BotFace mood={mood} volume={volume} size={Math.round(size * 0.6)} />
 
