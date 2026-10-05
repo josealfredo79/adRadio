@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import SEO from '@/components/SEO'
 import AgentChat from '@/components/AgentChat'
+import { useNativeViewport } from '@/lib/useNativeViewport'
 import {
   ArrowLeft,
   Bell,
@@ -154,6 +155,7 @@ export default function PortalPage() {
     enabled: !!token,
     retry: false,
   })
+  useNativeViewport(data ? getSiteTheme(data.business.site_theme).bg : undefined)
 
   // El index.html trae el manifest del dashboard; aquí va uno por cliente para
   // que "Agregar a inicio" instale la app del negocio (requisito en iPhone
@@ -213,7 +215,7 @@ export default function PortalPage() {
       <style>{PUBLIC_SITE_STYLES}</style>
       <div className="min-h-screen font-sans pb-28" style={{ background: theme.bg, color: theme.text }}>
         <MeshBackground color={color} dark={dark} />
-        <div className="relative z-10 mx-auto max-w-lg px-4 pt-6">
+        <div className="relative z-10 mx-auto max-w-lg px-4" style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top, 0px))' }}>
           <BusinessHeader business={data.business} theme={theme} />
           {promoId ? (
             <PromoView token={token!} promoId={promoId} business={data.business} theme={theme} onWant={openChat} />
@@ -236,11 +238,11 @@ export default function PortalPage() {
         {!chatOpen && (
           <button
             onClick={() => openChat()}
-            className="fixed bottom-5 right-5 z-20 inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold text-white shadow-xl transition-transform hover:scale-[1.03] active:scale-[0.98]"
-            style={{ background: color, boxShadow: `0 10px 30px ${color}55` }}
+            className="press fixed right-5 max-w-[calc(100vw-2.5rem)] whitespace-nowrap z-20 inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold text-white shadow-xl"
+            style={{ background: color, boxShadow: `0 10px 30px ${color}55`, bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
           >
             <MessageCircle size={18} />
-            Platicar con {data.business.agent}
+            <span className="truncate">Platicar con {data.business.agent.split(' ')[0]}</span>
           </button>
         )}
         {chatOpen && (
@@ -264,10 +266,10 @@ function BusinessHeader({ business, theme }: { business: Business; theme: SiteTh
   return (
     <header className="flex items-center gap-3">
       {business.logo_url ? (
-        <img src={business.logo_url} alt="" className="h-11 w-11 rounded-xl object-cover" />
+        <img src={business.logo_url} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
       ) : (
         <div
-          className="h-11 w-11 rounded-xl flex items-center justify-center text-lg font-bold text-white"
+          className="h-11 w-11 shrink-0 rounded-xl flex items-center justify-center text-lg font-bold text-white"
           style={{ background: `linear-gradient(135deg, ${business.color}, ${business.color}99)` }}
         >
           {(business.name || '?')[0].toUpperCase()}
@@ -331,7 +333,9 @@ function PortalHome({
         </p>
       </section>
 
-      {data.loyalty && <LoyaltyCardView loyalty={data.loyalty} color={color} business={business.name} />}
+      {data.loyalty && (
+        <LoyaltyCardView loyalty={data.loyalty} color={color} business={business.name} storageKey={`stamps-seen:${token}`} />
+      )}
 
       <div className="mt-6 grid grid-cols-3 gap-2">
         <QuickAction theme={theme} color={color} icon={<CalendarDays size={20} />} label="Agendar" onClick={() => onChat('Quiero agendar una cita')} />
@@ -822,11 +826,32 @@ function LoyaltyCardView({
   loyalty,
   color,
   business,
+  storageKey,
 }: {
   loyalty: PortalLoyalty
   color: string
   business: string
+  storageKey: string
 }) {
+  // Los sellos que el cliente todavía no había visto entran con animación (uno
+  // tras otro) — es un momento de celebración, pasa pocas veces. La cuenta de
+  // lo ya visto vive en este navegador; sin ella, se anima todo una vez.
+  const [seenBefore] = useState<number | null>(() => {
+    try {
+      const raw = localStorage.getItem(storageKey)
+      return raw === null ? null : Number(raw)
+    } catch {
+      return null
+    }
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, String(loyalty.stamps))
+    } catch {
+      // almacenamiento bloqueado: solo se pierde la animación
+    }
+  }, [storageKey, loyalty.stamps])
+  const animateFrom = seenBefore ?? 0
   const full = loyalty.rewards_ready > 0
   const missing = loyalty.required - loyalty.stamps
   // Recién llegó: solo tiene el sello de bienvenida — que se sienta el regalo.
@@ -840,7 +865,7 @@ function LoyaltyCardView({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Tu tarjeta de cliente</p>
-          <p className="mt-1 text-lg font-bold leading-snug">{loyalty.reward}</p>
+          <p className={`mt-1 font-bold leading-snug ${loyalty.reward.length > 40 ? 'text-base' : 'text-lg'}`}>{loyalty.reward}</p>
         </div>
         <Stamp size={22} className="shrink-0 opacity-80" />
       </div>
@@ -848,13 +873,14 @@ function LoyaltyCardView({
       <div className="mt-4 grid grid-cols-5 gap-2.5">
         {Array.from({ length: loyalty.required }, (_, i) => {
           const filled = full || i < loyalty.stamps
+          const isNew = filled && i >= animateFrom
           return (
             <div
               key={i}
-              className="aspect-square rounded-full flex items-center justify-center"
+              className={`aspect-square rounded-full flex items-center justify-center${isNew ? ' anim-stamp' : ''}`}
               style={
                 filled
-                  ? { background: '#fff', color }
+                  ? { background: '#fff', color, animationDelay: isNew ? `${120 + (i - animateFrom) * 70}ms` : undefined }
                   : { border: '2px dashed rgba(255,255,255,0.55)', color: 'rgba(255,255,255,0.7)' }
               }
             >

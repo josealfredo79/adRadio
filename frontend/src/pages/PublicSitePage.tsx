@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import SEO from '@/components/SEO'
 import AgentChat from '@/components/AgentChat'
+import { useNativeViewport } from '@/lib/useNativeViewport'
 import { MapPin, MessageCircle } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
 import { waDigits, categoryEmoji, DEFAULT_LANDING_SECTIONS, type BusinessHours, type LandingSectionId } from '@/pages/publicSite/utils'
@@ -76,6 +77,8 @@ export default function PublicSitePage() {
     enabled: !!slug,
     retry: false,
   })
+
+  useNativeViewport(site ? getSiteTheme(site.site_theme).bg : undefined)
 
   const { data: products } = useQuery<PublicProduct[]>({
     queryKey: ['public-site-products', slug],
@@ -187,7 +190,12 @@ export default function PublicSitePage() {
               ) : (
                 <div className="text-6xl mb-4">{categoryEmoji(site.business_category)}</div>
               )}
-              <h1 className="text-3xl sm:text-4xl font-medium" style={{ fontFamily: SITE_SERIF }}>{site.business_name}</h1>
+              <h1
+                className={`${site.business_name.length > 40 ? 'text-2xl sm:text-3xl' : 'text-3xl sm:text-4xl'} font-medium text-balance`}
+                style={{ fontFamily: SITE_SERIF }}
+              >
+                {site.business_name}
+              </h1>
               {site.tagline && (
                 <p className="mt-3 text-lg" style={site.hero_image_url ? { color: 'rgba(255,255,255,.85)' } : { color: theme.muted }}>
                   {site.tagline}
@@ -395,11 +403,11 @@ export default function PublicSitePage() {
           <button
             type="button"
             onClick={openChat}
-            className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold text-white shadow-xl transition-transform hover:scale-[1.03] active:scale-[0.98]"
-            style={{ background: site.color, boxShadow: `0 10px 30px ${site.color}55` }}
+            className="press fixed right-5 max-w-[calc(100vw-2.5rem)] whitespace-nowrap z-30 inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold text-white shadow-xl"
+            style={{ background: site.color, boxShadow: `0 10px 30px ${site.color}55`, bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
           >
             <MessageCircle size={18} />
-            Platicar con {site.agent}
+            <span className="truncate">Platicar con {site.agent.split(' ')[0]}</span>
           </button>
         )}
         {chatOpen && (

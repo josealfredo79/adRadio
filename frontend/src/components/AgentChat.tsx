@@ -115,6 +115,8 @@ export default function AgentChat({
   const [sending, setSending] = useState(false)
   // Hasta que carga el historial no se sabe si saludar como nuevo o "de nuevo".
   const [historyLoaded, setHistoryLoaded] = useState(false)
+  // Lo que ya estaba (historial) aparece de una vez; lo nuevo entra con animación.
+  const [historyCount, setHistoryCount] = useState(0)
   const [sentHere, setSentHere] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -167,6 +169,7 @@ export default function AgentChat({
         const msgs: HistoryMessage[] = r.data.messages ?? []
         track(msgs)
         lastAtRef.current ??= new Date().toISOString()
+        setHistoryCount(msgs.length)
         const last = msgs[msgs.length - 1]?.at
         const stale = !last || Date.now() - new Date(last).getTime() > GREET_AGAIN_AFTER_MS
         const greeting: ChatTurn[] = stale
@@ -280,9 +283,12 @@ export default function AgentChat({
   const mood = recording ? 'listening' : sending ? 'thinking' : speaker.speaking ? 'speaking' : 'idle'
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
+    <div className="fixed inset-0 z-30 flex items-end justify-center sm:items-center" onClick={onClose}>
+      {/* El fondo se oscurece aparte: si la hoja viviera dentro del mismo
+          desvanecido, se vería transparente mientras sube. */}
+      <div className="anim-backdrop absolute inset-0 bg-black/50" aria-hidden />
       <div
-        className="flex h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl sm:h-[640px] sm:rounded-3xl"
+        className="anim-sheet h-sheet relative flex w-full max-w-lg flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl"
         style={{ background: theme.bg, color: theme.text, border: `1px solid ${theme.cardBorder}` }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -318,14 +324,14 @@ export default function AgentChat({
           </div>
         )}
 
-        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4">
           {turns.map((t, i) =>
             t.note ? (
-              <p key={i} className="mx-auto max-w-[85%] text-center text-xs" style={{ color: theme.muted }}>
+              <p key={i} className="anim-bubble mx-auto max-w-[85%] text-center text-xs" style={{ color: theme.muted }}>
                 {t.content}
               </p>
             ) : (
-            <div key={i}>
+            <div key={i} className={i >= historyCount ? 'anim-bubble' : undefined}>
               {t.fromOwner && (
                 <p className="mb-1 text-xs font-semibold" style={{ color }}>
                   {business.name} te respondió
@@ -403,7 +409,7 @@ export default function AgentChat({
                   <button
                     key={q}
                     onClick={() => void send(q)}
-                    className="rounded-full px-3.5 py-2 text-sm"
+                    className="press rounded-full px-3.5 py-2 text-sm"
                     style={{ border: `1px solid ${theme.cardBorder}`, color: theme.text }}
                   >
                     {q}
@@ -427,7 +433,11 @@ export default function AgentChat({
             void send(undefined, false)
           }}
           className="flex items-center gap-2 p-3"
-          style={{ borderTop: `1px solid ${theme.cardBorder}` }}
+          style={{
+            borderTop: `1px solid ${theme.cardBorder}`,
+            // Arriba de la barra de inicio del iPhone cuando está instalada como app.
+            paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
+          }}
         >
           {recording ? (
             <p className="flex-1 px-2 text-[15px]" style={{ color: theme.muted }}>Te escucho… toca el cuadro rojo al terminar</p>
@@ -438,7 +448,8 @@ export default function AgentChat({
               onChange={(e) => setInput(e.target.value)}
               maxLength={500}
               placeholder="Escribe tu mensaje…"
-              className="min-w-0 flex-1 rounded-full bg-transparent px-4 py-3 text-[15px] outline-none"
+              enterKeyHint="send"
+              className="min-w-0 flex-1 rounded-full bg-transparent px-4 py-3 text-base outline-none"
               style={{ border: `1px solid ${theme.cardBorder}`, color: theme.text }}
             />
           )}
@@ -448,7 +459,7 @@ export default function AgentChat({
               onClick={() => void (recording ? stopRecording() : startRecording())}
               disabled={sending}
               aria-label={recording ? 'Terminar de hablar' : 'Hablar'}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-50"
+              className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-50"
               style={{ background: recording ? '#f43f5e' : color }}
             >
               {recording ? <Square size={16} fill="currentColor" /> : <Mic size={20} />}
@@ -458,7 +469,7 @@ export default function AgentChat({
               type="submit"
               disabled={!input.trim() || sending}
               aria-label="Enviar"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-50"
+              className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-50"
               style={{ background: color }}
             >
               <Send size={18} />

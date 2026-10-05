@@ -9,8 +9,10 @@ html {
   opacity: .7;
   transition: opacity .15s ease;
 }
-.psite-nav-link:hover {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .psite-nav-link:hover {
+    opacity: 1;
+  }
 }
 .psite-nav-links {
   display: none;
@@ -34,7 +36,7 @@ html {
 .psite-mobile-link {
   transition: background-color .15s ease;
 }
-.psite-mobile-link:hover {
+.psite-mobile-link:active {
   background-color: rgba(127,127,127,.1);
 }
 @keyframes psiteFadeUp {
@@ -42,20 +44,27 @@ html {
   to { opacity: 1; transform: translateY(0); }
 }
 .psite-hover-lift {
-  transition: transform .3s ease, box-shadow .3s ease;
-}
-.psite-hover-lift:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 16px 32px -12px var(--psite-glow, rgba(0,0,0,.35));
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms ease;
 }
 .psite-btn-primary {
-  transition: transform .3s ease, box-shadow .3s ease;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms ease;
 }
-.psite-btn-primary:hover {
-  transform: scale(1.03);
-  box-shadow: 0 12px 28px -8px var(--psite-glow, rgba(0,0,0,.35));
+/* Hover solo con mouse: en el celular se quedaba "pegado" tras tocar. */
+@media (hover: hover) and (pointer: fine) {
+  .psite-hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 32px -12px var(--psite-glow, rgba(0,0,0,.35));
+  }
+  .psite-btn-primary:hover {
+    transform: scale(1.02);
+    box-shadow: 0 12px 28px -8px var(--psite-glow, rgba(0,0,0,.35));
+  }
 }
 .psite-btn-primary:active {
-  transform: scale(.98);
+  transform: scale(.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  .psite-hover-lift, .psite-btn-primary { transition: box-shadow 200ms ease; }
+  .psite-hover-lift:hover, .psite-btn-primary:hover, .psite-btn-primary:active { transform: none; }
 }
 `

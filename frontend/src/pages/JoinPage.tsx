@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
+import { useNativeViewport } from '@/lib/useNativeViewport'
 import { saveAccountToken } from '@/lib/customerAccount'
 import { Gift } from 'lucide-react'
 
@@ -18,6 +19,7 @@ interface JoinInfo {
 
 export default function JoinPage() {
   const { slug } = useParams<{ slug: string }>()
+  useNativeViewport('#06060f')
   const navigate = useNavigate()
   const { data, isLoading, isError } = useQuery<JoinInfo>({
     queryKey: ['join', slug],
@@ -77,7 +79,7 @@ export default function JoinPage() {
   return (
     <>
       <SEO title={`Únete a ${business.name}`} noIndex />
-      <div className="min-h-screen bg-[#06060f] px-4 pb-16 pt-8 text-white">
+      <div className="min-h-screen bg-[#06060f] px-4 pb-16 text-white" style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 0px))' }}>
         <div className="mx-auto max-w-md">
           <header className="flex items-center gap-3">
             {business.logo_url ? (

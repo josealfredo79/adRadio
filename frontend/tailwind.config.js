@@ -1,5 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // hover:* solo en dispositivos con mouse: en el celular el primer toque
+  // deja el :hover "pegado" (botones crecidos después de tocarlos).
+  future: { hoverOnlyWhenSupported: true },
   darkMode: 'class',
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {

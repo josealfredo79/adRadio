@@ -79,7 +79,12 @@ export function NavBar({
   return (
     <div
       className="sticky top-0 z-40"
-      style={{ background: `${theme.bg}ee`, backdropFilter: 'blur(8px)', borderBottom: `1px solid ${theme.cardBorder}` }}
+      style={{
+        background: `${theme.bg}ee`,
+        backdropFilter: 'blur(8px)',
+        borderBottom: `1px solid ${theme.cardBorder}`,
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+      }}
     >
       <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between gap-6">
         <a href="#" className="flex items-center gap-2.5 min-w-0">

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
+import { useNativeViewport } from '@/lib/useNativeViewport'
 import { readAccountToken, saveAccountToken } from '@/lib/customerAccount'
 import { CalendarDays, ChevronRight, Gift, LogOut, Search, Stamp, Ticket } from 'lucide-react'
 
@@ -41,6 +42,7 @@ const fmtWhen = (iso: string) =>
 
 export default function MyAccountPage() {
   const [token, setToken] = useState<string | null>(readAccountToken)
+  useNativeViewport('#06060f')
   const { data: status } = useQuery<{ available: boolean }>({
     queryKey: ['account-status'],
     queryFn: () => api.get('/public/me/status').then((r) => r.data),
@@ -65,7 +67,7 @@ export default function MyAccountPage() {
   return (
     <>
       <SEO title="Mis negocios — IaRadio" noIndex />
-      <div className="min-h-screen bg-[#06060f] px-4 pb-16 pt-8 text-white">
+      <div className="min-h-screen bg-[#06060f] px-4 pb-16 text-white" style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 0px))' }}>
         <div className="mx-auto max-w-lg">
           <p className="text-sm font-semibold tracking-wide text-indigo-300">IaRadio</p>
           {token ? (
