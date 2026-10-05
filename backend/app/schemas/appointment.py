@@ -13,6 +13,7 @@ class AppointmentCreate(BaseModel):
     service: str
     scheduled_at: datetime
     duration_min: int = 30
+    staff_name: str | None = None
     notes: str | None = None
     contact_id: uuid.UUID | None = None
 
@@ -23,6 +24,7 @@ class AppointmentUpdate(BaseModel):
     service: str | None = None
     scheduled_at: datetime | None = None
     duration_min: int | None = None
+    staff_name: str | None = None
     notes: str | None = None
     status: str | None = None  # confirmed | cancelled | completed | no_show
 
@@ -34,6 +36,7 @@ class AppointmentOut(BaseModel):
     service: str
     scheduled_at: datetime
     duration_min: int
+    staff_name: str | None = None
     notes: str | None
     status: str
     google_event_id: str | None

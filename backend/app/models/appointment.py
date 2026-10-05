@@ -32,6 +32,8 @@ class Appointment(Base):
         DateTime(timezone=True), nullable=False, index=True
     )
     duration_min: Mapped[int] = mapped_column(Integer, default=30)
+    # Con quién es la cita (users.staff); null = sin asignar.
+    staff_name: Mapped[str | None] = mapped_column(String(80))
     notes: Mapped[str | None] = mapped_column(Text)
 
     # Estado: pending → confirmed → completed | cancelled | no_show

@@ -36,6 +36,9 @@ interface User {
   directory_listed: boolean
   customer_agent_enabled: boolean
   appointment_services?: { name: string; minutes: number }[] | null
+  staff?: { name: string; services: string[] }[] | null
+  payment_link?: string | null
+  payment_transfer?: string | null
 }
 
 export interface LoyaltyConfig {

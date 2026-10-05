@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment
 from app.models.user import User
-from app.services.availability_service import TZ
+from app.services.availability_service import TZ, available_staff
 
 
 class AppointmentConflictError(Exception):
@@ -33,6 +33,7 @@ async def check_no_conflict(
     scheduled_at: datetime,
     duration_min: int = 30,
     exclude_appointment_id=None,
+    staff_name: str | None = None,
 ) -> None:
     """Lanza AppointmentConflictError si [scheduled_at, scheduled_at +
     duration_min) se cruza con otra cita no cancelada del mismo anunciante.
@@ -41,6 +42,21 @@ async def check_no_conflict(
     if scheduled_at.tzinfo is None:
         scheduled_at = scheduled_at.replace(tzinfo=TZ)
     slot_end = scheduled_at + timedelta(minutes=duration_min)
+
+    # Con personal, chocar es que esa persona (o todo el equipo) ya esté ocupada:
+    # dos citas a la misma hora con dos estilistas distintos están bien.
+    free = await available_staff(db, advertiser, scheduled_at, duration_min, staff=staff_name,
+                                 exclude_id=exclude_appointment_id)
+    if free is not None:
+        if not free:
+            raise AppointmentConflictError(
+                f"{staff_name} ya tiene cita el {scheduled_at.astimezone(TZ).strftime('%d/%m/%Y')} a las "
+                f"{scheduled_at.astimezone(TZ).strftime('%H:%M')} — elige otro horario u otra persona."
+                if staff_name else
+                f"Todo tu equipo está ocupado el {scheduled_at.astimezone(TZ).strftime('%d/%m/%Y')} a las "
+                f"{scheduled_at.astimezone(TZ).strftime('%H:%M')} — elige otro horario."
+            )
+        return
 
     q = select(Appointment).where(
         Appointment.advertiser_id == advertiser.id,

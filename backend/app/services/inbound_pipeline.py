@@ -879,6 +879,9 @@ async def process_inbound_message(
                 f"💳 {pending_order.payment_method}\n\n"
                 "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
             )
+            from app.services.payment_info import payment_lines
+
+            order_reply += payment_lines(advertiser, pending_order.payment_method)
             if _stamped:
                 order_reply += await stamp_line(db, advertiser, pending_order.contact_id)
             order_reply += portal_footer(pending_order.contact_id)

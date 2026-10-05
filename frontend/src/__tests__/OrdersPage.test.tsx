@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import OrdersPage from '@/pages/OrdersPage'
 
+// PaymentInfoCard (cómo te pagan) lee la sesión.
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { payment_link: null, payment_transfer: null }, setUser: vi.fn(), loading: false }),
+}))
+
 const mockOrdersPage = {
   items: [
     { id: '1', order_number: 'ORD-001', state: 'confirmed', items_raw: 'Pizza + Refresco', customer_name: 'Carlos Ruiz', customer_phone: '+521234567890', delivery_address: 'Av. Reforma 123', payment_method: 'tarjeta', confirmed_at: '2025-01-01T12:00:00Z', created_at: '2025-01-01T11:00:00Z' },

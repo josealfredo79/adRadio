@@ -165,6 +165,13 @@ class User(Base):
     # Servicios que se agendan y cuánto duran: [{"name": "Tinte", "minutes": 120}].
     # El agente aparta ese tiempo; sin lista, cada cita dura 30 min.
     appointment_services: Mapped[list | None] = mapped_column(JSONB)
+    # Personal que atiende citas: [{"name": "Lupita", "services": [...]}]
+    # (services vacío = hace todo). Ver availability_service.
+    staff: Mapped[list | None] = mapped_column(JSONB)
+    # Cómo le pagan los clientes sus pedidos: link de cobro propio y datos de
+    # transferencia (texto libre: banco, CLABE, a nombre de…).
+    payment_link: Mapped[str | None] = mapped_column(String(500))
+    payment_transfer: Mapped[str | None] = mapped_column(String(500))
 
     # Google Calendar OAuth
     google_refresh_token: Mapped[str | None] = mapped_column(Text)

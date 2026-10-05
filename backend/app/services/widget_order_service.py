@@ -120,6 +120,7 @@ async def _advance(
     order.state = "confirmed"
     order.confirmed_at = datetime.now(timezone.utc)
     from app.services.loyalty_service import add_stamp, stamp_line
+    from app.services.payment_info import payment_lines
 
     stamped = await add_stamp(db, advertiser, contact.id, "order", str(order.id))
     await db.commit()
@@ -134,7 +135,7 @@ async def _advance(
         f"📍 {order.delivery_address}\n"
         f"💳 {order.payment_method}\n\n"
         "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
-        f"{loyalty}{portal_footer(contact.id)}"
+        f"{payment_lines(advertiser, order.payment_method)}{loyalty}{portal_footer(contact.id)}"
     )
 
 

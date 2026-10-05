@@ -6,6 +6,7 @@ import PrintButton from '@/components/PrintButton'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import SEO from '@/components/SEO'
+import PaymentInfoCard from '@/components/PaymentInfoCard'
 
 type OrderState = 'collecting_name' | 'collecting_address' | 'collecting_payment' | 'confirmed' | 'cancelled'
 
@@ -101,6 +102,8 @@ export default function OrdersPage() {
         </div>
         <PrintButton />
       </div>
+
+      <PaymentInfoCard />
 
       <div className="print-area">
 

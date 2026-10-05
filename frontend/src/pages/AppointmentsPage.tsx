@@ -6,6 +6,7 @@ import SEO from '@/components/SEO'
 import { useAuth } from '@/contexts/AuthContext'
 import BusinessHoursEditor from '@/components/BusinessHoursEditor'
 import AppointmentServicesCard from '@/components/AppointmentServicesCard'
+import StaffCard from '@/components/StaffCard'
 import { DEFAULT_BUSINESS_HOURS, type BusinessHours } from '@/pages/publicSite/utils'
 
 interface Appointment {
@@ -15,6 +16,7 @@ interface Appointment {
   service: string
   scheduled_at: string
   duration_min: number
+  staff_name?: string | null
   notes: string | null
   status: string
   google_event_id: string | null
@@ -58,6 +60,7 @@ export default function AppointmentsPage() {
     scheduled_at: '',
     duration_min: 30,
     notes: '',
+    staff_name: '',
   })
   const [error, setError] = useState('')
 
@@ -164,7 +167,7 @@ export default function AppointmentsPage() {
   })
 
   const resetForm = () => {
-    setForm({ customer_name: '', customer_phone: '', service: '', scheduled_at: '', duration_min: 30, notes: '' })
+    setForm({ customer_name: '', customer_phone: '', service: '', scheduled_at: '', duration_min: 30, notes: '', staff_name: '' })
     setError('')
   }
 
@@ -175,6 +178,7 @@ export default function AppointmentsPage() {
       scheduled_at: new Date(form.scheduled_at).toISOString(),
       customer_phone: form.customer_phone || undefined,
       notes: form.notes || undefined,
+      staff_name: form.staff_name || undefined,
     })
   }
 
@@ -294,6 +298,7 @@ export default function AppointmentsPage() {
       </div>
 
       <AppointmentServicesCard />
+      <StaffCard />
 
       {/* Appointments list */}
       {isLoading ? (
@@ -334,6 +339,7 @@ export default function AppointmentsPage() {
                             {new Date(a.scheduled_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                             {' · '}{a.duration_min} min
                           </span>
+                          {a.staff_name && <span>👤 con {a.staff_name}</span>}
                           {a.customer_phone && <span>📱 {a.customer_phone}</span>}
                         </div>
                         {a.notes && <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 italic">{a.notes}</p>}
@@ -428,6 +434,16 @@ export default function AppointmentsPage() {
                   </select>
                 </div>
               </div>
+              {(user?.staff?.length ?? 0) > 0 && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Con quién</label>
+                  <select value={form.staff_name} onChange={(e) => setForm({ ...form, staff_name: e.target.value })}
+                    className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none dark:border-gray-700">
+                    <option value="">Sin asignar</option>
+                    {user?.staff?.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Notas (opcional)</label>
                 <textarea rows={2} placeholder="Alguna nota sobre la cita..."

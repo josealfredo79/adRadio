@@ -90,5 +90,8 @@ class UserOut(BaseModel):
     directory_listed: bool = True
     customer_agent_enabled: bool = False
     appointment_services: list[dict] | None = None
+    staff: list[dict] | None = None
+    payment_link: str | None = None
+    payment_transfer: str | None = None
 
     model_config = {"from_attributes": True}

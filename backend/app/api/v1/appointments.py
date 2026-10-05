@@ -111,7 +111,7 @@ async def create_appointment(
 ) -> AppointmentOut:
     """Create a new appointment. Syncs to Google Calendar if connected."""
     try:
-        await check_no_conflict(db, current_user, body.scheduled_at, body.duration_min)
+        await check_no_conflict(db, current_user, body.scheduled_at, body.duration_min, staff_name=body.staff_name)
     except AppointmentConflictError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
 
@@ -163,13 +163,14 @@ async def update_appointment(
 
     update_data = body.model_dump(exclude_none=True)
 
-    if "scheduled_at" in update_data or "duration_min" in update_data:
+    if "scheduled_at" in update_data or "duration_min" in update_data or "staff_name" in update_data:
         try:
             await check_no_conflict(
                 db, current_user,
                 update_data.get("scheduled_at", appointment.scheduled_at),
                 update_data.get("duration_min", appointment.duration_min),
                 exclude_appointment_id=appointment.id,
+                staff_name=update_data.get("staff_name", appointment.staff_name),
             )
         except AppointmentConflictError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e

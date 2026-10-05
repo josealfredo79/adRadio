@@ -35,6 +35,11 @@ class ProfileUpdate(BaseModel):
     customer_agent_enabled: bool | None = None
     # [] borra la lista (todo vuelve a 30 min); None no la toca.
     appointment_services: list[dict] | None = None
+    # [] borra el personal; None no lo toca.
+    staff: list[dict] | None = None
+    # "" borra; None no lo toca.
+    payment_link: str | None = None
+    payment_transfer: str | None = None
 
     @field_validator("loyalty_config")
     @classmethod
@@ -192,6 +197,42 @@ class ProfileUpdate(BaseModel):
             seen.add(name.lower())
             clean.append({"name": name, "minutes": minutes})
         return clean
+
+    @field_validator("staff")
+    @classmethod
+    def validate_staff(cls, v: list[dict] | None) -> list[dict] | None:
+        if v is None:
+            return None
+        if len(v) > 30:
+            raise ValueError("Máximo 30 personas")
+        clean, seen = [], set()
+        for item in v:
+            name = " ".join(str((item or {}).get("name") or "").split())[:80]
+            if not name:
+                raise ValueError("Cada persona necesita nombre")
+            if name.lower() in seen:
+                raise ValueError(f"{name}: está repetido")
+            seen.add(name.lower())
+            services = (item or {}).get("services") or []
+            if not isinstance(services, list):
+                raise ValueError(f"{name}: los servicios deben ser una lista")  # noqa: TRY004 — pydantic solo convierte ValueError
+            clean.append({"name": name, "services": [" ".join(str(s).split())[:80] for s in services if str(s).strip()][:40]})
+        return clean
+
+    @field_validator("payment_link")
+    @classmethod
+    def validate_payment_link(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if v and (not v.startswith("https://") or " " in v or len(v) > 500):
+            raise ValueError("El link de pago debe empezar con https://")
+        return v
+
+    @field_validator("payment_transfer")
+    @classmethod
+    def validate_payment_transfer(cls, v: str | None) -> str | None:
+        return None if v is None else " ".join(v.split())[:500]
 
     @field_validator("business_hours")
     @classmethod
