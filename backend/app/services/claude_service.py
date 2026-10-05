@@ -363,6 +363,10 @@ _ORDER_KEYWORDS: frozenset[str] = frozenset([
     "necesito ordenar", "ordenar", "pedir", "comprar",
     "apartar", "reservar", "me llevo", "quisiera pedir",
     "quisiera ordenar", "quisiera comprar",
+    # "Quiero hacer un pedido" es el botón rápido del chat web y no traía
+    # ninguna de las de arriba ("pedido" ≠ "pedir"). Sin "un pedido" a secas:
+    # "¿dónde va mi pedido?" no es uno nuevo.
+    "hacer un pedido", "hacer pedido", "hago un pedido", "quiero un pedido",
 ])
 
 

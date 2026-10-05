@@ -6,10 +6,20 @@ Serves only the same public-safe subset of fields as widget_preview
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.rate_limiter import limiter
 from app.database import get_db
 from app.models.customer_story import CustomerStory
@@ -60,6 +70,9 @@ async def get_public_site(request: Request, slug: str, db: AsyncSession = Depend
         "whatsapp_number": _public_whatsapp_number(user),
         "business_hours": user.business_hours or DEFAULT_BUSINESS_HOURS,
         "landing_sections": user.landing_sections or DEFAULT_LANDING_SECTIONS,
+        "slug": user.slug or "",
+        # Registro con código (/q/{slug}) encendido: el chat ofrece "Hazte cliente".
+        "account_available": settings.CUSTOMER_ACCOUNT_ENABLED,
     }
 
 
@@ -215,3 +228,51 @@ async def get_public_product_by_advertiser(
         raise HTTPException(status_code=404, detail="Negocio no encontrado")
 
     return await _get_product_detail(db, user, product_id, "")
+
+
+# ─── Platicar con voz con el agente de la página ─────────────────────────────
+# Igual que en el portal del cliente (portal.py), pero para cualquier visitante
+# de la página pública: habla en vez de escribir y el agente 3D le contesta en
+# voz alta. Sin cuenta, así que límites más cortos por IP.
+SITE_AUDIO_MAX_BYTES = 2 * 1024 * 1024
+SITE_SPEAK_MAX_CHARS = 600
+
+
+async def _site_owner(db: AsyncSession, slug: str) -> User:
+    user = (await db.execute(select(User).where(User.slug == slug.lower()))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Página no encontrada")
+    return user
+
+
+@router.post("/{slug}/listen")
+@limiter.limit("6/minute")
+async def site_listen(
+    request: Request,
+    slug: str,
+    audio: UploadFile | None = File(None),
+    text: str | None = Form(None),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.api.v1.voice_setup import read_transcript
+
+    await _site_owner(db, slug)
+    transcript = await read_transcript(audio, text, SITE_AUDIO_MAX_BYTES, 500, "1 minuto")
+    return {"transcript": transcript[:500]}
+
+
+@router.post("/{slug}/speak")
+@limiter.limit("12/minute")
+async def site_speak(request: Request, slug: str, body: dict, db: AsyncSession = Depends(get_db)) -> Response:
+    from app.services.radio.tts import _tts_edge
+
+    await _site_owner(db, slug)
+    text = " ".join(str(body.get("text") or "").replace("*", "").split())[:SITE_SPEAK_MAX_CHARS]
+    if not text:
+        raise HTTPException(status_code=400, detail="Nada que decir")
+    try:
+        audio = await _tts_edge(text, "es-MX-DaliaNeural", rate="+0%", pitch="+0Hz")
+    except Exception:
+        logger.warning("[SITE] TTS failed", exc_info=True)
+        raise HTTPException(status_code=503, detail="Voz no disponible")
+    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=3600"})

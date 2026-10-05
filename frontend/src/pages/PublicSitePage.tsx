@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import SEO from '@/components/SEO'
+import AgentChat from '@/components/AgentChat'
 import { MapPin, MessageCircle } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
 import { waDigits, categoryEmoji, DEFAULT_LANDING_SECTIONS, type BusinessHours, type LandingSectionId } from '@/pages/publicSite/utils'
@@ -27,7 +28,12 @@ interface PublicSite {
   whatsapp_number: string
   business_hours: BusinessHours | null
   landing_sections: LandingSectionId[] | null
+  slug: string
+  account_available: boolean
 }
+
+// El agente 3D (la mascota robot que habla) — se descarga aparte, solo aquí.
+const Mascot3D = lazy(() => import('@/components/Mascot3D'))
 
 interface PublicProduct {
   id: string
@@ -49,12 +55,13 @@ interface PublicStory {
 
 const SENTIMENT_EMOJI: Record<string, string> = { positivo: '😊', negativo: '😕', neutro: '🙂' }
 
-const WIDGET_BASE = (import.meta.env.VITE_WIDGET_URL as string | undefined) ?? ''
-
 export default function PublicSitePage() {
   const { slug } = useParams<{ slug: string }>()
   const [notFound, setNotFound] = useState(false)
-  const widgetMounted = useRef(false)
+  // Chat web con el agente: gratis para el negocio y sin salir de la página
+  // (antes los botones mandaban a WhatsApp, que Meta cobra).
+  const [chatOpen, setChatOpen] = useState(false)
+  const openChat = () => setChatOpen(true)
 
   const { data: site, isLoading } = useQuery<PublicSite>({
     queryKey: ['public-site', slug],
@@ -100,37 +107,6 @@ export default function PublicSitePage() {
     document.head.appendChild(link)
     return () => { link.remove() }
   }, [])
-
-  useEffect(() => {
-    if (!site || widgetMounted.current) return
-    widgetMounted.current = true
-
-    ;(window as unknown as { IaRadioWidget?: unknown }).IaRadioWidget = {
-      advertiserId: site.advertiser_id,
-      apiBase: `${WIDGET_BASE}/api/v1`,
-      business: site.business_name,
-      agent: site.agent,
-      greeting: site.greeting,
-      color: site.color,
-    }
-
-    const link = document.createElement('link')
-    link.rel = 'stylesheet'
-    link.href = `${WIDGET_BASE}/widget/widget.css`
-    document.head.appendChild(link)
-
-    const script = document.createElement('script')
-    script.src = `${WIDGET_BASE}/widget/widget.js`
-    script.defer = true
-    document.body.appendChild(script)
-
-    return () => {
-      link.remove()
-      script.remove()
-      document.getElementById('iaradio-widget-popup')?.remove()
-      document.getElementById('iaradio-widget-btn')?.remove()
-    }
-  }, [site])
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-[#06060f] text-white">Cargando...</div>
@@ -188,6 +164,7 @@ export default function PublicSitePage() {
             color={site.color}
             theme={theme}
             links={navLinks}
+            onChat={openChat}
           />
 
           <header
@@ -228,17 +205,43 @@ export default function PublicSitePage() {
                   </Badge>
                 )}
               </div>
-              {site.whatsapp_number && (
-                <a
-                  href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="psite-btn-primary mt-6 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-lg"
-                  style={{ background: `linear-gradient(135deg, ${site.color}, ${site.color}cc)`, color: '#fff', ...glowVar(site.color, theme) }}
+              {/* El agente 3D: saluda y al tocarlo abre el chat (texto o voz). */}
+              <button
+                type="button"
+                onClick={openChat}
+                aria-label={`Platicar con ${site.agent}`}
+                className="mt-6 mx-auto flex flex-col items-center"
+              >
+                <span
+                  className="relative mb-1 rounded-2xl px-4 py-2 text-sm font-medium shadow-lg"
+                  style={{ background: theme.cardBg, color: theme.text, border: `1px solid ${theme.cardBorder}` }}
                 >
-                  <MessageCircle size={16} />
-                  Chatea con {site.agent}
-                </a>
+                  ¡Hola! Soy {site.agent} 👋 ¿Te ayudo?
+                </span>
+                <Suspense fallback={<div style={{ width: 170, height: 196 }} />}>
+                  <Mascot3D mood="happy" size={170} />
+                </Suspense>
+              </button>
+              <button
+                type="button"
+                onClick={openChat}
+                className="psite-btn-primary mt-2 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-lg"
+                style={{ background: `linear-gradient(135deg, ${site.color}, ${site.color}cc)`, color: '#fff', ...glowVar(site.color, theme) }}
+              >
+                <MessageCircle size={16} />
+                Platica con {site.agent}
+              </button>
+              {site.whatsapp_number && (
+                <p className="mt-3 text-sm">
+                  <a
+                    href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline underline-offset-4 opacity-80 hover:opacity-100"
+                  >
+                    o escríbenos por WhatsApp
+                  </a>
+                </p>
               )}
             </div>
           </header>
@@ -357,18 +360,15 @@ export default function PublicSitePage() {
               <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,.85)' }}>
                 Un mensaje y {site.agent} te responde al instante.
               </p>
-              {site.whatsapp_number && (
-                <a
-                  href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="psite-btn-primary inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-lg"
-                  style={{ background: '#fff', color: site.color }}
-                >
-                  <MessageCircle size={16} />
-                  Chatea con {site.agent}
-                </a>
-              )}
+              <button
+                type="button"
+                onClick={openChat}
+                className="psite-btn-primary inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-lg"
+                style={{ background: '#fff', color: site.color }}
+              >
+                <MessageCircle size={16} />
+                Platica con {site.agent}
+              </button>
             </div>
           </section>
 
@@ -390,6 +390,35 @@ export default function PublicSitePage() {
             </p>
           </footer>
         </div>
+
+        {!chatOpen && (
+          <button
+            type="button"
+            onClick={openChat}
+            className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold text-white shadow-xl transition-transform hover:scale-[1.03] active:scale-[0.98]"
+            style={{ background: site.color, boxShadow: `0 10px 30px ${site.color}55` }}
+          >
+            <MessageCircle size={18} />
+            Platicar con {site.agent}
+          </button>
+        )}
+        {chatOpen && (
+          <AgentChat
+            business={{
+              advertiser_id: site.advertiser_id,
+              name: site.business_name,
+              agent: site.agent,
+              color: site.color,
+              greeting: site.greeting,
+            }}
+            theme={theme}
+            voiceBase={`/public/site/${site.slug || slug}`}
+            joinPath={site.account_available && site.slug ? `/q/${site.slug}` : undefined}
+            whatsappHref={site.whatsapp_number ? `https://wa.me/${waDigits(site.whatsapp_number)}` : undefined}
+            prefill={null}
+            onClose={() => setChatOpen(false)}
+          />
+        )}
       </div>
     </>
   )

@@ -180,6 +180,15 @@ async def widget_chat(
 
     if unverified:
         reply = _strip_portal_links(reply)
+    # El bot necesita sus datos para pedir o agendar: el chat ofrece registrarse.
+    from app.services.appointment_booking_service import (
+        NEEDS_CONTACT_REPLY as NEEDS_CONTACT_APPT,
+    )
+    from app.services.widget_order_service import (
+        NEEDS_CONTACT_REPLY as NEEDS_CONTACT_ORDER,
+    )
+
+    needs_contact = contact is None and reply in (NEEDS_CONTACT_APPT, NEEDS_CONTACT_ORDER)
 
     history.append({"role": "user", "content": message})
     history.append({"role": "assistant", "content": reply})
@@ -218,7 +227,7 @@ async def widget_chat(
         logger.warning("[WIDGET-CHAT] Failed to extract product cards", exc_info=True)
         cards = []
 
-    return {"reply": reply, "session_id": session_id, "cards": cards}
+    return {"reply": reply, "session_id": session_id, "cards": cards, "needs_contact": needs_contact}
 
 
 @router.post("/lead/{advertiser_id}")

@@ -60,6 +60,7 @@ export function NavBar({
   color,
   theme,
   links,
+  onChat,
 }: {
   businessName: string
   logoUrl: string
@@ -69,6 +70,8 @@ export function NavBar({
   color: string
   theme: SiteThemeDef
   links: NavLink[]
+  // Abre el chat web con el agente (gratis); sin él, el botón va a WhatsApp.
+  onChat?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const waHref = whatsappNumber ? `https://wa.me/${waDigits(whatsappNumber)}` : null
@@ -101,7 +104,17 @@ export function NavBar({
         )}
 
         <div className="flex items-center gap-2 shrink-0">
-          {waHref && (
+          {onChat ? (
+            <button
+              type="button"
+              onClick={onChat}
+              className="psite-btn-primary psite-nav-cta items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold shadow"
+              style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)`, color: '#fff', ...glowVar(color, theme) }}
+            >
+              <MessageCircle size={13} />
+              Platica con {agent}
+            </button>
+          ) : waHref && (
             <a
               href={waHref}
               target="_blank"
@@ -140,7 +153,20 @@ export function NavBar({
               {l.label}
             </a>
           ))}
-          {waHref && (
+          {onChat ? (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                onChat()
+              }}
+              className="psite-btn-primary mt-1 flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold"
+              style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)`, color: '#fff' }}
+            >
+              <MessageCircle size={15} />
+              Platica con {agent}
+            </button>
+          ) : waHref && (
             <a
               href={waHref}
               target="_blank"
@@ -174,7 +200,7 @@ export function BenefitsSection({
     {
       icon: MessageCircle,
       title: 'Respuesta inmediata',
-      text: `Escríbenos por WhatsApp y ${agent} te contesta al instante, sin esperas ni filas.`,
+      text: `Escríbele a ${agent} aquí mismo, con texto o con tu voz, y te contesta al instante, sin esperas ni filas.`,
     },
     {
       icon: Clock,
@@ -281,7 +307,7 @@ export function BusinessHoursCard({ hours, color, theme }: { hours: BusinessHour
         </div>
       ))}
       <div className="flex items-center justify-between text-sm pt-2">
-        <span style={{ color: theme.muted }}>WhatsApp</span>
+        <span style={{ color: theme.muted }}>Chat aquí y WhatsApp</span>
         <span className="font-semibold" style={{ color }}>Respuesta 24/7</span>
       </div>
     </div>
