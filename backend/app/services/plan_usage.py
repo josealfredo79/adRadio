@@ -69,7 +69,7 @@ async def register_bot_conversation(advertiser_id: uuid.UUID, conversation_key: 
     conversación nueva si este cliente no ha hablado con la IA en 24 h, manda
     los avisos de 80 % / 100 %, y dice si hay que usar el modelo económico.
 
-    Usa su propia sesión con SELECT ... FOR UPDATE: el contador se guarda
+    Usa su propia sesión con SELECT ... FOR NO KEY UPDATE: el contador se guarda
     aunque el que llama no haga commit (ej. el chat web), y dos mensajes
     simultáneos no se pisan. Ante cualquier error, deja pasar con el modelo
     normal — la cuota nunca debe tumbar al bot."""
@@ -83,7 +83,12 @@ async def register_bot_conversation(advertiser_id: uuid.UUID, conversation_key: 
                 f"{DEDUPE_PREFIX}{advertiser_id}:{conversation_key}", "1", ex=CONV_WINDOW_SECONDS, nx=True,
             ))
         async with AsyncSessionLocal() as db:
-            user = await db.get(User, advertiser_id, with_for_update=True)
+            # FOR NO KEY UPDATE, no FOR UPDATE: el que llama suele tener sin
+            # commit un INSERT con FK a users (la conversación nueva del chat
+            # web), que deja KEY SHARE en esta fila. FOR UPDATE choca con él y
+            # se esperaban mutuamente para siempre; este no, y aún serializa
+            # dos contadores simultáneos.
+            user = await db.get(User, advertiser_id, with_for_update={"key_share": True})
             if user is None:
                 return ConversationUsage(used=0, cap=-1, economy=False)
             _roll_month(user, _current_month())

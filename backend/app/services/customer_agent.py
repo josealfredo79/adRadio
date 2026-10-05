@@ -286,7 +286,9 @@ async def _tool_horarios_libres(ctx: _Ctx, args: dict) -> dict:
     slots = await get_available_slots(ctx.db, ctx.advertiser, day, APPOINTMENT_MINUTES)
     if not slots:
         return {"dia": _WEEKDAYS[day.weekday()], "horarios": [], "nota": "Sin horarios libres ese día (cerrado o lleno)."}
-    return {"dia": _WEEKDAYS[day.weekday()], "horarios": [s.strftime("%H:%M") for s in slots][:48]}  # el día completo: si se corta, "en la tarde" no se ve
+    # Haiku leía "a las 5" contra "17:00" y contestaba que no había lugar: se le dice cómo leer la lista.
+    return {"dia": _WEEKDAYS[day.weekday()], "horarios": [s.strftime("%H:%M") for s in slots][:48],  # el día completo: si se corta, "en la tarde" no se ve
+            "nota": "Formato 24 h: 17:00 son las 5 de la tarde."}
 
 
 async def _tool_mis_citas(ctx: _Ctx, args: dict) -> dict:
@@ -461,6 +463,8 @@ Cómo trabajas:
   agendar o apartar algo, usa horarios_libres y luego proponer_cita. No decidas tú que "ese tipo de negocio no
   aparta": solo di que no se puede si la información del negocio lo prohíbe con esas palabras.
 - Antes de proponer una cita, consulta horarios_libres de ese día. Si el cliente dice "en la tarde", ofrécele 2 o 3 horarios.
+- Las horas sin "de la mañana/tarde" son las que caen en el horario: "a las 5" = 17:00, "a las 10" = 10:00. Si la hora
+  que pidió está en horarios_libres, propónla directo con proponer_cita; solo ofrece otras si esa no está.
 - Si el cliente pide varias cosas (cita y pedido), resuélvelas una por una: primero una, y cuando se confirme, la otra.
 - Para un pedido necesitas: productos del catálogo (buscar_productos), si es a domicilio (con dirección) o para recoger, y forma de pago.
 - No prometas sellos, descuentos, regalos ni tiempos de entrega que no te haya dado una herramienta.

@@ -158,6 +158,31 @@ class TestConversationQuota:
             await _cleanup(uid)
 
     @pytest.mark.asyncio
+    async def test_does_not_deadlock_with_callers_open_insert(self):
+        # El chat web crea la conversación (FK a users → candado KEY SHARE en
+        # la fila del negocio) y, sin commit, pide la respuesta a la IA. Con
+        # FOR UPDATE el contador esperaba a ese request y el request a él:
+        # chat colgado para siempre con el primer mensaje de un cliente nuevo.
+        import asyncio
+
+        from app.models.contact import Contact
+        from app.models.conversation import Conversation
+
+        uid = await _seed(current_plan="starter")
+        try:
+            async with AsyncSessionLocal() as caller:
+                contact = Contact(advertiser_id=uid, name="Nuevo", phone=f"+52155{uuid.uuid4().int % 10**8:08d}")
+                caller.add(contact)
+                await caller.flush()
+                caller.add(Conversation(advertiser_id=uid, contact_id=contact.id, messages=[]))
+                await caller.flush()
+                usage = await asyncio.wait_for(plan_usage.register_bot_conversation(uid, "nuevo", FakeRedis()), 10)
+                assert usage.used == 1
+                await caller.rollback()
+        finally:
+            await _cleanup(uid)
+
+    @pytest.mark.asyncio
     async def test_failure_never_blocks_the_bot(self):
         with patch("app.database.AsyncSessionLocal", side_effect=RuntimeError("db down")):
             usage = await plan_usage.register_bot_conversation(uuid.uuid4(), "c", None)
