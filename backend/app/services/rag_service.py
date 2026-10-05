@@ -108,7 +108,7 @@ async def answer_with_rag(
             from app.services.plan_usage import register_bot_conversation
             usage = await register_bot_conversation(uuid.UUID(str(advertiser_id)), conversation_key, redis)
             economy = usage.economy
-        return await generate_bot_response(
+        reply = await generate_bot_response(
             advertiser_context=context,
             conversation_history=conversation_history,
             user_message=query,
@@ -121,6 +121,16 @@ async def answer_with_rag(
             economy=economy,
             customer_note=customer_note,
         )
+        from app.services.claude_service import BOT_BUSY_REPLY
+
+        if reply == BOT_BUSY_REPLY and user is not None:
+            try:
+                from app.services.owner_alerts import alert_bot_down
+
+                await alert_bot_down(redis, user)
+            except Exception:
+                logger.warning("[RAG] bot-down alert failed", exc_info=True)
+        return reply
 
     # Pure fallback — no instructions, no context
     if user and user.business_name:

@@ -118,6 +118,8 @@ class Settings(BaseSettings):
     # anterior sin cambios (Anthropic directo).
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    # Uno o varios separados por coma (ej. "openai/gpt-oss-20b:free,meta-llama/
+    # llama-3.3-70b-instruct:free"): se prueban en orden.
     OPENROUTER_MODEL: str = ""
     # Modelo aparte para el juez del Laboratorio (evaluación) — opcional, si
     # se omite usa OPENROUTER_MODEL. Igual que vocero-crm: separar el modelo
@@ -143,6 +145,21 @@ class Settings(BaseSettings):
     # cambios (salta directo a OpenRouter/Anthropic).
     GROQ_CHAT_BASE_URL: str = "https://api.groq.com/openai/v1"
     GROQ_CHAT_MODEL: str = ""
+
+    # Más proveedores con plan GRATIS y API compatible con OpenAI (ver
+    # llm_client.py): se prueban en orden Groq → Gemini → Mistral → OpenRouter
+    # y Claude queda al final como respaldo de pago. Sin llave = se salta.
+    # Gemini: llave de Google AI Studio (gratis, sin tarjeta).
+    GEMINI_API_KEY: str = ""
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    GEMINI_MODEL: str = "gemini-2.5-flash-lite"
+    # Mistral: plan "Experiment" gratis (pide aceptar que usen los datos para entrenar).
+    MISTRAL_API_KEY: str = ""
+    MISTRAL_BASE_URL: str = "https://api.mistral.ai/v1"
+    MISTRAL_MODEL: str = "mistral-small-latest"
+    # Segundos que se espera a cada proveedor gratis antes de pasar al siguiente
+    # (un proveedor atorado no puede dejar al cliente sin respuesta).
+    LLM_PROVIDER_TIMEOUT_SECONDS: float = 12.0
 
     # Voyage AI (embeddings RAG)
     VOYAGE_API_KEY: str = ""

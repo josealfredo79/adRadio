@@ -127,6 +127,21 @@ async def alert_web_message(redis, advertiser: User, contact_id: uuid.UUID, name
     return await _send(advertiser, to, body)
 
 
+async def alert_bot_down(redis, advertiser: User) -> bool:
+    """Ningún modelo de IA contestó (llm_client: gratis y Claude): el cliente
+    recibió "dame un momento". Se avisa al dueño una vez por hora como mucho,
+    para que conteste él desde el Inbox."""
+    to = _destination(advertiser)
+    if redis is None or not to:
+        return False
+    if not await redis.set(f"owner_alert_bot_down:{advertiser.id}", "1", ex=3600, nx=True):
+        return False
+    return await _send(advertiser, to, (
+        "⚠️ Tu bot no pudo contestar un mensaje (la IA no respondió). Le dijimos al cliente que en un momento "
+        f"le contestas. Revisa tu Inbox: {_inbox_url()}"
+    ))
+
+
 async def alert_new_customer(redis, advertiser: User, name: str, via: str) -> bool:
     """Se unió un cliente nuevo por el QR o el directorio. True si salió un aviso."""
     to = _destination(advertiser)

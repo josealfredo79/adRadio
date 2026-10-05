@@ -99,6 +99,10 @@ Devuelve solo las 3 variantes, separadas por "---", sin numeración ni explicaci
     return variants[:3]
 
 
+# Lo que contesta el bot si ningún modelo respondió (ver generate_bot_response).
+BOT_BUSY_REPLY = "Dame un momento, ahorita te contesto 🙏"
+
+
 async def generate_bot_response(
     advertiser_context: str,
     conversation_history: list[dict],
@@ -208,13 +212,12 @@ Tu personalidad es: {bot_personality}.
             messages, system=system, max_tokens=500, temperature=0.3,
             anthropic_model="claude-haiku-4-5-20251001", economy=economy,
         )
-    except Exception as e:
-        logger.warning("[CLAUDE] generate_bot_response failed on every provider: %s", e, exc_info=True)
-        return (
-            f"Hola! Soy {bot_name} de {business_name}. "
-            f"{bot_personality}. "
-            "¿En qué puedo ayudarte hoy?"
-        )
+    except Exception:
+        # Todos los modelos fallaron (gratis y Claude). Antes se repetía el
+        # saludo a cada mensaje; ahora se pide un momento y rag_service le
+        # avisa al dueño (owner_alerts.alert_bot_down).
+        logger.exception("[CLAUDE] generate_bot_response failed on every provider")
+        return BOT_BUSY_REPLY
 
 
 # ─── Personalización de mensajes ─────────────────────────────────────────────

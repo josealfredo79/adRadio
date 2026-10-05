@@ -5,16 +5,17 @@ src/lib/ai/index.ts). Todo el código que antes llamaba a
 anthropic.AsyncAnthropic().messages.create(...) directamente ahora pasa por
 chat_completion() aquí.
 
-Cadena de proveedores (cada uno opcional vía variables de entorno): Groq →
-OpenRouter → Anthropic. Groq y OpenRouter comparten el formato de chat
-completions de OpenAI, así que reutilizan el cliente `openai` que el
-proyecto ya trae para Whisper. Si un proveedor gratis falla (cuota agotada,
-error de red, etc.) se intenta el siguiente automáticamente — Anthropic es
-el fallback pagado final y confiable. Si ninguno de Groq/OpenRouter está
-configurado, cae directo en Anthropic — el comportamiento que este proyecto
-tuvo siempre, sin cambios de default.
+Cadena (decisión del dueño 2026-10-05: primero todos los gratis, Claude al
+final): Groq → Gemini → Mistral → OpenRouter (uno o varios modelos) →
+Anthropic. Cada proveedor es opcional: sin llave se salta. Todos los gratis
+hablan el formato de chat completions de OpenAI, así que comparten el
+cliente `openai`. Si uno falla — error, cuota agotada, se atora más de
+LLM_PROVIDER_TIMEOUT_SECONDS o contesta vacío — se pasa al siguiente.
+Anthropic es el respaldo pagado final y confiable.
 """
 import logging
+import re
+from collections.abc import Callable
 
 import anthropic
 from openai import AsyncOpenAI
@@ -24,43 +25,71 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 _anthropic_client: anthropic.AsyncAnthropic | None = None
-_openrouter_client: AsyncOpenAI | None = None
-_groq_client: AsyncOpenAI | None = None
+_openai_clients: dict[str, AsyncOpenAI] = {}
+
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_LEAKED_REASONING = re.compile(r"^(<think>|here'?s (a|my) thinking process|\*\*analy[sz]e|okay, (so|let me)|let me think)",
+                               re.IGNORECASE)
+
+
+class EmptyReply(Exception):
+    """El proveedor contestó sin texto: cuenta como falla y se prueba el siguiente."""
+
+
+def _timeout(max_tokens: int, base: float) -> float:
+    # Textos largos (guiones de radio, banners) necesitan más que un mensaje de chat.
+    return max(base, max_tokens / 40)
 
 
 def _get_anthropic_client() -> anthropic.AsyncAnthropic:
     global _anthropic_client
     if _anthropic_client is None:
-        _anthropic_client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        _anthropic_client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY, max_retries=1)
     return _anthropic_client
 
 
-def _get_openrouter_client() -> AsyncOpenAI:
-    global _openrouter_client
-    if _openrouter_client is None:
-        _openrouter_client = AsyncOpenAI(
-            api_key=settings.OPENROUTER_API_KEY,
-            base_url=settings.OPENROUTER_BASE_URL,
-        )
-    return _openrouter_client
+def _client(name: str, api_key: str, base_url: str) -> AsyncOpenAI:
+    if name not in _openai_clients:
+        # Sin reintentos del SDK: si falla, mejor pasar ya al siguiente proveedor.
+        _openai_clients[name] = AsyncOpenAI(api_key=api_key, base_url=base_url, max_retries=0)
+    return _openai_clients[name]
 
 
 def _get_groq_client() -> AsyncOpenAI:
-    global _groq_client
-    if _groq_client is None:
-        _groq_client = AsyncOpenAI(
-            api_key=settings.GROQ_API_KEY,
-            base_url=settings.GROQ_CHAT_BASE_URL,
-        )
-    return _groq_client
+    return _client("groq", settings.GROQ_API_KEY, settings.GROQ_CHAT_BASE_URL)
+
+
+def _get_gemini_client() -> AsyncOpenAI:
+    return _client("gemini", settings.GEMINI_API_KEY, settings.GEMINI_BASE_URL)
+
+
+def _get_mistral_client() -> AsyncOpenAI:
+    return _client("mistral", settings.MISTRAL_API_KEY, settings.MISTRAL_BASE_URL)
+
+
+def _get_openrouter_client() -> AsyncOpenAI:
+    return _client("openrouter", settings.OPENROUTER_API_KEY, settings.OPENROUTER_BASE_URL)
+
+
+def is_groq_configured() -> bool:
+    return bool(settings.GROQ_API_KEY and settings.GROQ_CHAT_MODEL)
+
+
+def is_gemini_configured() -> bool:
+    return bool(settings.GEMINI_API_KEY and settings.GEMINI_MODEL)
+
+
+def is_mistral_configured() -> bool:
+    return bool(settings.MISTRAL_API_KEY and settings.MISTRAL_MODEL)
 
 
 def is_openrouter_configured() -> bool:
     return bool(settings.OPENROUTER_API_KEY and settings.OPENROUTER_MODEL)
 
 
-def is_groq_configured() -> bool:
-    return bool(settings.GROQ_API_KEY and settings.GROQ_CHAT_MODEL)
+def _models(value: str) -> list[str]:
+    return [m.strip() for m in (value or "").split(",") if m.strip()]
 
 
 async def _openai_compatible_completion(
@@ -73,8 +102,48 @@ async def _openai_compatible_completion(
         max_tokens=max_tokens,
         temperature=temperature,
         messages=or_messages,
+        timeout=_timeout(max_tokens, settings.LLM_PROVIDER_TIMEOUT_SECONDS),
     )
-    return (response.choices[0].message.content or "").strip()
+    text = (response.choices[0].message.content or "").strip() if response.choices else ""
+    # Modelos gratis que "piensan": a veces devuelven su razonamiento en vez de
+    # la respuesta (visto 2026-10-05 en OpenRouter). Eso no se le manda al cliente.
+    text = _THINK_RE.sub("", text).strip()
+    if not text or _LEAKED_REASONING.match(text):
+        raise EmptyReply(model)
+    return text
+
+
+def free_chain(judge: bool = False, economy: bool = False) -> list[tuple[str, Callable[[], bool], Callable]]:
+    """Los proveedores gratis en orden: (nombre, ¿configurado?, fábrica de
+    llamada). La fábrica recibe (messages, system, max_tokens, temperature)."""
+
+    def make(get_client: Callable[[], AsyncOpenAI], models: Callable[[], list[str]]):
+        async def call(messages, system, max_tokens, temperature) -> str:
+            last: Exception | None = None
+            for model in models():
+                try:
+                    return await _openai_compatible_completion(get_client(), model, messages, system,
+                                                               max_tokens, temperature)
+                except Exception as e:  # el siguiente modelo del mismo proveedor
+                    last = e
+            raise last or EmptyReply("sin modelo")
+        return call
+
+    openrouter_models = (
+        (lambda: _models(settings.OPENROUTER_JUDGE_MODEL or settings.OPENROUTER_MODEL)) if judge
+        else (lambda: _models(settings.OPENROUTER_MODEL))
+    )
+    chain = [
+        ("Groq", is_groq_configured, make(_get_groq_client, lambda: [settings.GROQ_CHAT_MODEL])),
+        ("Gemini", is_gemini_configured, make(_get_gemini_client, lambda: [settings.GEMINI_MODEL])),
+        ("Mistral", is_mistral_configured, make(_get_mistral_client, lambda: [settings.MISTRAL_MODEL])),
+        ("OpenRouter", is_openrouter_configured, make(_get_openrouter_client, openrouter_models)),
+    ]
+    if economy:
+        # Negocio que ya pasó la cuota de su plan (plan_usage.py): primero el
+        # modelo gratis de OpenRouter, para no gastar la cuota de los demás.
+        chain.sort(key=lambda p: p[0] != "OpenRouter")
+    return chain
 
 
 async def chat_completion(
@@ -88,67 +157,39 @@ async def chat_completion(
     force_anthropic: bool = False,
     economy: bool = False,
 ) -> str:
-    """Genera una respuesta de chat con el proveedor configurado.
+    """Genera una respuesta de chat: prueba los proveedores gratis en orden y
+    termina en Anthropic.
 
     `messages` son turnos {"role": "user"|"assistant", "content": ...} sin
-    el system prompt (va aparte en `system`, como en la API de Anthropic —
-    para OpenRouter se antepone como mensaje role="system", el formato
-    estándar de OpenAI).
+    el system prompt (va aparte en `system`, como en la API de Anthropic;
+    para los proveedores compatibles con OpenAI se antepone como
+    role="system").
 
     `anthropic_model` sobreescribe el modelo SOLO en la rama Anthropic (ej.
-    Haiku para el bot por costo, en vez del ANTHROPIC_MODEL default) — no
-    aplica en Groq/OpenRouter, porque ahí el modelo se elige por variable de
-    entorno, no por función que llama (esa es la simplicidad del patrón: un
-    solo modelo configurado, no uno hardcodeado por caso de uso). `judge=True`
-    usa OPENROUTER_JUDGE_MODEL si está configurado (si no, cae en
-    OPENROUTER_MODEL) — solo aplica en la rama OpenRouter.
-
-    `economy=True` (negocio que ya usó las conversaciones de su plan, ver
-    plan_usage.py) prueba primero OpenRouter — configurado con un modelo
-    gratuito — y deja Groq como respaldo: el bot sigue contestando, solo que
-    más barato.
-
-    `force_anthropic=True` salta las ramas Groq y OpenRouter aunque estén
-    configuradas — para un call site puntual que necesita un fallback
-    confiable (no gratis), sin cambiar el proveedor default de todo el
-    proyecto.
-
-    Cadena: si no se pidió `force_anthropic`, se intenta primero Groq (si
-    está configurado) y luego OpenRouter (si está configurado) — un error de
-    cualquiera de los dos (cuota agotada, red, etc.) cae automáticamente al
-    siguiente en la cadena, terminando en Anthropic si ambos fallan.
+    Haiku para el bot por costo). `judge=True` usa OPENROUTER_JUDGE_MODEL si
+    está configurado. `economy=True` prueba primero OpenRouter.
+    `force_anthropic=True` salta los gratis — para un call site que necesita
+    el respaldo confiable.
     """
     if not force_anthropic:
-        async def _groq() -> str:
-            return await _openai_compatible_completion(
-                _get_groq_client(), settings.GROQ_CHAT_MODEL,
-                messages, system, max_tokens, temperature,
-            )
-
-        async def _openrouter() -> str:
-            model = (settings.OPENROUTER_JUDGE_MODEL or settings.OPENROUTER_MODEL) if judge else settings.OPENROUTER_MODEL
-            return await _openai_compatible_completion(
-                _get_openrouter_client(), model,
-                messages, system, max_tokens, temperature,
-            )
-
-        chain = [("Groq", is_groq_configured, _groq), ("OpenRouter", is_openrouter_configured, _openrouter)]
-        if economy:
-            chain.reverse()
-        for name, configured, call in chain:
+        for name, configured, call in free_chain(judge=judge, economy=economy):
             if not configured():
                 continue
             try:
-                return await call()
+                return await call(messages, system, max_tokens, temperature)
             except Exception as e:
                 logger.warning("[LLM] %s falló, probando siguiente proveedor: %s", name, e)
 
-    client = _get_anthropic_client()
-    response = await client.messages.create(
+    response = await _get_anthropic_client().messages.create(
         model=anthropic_model or settings.ANTHROPIC_MODEL,
         max_tokens=max_tokens,
         temperature=temperature,
         system=system or anthropic.NOT_GIVEN,
         messages=messages,
+        timeout=_timeout(max_tokens, 25.0),
     )
-    return response.content[0].text.strip()
+    text = "".join(b.text for b in response.content if isinstance(getattr(b, "text", None), str)).strip()
+    if not text:
+        raise EmptyReply(anthropic_model or settings.ANTHROPIC_MODEL)
+    return text
+
