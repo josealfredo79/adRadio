@@ -162,6 +162,9 @@ class User(Base):
     directory_listed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     # Agente con herramientas en el chat web del cliente (customer_agent.py), beta.
     customer_agent_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Servicios que se agendan y cuánto duran: [{"name": "Tinte", "minutes": 120}].
+    # El agente aparta ese tiempo; sin lista, cada cita dura 30 min.
+    appointment_services: Mapped[list | None] = mapped_column(JSONB)
 
     # Google Calendar OAuth
     google_refresh_token: Mapped[str | None] = mapped_column(Text)

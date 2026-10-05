@@ -35,6 +35,7 @@ interface User {
   loyalty_config: LoyaltyConfig | null
   directory_listed: boolean
   customer_agent_enabled: boolean
+  appointment_services?: { name: string; minutes: number }[] | null
 }
 
 export interface LoyaltyConfig {

@@ -33,6 +33,8 @@ class ProfileUpdate(BaseModel):
     loyalty_config: dict | None = None
     directory_listed: bool | None = None
     customer_agent_enabled: bool | None = None
+    # [] borra la lista (todo vuelve a 30 min); None no la toca.
+    appointment_services: list[dict] | None = None
 
     @field_validator("loyalty_config")
     @classmethod
@@ -166,6 +168,30 @@ class ProfileUpdate(BaseModel):
         if len(v) != len(set(v)):
             raise ValueError("No puede repetir una sección")
         return v
+
+    @field_validator("appointment_services")
+    @classmethod
+    def validate_appointment_services(cls, v: list[dict] | None) -> list[dict] | None:
+        if v is None:
+            return None
+        if len(v) > 40:
+            raise ValueError("Máximo 40 servicios")
+        clean, seen = [], set()
+        for item in v:
+            name = " ".join(str((item or {}).get("name") or "").split())[:80]
+            try:
+                minutes = int((item or {}).get("minutes"))
+            except (TypeError, ValueError):
+                raise ValueError(f"{name or 'Servicio'}: la duración debe ser un número de minutos") from None
+            if not name:
+                raise ValueError("Cada servicio necesita nombre")
+            if not 15 <= minutes <= 480 or minutes % 15:
+                raise ValueError(f"{name}: la duración va de 15 a 480 minutos, en pasos de 15")
+            if name.lower() in seen:
+                raise ValueError(f"{name}: está repetido")
+            seen.add(name.lower())
+            clean.append({"name": name, "minutes": minutes})
+        return clean
 
     @field_validator("business_hours")
     @classmethod

@@ -19,6 +19,7 @@ from app.database import AsyncSessionLocal, engine
 from app.models.appointment import Appointment
 from app.models.contact import Contact
 from app.models.conversation import Conversation
+from app.models.coupon import Coupon
 from app.models.loyalty_stamp import LoyaltyStamp
 from app.models.message import Message
 from app.models.order import Order
@@ -106,7 +107,7 @@ async def _cleanup(user_id):
     async with AsyncSessionLocal() as db:
         orders = select(Order.id).where(Order.advertiser_id == user_id)
         await db.execute(delete(OrderItem).where(OrderItem.order_id.in_(orders)))
-        for model in (LoyaltyStamp, Order, Appointment, Message, Conversation, Product, Contact):
+        for model in (LoyaltyStamp, Order, Appointment, Message, Conversation, Product, Coupon, Contact):
             await db.execute(delete(model).where(model.advertiser_id == user_id))
         await db.execute(delete(User).where(User.id == user_id))
         await db.commit()
@@ -269,6 +270,138 @@ class TestOrders:
             )
             out = await _say(user_id, ana, "quiero pedir uno a domicilio", Redis(), claude)
             assert "dirección" in tool_results(client)[0]["error"] and out.confirm is False
+        finally:
+            await _cleanup(user_id)
+
+
+class TestServicesWithDuration:
+    """Cada servicio aparta su tiempo (users.appointment_services)."""
+
+    async def _with_services(self, user_id):
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, user_id)
+            user.appointment_services = [{"name": "Corte", "minutes": 30}, {"name": "Tinte completo", "minutes": 120}]
+            await db.commit()
+
+    @pytest.mark.asyncio
+    async def test_long_service_books_its_duration_and_needs_room(self):
+        user_id, ana, *_ = await _seed()
+        await self._with_services(user_id)
+        r = Redis()
+        late = _next_open_day()  # 17:00, cierra a las 18:00: un tinte de 2 h no cabe
+        early = late.replace(hour=10)
+        try:
+            claude, client = fake_claude(
+                resp(tool("horarios_libres", fecha=late.date().isoformat(), servicio="tinte")),
+                resp(tool("proponer_cita", servicio="tinte", fecha_hora=late.strftime("%Y-%m-%dT%H:%M"))),
+                resp(tool("proponer_cita", servicio="tinte", fecha_hora=early.strftime("%Y-%m-%dT%H:%M"))),
+                resp(text("Tinte a las 10 am. ¿Lo confirmo?"), stop="end_turn"),
+            )
+            out = await _say(user_id, ana, "agéndame un tinte", r, claude)
+            free, too_late, ok = tool_results(client)
+            assert free["duracion_min"] == 120 and "16:00" in free["horarios"] and "17:00" not in free["horarios"]
+            assert "error" in too_late and "listo_para_confirmar" in ok and out.confirm is True
+            out = await _say(user_id, ana, "sí", r)
+            async with AsyncSessionLocal() as db:
+                appt = (await db.execute(select(Appointment).where(Appointment.contact_id == ana))).scalar_one()
+            assert appt.service == "Tinte completo" and appt.duration_min == 120
+        finally:
+            await _cleanup(user_id)
+
+    def test_naming_a_service_goes_to_the_agent(self):
+        owner = SimpleNamespace(appointment_services=[{"name": "Manicure", "minutes": 60}])
+        assert agent._mentions_service(owner, "quiero una manicure el sábado en la mañana") is True
+        assert agent._mentions_service(owner, "¿a qué hora abren?") is False
+        assert agent._mentions_service(SimpleNamespace(appointment_services=None), "manicure") is False
+
+    @pytest.mark.asyncio
+    async def test_unknown_service_lists_the_real_ones(self):
+        user_id, ana, *_ = await _seed()
+        await self._with_services(user_id)
+        try:
+            claude, client = fake_claude(
+                resp(tool("proponer_cita", servicio="Masaje", fecha_hora=_next_open_day().strftime("%Y-%m-%dT%H:%M"))),
+                resp(text("Tenemos corte o tinte completo, ¿cuál?"), stop="end_turn"),
+            )
+            out = await _say(user_id, ana, "agéndame un masaje", Redis(), claude)
+            assert "Tinte completo" in tool_results(client)[0]["error"] and out.confirm is False
+            prompt = client.messages.create.await_args_list[0].kwargs["system"][0]["text"]
+            assert "Tinte completo (120 min)" in prompt
+        finally:
+            await _cleanup(user_id)
+
+
+class TestCouponsAndOrderStatus:
+    @pytest.mark.asyncio
+    async def test_only_own_valid_coupons(self):
+        user_id, ana, *_ = await _seed()
+        now = datetime.now(timezone.utc)
+        async with AsyncSessionLocal() as db:
+            beto = (await db.execute(select(Contact).where(Contact.advertiser_id == user_id, Contact.name == "Beto"))).scalar_one()
+            db.add_all([
+                Coupon(advertiser_id=user_id, contact_id=ana, code=f"ANA{uuid.uuid4().hex[:6]}", discount_type="percentage",
+                       discount_value=15, expires_at=now + timedelta(days=5)),
+                Coupon(advertiser_id=user_id, contact_id=ana, code=f"OLD{uuid.uuid4().hex[:6]}", discount_type="fixed",
+                       discount_value=50, expires_at=now - timedelta(days=1)),
+                Coupon(advertiser_id=user_id, contact_id=beto.id, code=f"BET{uuid.uuid4().hex[:6]}",
+                       discount_type="percentage", discount_value=90, expires_at=now + timedelta(days=5)),
+            ])
+            await db.commit()
+        try:
+            claude, client = fake_claude(resp(tool("mis_cupones")), resp(text("Tienes 15%."), stop="end_turn"))
+            await _say(user_id, ana, "¿tengo algún cupón?", Redis(), claude)
+            cupones = tool_results(client)[0]["cupones"]
+            assert [c["descuento"] for c in cupones] == ["15% de descuento"]
+            assert cupones[0]["codigo"].startswith("ANA")
+        finally:
+            await _cleanup(user_id)
+
+    async def _order(self, user_id, contact_id, minutes_ago):
+        async with AsyncSessionLocal() as db:
+            order = Order(advertiser_id=user_id, contact_id=contact_id, order_number=7, state="confirmed",
+                          items_raw="2 Taco al pastor", delivery_address="Para recoger en el negocio",
+                          confirmed_at=datetime.now(timezone.utc) - timedelta(minutes=minutes_ago))
+            db.add(order)
+            await db.commit()
+            return order.id
+
+    @pytest.mark.asyncio
+    async def test_status_and_cancel_a_fresh_order_after_yes(self):
+        user_id, ana, *_ = await _seed()
+        order_id = await self._order(user_id, ana, minutes_ago=3)
+        r = Redis()
+        try:
+            claude, client = fake_claude(
+                resp(tool("mis_pedidos")),
+                resp(tool("proponer_cancelar_pedido", numero=7)),
+                resp(text("¿Cancelo tu pedido #0007? ¿Lo confirmo?"), stop="end_turn"),
+            )
+            out = await _say(user_id, ana, "cancela mi pedido", r, claude)
+            assert tool_results(client)[0]["pedidos"][0]["estado"].startswith("confirmado") and out.confirm is True
+            async with AsyncSessionLocal() as db:
+                assert (await db.get(Order, order_id)).state == "confirmed"
+            out = await _say(user_id, ana, "sí", r)
+            assert "cancelé tu pedido #0007" in out.text
+            async with AsyncSessionLocal() as db:
+                assert (await db.get(Order, order_id)).state == "cancelled"
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_old_order_cannot_be_cancelled_by_the_customer(self):
+        user_id, ana, *_ = await _seed()
+        order_id = await self._order(user_id, ana, minutes_ago=30)
+        r = Redis()
+        try:
+            claude, client = fake_claude(
+                resp(tool("proponer_cancelar_pedido", numero=7)),
+                resp(text("Ya lo están preparando, ¿le aviso al negocio?"), stop="end_turn"),
+            )
+            out = await _say(user_id, ana, "cancela mi pedido", r, claude)
+            assert "10 minutos" in tool_results(client)[0]["error"] and out.confirm is False
+            await _say(user_id, ana, "sí", r)
+            async with AsyncSessionLocal() as db:
+                assert (await db.get(Order, order_id)).state == "confirmed"
         finally:
             await _cleanup(user_id)
 

@@ -89,5 +89,6 @@ class UserOut(BaseModel):
     loyalty_config: dict | None = None
     directory_listed: bool = True
     customer_agent_enabled: bool = False
+    appointment_services: list[dict] | None = None
 
     model_config = {"from_attributes": True}

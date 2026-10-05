@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams, Link } from 'react-router-dom'
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic, Globe } from 'lucide-react'
@@ -47,8 +47,13 @@ const DAYS_ES: Record<string, string> = {
   Mon: 'Lun', Tue: 'Mar', Wed: 'Mié', Thu: 'Jue', Fri: 'Vie', Sat: 'Sáb', Sun: 'Dom',
 }
 
+// La misma mascota de /app/hablar (verde IaRadio, como allá). Lazy: three.js
+// no entra al bundle del dashboard hasta que se pinta la tarjeta.
+const Mascot3D = lazy(() => import('@/components/Mascot3D'))
+
 export default function DashboardPage() {
   const { user } = useAuth()
+  const [talkHover, setTalkHover] = useState(false)
   const [hasDemoDraft] = useState(() => loadDemoDraft() !== null)
   const [searchParams, setSearchParams] = useSearchParams()
   const paymentSuccess = searchParams.get('success') === '1'
@@ -161,10 +166,26 @@ export default function DashboardPage() {
       {user?.bot_instructions && (
         <Link
           to="/app/hablar"
-          className="flex items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50 p-5 transition-shadow hover:shadow-md dark:border-brand-900 dark:bg-brand-950/30"
+          onMouseEnter={() => setTalkHover(true)}
+          onMouseLeave={() => setTalkHover(false)}
+          className="flex items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50 p-3 pr-5 transition-shadow hover:shadow-md dark:border-brand-900 dark:bg-brand-950/30"
         >
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-500 text-white">
-            <Mic className="h-7 w-7" />
+          {/* Al pasar el mouse "pone atención", como cuando escucha en /app/hablar. */}
+          <span className="relative shrink-0">
+            <Suspense
+              fallback={
+                <span className="flex h-[92px] w-20 items-center justify-center">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-white">
+                    <Mic className="h-7 w-7" />
+                  </span>
+                </span>
+              }
+            >
+              <Mascot3D mood={talkHover ? 'listening' : 'happy'} size={80} />
+            </Suspense>
+            <span className="absolute bottom-1 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-brand-500 text-white shadow ring-2 ring-white dark:ring-gray-950">
+              <Mic className="h-4 w-4" />
+            </span>
           </span>
           <span>
             <span className="block text-lg font-bold text-foreground">Habla con IaRadio</span>

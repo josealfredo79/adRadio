@@ -5,6 +5,7 @@ import { CalendarDays, Plus, Trash2, Check, X, Clock, ExternalLink, Unplug, Sett
 import SEO from '@/components/SEO'
 import { useAuth } from '@/contexts/AuthContext'
 import BusinessHoursEditor from '@/components/BusinessHoursEditor'
+import AppointmentServicesCard from '@/components/AppointmentServicesCard'
 import { DEFAULT_BUSINESS_HOURS, type BusinessHours } from '@/pages/publicSite/utils'
 
 interface Appointment {
@@ -291,6 +292,8 @@ export default function AppointmentsPage() {
           </div>
         )}
       </div>
+
+      <AppointmentServicesCard />
 
       {/* Appointments list */}
       {isLoading ? (

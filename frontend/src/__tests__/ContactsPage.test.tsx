@@ -6,6 +6,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ToastProvider } from '@/contexts/ToastContext'
 import ContactsPage from '@/pages/ContactsPage'
 
+// LoyaltyContactButton (botón de sellos en cada contacto) lee la sesión.
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { loyalty_config: null }, setUser: vi.fn(), loading: false }),
+}))
+
 const mockContactsPage = {
   items: [
     { id: '1', name: 'Maria Lopez', phone: '+521234567890', email: 'maria@test.com', tags: ['vip', 'nuevo'], status: 'active', engagement_score: 85, created_at: '2025-01-01T00:00:00Z', city: 'CDMX' },

@@ -781,3 +781,26 @@ class TestUpdateProfileWidgetColor:
     def test_rejects_wrong_length(self):
         with pytest.raises(ValueError):
             ProfileUpdate(widget_color="#1234")
+
+
+class TestAppointmentServicesValidation:
+    def test_cleans_names_and_keeps_minutes(self):
+        body = ProfileUpdate(appointment_services=[{"name": "  Tinte   completo ", "minutes": "120"}, {"name": "Corte", "minutes": 30}])
+        assert body.appointment_services == [{"name": "Tinte completo", "minutes": 120}, {"name": "Corte", "minutes": 30}]
+
+    def test_empty_list_clears(self):
+        assert ProfileUpdate(appointment_services=[]).appointment_services == []
+
+    @pytest.mark.parametrize("bad", [
+        [{"name": "", "minutes": 30}],
+        [{"name": "Corte", "minutes": 10}],
+        [{"name": "Corte", "minutes": 50}],
+        [{"name": "Corte", "minutes": 600}],
+        [{"name": "Corte", "minutes": "media hora"}],
+        [{"name": "Corte", "minutes": 30}, {"name": "corte", "minutes": 45}],
+    ])
+    def test_rejects_bad_entries(self, bad):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ProfileUpdate(appointment_services=bad)
