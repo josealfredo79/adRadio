@@ -114,7 +114,8 @@
       .then(function (data) {
         sessionId = data.session_id || sessionId;
         leadWrap.innerHTML = '';
-        _appendBubble('¡Gracias, ' + name + '! Un miembro del equipo te contactará pronto. 🙌', 'bot');
+        // Número ya registrado: por seguridad no se liga sin verificar (ver /widget/lead).
+        _appendBubble(data.existing ? data.message : '¡Gracias, ' + name + '! Un miembro del equipo te contactará pronto. 🙌', 'bot');
       })
       .catch(function (err) {
         leadErrorEl.textContent = err.message === 'Error' || !err.message

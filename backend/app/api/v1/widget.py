@@ -34,6 +34,16 @@ CHAT_MAX_HISTORY = 20
 # later /widget/chat call in the same session (same session_id) knows a real
 # Contact already exists and can hand off to widget_order_service.
 SESSION_CONTACT_REDIS_PREFIX = "widget_session_contact:"
+# Sesión ligada con "Dejar mis datos" (nombre + número que nadie verificó):
+# puede pedir y agendar, pero NUNCA recibe el link de la tarjeta (/c/...) ni
+# datos del cliente — si no, cualquiera escribiría el número de otro y vería
+# sus citas y su plática. Las del portal (link firmado) no llevan esta marca.
+UNVERIFIED_SESSION_PREFIX = "widget_unverified:"
+
+
+def _strip_portal_links(reply: str) -> str:
+    """Quita las líneas con link al portal (pie de confirmaciones, invitación)."""
+    return "\n".join(line for line in reply.split("\n") if "/c/" not in line).rstrip()
 
 
 @router.get("/snippet")
@@ -110,6 +120,7 @@ async def widget_chat(
         if contact_id_raw:
             contact_id_str = contact_id_raw.decode() if isinstance(contact_id_raw, bytes) else contact_id_raw
             contact = await db.get(Contact, UUID(contact_id_str))
+    unverified = bool(contact and redis and await redis.get(f"{UNVERIFIED_SESSION_PREFIX}{advertiser_id}:{session_id}"))
 
     if contact is not None:
         # El dueño pausó el bot para atender en persona: en la web tampoco
@@ -161,11 +172,14 @@ async def widget_chat(
                 bot_personality=user.bot_personality or "amigable y profesional",
                 conversation_key=str(contact.id) if contact else f"session:{session_id}",
                 redis=redis,
-                contact_id=contact.id if contact else None,
+                contact_id=contact.id if contact and not unverified else None,
             )
         except Exception:
             logger.exception("[WIDGET-CHAT] advertiser=%s", advertiser_id)
             reply = "Gracias por tu mensaje. En breve un asesor te atenderá. 😊"
+
+    if unverified:
+        reply = _strip_portal_links(reply)
 
     history.append({"role": "user", "content": message})
     history.append({"role": "assistant", "content": reply})
@@ -236,11 +250,26 @@ async def widget_capture_lead(
     if not user:
         raise HTTPException(status_code=404, detail="Widget no encontrado")
 
+    from app.services.customer_account import canonical_phone, contact_phone_canonical
+
+    canonical = canonical_phone(phone)
     contact_result = await db.execute(
-        select(Contact).where(Contact.advertiser_id == advertiser_id, Contact.phone == phone)
+        select(Contact).where(
+            Contact.advertiser_id == advertiser_id,
+            contact_phone_canonical() == canonical if canonical else Contact.phone == phone,
+        ).limit(1)
     )
     contact = contact_result.scalar_one_or_none()
     is_new_contact = contact is None
+    if not is_new_contact:
+        # Ese número ya es cliente: sin verificar, ligar esta sesión a su
+        # contacto le daría a quien lo escribió su tarjeta y su plática. Que
+        # entre con su código (/q/{slug}) o desde el link que le llega por WhatsApp.
+        return {
+            "message": "Ese número ya está registrado con nosotros. Entra con el código que te llega por WhatsApp.",
+            "existing": True,
+            "session_id": body.get("session_id") or str(uuid_module.uuid4()),
+        }
     if not contact:
         contact = Contact(advertiser_id=advertiser_id, name=name, phone=phone, source="widget")
         db.add(contact)
@@ -288,6 +317,7 @@ async def widget_capture_lead(
         await redis.setex(
             f"{SESSION_CONTACT_REDIS_PREFIX}{advertiser_id}:{session_id}", CHAT_REDIS_TTL, str(contact.id)
         )
+        await redis.setex(f"{UNVERIFIED_SESSION_PREFIX}{advertiser_id}:{session_id}", CHAT_REDIS_TTL, "1")
 
     if is_new_contact:
         from app.services.webhook_dispatcher import dispatch_webhook_event

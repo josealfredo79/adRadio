@@ -444,7 +444,10 @@ class TestWidgetCaptureLead:
             await _cleanup([user_id])
 
     @pytest.mark.asyncio
-    async def test_reuses_existing_contact_by_phone_and_skips_webhook(self):
+    async def test_existing_number_is_not_linked_or_duplicated_and_skips_webhook(self):
+        """Sin verificar el número, ligar la sesión al contacto existente le
+        daría a quien lo escribió la tarjeta de otra persona (hueco cerrado
+        2026-10-04, ver test_widget_lead_security.py)."""
         user_id = await _seed_user()
         try:
             async with AsyncSessionLocal() as db:
@@ -459,7 +462,7 @@ class TestWidgetCaptureLead:
                         request=_request(method="POST"), advertiser_id=user_id,
                         body={"name": "Otro nombre", "phone": "+525511113333"}, db=db, redis=None,
                     )
-            assert out["contact_id"] == str(existing.id)
+            assert out["existing"] is True and "contact_id" not in out
             mock_hook.assert_not_called()
 
             async with AsyncSessionLocal() as db:
