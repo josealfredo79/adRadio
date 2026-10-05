@@ -2,6 +2,7 @@
 Celery application configuration.
 """
 from celery import Celery
+from celery.schedules import crontab
 
 # Force model loading so SQLAlchemy mappers resolve all relationships (e.g. User → KnowledgeBase)
 import app.models  # noqa: F401
@@ -49,6 +50,7 @@ celery_app.conf.update(
         "app.workers.tasks.process_automation_enrollments": {"queue": "campaigns"},
         "app.workers.tasks.send_trial_expiry_reminders": {"queue": "campaigns"},
         "app.workers.tasks.poll_meta_quality_ratings": {"queue": "campaigns"},
+        "app.workers.tasks.send_owner_morning_digests": {"queue": "campaigns"},
     },
 )
 
@@ -81,6 +83,11 @@ celery_app.conf.beat_schedule = {
     "send-trial-expiry-reminders": {
         "task": "app.workers.tasks.send_trial_expiry_reminders",
         "schedule": 43200.0,  # every 12 hours — enough for daily reminders
+    },
+    "send-owner-morning-digests": {
+        "task": "app.workers.tasks.send_owner_morning_digests",
+        # 8:00 am en México (UTC-6 todo el año desde 2022); beat corre en UTC.
+        "schedule": crontab(minute=0, hour=14),
     },
     "poll-meta-quality-ratings": {
         "task": "app.workers.tasks.poll_meta_quality_ratings",

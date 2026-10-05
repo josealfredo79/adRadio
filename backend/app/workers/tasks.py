@@ -822,6 +822,28 @@ def send_closer_reminders_task():
 
 
 @celery_app.task
+def send_owner_morning_digests():
+    """Celery Beat, 8 am México: resumen único para el dueño de lo que llegó
+    por la web mientras estaba en silencio (ver owner_alerts.py)."""
+    async def _run():
+        import redis.asyncio as aioredis
+
+        from app.config import settings
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.services.owner_alerts import send_morning_digests
+
+        redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        try:
+            async with AsyncSessionLocal() as db:
+                sent = await send_morning_digests(db, redis)
+            logger.info("[OWNER-ALERT] morning digests sent=%s", sent)
+        finally:
+            await redis.aclose()
+
+    run_async(_run())
+
+
+@celery_app.task
 def poll_meta_quality_ratings():
     """Celery Beat: refresh the real quality_rating (GREEN/YELLOW/RED) from
     Meta's Graph API for every connected advertiser. The webhook

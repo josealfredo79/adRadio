@@ -197,9 +197,12 @@ class TestWebChatInTheInbox:
     async def test_paused_bot_stays_quiet_on_the_web_too(self):
         user_id, cid, conv_id = await _seed(status="escalated")
         try:
-            out, rag = await _web_chat(user_id, cid, "¿me atiende alguien?")
+            alert = AsyncMock(return_value=True)
+            with patch("app.services.owner_alerts.alert_web_message", alert):
+                out, rag = await _web_chat(user_id, cid, "¿me atiende alguien?")
             assert out["handoff"] is True and out["reply"] == ""
             rag.assert_not_called()
+            assert alert.await_args.args[2:] == (cid, "Ana", "¿me atiende alguien?")
             async with AsyncSessionLocal() as db:
                 conv = await db.get(Conversation, conv_id)
                 assert conv.messages[-1] == {"role": "user", "content": "¿me atiende alguien?", "channel": "web"}

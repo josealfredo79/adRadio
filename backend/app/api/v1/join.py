@@ -141,6 +141,9 @@ async def join_verify(
         db.add(contact)
         await db.commit()
         await db.refresh(contact)
+        from app.services.owner_alerts import alert_new_customer
+
+        await alert_new_customer(redis, user, name, "tu QR de mostrador")
     elif contact.status == "blocked":
         raise HTTPException(status_code=403, detail="No pudimos registrarte. Pregunta en el mostrador.")
     # Si se había dado de baja de WhatsApp se queda así: usar su tarjeta en

@@ -126,6 +126,9 @@ async def widget_chat(
             from app.services.realtime import publish_conversation_event
 
             await publish_conversation_event(user.id, {"type": "message", "contact_id": str(contact.id)})
+            from app.services.owner_alerts import alert_web_message
+
+            await alert_web_message(redis, user, contact.id, contact.name or "Un cliente", message)
             return {"reply": "", "handoff": True, "session_id": session_id, "cards": []}
 
     from app.services.appointment_booking_service import handle_appointment_booking

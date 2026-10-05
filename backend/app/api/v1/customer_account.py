@@ -224,6 +224,7 @@ async def connect(
     body: dict,
     authorization: str = Header(default=""),
     db: AsyncSession = Depends(get_db),
+    redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> dict:
     """Unirse a un negocio del directorio: crea (o encuentra) su contacto ahí
     y regresa el link de su portal para abrir el chat."""
@@ -253,4 +254,7 @@ async def connect(
     db.add(contact)
     await db.commit()
     await db.refresh(contact)
+    from app.services.owner_alerts import alert_new_customer
+
+    await alert_new_customer(redis, business, name, "el directorio de IaRadio")
     return {"portal_path": f"/c/{make_portal_token(contact.id)}"}

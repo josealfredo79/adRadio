@@ -112,3 +112,17 @@ Para aparecer, el negocio necesita tener el link de su página (Widget de
 chat) y no estar `churned` ni `suspended`. Cada negocio puede salirse en
 Configuración → **Directorio de IaRadio**; viene encendido. Funciona con el
 mismo `CUSTOMER_ACCOUNT_ENABLED` de /mi.
+
+## Avisos al dueño de lo que llega por la web
+
+Por este número, el dueño recibe aviso cuando un cliente le escribe por la
+web con el bot pausado, y cuando llega un cliente nuevo por el QR o el
+directorio. Necesita su celular en Configuración → **Tu WhatsApp
+personal**. Para no saturarlo (`app/services/owner_alerts.py`):
+
+- Un aviso por cliente cada 30 minutos; si sigue escribiendo, ese aviso lo cubre.
+- Máximo 4 avisos por hora por negocio; lo que sobre se junta en el siguiente.
+- Clientes nuevos agrupados: un aviso cada 2 horas como máximo, con los nombres.
+- Silencio de 9 pm a 8 am (hora de México). A las 8 am llega un solo
+  resumen (tarea `send_owner_morning_digests` de Celery Beat).
+- Con el bot activo no hay aviso: el bot ya contestó.
