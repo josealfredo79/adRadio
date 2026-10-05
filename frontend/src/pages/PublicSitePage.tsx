@@ -1,9 +1,11 @@
-import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import SEO from '@/components/SEO'
 import AgentChat from '@/components/AgentChat'
+import MascotSmart from '@/components/MascotSmart'
+import { mascotAb, trackMascot } from '@/lib/mascotAb'
 import { useNativeViewport } from '@/lib/useNativeViewport'
 import { MapPin, MessageCircle } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
@@ -34,7 +36,6 @@ interface PublicSite {
 }
 
 // El agente 3D (la mascota robot que habla) — se descarga aparte, solo aquí.
-const Mascot3D = lazy(() => import('@/components/Mascot3D'))
 
 interface PublicProduct {
   id: string
@@ -62,7 +63,11 @@ export default function PublicSitePage() {
   // Chat web con el agente: gratis para el negocio y sin salir de la página
   // (antes los botones mandaban a WhatsApp, que Meta cobra).
   const [chatOpen, setChatOpen] = useState(false)
-  const openChat = () => setChatOpen(true)
+  const abVariant = mascotAb().variant
+  const openChat = () => {
+    setChatOpen(true)
+    trackMascot(site?.slug || slug, 'chat_open')
+  }
 
   const { data: site, isLoading } = useQuery<PublicSite>({
     queryKey: ['public-site', slug],
@@ -102,6 +107,12 @@ export default function PublicSitePage() {
         .slice(0, 3),
     [products]
   )
+
+  // Prueba A/B de la mascota: una visita por visitante (el servidor descarta repetidas).
+  const siteSlug = site?.slug
+  useEffect(() => {
+    if (siteSlug) trackMascot(siteSlug, 'view')
+  }, [siteSlug])
 
   useEffect(() => {
     const link = document.createElement('link')
@@ -226,9 +237,9 @@ export default function PublicSitePage() {
                 >
                   ¡Hola! Soy {site.agent} 👋 ¿Te ayudo?
                 </span>
-                <Suspense fallback={<div style={{ width: 170, height: 196 }} />}>
-                  <Mascot3D mood="happy" size={170} color={site.color} />
-                </Suspense>
+                {/* Sale al instante en imagen; el 3D entra después y solo en la
+                    mitad de los visitantes (prueba A/B, lib/mascotAb.ts). */}
+                <MascotSmart mood="happy" size={170} color={site.color} allow3d={abVariant === '3d'} />
               </button>
               <button
                 type="button"
@@ -243,6 +254,7 @@ export default function PublicSitePage() {
                 <p className="mt-3 text-sm">
                   <a
                     href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
+                    onClick={() => trackMascot(slug, 'whatsapp')}
                     target="_blank"
                     rel="noreferrer"
                     className="underline underline-offset-4 opacity-80 hover:opacity-100"
@@ -424,6 +436,8 @@ export default function PublicSitePage() {
             joinPath={site.account_available && site.slug ? `/q/${site.slug}` : undefined}
             whatsappHref={site.whatsapp_number ? `https://wa.me/${waDigits(site.whatsapp_number)}` : undefined}
             prefill={null}
+            mascot3d={abVariant === '3d'}
+            onEvent={(e) => trackMascot(site.slug || slug, e)}
             onClose={() => setChatOpen(false)}
           />
         )}

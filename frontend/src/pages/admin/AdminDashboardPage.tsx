@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '@/lib/api'
+import MascotAbCard from '@/pages/admin/MascotAbCard'
 import { formatNumber, formatCurrency } from '@/lib/utils'
 import {
   Users,
@@ -162,6 +163,8 @@ export default function AdminDashboardPage() {
           color="bg-pink-500"
         />
       </div>
+
+      <MascotAbCard />
     </div>
   )
 }

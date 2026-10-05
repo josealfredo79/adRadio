@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
 from app.api.v1.payments import PLANS
+from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.transaction import Transaction
 from app.models.user import User
@@ -315,3 +316,13 @@ async def list_users(
         "page": page,
         "per_page": per_page,
     }
+
+
+@router.get("/admin/ab/mascot")
+async def mascot_ab_results(redis=Depends(get_redis_optional)) -> dict:
+    """Resultados de la prueba A/B de la mascota en las páginas públicas."""
+    from app.services import mascot_ab
+
+    if redis is None:
+        raise HTTPException(status_code=503, detail="Redis no disponible")
+    return await mascot_ab.results(redis)

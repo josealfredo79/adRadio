@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.rate_limiter import limiter
+from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.customer_story import CustomerStory
 from app.models.order import Order
@@ -276,3 +277,20 @@ async def site_speak(request: Request, slug: str, body: dict, db: AsyncSession =
         logger.warning("[SITE] TTS failed", exc_info=True)
         raise HTTPException(status_code=503, detail="Voz no disponible")
     return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@router.post("/{slug}/ab")
+@limiter.limit("60/minute")
+async def site_ab_event(request: Request, slug: str, body: dict, redis=Depends(get_redis_optional)) -> dict:
+    """Prueba A/B de la mascota (services/mascot_ab.py). Nunca falla hacia el
+    visitante: un evento perdido no debe romper la página."""
+    from app.services import mascot_ab
+
+    variant, event, visitor = str(body.get("variant") or ""), str(body.get("event") or ""), str(body.get("visitor") or "")
+    if redis is None or not mascot_ab.valid(slug, variant, event, visitor):
+        return {"ok": False}
+    try:
+        return {"ok": await mascot_ab.record(redis, slug, variant, event, visitor)}
+    except Exception:
+        logger.warning("[AB] record failed slug=%s", slug, exc_info=True)
+        return {"ok": False}

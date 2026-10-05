@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FaceMood } from '@/components/BotFace'
+import MascotSmart from '@/components/MascotSmart'
 import api from '@/lib/api'
 import { ClipboardList, Mic, Send, ShoppingBag, Square, Volume2, VolumeX, X } from 'lucide-react'
 import type { SiteThemeDef } from '@/pages/publicSite/theme'
@@ -90,6 +91,8 @@ export default function AgentChat({
   whatsappHref,
   prefill,
   onClose,
+  mascot3d = true,
+  onEvent,
 }: {
   business: ChatBusiness
   theme: SiteThemeDef
@@ -105,6 +108,10 @@ export default function AgentChat({
   // Si no hay registro con código, para pedir/agendar se va a WhatsApp.
   whatsappHref?: string
   prefill: string | null
+  // Prueba A/B de la página pública (lib/mascotAb.ts): la mascota del
+  // encabezado en 3D o en imagen fija, y avisar lo que pasa en la plática.
+  mascot3d?: boolean
+  onEvent?: (event: 'message' | 'confirmed' | 'whatsapp') => void
   onClose: () => void
 }) {
   const color = business.color
@@ -234,6 +241,7 @@ export default function AgentChat({
     if (!message || sending) return
     if (text === undefined) setInput('')
     setSentHere(true)
+    onEvent?.('message')
     setTurns((t) => [...t, { role: 'user', content: message }])
     setSending(true)
     try {
@@ -262,7 +270,10 @@ export default function AgentChat({
           confirm: !!r.data.confirm,
         },
       ])
-      if (reply.trimStart().startsWith('✅')) react('happy', 2500)
+      if (reply.trimStart().startsWith('✅')) {
+        react('happy', 2500)
+        onEvent?.('confirmed')
+      }
       else if (r.data.needs_contact) react('confused', 1800)
       if (spoken) void speaker.speak(reply.replace(/https?:\/\/\S+/g, ''))
     } catch {
@@ -329,11 +340,9 @@ export default function AgentChat({
             {/* La mascota acompaña la plática: piensa mientras busca, se alegra al confirmar.
                 En modo voz sale grande abajo, así que aquí se quita. */}
             {!voiceMode && (
-              <Suspense fallback={<div style={{ width: 44, height: 51 }} className="shrink-0" />}>
-                <div className="-my-1 shrink-0">
-                  <Mascot3D mood={mood} size={44} color={color} />
-                </div>
-              </Suspense>
+              <div className="-my-1 shrink-0">
+                <MascotSmart mood={mood} size={44} color={color} allow3d={mascot3d} />
+              </div>
             )}
             <div className="min-w-0">
             <p className="truncate font-semibold">{business.agent}</p>
@@ -414,6 +423,7 @@ export default function AgentChat({
                 <a
                   href={joinPath || whatsappHref}
                   target={joinPath ? undefined : '_blank'}
+                  onClick={() => { if (!joinPath) onEvent?.('whatsapp') }}
                   rel="noreferrer"
                   className="mt-2 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white"
                   style={{ background: color }}
