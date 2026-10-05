@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import type { FaceMood } from '@/components/BotFace'
 import api from '@/lib/api'
 import { ClipboardList, Mic, Send, ShoppingBag, Square, Volume2, VolumeX, X } from 'lucide-react'
 import type { SiteThemeDef } from '@/pages/publicSite/theme'
@@ -117,6 +118,18 @@ export default function AgentChat({
   const [sending, setSending] = useState(false)
   // Hasta que carga el historial no se sabe si saludar como nuevo o "de nuevo".
   const [historyLoaded, setHistoryLoaded] = useState(false)
+  // Reacción breve de la mascota a lo que pasó: feliz si algo quedó
+  // confirmado (✅), confundida si faltó algo o falló. Vuelve sola a lo normal.
+  const [reaction, setReaction] = useState<FaceMood | null>(null)
+  const reactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const react = (m: FaceMood, ms: number) => {
+    if (reactionTimer.current) clearTimeout(reactionTimer.current)
+    setReaction(m)
+    reactionTimer.current = setTimeout(() => setReaction(null), ms)
+  }
+  useEffect(() => () => {
+    if (reactionTimer.current) clearTimeout(reactionTimer.current)
+  }, [])
   // Lo que ya estaba (historial) aparece de una vez; lo nuevo entra con animación.
   const [historyCount, setHistoryCount] = useState(0)
   const [sentHere, setSentHere] = useState(false)
@@ -247,8 +260,11 @@ export default function AgentChat({
           confirm: !!r.data.confirm,
         },
       ])
+      if (reply.trimStart().startsWith('✅')) react('happy', 2500)
+      else if (r.data.needs_contact) react('confused', 1800)
       if (spoken) void speaker.speak(reply.replace(/https?:\/\/\S+/g, ''))
     } catch {
+      react('confused', 1800)
       setTurns((t) => [...t, { role: 'assistant', content: 'Uy, no me llegó tu mensaje. ¿Lo intentas de nuevo?' }])
     } finally {
       setSending(false)
@@ -288,7 +304,13 @@ export default function AgentChat({
     }
   }
 
-  const mood = recording ? 'listening' : sending ? 'thinking' : speaker.speaking ? 'speaking' : 'idle'
+  const mood: FaceMood = recording
+    ? 'listening'
+    : sending
+      ? 'thinking'
+      : speaker.speaking
+        ? 'speaking'
+        : (reaction ?? 'idle')
 
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center sm:items-center" onClick={onClose}>
@@ -300,12 +322,23 @@ export default function AgentChat({
         style={{ background: theme.bg, color: theme.text, border: `1px solid ${theme.cardBorder}` }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${theme.cardBorder}` }}>
-          <div>
-            <p className="font-semibold">{business.agent}</p>
+        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: `1px solid ${theme.cardBorder}` }}>
+          <div className="flex min-w-0 items-center gap-2">
+            {/* La mascota acompaña la plática: piensa mientras busca, se alegra al confirmar.
+                En modo voz sale grande abajo, así que aquí se quita. */}
+            {!voiceMode && (
+              <Suspense fallback={<div style={{ width: 44, height: 51 }} className="shrink-0" />}>
+                <div className="-my-1 shrink-0">
+                  <Mascot3D mood={mood} size={44} color={color} />
+                </div>
+              </Suspense>
+            )}
+            <div className="min-w-0">
+            <p className="truncate font-semibold">{business.agent}</p>
             <p className="text-xs" style={{ color: theme.muted }}>
               {business.name} · responde al instante
             </p>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             {voiceMode && (
@@ -327,7 +360,7 @@ export default function AgentChat({
         {voiceMode && (
           <div className="flex shrink-0 flex-col items-center bg-[#0a0f2e] pt-1 pb-1">
             <Suspense fallback={<div style={{ height: 150 }} />}>
-              <Mascot3D mood={mood} getLevel={speaker.level} size={130} />
+              <Mascot3D mood={mood} getLevel={speaker.level} size={130} color={color} />
             </Suspense>
           </div>
         )}

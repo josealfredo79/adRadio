@@ -227,7 +227,7 @@ export default function PublicSitePage() {
                   ¡Hola! Soy {site.agent} 👋 ¿Te ayudo?
                 </span>
                 <Suspense fallback={<div style={{ width: 170, height: 196 }} />}>
-                  <Mascot3D mood="happy" size={170} />
+                  <Mascot3D mood="happy" size={170} color={site.color} />
                 </Suspense>
               </button>
               <button
