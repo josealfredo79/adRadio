@@ -8,7 +8,7 @@ import hmac
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
@@ -260,10 +260,16 @@ async def appointment_stats(
         )
     )).scalar() or 0
 
+    # "Hoy" es el día en México, no en UTC: con func.date() en UTC, de 6 pm a
+    # medianoche el dashboard contaba las citas de mañana como de hoy.
+    from app.services.availability_service import TZ
+
+    day_start = now.astimezone(TZ).replace(hour=0, minute=0, second=0, microsecond=0)
     today_count = (await db.execute(
         select(func.count()).select_from(Appointment).where(
             Appointment.advertiser_id == current_user.id,
-            func.date(Appointment.scheduled_at) == now.date(),
+            Appointment.scheduled_at >= day_start,
+            Appointment.scheduled_at < day_start + timedelta(days=1),
             Appointment.status.in_(["pending", "confirmed"]),
         )
     )).scalar() or 0

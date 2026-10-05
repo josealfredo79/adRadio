@@ -364,9 +364,11 @@ class TestAppointmentStats:
         user_id = await _seed_user(google_calendar_connected=True)
         try:
             now = datetime.now(timezone.utc)
-            # Más tarde hoy (UTC), sin pasarse a mañana: a las 23:xx el viejo
-            # now.replace(hour=23) quedaba en el pasado y el test fallaba de noche.
-            later_today = min(now + timedelta(minutes=30), now.replace(hour=23, minute=59, second=59))
+            # Más tarde hoy en México, sin pasarse a mañana.
+            from app.services.availability_service import TZ
+
+            local_end = now.astimezone(TZ).replace(hour=23, minute=59, second=59)
+            later_today = min(now + timedelta(minutes=30), local_end)
             async with AsyncSessionLocal() as db:
                 db.add(Appointment(advertiser_id=user_id, customer_name="Hoy", service="X", scheduled_at=later_today, status="pending"))
                 db.add(Appointment(advertiser_id=user_id, customer_name="Futura", service="X", scheduled_at=now + timedelta(days=5), status="confirmed"))
@@ -380,6 +382,30 @@ class TestAppointmentStats:
             assert stats["upcoming"] == 2  # hoy + futura, no la pasada/completed
             assert stats["today"] == 1
             assert stats["google_connected"] is True
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_today_is_the_day_in_mexico_not_utc(self):
+        """A las 8 pm en México ya es mañana en UTC: una cita de mañana a las
+        10 am no es "de hoy", y una de hoy a las 9 pm sí."""
+        from app.services.availability_service import TZ
+
+        user_id = await _seed_user()
+        fake_now = datetime(2026, 10, 5, 2, 0, tzinfo=timezone.utc)  # 4 oct, 8 pm en CDMX
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add(Appointment(advertiser_id=user_id, customer_name="Hoy 9pm", service="X", status="pending",
+                                   scheduled_at=datetime(2026, 10, 4, 21, 0, tzinfo=TZ)))
+                db.add(Appointment(advertiser_id=user_id, customer_name="Mañana 10am", service="X", status="pending",
+                                   scheduled_at=datetime(2026, 10, 5, 10, 0, tzinfo=TZ)))
+                await db.commit()
+            with patch("app.api.v1.appointments.datetime") as dt:
+                dt.now.return_value = fake_now
+                async with AsyncSessionLocal() as db:
+                    user = await db.get(User, user_id)
+                    stats = await appointment_stats(current_user=user, db=db)
+            assert stats["today"] == 1
         finally:
             await _cleanup([user_id])
 
