@@ -412,6 +412,13 @@ def _coupon_out(c: Coupon | None) -> dict | None:
     }
 
 
+def _promo_audio(campaign: Campaign) -> str:
+    ab = campaign.ab_test or {}
+    if ab.get("campaign_mode") in ("radio", "comunitaria"):
+        return str(ab.get("audio_url") or "")
+    return ""
+
+
 def _promo_summary(p: dict) -> dict:
     text = p["text"]
     return {
@@ -420,6 +427,7 @@ def _promo_summary(p: dict) -> dict:
         "excerpt": text if len(text) <= 140 else text[:137].rstrip() + "…",
         "image_url": p["image_url"] or "",
         "has_coupon": p["coupon"] is not None,
+        "has_audio": bool(_promo_audio(p["campaign"])),
     }
 
 
@@ -438,6 +446,8 @@ async def get_promo(request: Request, token: str, campaign_id: uuid.UUID, db: As
         "title": p["campaign"].name,
         "text": p["text"],
         "image_url": p["image_url"] or "",
+        # Campaña de radio: el spot se escucha aquí (le llegó por la web, no por WhatsApp).
+        "audio_url": _promo_audio(p["campaign"]),
         "coupon": _coupon_out(p["coupon"]),
     }
 

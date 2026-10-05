@@ -374,6 +374,26 @@ class TestPromotions:
                 )
             assert out["text"] == "Hola Ana, este viernes 2x1 en Barbería Don Pepe"
             assert out["coupon"]["code"] == f"PRO{s['tag']}"
+            assert out["audio_url"] == ""
+        finally:
+            await _cleanup(s["user_id"])
+
+    @pytest.mark.asyncio
+    async def test_radio_promo_brings_its_audio(self):
+        # Le llegó por la web en vez de nota de voz: el spot se escucha en la promo.
+        s = await _seed()
+        try:
+            c = await _seed_promos(s)
+            async with AsyncSessionLocal() as db:
+                camp = await db.get(Campaign, c["promo"])
+                camp.ab_test = {"campaign_mode": "radio", "audio_url": "https://cdn.test/spot.mp3"}
+                await db.commit()
+                out = await get_promo(
+                    request=_request(), token=make_portal_token(s["ana"]), campaign_id=c["promo"], db=db,
+                )
+                portal = await get_portal(request=_request(), token=make_portal_token(s["ana"]), db=db)
+            assert out["audio_url"] == "https://cdn.test/spot.mp3"
+            assert portal["promotions"][0]["has_audio"] is True
         finally:
             await _cleanup(s["user_id"])
 

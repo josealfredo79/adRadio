@@ -285,7 +285,7 @@ async def resume_campaign(
     web_only = bool(body and body.web_only)
     if web_only:
         if not supports_web(campaign):
-            raise HTTPException(status_code=400, detail="Las campañas de radio y Voces del Barrio solo se pueden mandar por WhatsApp")
+            raise HTTPException(status_code=400, detail="Las Voces del Barrio solo se pueden mandar por WhatsApp")
         if (await campaign_reach(db, campaign))["web"] == 0:
             raise HTTPException(
                 status_code=409,

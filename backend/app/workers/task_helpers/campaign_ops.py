@@ -388,6 +388,9 @@ async def _push_campaign(db, campaign, advertiser, contact, ab) -> bool:
         {"name": contact.name, "city": getattr(contact, "city", None)},
         {"business_name": advertiser.business_name, "city": advertiser.city},
     )
+    if ab.get("audio_url"):
+        # Campaña de radio: el aviso invita a escucharla en la tarjeta (ahí está el audio).
+        text = f"🔊 Toca para escucharla. {text}".strip()
     now = datetime.now(timezone.utc)
     msg = Message(
         campaign_id=campaign.id, contact_id=contact.id, advertiser_id=campaign.advertiser_id,
@@ -476,8 +479,8 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             continue
         if web_only:
             # "Solo por web": quien no tiene notificaciones no recibe nada por
-            # WhatsApp (ni se gasta saldo ni se le cobra al negocio).
-            skipped_count += 1
+            # WhatsApp (ni se gasta saldo ni se le cobra al negocio). No es un
+            # fallo: contarlo en skipped_count pausaba sola la campaña.
             continue
         if advertiser.messages_remaining - charged <= 0:
             if push_contacts:
@@ -610,9 +613,25 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
     # task (counted here); "invited" sends decrement synchronously in
     # _offer_or_queue (not counted here). This only gates the loop.
     charged = 0
+    # Quien activó los avisos en su tarjeta la escucha ahí, gratis: no se le
+    # manda por WhatsApp (mismo trato que send_banner_messages).
+    push_contacts = await contacts_with_push(db, [c.id for c in contacts])
+    pushed_count = 0
+    web_only = is_web_only(campaign)
 
     for idx_r, contact in enumerate(contacts):
+        if (
+            contact.id in push_contacts
+            and _is_contact_active(contact)[0]
+            and await _push_campaign(db, campaign, advertiser, contact, ab)
+        ):
+            pushed_count += 1
+            continue
+        if web_only:
+            continue  # "solo por web": ver send_banner_messages
         if advertiser.messages_remaining - charged <= 0:
+            if push_contacts:
+                continue  # sin saldo de WhatsApp, pero las notificaciones siguen siendo gratis
             break
 
         active, block_reason = _is_contact_active(contact)
@@ -671,6 +690,9 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         contact.last_campaign_sent_at = datetime.now(timezone.utc)
         charged += 1
         ban_delay += anti_ban_delay()
+
+    if pushed_count:
+        logger.info("[CAMPAIGN] %s: %d sent free by web push", campaign.id, pushed_count)
 
     # Auto-pause if failure rate is too high — "invited" contacts count as a
     # successful attempt here (a real message was delivered, the audio just
@@ -741,8 +763,8 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             continue
         if web_only:
             # "Solo por web": quien no tiene notificaciones no recibe nada por
-            # WhatsApp (ni se gasta saldo ni se le cobra al negocio).
-            skipped_count += 1
+            # WhatsApp (ni se gasta saldo ni se le cobra al negocio). No es un
+            # fallo: contarlo en skipped_count pausaba sola la campaña.
             continue
         if advertiser.messages_remaining - charged <= 0:
             if push_contacts:

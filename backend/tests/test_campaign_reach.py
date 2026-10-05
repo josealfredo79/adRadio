@@ -31,10 +31,13 @@ def _request() -> Request:
                     "headers": [], "client": ("test", 1), "query_string": b""})
 
 
-async def _campaign(user_id, mode: str = "regular", messages_remaining: int = 5):
+async def _campaign(user_id, mode: str = "regular", messages_remaining: int = 5, type_: str = "promo"):
     async with AsyncSessionLocal() as db:
-        camp = Campaign(advertiser_id=user_id, name="2x1 en cortes", type="promo",
-                        message_text="2x1 este viernes", ab_test={"campaign_mode": mode})
+        ab = {"campaign_mode": mode}
+        if mode == "radio":
+            ab["audio_url"] = "https://cdn.test/spot.mp3"
+        camp = Campaign(advertiser_id=user_id, name="2x1 en cortes", type=type_,
+                        message_text="2x1 este viernes", ab_test=ab)
         db.add(camp)
         user = await db.get(User, user_id)
         user.messages_remaining = messages_remaining
@@ -60,11 +63,24 @@ class TestCampaignReach:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
-    async def test_radio_campaign_is_whatsapp_only(self):
+    async def test_radio_campaign_also_goes_by_web(self):
+        # El spot se escucha en la tarjeta web (portal.py: audio_url de la promo).
         user_id, (with_push, _) = await _seed(2)
         try:
             await _add_subs(user_id, with_push, 1)
             camp_id = await _campaign(user_id, mode="radio")
+            async with AsyncSessionLocal() as db:
+                reach = await campaign_reach(db, await db.get(Campaign, camp_id))
+            assert reach["web"] == 1 and reach["whatsapp"] == 1 and reach["web_supported"] is True
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_voces_del_barrio_stay_whatsapp_only(self):
+        user_id, (with_push, _) = await _seed(2)
+        try:
+            await _add_subs(user_id, with_push, 1)
+            camp_id = await _campaign(user_id, mode="radio", type_="voces")
             async with AsyncSessionLocal() as db:
                 reach = await campaign_reach(db, await db.get(Campaign, camp_id))
             assert reach == {"total": 2, "web": 0, "whatsapp": 2,
@@ -130,6 +146,62 @@ class TestWebOnlySend:
             await _cleanup(user_id)
 
 
+class TestRadioByWeb:
+    async def _send(self, user_id, camp_id, contact_ids, push_ids):
+        from app.workers.task_helpers.campaign_ops import send_radio_messages
+        pushed = []
+
+        async def fake_push(db, contact_id, **kw):
+            pushed.append((contact_id, kw["body"]))
+            return 1
+
+        voice = MagicMock()
+        offer = AsyncMock(return_value=("open", None))
+        with patch("app.workers.task_helpers.campaign_ops.contacts_with_push", AsyncMock(return_value=set(push_ids))), \
+             patch("app.services.web_push.push_to_contact", side_effect=fake_push), \
+             patch("app.workers.task_helpers.campaign_ops._offer_or_queue", offer), \
+             patch("app.workers.tasks.send_whatsapp_voice_note.apply_async", voice):
+            async with AsyncSessionLocal() as db:
+                camp = await db.get(Campaign, camp_id)
+                user = await db.get(User, user_id)
+                contacts = [await db.get(Contact, c) for c in contact_ids]
+                await send_radio_messages(db, camp, contacts, user, camp.ab_test, ban_delay=0)
+        return pushed, voice
+
+    @pytest.mark.asyncio
+    async def test_web_customers_get_it_free_by_web_not_as_voice_note(self):
+        user_id, (with_push, without) = await _seed(2)
+        try:
+            camp_id = await _campaign(user_id, mode="radio")
+            pushed, voice = await self._send(user_id, camp_id, [with_push, without], [with_push])
+            assert [c for c, _ in pushed] == [with_push] and pushed[0][1].startswith("2x1 en cortes — 🔊")
+            # Solo el que no usa la web recibe la nota de voz por WhatsApp.
+            assert voice.call_count == 1 and voice.call_args.kwargs["args"][1] != ""
+            async with AsyncSessionLocal() as db:
+                assert (await db.get(Contact, without)).phone in voice.call_args.kwargs["args"]
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_web_only_radio_is_not_auto_paused(self):
+        # Antes los que no tienen avisos contaban como fallos y una campaña
+        # "solo por web" con pocos suscritos se pausaba sola.
+        user_id, contact_ids = await _seed(12)
+        try:
+            camp_id = await _campaign(user_id, mode="radio")
+            async with AsyncSessionLocal() as db:
+                camp = await db.get(Campaign, camp_id)
+                camp.ab_test = {**camp.ab_test, "web_only": True}
+                camp.status = "running"
+                await db.commit()
+            pushed, voice = await self._send(user_id, camp_id, contact_ids, contact_ids[:1])
+            assert len(pushed) == 1 and voice.call_count == 0
+            async with AsyncSessionLocal() as db:
+                assert (await db.get(Campaign, camp_id)).status == "running"
+        finally:
+            await _cleanup(user_id)
+
+
 class TestResumeWebOnly:
     @pytest.mark.asyncio
     async def test_rejected_when_nobody_has_notifications(self):
@@ -147,11 +219,11 @@ class TestResumeWebOnly:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
-    async def test_rejected_for_radio(self):
+    async def test_rejected_for_voces_del_barrio(self):
         user_id, (cid,) = await _seed(1)
         try:
             await _add_subs(user_id, cid, 1)
-            camp_id = await _campaign(user_id, mode="radio")
+            camp_id = await _campaign(user_id, mode="radio", type_="voces")
             async with AsyncSessionLocal() as db:
                 user = await db.get(User, user_id)
                 with pytest.raises(HTTPException) as exc:

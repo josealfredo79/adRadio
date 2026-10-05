@@ -79,6 +79,7 @@ interface PromoSummary {
   excerpt: string
   image_url: string
   has_coupon: boolean
+  has_audio?: boolean
 }
 
 interface PromoDetail {
@@ -86,6 +87,7 @@ interface PromoDetail {
   title: string
   text: string
   image_url: string
+  audio_url?: string
   coupon: PortalCoupon | null
 }
 
@@ -370,7 +372,10 @@ function PortalHome({
                   {p.image_url && <img src={p.image_url} alt="" className="h-40 w-full object-cover" />}
                   <div className="p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-semibold">{p.title}</p>
+                      <p className="font-semibold">
+                        {p.has_audio && <span aria-label="Con audio">🔊 </span>}
+                        {p.title}
+                      </p>
                       {p.has_coupon && (
                         <span className="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold text-white" style={{ background: color }}>
                           Con cupón
@@ -987,6 +992,17 @@ function PromoView({
           {promo.image_url && <img src={promo.image_url} alt="" className="w-full object-cover" />}
           <div className="space-y-4 p-5">
             <h1 className="text-2xl font-bold">{promo.title}</h1>
+            {/* Campaña de radio: le llegó por la web en vez de nota de voz por WhatsApp. */}
+            {promo.audio_url && (
+              <div className="rounded-2xl p-3" style={{ background: `${color}14`, border: `1px solid ${color}33` }}>
+                <p className="mb-2 text-sm font-semibold" style={{ color }}>
+                  🔊 Escúchala
+                </p>
+                <audio controls preload="none" src={promo.audio_url} className="w-full">
+                  Tu navegador no puede reproducir el audio.
+                </audio>
+              </div>
+            )}
             <p className="whitespace-pre-line leading-relaxed" style={{ color: theme.muted }}>
               {promo.text}
             </p>

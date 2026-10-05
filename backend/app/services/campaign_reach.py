@@ -21,9 +21,10 @@ from app.services.web_push import contacts_with_push
 META_MARKETING_USD_MX = 0.0397
 USD_TO_MXN = 18.5
 
-# Modos que sí se mandan como notificación web; la radio y las Voces del
-# Barrio solo existen como audio / nota de voz por WhatsApp.
-WEB_MODES = ("regular", "banner")
+# Modos que sí se mandan como notificación web. La radio también: el aviso
+# abre la promo en la tarjeta del cliente, que trae el audio para escucharlo
+# ahí (2026-10-05). Las Voces del Barrio siguen solo por WhatsApp.
+WEB_MODES = ("regular", "banner", "radio", "comunitaria")
 
 
 def recipients_query(campaign: Campaign) -> Select:

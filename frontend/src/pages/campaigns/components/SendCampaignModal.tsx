@@ -67,7 +67,7 @@ export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCa
             {!reach.web_supported ? (
               <p className="flex gap-2 text-xs text-muted-foreground">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                Las campañas de radio y Voces del Barrio van como audio, así que solo se mandan por WhatsApp.
+                Las Voces del Barrio van como nota de voz, así que solo se mandan por WhatsApp.
               </p>
             ) : reach.web < reach.total && (
               <p className="flex gap-2 text-xs text-muted-foreground">
