@@ -66,3 +66,22 @@ migración corra al arrancar.
 5. Copiloto: escribir "¿cuántos contactos tengo?" (responde directo) y
    "lanza la campaña X" (debe llegar con botones; "Cancelar" no lanza nada,
    "Sí, hazlo" la lanza).
+
+## Cuenta del cliente (/mi): entrar con número + código
+
+En iaradio.online/mi el cliente escribe su número y le llega un código por
+WhatsApp desde este número central. Con el código ve todos los negocios
+IaRadio donde es cliente: sellos, próxima cita y cupones, y entra al portal
+de cada uno. El código solo se manda si el número es cliente de algún
+negocio. Hay un límite: uno por minuto y 5 al día por número, porque Meta
+cobra cada uno.
+
+1. Crea en WhatsApp Manager la plantilla de **Autenticación**:
+   - Nombre: `codigo_acceso`, idioma **Español (MEX)**.
+   - Entrega del código: **Copiar código**. Marca "Agregar recomendación de
+     seguridad" y vencimiento de **10 minutos**.
+2. Cuando Meta la apruebe, en Railway (servicio adRadio):
+   `CUSTOMER_ACCOUNT_ENABLED=true`. Mientras esté apagado, /mi dice "Muy
+   pronto" y el portal no muestra el link "Todos tus negocios en un lugar".
+3. (opcional) `IARADIO_OTP_TEMPLATE_NAME` / `IARADIO_OTP_TEMPLATE_LANG` si la
+   plantilla se llama distinto.

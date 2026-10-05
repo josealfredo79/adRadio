@@ -26,6 +26,7 @@ const CustomerStoriesPage = lazy(() => import('@/pages/CustomerStoriesPage'))
 const PublicSitePage = lazy(() => import('@/pages/PublicSitePage'))
 const ProductDetailPage = lazy(() => import('@/pages/ProductDetailPage'))
 const PortalPage = lazy(() => import('@/pages/PortalPage'))
+const MyAccountPage = lazy(() => import('@/pages/MyAccountPage'))
 const VoiceSetupPage = lazy(() => import('@/pages/VoiceSetupPage'))
 const TalkPage = lazy(() => import('@/pages/TalkPage'))
 const TeamPage = lazy(() => import('@/pages/TeamPage'))
@@ -77,6 +78,7 @@ export default function App() {
             <Route path="/p/:advertiserId/:productId" element={<ProductDetailPage />} />
             <Route path="/c/:token" element={<PortalPage />} />
             <Route path="/c/:token/promo/:promoId" element={<PortalPage />} />
+            <Route path="/mi" element={<MyAccountPage />} />
 
             {/* Public */}
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />

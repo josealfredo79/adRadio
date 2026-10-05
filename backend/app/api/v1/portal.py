@@ -174,6 +174,7 @@ async def get_portal(request: Request, token: str, db: AsyncSession = Depends(ge
             "whatsapp_number": _public_whatsapp_number(advertiser),
         },
         "customer": {"first_name": _first_name(contact.name) or ""},
+        "account_available": settings.CUSTOMER_ACCOUNT_ENABLED,
         "upcoming_appointments": [_appointment_out(a, now) for a in upcoming],
         "past_appointments": [_appointment_out(a, now) for a in history],
         "orders": [

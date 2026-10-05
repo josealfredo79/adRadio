@@ -29,6 +29,7 @@ from app.api.v1 import (
     contacts,
     conversations,
     copilot,
+    customer_account,
     knowledge_base,
     lab,
     meta_whatsapp,
@@ -270,6 +271,7 @@ app.include_router(public_api_routes.router, prefix=settings.API_PREFIX)
 app.include_router(public_site.router, prefix=settings.API_PREFIX)
 app.include_router(public_site.product_router, prefix=settings.API_PREFIX)
 app.include_router(portal.router, prefix=settings.API_PREFIX)
+app.include_router(customer_account.router, prefix=settings.API_PREFIX)
 app.include_router(voice_setup.router, prefix=settings.API_PREFIX)
 app.include_router(voice_demo.router, prefix=settings.API_PREFIX)
 app.include_router(chat_demo.router, prefix=settings.API_PREFIX)

@@ -112,6 +112,7 @@ interface PortalLoyalty {
 }
 
 interface PortalData {
+  account_available: boolean
   loyalty: PortalLoyalty | null
   push: PortalPush
   business: Business
@@ -230,6 +231,14 @@ export default function PortalPage() {
           )}
           <p className="mt-10 text-center text-xs" style={{ color: theme.muted }}>
             Hecho con <span className="font-semibold">IaRadio</span>
+            {data.account_available && (
+              <>
+                {' · '}
+                <Link to="/mi" className="underline">
+                  Todos tus negocios en un lugar
+                </Link>
+              </>
+            )}
           </p>
         </div>
 

@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     # para cuando el dueño no le ha escrito al número central en 24h.
     IARADIO_OWNER_TEMPLATE_NAME: str = "aviso_dueno"
     IARADIO_OWNER_TEMPLATE_LANG: str = "es_MX"
+    # Plantilla de AUTENTICACIÓN (botón "Copiar código") para que el cliente
+    # entre a su cuenta /mi con su número. Ver docs/NUMERO_CENTRAL_IARADIO.md.
+    IARADIO_OTP_TEMPLATE_NAME: str = "codigo_acceso"
+    IARADIO_OTP_TEMPLATE_LANG: str = "es_MX"
+    # Cuenta del cliente /mi (entrar con número + código). Encenderlo en
+    # Railway cuando Meta apruebe la plantilla de arriba; apagado, /mi dice
+    # "muy pronto" y el portal no muestra el link.
+    CUSTOMER_ACCOUNT_ENABLED: bool = False
     # Desde cuántas respuestas por WhatsApp del bot en el mes se invita a los
     # clientes al portal web. 0 = desde el primer mensaje (decisión del dueño,
     # 2026-10-02: sin confirmación oficial de Meta sobre los 1,000 mensajes de
