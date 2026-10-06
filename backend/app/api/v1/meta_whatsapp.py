@@ -29,6 +29,16 @@ from app.services.meta_provisioning import (
     new_registration_pin,
     register_phone_number,
 )
+from app.services.meta_service import _connection
+from app.services.meta_templates import (
+    TemplateCategory,
+    TemplateLanguage,
+    TemplateValidationError,
+    build_components,
+    create_template,
+    list_templates,
+    normalize_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -326,9 +336,8 @@ async def update_whatsapp_templates(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Record the name of an already-approved Meta template (created and
-    approved directly in WhatsApp Manager — this app doesn't create/submit
-    templates yet, see Fase 1 §6 in the migration plan).
+    Record which approved Meta template to use for each purpose (created
+    from AdRadio via /me/whatsapp-templates/meta or in WhatsApp Manager).
     """
     if body.utility_template_name is not None:
         name = body.utility_template_name.strip()
@@ -341,3 +350,69 @@ async def update_whatsapp_templates(
     await db.commit()
     await db.refresh(current_user)
     return _connection_out(current_user)
+
+
+class MetaTemplateOut(BaseModel):
+    id: str
+    name: str
+    language: str
+    category: str
+    status: str
+    body: str
+    rejected_reason: str | None = None
+
+
+class MetaTemplateCreate(BaseModel):
+    name: str
+    category: TemplateCategory
+    language: TemplateLanguage = "es_MX"
+    body: str
+    examples: list[str] = []
+    footer: str | None = None
+
+
+def _waba_credentials(user: User) -> tuple[str, str]:
+    conn = _connection(user)
+    if conn is None or not user.meta_waba_id:
+        raise HTTPException(status_code=409, detail="Conecta tu WhatsApp primero")
+    return user.meta_waba_id, conn[1]
+
+
+def _raise_for(result) -> None:
+    raise HTTPException(status_code=503 if result.code == "meta_unavailable" else 422, detail=result.message)
+
+
+@router.get("/me/whatsapp-templates/meta", response_model=list[MetaTemplateOut])
+async def get_meta_templates(current_user: User = Depends(get_current_user)):
+    """The templates on the business's WABA, with their live Meta status."""
+    waba_id, token = _waba_credentials(current_user)
+    templates, error = await list_templates(waba_id, token)
+    if error:
+        _raise_for(error)
+    return [MetaTemplateOut(**t.__dict__) for t in templates]
+
+
+@router.post("/me/whatsapp-templates/meta", response_model=MetaTemplateOut, status_code=201)
+async def create_meta_template(body: MetaTemplateCreate, current_user: User = Depends(get_current_user)):
+    """Submit a new template to Meta for approval (it starts as PENDING;
+    Meta usually decides within minutes, sometimes up to 24 h)."""
+    waba_id, token = _waba_credentials(current_user)
+    try:
+        name = normalize_name(body.name)
+        components = build_components(body.body, body.examples, body.footer)
+    except TemplateValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    result = await create_template(
+        waba_id, token, name=name, category=body.category, language=body.language, components=components,
+    )
+    if not result.ok:
+        _raise_for(result)
+    return MetaTemplateOut(
+        id=str(result.data.get("id", "")),
+        name=name,
+        language=body.language,
+        category=result.data.get("category", body.category),
+        status=result.data.get("status", "PENDING"),
+        body=body.body.strip(),
+    )

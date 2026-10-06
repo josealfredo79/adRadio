@@ -381,3 +381,66 @@ class TestEmbeddedSignup:
             assert r.status_code == 422
             assert test_user.meta_connection_status == "not_connected"
         assert test_user.meta_utility_template_status == "not_configured"
+
+
+class TestMetaTemplates:
+    @pytest.fixture
+    def connected(self, test_user):
+        test_user.meta_waba_id = "waba-1"
+        with patch("app.api.v1.meta_whatsapp._connection", return_value=("phone-1", "tok")):
+            yield test_user
+
+    def test_requires_connection(self, client, test_user):
+        with patch("app.api.v1.meta_whatsapp._connection", return_value=None):
+            r = client.get("/api/v1/me/whatsapp-templates/meta")
+        assert r.status_code == 409
+
+    def test_lists_templates(self, client, connected):
+        from app.services.meta_templates import TemplateSummary
+        with patch("app.api.v1.meta_whatsapp.list_templates", new=AsyncMock(return_value=(
+            [TemplateSummary(id="1", name="aviso", language="es_MX", category="UTILITY", status="APPROVED", body="Hola")],
+            None,
+        ))) as mock_list:
+            r = client.get("/api/v1/me/whatsapp-templates/meta")
+        assert r.status_code == 200
+        assert r.json()[0]["name"] == "aviso"
+        mock_list.assert_awaited_with("waba-1", "tok")
+
+    def test_creates_template(self, client, connected):
+        from app.services.meta_templates import TemplateResult
+        with patch("app.api.v1.meta_whatsapp.create_template", new=AsyncMock(return_value=TemplateResult(
+            ok=True, data={"id": "tpl-9", "status": "PENDING", "category": "UTILITY"},
+        ))) as mock_create:
+            r = client.post("/api/v1/me/whatsapp-templates/meta", json={
+                "name": "Recordatorio Cita", "category": "UTILITY",
+                "body": "Hola {{1}}, te esperamos mañana.", "examples": ["Ana"],
+            })
+        assert r.status_code == 201
+        assert r.json() == {
+            "id": "tpl-9", "name": "recordatorio_cita", "language": "es_MX", "category": "UTILITY",
+            "status": "PENDING", "body": "Hola {{1}}, te esperamos mañana.", "rejected_reason": None,
+        }
+        args, kwargs = mock_create.await_args
+        assert args == ("waba-1", "tok")
+        assert kwargs["name"] == "recordatorio_cita"
+        assert kwargs["components"][0]["example"] == {"body_text": [["Ana"]]}
+
+    def test_invalid_template_never_reaches_meta(self, client, connected):
+        with patch("app.api.v1.meta_whatsapp.create_template", new=AsyncMock()) as mock_create:
+            r = client.post("/api/v1/me/whatsapp-templates/meta", json={
+                "name": "aviso", "category": "UTILITY", "body": "Hola {{1}} ya", "examples": [],
+            })
+        assert r.status_code == 422
+        assert "ejemplo" in r.json()["detail"]
+        mock_create.assert_not_awaited()
+
+    def test_meta_rejection_is_422_with_its_reason(self, client, connected):
+        from app.services.meta_templates import TemplateResult
+        with patch("app.api.v1.meta_whatsapp.create_template", new=AsyncMock(return_value=TemplateResult(
+            ok=False, code="meta_error", message="Ya existe una plantilla con ese nombre",
+        ))):
+            r = client.post("/api/v1/me/whatsapp-templates/meta", json={
+                "name": "aviso", "category": "UTILITY", "body": "Hola ya abrimos",
+            })
+        assert r.status_code == 422
+        assert r.json()["detail"] == "Ya existe una plantilla con ese nombre"

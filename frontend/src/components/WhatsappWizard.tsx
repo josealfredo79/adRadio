@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { launchEmbeddedSignup } from '@/lib/fbSdk'
+import WhatsappTemplates from '@/components/WhatsappTemplates'
+import { useMetaTemplates } from '@/lib/metaTemplates'
 import { Check, ChevronDown, ExternalLink, Loader2, MessageCircle, Sparkles, X } from 'lucide-react'
 
 // El botón "Conectar con Meta" (Embedded Signup) se muestra solo si el
@@ -127,6 +129,8 @@ export default function WhatsappWizard() {
   const [apptTemplate, setApptTemplate] = useState(connection?.appointment_template_name ?? '')
 
   const isConnected = connection?.status === 'connected'
+  const { data: metaTemplates } = useMetaTemplates(isConnected)
+  const approvedTemplates = (metaTemplates ?? []).filter((t) => t.status === 'APPROVED')
 
   return (
     <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-5">
@@ -455,14 +459,20 @@ export default function WhatsappWizard() {
         <p className="text-sm text-red-600">{getApiError(saveMutation.error, 'No se pudo guardar la conexión')}</p>
       )}
 
+      {isConnected && <WhatsappTemplates />}
+
       {isConnected && (
         <div className="border-t border-border pt-4 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Plantillas aprobadas (opcional)</h3>
+          <h3 className="text-sm font-semibold text-foreground">¿Qué plantilla usar para cada aviso? (opcional)</h3>
           <p className="text-xs text-muted-foreground">
-            Pega el nombre exacto de las plantillas ya aprobadas en tu WhatsApp Manager (cualquier
-            categoría aprobada sirve, no tiene que ser "Utility"). Sin esto, los mensajes fuera de la
+            Elige una de tus plantillas aprobadas (cualquier tipo sirve). Sin esto, los mensajes fuera de la
             ventana de 24h (recordatorios, reapertura de conversación) se degradan a texto plano.
           </p>
+          <datalist id="approved-meta-templates">
+            {approvedTemplates.map((t) => (
+              <option key={t.id || t.name} value={t.name} />
+            ))}
+          </datalist>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-foreground mb-1">Plantilla de reapertura</label>
@@ -471,6 +481,7 @@ export default function WhatsappWizard() {
                 value={utilityTemplate}
                 onChange={(e) => setUtilityTemplate(e.target.value)}
                 onBlur={() => templatesMutation.mutate({ utility_template_name: utilityTemplate })}
+                list="approved-meta-templates"
                 placeholder="Ej: notificacion_informativa"
                 className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
@@ -482,6 +493,7 @@ export default function WhatsappWizard() {
                 value={apptTemplate}
                 onChange={(e) => setApptTemplate(e.target.value)}
                 onBlur={() => templatesMutation.mutate({ appointment_template_name: apptTemplate })}
+                list="approved-meta-templates"
                 placeholder="Ej: recordatorio_cita"
                 className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
