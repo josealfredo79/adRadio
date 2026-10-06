@@ -42,9 +42,12 @@ const api = axios.create({
   timeout: 10000,
 })
 
-// Attach in-memory access token to every request
+// Attach in-memory access token to every request — salvo que la petición ya
+// traiga su propia credencial: la app del cliente (/mi) manda la de su cuenta,
+// y con el dueño logueado en el mismo navegador se la cambiábamos por la del
+// dueño → 401 y de vuelta a pedir el número (2026-10-05).
 api.interceptors.request.use((config) => {
-  if (_accessToken) {
+  if (_accessToken && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${_accessToken}`
   }
   // Idempotency-Key for mutating requests to prevent duplicate processing
@@ -80,7 +83,11 @@ api.interceptors.response.use(
     // Don't intercept auth endpoints (login, register, etc.)
     // Let those errors flow to the caller for proper UI feedback.
     const isAuthEndpoint = originalRequest?.url?.includes('/auth/')
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+    // Lo público (app del cliente, portal, página del negocio) no usa la sesión
+    // del dueño: renovarla no arregla nada y, si fallaba, mandaba al cliente
+    // al login del panel. Su 401 lo maneja la pantalla (ej. /mi pide el número).
+    const isPublic = /^\/?public\//.test(originalRequest?.url ?? '')
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint && !isPublic) {
       originalRequest._retry = true
       try {
         const { data } = await axios.post(
