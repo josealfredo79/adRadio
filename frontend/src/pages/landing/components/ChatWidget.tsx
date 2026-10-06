@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { MessageCircle, X, Send, Bot } from 'lucide-react'
+import { X, Send } from 'lucide-react'
+import MascotSmart from '@/components/MascotSmart'
 
 interface ProductCard {
   url: string
@@ -15,6 +16,12 @@ interface ChatMessage {
 }
 
 const STORAGE_KEY = 'iaradio_demo_session'
+// Los colores del chat de la app del cliente (verde IaRadio, fondo oscuro).
+const GREEN = '#25D366'
+const BG = '#0b0d16'
+const CARD = '#151926'
+const BORDER = 'rgba(255,255,255,0.09)'
+const MUTED = 'rgba(255,255,255,0.55)'
 const API_BASE = `${import.meta.env.VITE_API_URL ?? ''}/api/v1`
 const SITE_ORIGIN = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -24,7 +31,7 @@ function ProductCardPreview({ card }: { card: ProductCard }) {
       href={`${SITE_ORIGIN}${card.url}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-2.5 rounded-lg bg-gray-800 border border-gray-700 p-2 hover:border-indigo-500 transition-colors w-full"
+      className="flex w-full items-center gap-2.5 rounded-2xl border border-white/10 bg-[#151926] p-2 transition-colors hover:border-[#25D366]"
     >
       <div className="h-11 w-11 shrink-0 rounded-md bg-gray-700 overflow-hidden flex items-center justify-center">
         {card.photo_url ? (
@@ -35,7 +42,7 @@ function ProductCardPreview({ card }: { card: ProductCard }) {
       </div>
       <div className="min-w-0">
         <div className="text-xs font-semibold text-white truncate">{card.name}</div>
-        {card.price && <div className="text-xs text-indigo-300">{card.price}</div>}
+        {card.price && <div className="text-xs text-white/60">{card.price}</div>}
       </div>
     </a>
   )
@@ -126,42 +133,48 @@ export default function ChatWidget() {
     }
   }, [input, loading, sessionId])
 
+  // Mismo aspecto que el chat de la app del cliente (AgentChat): la mascota de
+  // IaRadio como avatar y botón, globos tipo WhatsApp, caja redonda. Antes era
+  // otro diseño (degradado morado, icono de robot) y parecían dos productos.
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div className="fixed bottom-5 right-4 z-50 flex flex-col items-end sm:right-6">
       {open && (
         <div
-          className="mb-4 w-80 sm:w-96 rounded-2xl shadow-2xl overflow-hidden"
-          style={{ animation: 'fadeUp 0.3s ease' }}
+          className="mb-3 flex h-[70dvh] max-h-[34rem] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-3xl shadow-2xl sm:w-96"
+          style={{ animation: 'fadeUp 0.3s ease', background: BG, color: '#fff', border: `1px solid ${BORDER}` }}
         >
-          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-full bg-white/20 flex items-center justify-center">
-                <Bot className="h-5 w-5 text-white" />
+          <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="-my-1 shrink-0">
+                <MascotSmart mood={loading ? 'thinking' : 'idle'} size={44} color={GREEN} />
               </div>
-              <div>
-                <div className="text-sm font-semibold text-white">Alex · IaRadio</div>
-                <div className="text-[10px] text-green-200">● en línea</div>
+              <div className="min-w-0">
+                <p className="truncate font-semibold">Alex · IaRadio</p>
+                <p className="truncate text-xs" style={{ color: MUTED }}>
+                  {loading ? 'escribiendo…' : 'Asistente · responde al instante'}
+                </p>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white transition-colors">
-              <X className="h-5 w-5" />
+            <button onClick={() => setOpen(false)} aria-label="Cerrar chat" className="rounded-full p-2" style={{ color: MUTED }}>
+              <X size={20} />
             </button>
           </div>
 
-          <div className="bg-gray-900 h-80 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+          <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4">
             {messages.map((msg, i) => (
               <div
                 key={i}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 style={{ animation: 'fadeUp 0.3s ease' }}
               >
-                <div className={`flex flex-col gap-1.5 max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                <div className={`flex max-w-[85%] flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                   <div
-                    className={`rounded-xl px-3 py-2 text-sm shadow-sm whitespace-pre-wrap ${
+                    className="whitespace-pre-line rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed"
+                    style={
                       msg.role === 'user'
-                        ? 'rounded-tr-none bg-indigo-600 text-white'
-                        : 'rounded-tl-none bg-gray-800 text-gray-100'
-                    }`}
+                        ? { background: GREEN, color: '#fff', borderBottomRightRadius: 6 }
+                        : { background: CARD, border: `1px solid ${BORDER}`, borderBottomLeftRadius: 6 }
+                    }
                   >
                     {msg.content}
                   </div>
@@ -172,51 +185,55 @@ export default function ChatWidget() {
               </div>
             ))}
             {loading && (
-              <div className="flex justify-start" style={{ animation: 'fadeUp 0.3s ease' }}>
-                <div className="rounded-xl rounded-tl-none bg-gray-800 px-3 py-2 shadow-sm flex gap-1 items-center">
-                  <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span
-                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
-                    style={{ animationDelay: '150ms' }}
-                  />
-                  <span
-                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
-                    style={{ animationDelay: '300ms' }}
-                  />
+              <div className="flex justify-start">
+                <div className="rounded-2xl px-4 py-2.5 text-sm" style={{ background: CARD, color: MUTED }}>
+                  Escribiendo…
                 </div>
               </div>
             )}
             <div ref={endRef} />
           </div>
 
-          <div className="bg-gray-900 border-t border-gray-800 p-3 flex gap-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void send()
+            }}
+            className="flex items-center gap-2 p-3"
+            style={{ borderTop: `1px solid ${BORDER}` }}
+          >
             <input
               ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && send()}
-              placeholder="Escribe un mensaje..."
+              placeholder="Escribe tu mensaje…"
               disabled={loading}
-              className="flex-1 bg-gray-800 text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-500 disabled:opacity-50"
+              enterKeyHint="send"
+              className="min-w-0 flex-1 rounded-full bg-transparent px-4 py-3 text-base text-white outline-none placeholder:text-white/40 disabled:opacity-50"
+              style={{ border: `1px solid ${BORDER}` }}
             />
             <button
-              onClick={send}
+              type="submit"
               disabled={loading || !input.trim()}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl px-3 py-2.5 transition-colors"
+              aria-label="Enviar"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-95 disabled:opacity-50"
+              style={{ background: GREEN }}
             >
-              <Send className="h-4 w-4" />
+              <Send size={18} />
             </button>
-          </div>
+          </form>
         </div>
       )}
 
+      {/* El botón es la mascota misma (como el agente de cada negocio). */}
       <button
         onClick={() => setOpen(!open)}
-        className="h-14 w-14 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95"
         aria-label={open ? 'Cerrar chat' : 'Abrir chat'}
+        className="flex h-16 w-16 items-center justify-center rounded-full shadow-xl transition-transform hover:scale-105 active:scale-95"
+        style={{ background: open ? CARD : '#0b1220', border: `1px solid ${BORDER}` }}
       >
-        {open ? <X className="h-6 w-6 text-white" /> : <MessageCircle className="h-6 w-6 text-white" />}
+        {open ? <X className="h-6 w-6 text-white" /> : <MascotSmart mood="happy" size={48} color={GREEN} />}
       </button>
     </div>
   )
