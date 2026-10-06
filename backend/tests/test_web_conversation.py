@@ -214,6 +214,31 @@ class TestWebChatInTheInbox:
 
 class TestPortalHistory:
     @pytest.mark.asyncio
+    async def test_question_always_shows_before_its_answer(self):
+        # Antes ambos llevaban la hora de inicio de la transacción y empataban:
+        # el chat a veces mostraba la respuesta arriba de la pregunta.
+        user_id, cid, _ = await _seed()
+        try:
+            for i in range(4):
+                await _web_chat(user_id, cid, f"pregunta {i}", rag_reply=f"respuesta {i}")
+            async with AsyncSessionLocal() as db:
+                # Además, un par viejo que ya quedó empatado en la BD.
+                tie = datetime.now(timezone.utc) + timedelta(minutes=1)
+                db.add_all([
+                    Message(advertiser_id=user_id, contact_id=cid, direction="outbound", content="respuesta vieja",
+                            status="sent", created_at=tie, channel="web"),
+                    Message(advertiser_id=user_id, contact_id=cid, direction="inbound", content="pregunta vieja",
+                            status="sent", created_at=tie, channel="web"),
+                ])
+                await db.commit()
+                out = await get_messages(request=_request(), token=make_portal_token(cid), db=db)
+            web = [x["content"] for x in out["messages"] if x["channel"] == "web"]
+            assert web == ["pregunta 0", "respuesta 0", "pregunta 1", "respuesta 1", "pregunta 2", "respuesta 2",
+                           "pregunta 3", "respuesta 3", "pregunta vieja", "respuesta vieja"]
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
     async def test_one_thread_without_campaigns_or_internal_markers(self):
         user_id, cid, _ = await _seed()
         other_id, other_cid, _ = await _seed()

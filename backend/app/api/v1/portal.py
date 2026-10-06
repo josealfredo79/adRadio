@@ -320,7 +320,11 @@ async def get_messages(
         except ValueError:
             raise HTTPException(status_code=400, detail="after no válido")
         q = q.where(Message.created_at > since)
-    rows = (await db.execute(q.order_by(Message.created_at.desc()).limit(CHAT_HISTORY_LIMIT))).scalars().all()
+    # Empate de hora (mensajes viejos guardados en la misma transacción): primero
+    # lo que escribió el cliente, luego la respuesta.
+    rows = (await db.execute(
+        q.order_by(Message.created_at.desc(), (Message.direction == "outbound").desc()).limit(CHAT_HISTORY_LIMIT)
+    )).scalars().all()
     return {
         "messages": [
             {

@@ -2,7 +2,7 @@
 import json
 import logging
 import uuid as uuid_module
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis
@@ -213,10 +213,14 @@ async def widget_chat(
         # Cliente que entró desde su portal (/c/...): la plática queda en su
         # historial (el dueño la ve en el Inbox) marcada como "web" — cada
         # respuesta aquí es un mensaje de WhatsApp que no se pagó.
+        # Hora explícita: con el default de la BD (inicio de la transacción) la
+        # pregunta y la respuesta empataban y el chat a veces ponía la respuesta arriba.
+        asked_at = datetime.now(timezone.utc)
         db.add(Message(advertiser_id=user.id, contact_id=contact.id, direction="inbound",
-                       content=message, status="delivered", channel="web"))
+                       content=message, status="delivered", channel="web", created_at=asked_at))
         db.add(Message(advertiser_id=user.id, contact_id=contact.id, direction="outbound",
-                       content=reply, status="delivered", channel="web"))
+                       content=reply, status="delivered", channel="web",
+                       created_at=asked_at + timedelta(milliseconds=1)))
         try:
             conv = await open_conversation(db, user.id, contact.id)
             log_turns(

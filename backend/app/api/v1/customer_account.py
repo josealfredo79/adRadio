@@ -119,7 +119,7 @@ async def _last_message(db: AsyncSession, contact_id) -> dict | None:
         select(Message, Campaign)
         .outerjoin(Campaign, Campaign.id == Message.campaign_id)
         .where(Message.contact_id == contact_id, Message.status != "queued")
-        .order_by(Message.created_at.desc())
+        .order_by(Message.created_at.desc(), (Message.direction == "outbound").desc())
         .limit(10)
     )).all()
     for m, campaign in rows:
