@@ -113,18 +113,25 @@ en el campo de instrucciones de prueba. No usar la cuenta personal.
 > We only access the WhatsApp Business Accounts that businesses explicitly
 > connect to AdRadio.
 
-**Video (1–2 min) — guion:**
-1. Iniciar sesión con la cuenta de prueba.
-2. Abrir el asistente de conexión de WhatsApp, llenar WABA ID, Phone Number ID y token, y guardar.
-3. Mostrar que AdRadio confirma el número y el nombre verificado, y que los webhooks quedan configurados solos.
-4. Mostrar el panel de salud del número (calidad y límite de mensajes).
-5. Mostrar dónde se eligen las plantillas aprobadas.
+**Video (1–2 min) — guion.** Meta pide explícitamente "un único video que
+muestre la creación de una plantilla de mensaje". Desde a3ff8c8 se crea en
+AdRadio (Configuración → WhatsApp → "Tus plantillas de WhatsApp"):
+1. Iniciar sesión en `https://www.iaradio.online/login` con la cuenta IaRadio
+   (la del número central).
+2. Configuración → WhatsApp: mostrar el número conectado y la lista de
+   plantillas con su estado traído de Meta.
+3. "Nueva plantilla": nombre `aviso_cita_demo`, tipo Utilidad, mensaje
+   `Hola {{1}}, te recordamos tu cita del {{2}}. Responde si necesitas
+   cambiarla.`, ejemplos `Ana` y `lunes 10:00 am` → "Enviar a revisión de Meta".
+4. Mostrar que aparece "En revisión" en la lista.
+5. Abrir WhatsApp Manager (business.facebook.com → Plantillas de mensajes) y
+   mostrar la misma plantilla ahí, creada por la app.
+6. (Si ya se aprobó) volver a AdRadio, "Actualizar" → "Aprobada", y elegirla
+   en "¿Qué plantilla usar para cada aviso?".
 
-> Ojo: antes de grabar, abrir el link **"Normas de uso"** de cada permiso en la
-> solicitud — ahí Meta dice exactamente qué debe verse en el video. Si para
-> `whatsapp_business_management` pide mostrar la *creación* de una plantilla,
-> AdRadio hoy no crea plantillas (solo usa las ya aprobadas): avisarme antes de
-> grabar para decidir si se agrega o se muestra el flujo actual.
+**Video de messaging:** mostrar en pantalla dividida (o cortando entre las
+dos) el Inbox de AdRadio respondiendo a una conversación y el celular o
+WhatsApp Web recibiéndolo. Meta pide que se vean ambos lados.
 
 ## public_profile
 
