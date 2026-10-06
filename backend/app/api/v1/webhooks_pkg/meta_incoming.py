@@ -268,6 +268,13 @@ async def meta_incoming(
                 errors = status_evt.get("errors") or []
                 if errors:
                     error_code = str(errors[0].get("code", ""))
+                    # Un mensaje que Meta no entregó (ej. el código de /mi): el
+                    # motivo exacto solo viene aquí, y sin esto no quedaba rastro.
+                    logger.warning(
+                        "[META WEBHOOK] %s wamid=%s to=...%s code=%s %s", status_evt.get("status"),
+                        status_evt.get("id"), str(status_evt.get("recipient_id", ""))[-4:], error_code,
+                        (errors[0].get("title") or errors[0].get("message") or "")[:200],
+                    )
                 try:
                     await apply_status_update(
                         db, status_evt.get("id", ""), status_evt.get("status", ""), error_code

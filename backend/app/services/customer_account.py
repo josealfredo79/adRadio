@@ -149,7 +149,7 @@ async def send_code(phone: str, code: str) -> bool:
     if not token:
         return False
     try:
-        await graph_request(
+        resp = await graph_request(
             f"{settings.IARADIO_WA_PHONE_NUMBER_ID}/messages",
             token=token,
             method="POST",
@@ -168,6 +168,10 @@ async def send_code(phone: str, code: str) -> bool:
                 },
             },
         )
+        # Meta lo aceptó, pero la entrega llega después por webhook (statuses):
+        # con el wamid se cruza en el log si el código no le llega al cliente.
+        wamid = ((resp or {}).get("messages") or [{}])[0].get("id") if isinstance(resp, dict) else None
+        logger.info("[ACCOUNT] OTP sent to ...%s wamid=%s", phone[-4:], wamid)
         return True
     except MetaApiError as e:
         logger.error("[ACCOUNT] OTP template send failed: %s", e)
