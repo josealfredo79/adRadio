@@ -266,6 +266,11 @@ async def meta_incoming(
             for status_evt in value.get("statuses", []):
                 error_code = None
                 errors = status_evt.get("errors") or []
+                if not errors and platform_enabled() and phone_number_id == settings.IARADIO_WA_PHONE_NUMBER_ID:
+                    # Número central (códigos de /mi, avisos al dueño): poco volumen,
+                    # y saber si quedó "delivered" o solo "sent" resuelve "no me llegó".
+                    logger.info("[META WEBHOOK] central %s wamid=%s to=...%s", status_evt.get("status"),
+                                status_evt.get("id"), str(status_evt.get("recipient_id", ""))[-4:])
                 if errors:
                     error_code = str(errors[0].get("code", ""))
                     # Un mensaje que Meta no entregó (ej. el código de /mi): el
