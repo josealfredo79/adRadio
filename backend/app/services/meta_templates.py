@@ -22,6 +22,7 @@ NAME_RE = re.compile(r"^[a-z0-9_]{1,512}$")
 VARIABLE_RE = re.compile(r"\{\{(\d+)\}\}")
 BODY_MAX = 1024
 FOOTER_MAX = 60
+EDGE_PUNCTUATION = " \t\r\n.,;:!?¡¿…()[]\"'*_~-"
 
 
 class TemplateValidationError(ValueError):
@@ -71,9 +72,14 @@ def build_components(body: str, examples: list[str], footer: str | None) -> list
     distinct = sorted(set(variables))
     if distinct != list(range(1, len(distinct) + 1)):
         raise TemplateValidationError("Las variables deben ir numeradas en orden: {{1}}, {{2}}, {{3}}…")
-    if body.startswith("{{") or body.endswith("}}"):
-        # Meta rejects templates that start or end with a variable.
-        raise TemplateValidationError("El mensaje no puede empezar ni terminar con una variable")
+    # Meta rejects templates that start or end with a variable, and trailing
+    # punctuation doesn't count ("...del {{2}}." is still "at the end").
+    core = body.strip(EDGE_PUNCTUATION)
+    if core.startswith("{{") or core.endswith("}}"):
+        raise TemplateValidationError(
+            "El mensaje no puede empezar ni terminar con una variable (aunque lleve punto). "
+            "Agrega texto después, por ejemplo: «… del {{2}}. ¡Te esperamos!»"
+        )
     examples = [e.strip() for e in examples]
     if len(examples) != len(distinct) or not all(examples):
         raise TemplateValidationError("Escribe un ejemplo para cada variable (Meta lo pide para revisarla)")

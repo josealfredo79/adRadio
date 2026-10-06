@@ -25,9 +25,9 @@ class TestNormalizeName:
 
 class TestBuildComponents:
     def test_body_with_examples_and_footer(self):
-        components = build_components("Hola {{1}}, tu cita es el {{2}}.", ["Ana", "lunes 10 am"], "Responde STOP para salir")
+        components = build_components("Hola {{1}}, tu cita es el {{2}}. ¡Te esperamos!", ["Ana", "lunes 10 am"], "Responde STOP para salir")
         assert components == [
-            {"type": "BODY", "text": "Hola {{1}}, tu cita es el {{2}}.", "example": {"body_text": [["Ana", "lunes 10 am"]]}},
+            {"type": "BODY", "text": "Hola {{1}}, tu cita es el {{2}}. ¡Te esperamos!", "example": {"body_text": [["Ana", "lunes 10 am"]]}},
             {"type": "FOOTER", "text": "Responde STOP para salir"},
         ]
 
@@ -45,6 +45,8 @@ class TestBuildComponents:
         ("Hola {{1}} ya llegó", ["  "]),           # blank example
         ("{{1}} ya llegó tu pedido", ["Ana"]),     # starts with a variable
         ("Tu pedido llegó {{1}}", ["Ana"]),        # ends with a variable
+        ("Tu cita es el {{1}}.", ["lunes"]),       # trailing period still counts as the end
+        ("¡{{1}}, ya llegó!", ["Ana"]),            # so does leading punctuation
         ("x" * 1025, []),
     ])
     def test_rejects_what_meta_would_reject(self, body, examples):

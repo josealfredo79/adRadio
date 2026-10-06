@@ -153,7 +153,7 @@ export default function WhatsappTemplates() {
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
               Usa {'{{1}}'}, {'{{2}}'}… para lo que cambia en cada envío (nombre, fecha). No empieces ni termines con
-              una variable.
+              una variable (aunque lleve punto).
             </p>
           </div>
           {variables.length > 0 && (
