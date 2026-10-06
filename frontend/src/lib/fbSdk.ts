@@ -74,9 +74,11 @@ export function launchEmbeddedSignup(appId: string, configId: string): Promise<E
         window.FB.init({ appId, version: 'v21.0', cookie: true, xfbml: true })
 
         let signup: EmbeddedSignupResult | null = null
+        // Set when Meta reports the customer quit or hit an error inside the popup.
+        let abortMessage: string | null = null
 
-        // Meta posts the selected WABA + phone number via the sessionInfo
-        // message before resolving the login callback — capture it here.
+        // Meta posts the selected WABA + phone number (or why the flow ended)
+        // via the sessionInfo message before resolving the login callback.
         const handleMessage = (raw: unknown) => {
           let payload: unknown = raw
           if (typeof raw === 'string') {
@@ -89,15 +91,25 @@ export function launchEmbeddedSignup(appId: string, configId: string): Promise<E
           const data = (payload ?? {}) as {
             type?: string
             event?: string
-            data?: { waba_id?: string | number; phone_number_id?: string | number }
+            data?: {
+              waba_id?: string | number
+              phone_number_id?: string | number
+              current_step?: string
+              error_message?: string
+            }
           }
           if (data.type !== 'WA_EMBEDDED_SIGNUP') return
-          if (data.event === 'FINISH' && data.data) {
+          if ((data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA') && data.data) {
+            // FINISH_ONLY_WABA has no number; the server looks it up from the token.
             signup = {
               code: '',
               wabaId: String(data.data.waba_id ?? ''),
               phoneNumberId: String(data.data.phone_number_id ?? ''),
             }
+          } else if (data.event === 'CANCEL') {
+            abortMessage = data.data?.error_message
+              ? `Meta reportó un error: ${data.data.error_message}`
+              : 'Cerraste la ventana de Meta antes de terminar. Vuelve a intentarlo cuando quieras.'
           }
         }
         window.FB.Event?.subscribe('message', handleMessage)
@@ -114,13 +126,14 @@ export function launchEmbeddedSignup(appId: string, configId: string): Promise<E
             }
             const code = response.authResponse?.code
             if (!code) {
-              reject(new Error('Meta no devolvió el código de autorización'))
+              reject(new Error(abortMessage ?? 'Meta no devolvió el código de autorización'))
               return
             }
             if (signup) {
               resolve({ ...signup, code })
             } else {
-              // Fallback: some flows resolve without the sessionInfo message.
+              // Some flows resolve without the sessionInfo message; the
+              // server reads the WABA and number from the token.
               resolve({ code, wabaId: '', phoneNumberId: '' })
             }
           },
@@ -128,7 +141,7 @@ export function launchEmbeddedSignup(appId: string, configId: string): Promise<E
             config_id: configId,
             response_type: 'code',
             override_default_response_type: true,
-            extras: { feature: 'whatsapp_embedded_signup', sessionInfoVersion: 2 },
+            extras: { feature: 'whatsapp_embedded_signup', sessionInfoVersion: 3 },
           },
         )
       })

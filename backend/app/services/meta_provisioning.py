@@ -8,10 +8,14 @@ app at IaRadio's webhook so inbound messages actually arrive. Without this, a
 manually-connected advertiser can send but never receive (their app isn't
 wired to our central webhook — see meta_incoming.py).
 
-Fase B/C (later): number verification (request_code/verify_code/register) and
+`register_phone_number` — the Cloud API registration Meta requires after
+Embedded Signup; without it the number can't send.
+
+Fase B/C (later): SMS number verification (request_code/verify_code) and
 template creation land here too.
 """
 import logging
+import secrets
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -85,4 +89,42 @@ async def configure_app_webhook(app_id: str, app_secret: str) -> ProvisionResult
             message="Meta no confirmó la suscripción del webhook",
             data=data,
         )
+    return ProvisionResult(ok=True, data=data)
+
+
+# Meta: "Two step verification PIN mismatch" — the number already has a 2FA
+# PIN its owner set, which means it was registered on the Cloud API before.
+PIN_MISMATCH_CODE = 133005
+
+
+def new_registration_pin() -> str:
+    return f"{secrets.randbelow(10**6):06d}"
+
+
+async def register_phone_number(phone_number_id: str, token: str, pin: str) -> ProvisionResult:
+    """Register the number on the Cloud API (`POST /{phone_number_id}/register`).
+
+    Required after Embedded Signup — a number that skips it connects fine but
+    every send fails. `pin` becomes the number's two-step verification PIN.
+    A PIN mismatch means the owner already registered it with their own PIN,
+    so it counts as registered (`data["already_registered"]`).
+    """
+    try:
+        data = await graph_request(
+            f"{phone_number_id}/register",
+            token=token,
+            method="POST",
+            body={"messaging_product": "whatsapp", "pin": pin},
+        )
+    except MetaApiError as e:
+        if e.code == PIN_MISMATCH_CODE:
+            logger.info("[META PROVISION] phone=%s already has an owner 2FA PIN; treating as registered", phone_number_id)
+            return ProvisionResult(ok=True, data={"already_registered": True})
+        logger.warning("[META PROVISION] register_phone_number failed phone=%s: %s", phone_number_id, e)
+        if e.status == 0 or e.status >= 500:
+            return ProvisionResult(ok=False, code="meta_unavailable", message="Meta no está disponible en este momento; intenta de nuevo")
+        return ProvisionResult(ok=False, code="meta_error", message=str(e))
+
+    if not data.get("success", True):
+        return ProvisionResult(ok=False, code="meta_error", message="Meta no confirmó el registro del número", data=data)
     return ProvisionResult(ok=True, data=data)

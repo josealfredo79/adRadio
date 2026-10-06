@@ -24,7 +24,11 @@ from app.schemas.meta_whatsapp import (
 )
 from app.services.meta_connect_service import subscribe_app_to_waba, test_connection
 from app.services.meta_oauth_service import exchange_embedded_code
-from app.services.meta_provisioning import configure_app_webhook
+from app.services.meta_provisioning import (
+    configure_app_webhook,
+    new_registration_pin,
+    register_phone_number,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -185,10 +189,12 @@ async def get_whatsapp_embedded_config(current_user: User = Depends(get_current_
 
 class MetaEmbeddedSignupBody(BaseModel):
     """Payload from the "Conectar con Meta" flow: the OAuth code plus the
-    WABA/phone the customer picked in Meta's own signup window."""
+    WABA/phone the customer picked in Meta's own signup window. The IDs may
+    come empty when Meta's sessionInfo message didn't arrive — the server
+    then reads them from the token."""
     code: str
-    waba_id: str
-    phone_number_id: str
+    waba_id: str = ""
+    phone_number_id: str = ""
 
 
 @router.post("/me/whatsapp-connection/embedded", response_model=MetaWhatsappConnectionOut)
@@ -205,9 +211,21 @@ async def connect_whatsapp_embedded(
         status_code = 503 if result.code == "meta_unavailable" else 422
         raise HTTPException(status_code=status_code, detail=result.message)
 
+    # Embedded Signup numbers must be registered on the Cloud API before they
+    # can send. A failure doesn't block the connection (the token is valid);
+    # verification_status tells the wizard to show it.
+    pin = new_registration_pin()
+    registration = await register_phone_number(result.phone_number_id, result.token, pin)
+    if registration.ok and not registration.data.get("already_registered"):
+        pin_enc = encrypt_secret(pin)
+        current_user.meta_pin_cipher = pin_enc.cipher
+        current_user.meta_pin_iv = pin_enc.iv
+        current_user.meta_pin_tag = pin_enc.tag
+    current_user.meta_verification_status = "registered" if registration.ok else "register_failed"
+
     enc = encrypt_secret(result.token)
-    current_user.meta_waba_id = body.waba_id
-    current_user.meta_phone_number_id = body.phone_number_id
+    current_user.meta_waba_id = result.waba_id
+    current_user.meta_phone_number_id = result.phone_number_id
     current_user.meta_display_phone_number = result.display_phone_number
     current_user.meta_verified_name = result.verified_name
     current_user.meta_token_cipher = enc.cipher
@@ -218,7 +236,7 @@ async def connect_whatsapp_embedded(
     await db.commit()
     await db.refresh(current_user)
 
-    await subscribe_app_to_waba(body.waba_id, result.token)
+    await subscribe_app_to_waba(result.waba_id, result.token)
 
     return _connection_out(current_user)
 

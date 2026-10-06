@@ -4,7 +4,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.services.meta_client import MetaApiError
-from app.services.meta_provisioning import WEBHOOK_FIELDS, configure_app_webhook
+from app.services.meta_provisioning import (
+    PIN_MISMATCH_CODE,
+    WEBHOOK_FIELDS,
+    configure_app_webhook,
+    new_registration_pin,
+    register_phone_number,
+)
 
 
 class TestConfigureAppWebhook:
@@ -64,3 +70,54 @@ class TestConfigureAppWebhook:
             result = await configure_app_webhook("app", "sec")
             assert result.ok is False
             assert result.code == "meta_error"
+
+
+class TestRegisterPhoneNumber:
+    @pytest.mark.asyncio
+    async def test_posts_register_with_pin(self):
+        with patch(
+            "app.services.meta_provisioning.graph_request",
+            new=AsyncMock(return_value={"success": True}),
+        ) as mock_gr:
+            result = await register_phone_number("phone-1", "tok", "123456")
+
+        assert result.ok is True
+        assert mock_gr.call_args.args[0] == "phone-1/register"
+        kwargs = mock_gr.call_args.kwargs
+        assert kwargs["token"] == "tok"
+        assert kwargs["method"] == "POST"
+        assert kwargs["body"] == {"messaging_product": "whatsapp", "pin": "123456"}
+
+    @pytest.mark.asyncio
+    async def test_pin_mismatch_means_already_registered(self):
+        with patch(
+            "app.services.meta_provisioning.graph_request",
+            new=AsyncMock(side_effect=MetaApiError("Two step verification PIN mismatch", status=400, code=PIN_MISMATCH_CODE)),
+        ):
+            result = await register_phone_number("phone-1", "tok", "123456")
+        assert result.ok is True
+        assert result.data == {"already_registered": True}
+
+    @pytest.mark.asyncio
+    async def test_other_error_fails(self):
+        with patch(
+            "app.services.meta_provisioning.graph_request",
+            new=AsyncMock(side_effect=MetaApiError("Account not verified", status=400, code=133000)),
+        ):
+            result = await register_phone_number("phone-1", "tok", "123456")
+        assert result.ok is False
+        assert result.code == "meta_error"
+
+    @pytest.mark.asyncio
+    async def test_meta_down_is_unavailable(self):
+        with patch(
+            "app.services.meta_provisioning.graph_request",
+            new=AsyncMock(side_effect=MetaApiError("timeout", status=0)),
+        ):
+            result = await register_phone_number("phone-1", "tok", "123456")
+        assert result.code == "meta_unavailable"
+
+    def test_pin_is_six_digits(self):
+        pins = {new_registration_pin() for _ in range(50)}
+        assert all(len(p) == 6 and p.isdigit() for p in pins)
+        assert len(pins) > 1

@@ -10,6 +10,7 @@ from app.database import get_db
 from app.schemas.meta_whatsapp import MetaWhatsappConnectionOut
 from app.services.meta_connect_service import ConnectionCheck
 from app.services.meta_oauth_service import OAuthResult
+from app.services.meta_provisioning import ProvisionResult
 
 
 @pytest.fixture
@@ -299,9 +300,12 @@ class TestEmbeddedSignup:
 
     def test_successful_embedded_signup_persists_and_subscribes(self, client, test_user):
         with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(
-            ok=True, token="EAAGembeddedtoken", display_phone_number="+521234567890",
-            verified_name="Mi Negocio",
+            ok=True, token="EAAGembeddedtoken", waba_id="waba-1", phone_number_id="phone-1",
+            display_phone_number="+521234567890", verified_name="Mi Negocio",
         ))), patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()) as mock_subscribe, \
+                patch("app.api.v1.meta_whatsapp.register_phone_number", new=AsyncMock(
+                    return_value=ProvisionResult(ok=True, data={"success": True}),
+                )) as mock_register, \
                 patch("app.api.v1.meta_whatsapp.get_whatsapp_connection", new=AsyncMock(return_value=MetaWhatsappConnectionOut(
                     waba_id="waba-1", phone_number_id="phone-1", status="connected",
                     utility_template_status="not_configured",
@@ -316,6 +320,56 @@ class TestEmbeddedSignup:
             assert test_user.meta_connected_at is not None
             assert mock_subscribe.await_count == 1
             mock_subscribe.assert_awaited_with("waba-1", "EAAGembeddedtoken")
+            # Registered on the Cloud API with a fresh 6-digit PIN, kept encrypted.
+            phone_id, token, pin = mock_register.await_args.args
+            assert (phone_id, token) == ("phone-1", "EAAGembeddedtoken")
+            assert len(pin) == 6 and pin.isdigit()
+            assert test_user.meta_verification_status == "registered"
+            assert test_user.meta_pin_cipher
+
+    def _signup(self, client, oauth: OAuthResult, registration: ProvisionResult, body: dict):
+        with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=oauth)) as mock_exchange, \
+                patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()) as mock_subscribe, \
+                patch("app.api.v1.meta_whatsapp.register_phone_number", new=AsyncMock(return_value=registration)):
+            r = client.post("/api/v1/me/whatsapp-connection/embedded", json=body)
+        return r, mock_exchange, mock_subscribe
+
+    def test_missing_ids_use_the_ones_resolved_from_the_token(self, client, test_user):
+        r, mock_exchange, mock_subscribe = self._signup(
+            client,
+            OAuthResult(ok=True, token="tok", waba_id="waba-9", phone_number_id="phone-9", display_phone_number="+52155"),
+            ProvisionResult(ok=True),
+            {"code": "abc123"},
+        )
+        assert r.status_code == 200
+        mock_exchange.assert_awaited_with("abc123", "", "")
+        assert test_user.meta_waba_id == "waba-9"
+        assert test_user.meta_phone_number_id == "phone-9"
+        mock_subscribe.assert_awaited_with("waba-9", "tok")
+
+    def test_registration_failure_still_connects_but_flags_it(self, client, test_user):
+        r, _, _ = self._signup(
+            client,
+            OAuthResult(ok=True, token="tok", waba_id="waba-1", phone_number_id="phone-1"),
+            ProvisionResult(ok=False, code="meta_error", message="nope"),
+            {"code": "abc123", "waba_id": "waba-1", "phone_number_id": "phone-1"},
+        )
+        assert r.status_code == 200
+        assert test_user.meta_connection_status == "connected"
+        assert test_user.meta_verification_status == "register_failed"
+        assert not test_user.meta_pin_cipher
+
+    def test_already_registered_number_keeps_its_owner_pin(self, client, test_user):
+        r, _, _ = self._signup(
+            client,
+            OAuthResult(ok=True, token="tok", waba_id="waba-1", phone_number_id="phone-1"),
+            ProvisionResult(ok=True, data={"already_registered": True}),
+            {"code": "abc123", "waba_id": "waba-1", "phone_number_id": "phone-1"},
+        )
+        assert r.status_code == 200
+        assert test_user.meta_verification_status == "registered"
+        # Our PIN never took effect, so don't store it.
+        assert not test_user.meta_pin_cipher
 
     def test_exchange_failure_returns_422(self, client, test_user):
         with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(

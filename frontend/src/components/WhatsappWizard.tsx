@@ -72,10 +72,6 @@ export default function WhatsappWizard() {
     }
     try {
       const result = await launchEmbeddedSignup(embeddedConfig.app_id, embeddedConfig.config_id)
-      if (!result.wabaId || !result.phoneNumberId) {
-        setConnectError('Meta no devolvió el número seleccionado. Intenta de nuevo o usa el formulario manual.')
-        return
-      }
       await embeddedMutation.mutateAsync(result)
     } catch (err) {
       setConnectError(err instanceof Error ? err.message : 'No se pudo completar la conexión con Meta')
@@ -154,6 +150,13 @@ export default function WhatsappWizard() {
       {connection?.status === 'reconnect_required' && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
           El token expiró o ya no es válido — reconecta abajo.
+        </div>
+      )}
+      {isConnected && connection?.verification_status === 'register_failed' && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+          Tu número quedó conectado, pero Meta no lo dejó registrar para enviar mensajes. Vuelve a dar
+          clic en “Conectar con Meta”; si sigue igual, revisa en WhatsApp Manager que el número esté
+          verificado.
         </div>
       )}
 

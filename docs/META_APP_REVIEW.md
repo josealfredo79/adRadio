@@ -3,10 +3,20 @@
 Material para la solicitud de acceso avanzado. Los textos van en inglés porque
 son para los revisores de Meta; copiar y pegar tal cual.
 
-Estado (2026-09-24): verificación de negocio aprobada 2026-09-22. Solicitud
-armada con `whatsapp_business_messaging`, `whatsapp_business_management` y
-`public_profile`, **sin enviar** — falta grabar los videos, bloqueados porque el
-login de producción está caído por la cuota de Neon (se reinicia ~1-oct).
+Estado (2026-10-06): verificación de negocio aprobada 2026-09-22. El login de
+producción volvió el 1-oct, así que ya se pueden grabar los videos. Solicitud
+**sin enviar**.
+
+**Dónde se hace ahora.** En el panel nuevo de Meta, la solicitud va dentro de
+Casos de uso → "Conectarte con los clientes a través de WhatsApp" →
+Personalizar → **Conviértete en socio → Conviértete en proveedor de
+tecnología**. Ese flujo junta el acceso avanzado (esta revisión), la
+verificación del negocio (✅) y publicar la app. Empezar por ahí, no pedir los
+permisos por separado.
+
+**La app está "Sin publicar".** Hay que publicarla (modo Live) antes de que
+Meta dé acceso avanzado. Requiere los URLs de "Antes de enviar" (ya responden
+200).
 
 ## Antes de enviar — Configuración → Básica
 
@@ -19,21 +29,28 @@ https://developers.facebook.com/apps/1346405667651723/settings/basic/
 - Ícono de la app 1024×1024, categoría "Business and pages", correo de contacto
   `iaradio@iaradio.online`.
 
-## Importante: el token tiene que salir de NUESTRA app
+## Las llamadas a la API ya salen de NUESTRA app
 
 Meta revisa que la app 1346405667651723 haya hecho llamadas reales a la API con
 cada permiso. En el flujo manual cada anunciante usa el token de **su propia**
-app de Meta, y esas llamadas no cuentan para la nuestra. Para la demo y los
-videos:
+app, y esas llamadas no cuentan para la nuestra.
 
-1. En business.facebook.com → Usuarios del sistema, crear (o usar) un usuario
-   del sistema del portfolio "Jose Alfredo Roman Cruz" y asignarle la app
-   **1346405667651723** y el WABA de prueba.
-2. Generar el token **con esa app seleccionada**, con los permisos
-   `whatsapp_business_messaging` y `whatsapp_business_management`. El acceso
-   estándar alcanza porque el WABA es del mismo portfolio.
-3. Conectar ese WABA en la cuenta de prueba de AdRadio usando ese token, y
-   mandar y recibir algunos mensajes antes de enviar la solicitud.
+Esto ya está cubierto (verificado 2026-10-06): el número central de IaRadio usa
+el token del usuario del sistema **adradio-api**, cuya única app asignada es
+**IARadio**, con el WABA "IaRadio". Con ese token:
+
+- `whatsapp_business_messaging`: los avisos al dueño y los códigos de `/mi`
+  salen todos los días.
+- `whatsapp_business_management`: `poll_meta_quality_ratings` (Celery Beat)
+  lee calidad y límite del número periódicamente; al conectar se leen número y
+  nombre verificado y se llama a `subscribed_apps`.
+
+Si el contador de un permiso sale en 0 en el panel: con la cuenta IaRadio,
+volver a guardar la conexión de WhatsApp en Configuración (repite las llamadas
+de management) y esperar hasta 24 h.
+
+Para los videos se puede usar el número central de IaRadio (ya conectado y en
+producción) en vez de montar un WABA de prueba.
 
 ## Cuenta de prueba para los revisores
 
@@ -119,10 +136,28 @@ Normalmente Meta lo concede por defecto y no pide video. Si pide descripción:
 
 ---
 
-## Después de la aprobación
+## Después de la aprobación (Tech Provider)
 
-1. Completar el alta como Tech Provider:
-   https://developers.facebook.com/docs/whatsapp/solution-providers/get-started-for-tech-providers
-2. Poner `META_EMBEDDED_SIGNUP_ENABLED=true` en Railway y probar el botón
+1. Poner `META_EMBEDDED_SIGNUP_ENABLED=true` en Railway y probar el botón
    "Conectar con Meta" de punta a punta con un número real. El formulario
    manual se queda como alternativa.
+2. Qué hace ya el código tras el popup (2026-10-06):
+   - cambia el `code` por el token del negocio;
+   - si Meta no mandó el WABA o el número (sin sessionInfo, o
+     `FINISH_ONLY_WABA`), los lee del token (`debug_token` → `granular_scopes`,
+     luego `/{waba}/phone_numbers`); si hay cero o varios, pide repetir;
+   - **registra el número en la Cloud API** (`POST /{phone}/register` con PIN
+     de 6 dígitos guardado cifrado en `meta_pin_*`). Sin esto el número
+     conecta pero no puede enviar. Si el número ya tenía PIN del dueño
+     (error 133005) se toma como registrado. Si falla, la conexión se guarda
+     con `verification_status = register_failed` y el asistente muestra el
+     aviso;
+   - suscribe el WABA a los webhooks.
+3. Cada negocio paga a Meta directo: debe agregar su método de pago en su WABA.
+   El panel de salud ya avisa cuando hay errores 131042 (pago).
+4. Versión de la API: todo usa `v21.0`, que Meta mantiene hasta el
+   21-ene-2027 (después sube las llamadas sola a la siguiente). Subirla antes
+   de esa fecha, probándola en todas las llamadas, no solo en el signup.
+5. Después: coexistencia (mismo número que el negocio ya usa en la app de
+   WhatsApp Business) — otra variante del signup más los webhooks de eco; no
+   construida.

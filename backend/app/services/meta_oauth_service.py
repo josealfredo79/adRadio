@@ -6,6 +6,10 @@ success it hands us an authorization `code` plus the WABA ID and phone number
 ID the customer picked. This service exchanges that code for a long-lived
 business token and verifies the number, so the advertiser never has to
 generate or paste a token by hand.
+
+The SDK's sessionInfo message (with the WABA/phone IDs) doesn't always arrive,
+and a customer can finish with a WABA but no number (FINISH_ONLY_WABA); in
+those cases the IDs are looked up from the token itself.
 """
 import logging
 from dataclasses import dataclass
@@ -13,7 +17,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.config import settings
-from app.services.meta_client import MetaApiError
+from app.services.meta_client import MetaApiError, graph_request
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +26,8 @@ logger = logging.getLogger(__name__)
 class OAuthResult:
     ok: bool
     token: str | None = None
+    waba_id: str | None = None
+    phone_number_id: str | None = None
     display_phone_number: str | None = None
     verified_name: str | None = None
     code: str | None = None
@@ -67,6 +73,25 @@ async def exchange_embedded_code(code: str, waba_id: str, phone_number_id: str) 
 
     token = data["access_token"]
 
+    try:
+        waba_id = waba_id or await _granted_waba_id(token)
+        if not waba_id:
+            return OAuthResult(
+                ok=False,
+                code="no_waba",
+                message="Meta no compartió ninguna cuenta de WhatsApp Business (o compartió varias). Intenta de nuevo eligiendo una sola.",
+            )
+        phone_number_id = phone_number_id or await _only_phone_number_id(waba_id, token)
+        if not phone_number_id:
+            return OAuthResult(
+                ok=False,
+                code="no_phone",
+                message="Tu cuenta de WhatsApp Business quedó conectada pero sin un número (o con varios). Vuelve a conectar y elige un solo número.",
+            )
+    except MetaApiError as e:
+        logger.warning("[META OAUTH] could not resolve WABA/phone from token: %s", e)
+        return OAuthResult(ok=False, code="meta_error", message=str(e))
+
     # Verify the token actually owns the chosen number (also fetches display name).
     try:
         from app.services.meta_connect_service import test_connection
@@ -84,6 +109,30 @@ async def exchange_embedded_code(code: str, waba_id: str, phone_number_id: str) 
     return OAuthResult(
         ok=True,
         token=token,
+        waba_id=waba_id,
+        phone_number_id=phone_number_id,
         display_phone_number=check.display_phone_number,
         verified_name=check.verified_name,
     )
+
+
+async def _granted_waba_id(token: str) -> str | None:
+    """The single WABA the customer shared with our app, read from the
+    token's granular scopes. None if there are zero or several."""
+    data = await graph_request(
+        "debug_token",
+        token=f"{settings.META_APP_ID}|{settings.META_APP_SECRET}",
+        params={"input_token": token},
+    )
+    ids: set[str] = set()
+    for scope in (data.get("data") or {}).get("granular_scopes") or []:
+        if scope.get("scope") == "whatsapp_business_management":
+            ids.update(str(t) for t in scope.get("target_ids") or [])
+    return ids.pop() if len(ids) == 1 else None
+
+
+async def _only_phone_number_id(waba_id: str, token: str) -> str | None:
+    """The WABA's phone number ID when it has exactly one."""
+    data = await graph_request(f"{waba_id}/phone_numbers", token=token, params={"fields": "id"})
+    numbers = data.get("data") or []
+    return str(numbers[0]["id"]) if len(numbers) == 1 else None
