@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 import { useNativeViewport } from '@/lib/useNativeViewport'
-import { readAccountToken, saveAccountToken } from '@/lib/customerAccount'
-import { CalendarDays, ChevronRight, Gift, LogOut, Search, Stamp, Ticket } from 'lucide-react'
+import { chatSeenAt, readAccountToken, saveAccountToken } from '@/lib/customerAccount'
+import { Gift, LogOut, MessageCircle, Search } from 'lucide-react'
 
 // /mi — la app del cliente: entra con su número + un código por WhatsApp
-// (backend: services/customer_account.py) y ve todos los negocios IaRadio
-// donde es cliente; cada tarjeta lo lleva al portal de ese negocio.
+// (backend: services/customer_account.py). Se usa como WhatsApp (pedido del
+// dueño 2026-10-05): una lista de chats, uno por negocio, con el último
+// mensaje y globito de no leídos; al tocar uno se abre su chat a pantalla
+// completa (/c/:token). Abajo, Chats y Descubrir.
 
 const TZ = 'America/Mexico_City'
 
@@ -33,12 +35,54 @@ interface MyBusiness {
   loyalty: { stamps: number; required: number; reward: string; rewards_ready: number } | null
   next_appointment: { service: string; scheduled_at: string } | null
   coupons: number
+  agent?: string
+  last_message: { text: string; at: string | null; from_me: boolean } | null
 }
 
-const fmtWhen = (iso: string) =>
-  new Intl.DateTimeFormat('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: TZ }).format(
-    new Date(iso)
+const dayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(d)
+
+// Como WhatsApp: hora si fue hoy, "ayer", el día de la semana o la fecha.
+function chatTime(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const now = new Date()
+  if (dayKey(d) === dayKey(now)) return new Intl.DateTimeFormat('es-MX', { hour: 'numeric', minute: '2-digit', timeZone: TZ }).format(d)
+  if (dayKey(d) === dayKey(new Date(now.getTime() - 86400000))) return 'ayer'
+  if (now.getTime() - d.getTime() < 6 * 86400000)
+    return new Intl.DateTimeFormat('es-MX', { weekday: 'short', timeZone: TZ }).format(d).replace('.', '')
+  return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', timeZone: TZ }).format(d).replace('.', '')
+}
+
+const portalToken = (path: string) => path.replace(/^\/c\//, '')
+
+function isUnread(b: MyBusiness): boolean {
+  const m = b.last_message
+  if (!m || m.from_me || !m.at) return false
+  const seen = chatSeenAt(portalToken(b.portal_path))
+  return !seen || new Date(m.at) > new Date(seen)
+}
+
+// Sin mensajes todavía: lo útil de ese negocio en una línea.
+function idlePreview(b: MyBusiness): string {
+  if (b.loyalty?.rewards_ready) return `🎁 ¡Tu premio está listo! ${b.loyalty.reward}`
+  if (b.next_appointment) return `📅 ${b.next_appointment.service}`
+  if (b.coupons) return `🎫 Tienes ${b.coupons} ${b.coupons === 1 ? 'cupón' : 'cupones'}`
+  if (b.loyalty) return `🎟️ ${b.loyalty.stamps} de ${b.loyalty.required} sellos`
+  return 'Toca para platicar'
+}
+
+function Avatar({ name, logo, color, size = 52 }: { name: string; logo: string; color: string; size?: number }) {
+  return logo ? (
+    <img src={logo} alt="" className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
+  ) : (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-full text-lg font-bold text-white"
+      style={{ width: size, height: size, background: `linear-gradient(135deg, ${color}, ${color}99)` }}
+    >
+      {(name || '?')[0].toUpperCase()}
+    </div>
   )
+}
 
 export default function MyAccountPage() {
   const [token, setToken] = useState<string | null>(readAccountToken)
@@ -189,16 +233,26 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
           </button>
         )}
       </form>
+      <p className="mt-6 text-center text-xs text-white/40">
+        Al entrar aceptas el{' '}
+        <a href="/privacy" className="underline">
+          aviso de privacidad
+        </a>
+        .
+      </p>
     </main>
   )
 }
 
 function Businesses({ token, onLogout }: { token: string; onLogout: () => void }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const { data, isLoading, error } = useQuery<{ businesses: MyBusiness[] }>({
     queryKey: ['my-businesses', token],
     queryFn: () => api.get('/public/me/businesses', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.data),
     retry: false,
+    // Mensajes nuevos de los negocios mientras la lista está abierta.
+    refetchInterval: 30000,
   })
 
   // Sesión vencida o inválida: de vuelta a entrar con el número.
@@ -211,104 +265,91 @@ function Businesses({ token, onLogout }: { token: string; onLogout: () => void }
     qc.removeQueries({ queryKey: ['my-businesses'] })
     onLogout()
   }
-  const [tab, setTab] = useState<'mine' | 'discover'>('mine')
+  const [tab, setTab] = useState<'chats' | 'discover'>('chats')
 
   return (
-    <main className="mt-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">{tab === 'mine' ? 'Tus negocios' : 'Descubre'}</h1>
-        <button onClick={logout} className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white">
+    <main className="pb-24">
+      <div className="mt-2 flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">{tab === 'chats' ? 'Chats' : 'Descubrir'}</h1>
+        <button onClick={logout} aria-label="Salir" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white">
           <LogOut size={16} /> Salir
         </button>
-      </div>
-
-      <div className="mt-5 grid grid-cols-2 gap-1 rounded-2xl bg-white/[0.06] p-1 text-sm font-semibold">
-        {(['mine', 'discover'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-xl py-2 transition-colors ${tab === t ? 'bg-white text-[#06060f]' : 'text-white/60'}`}
-          >
-            {t === 'mine' ? 'Mis negocios' : 'Descubre negocios'}
-          </button>
-        ))}
       </div>
 
       {tab === 'discover' ? (
         <Discover token={token} />
       ) : (
         <>
-
-      {isLoading && <p className="mt-8 text-white/50">Cargando…</p>}
-      {error && <p className="mt-8 text-rose-400">{getApiError(error, 'No se pudieron cargar tus negocios')}</p>}
-      {data && data.businesses.length === 0 && (
-        <p className="mt-8 text-white/60">Todavía no eres cliente de ningún negocio con IaRadio.</p>
-      )}
-
-      <div className="mt-6 space-y-3">
-        {data?.businesses.map((b) => (
-          <Link
-            key={b.portal_path}
-            to={b.portal_path}
-            className="block rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition-colors hover:bg-white/[0.07]"
-          >
-            <div className="flex items-center gap-3">
-              {b.logo_url ? (
-                <img src={b.logo_url} alt="" className="h-12 w-12 rounded-xl object-cover" />
-              ) : (
-                <div
-                  className="flex h-12 w-12 items-center justify-center rounded-xl text-lg font-bold"
-                  style={{ background: `linear-gradient(135deg, ${b.color}, ${b.color}99)` }}
-                >
-                  {(b.name || '?')[0].toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold">{b.name}</p>
-                {b.city && <p className="text-xs text-white/50">{b.city}</p>}
-              </div>
-              <ChevronRight size={20} className="text-white/40" />
+          {isLoading && <p className="mt-8 text-white/50">Cargando…</p>}
+          {error && <p className="mt-8 text-rose-400">{getApiError(error, 'No se pudieron cargar tus chats')}</p>}
+          {data && data.businesses.length === 0 && (
+            <div className="mt-10 text-center text-white/60">
+              <p>Todavía no tienes chats con ningún negocio.</p>
+              <button onClick={() => setTab('discover')} className="mt-3 font-semibold text-indigo-300">
+                Descubre negocios cerca de ti
+              </button>
             </div>
-
-            {b.loyalty && (
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="inline-flex items-center gap-1.5 text-white/70">
-                    <Stamp size={14} style={{ color: b.color }} />
-                    {b.loyalty.rewards_ready > 0 ? `🎁 ¡Premio listo! ${b.loyalty.reward}` : `${b.loyalty.stamps} de ${b.loyalty.required} sellos · ${b.loyalty.reward}`}
-                  </span>
-                </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${Math.min(100, (b.loyalty.stamps / b.loyalty.required) * 100)}%`,
-                      background: b.color,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {(b.next_appointment || b.coupons > 0) && (
-              <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                {b.next_appointment && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-white/80">
-                    <CalendarDays size={13} /> {b.next_appointment.service} · {fmtWhen(b.next_appointment.scheduled_at)}
-                  </span>
-                )}
-                {b.coupons > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-white/80">
-                    <Ticket size={13} /> {b.coupons} {b.coupons === 1 ? 'cupón' : 'cupones'}
-                  </span>
-                )}
-              </div>
-            )}
-          </Link>
-        ))}
-      </div>
+          )}
+          <ul className="mt-3 -mx-4">
+            {data?.businesses.map((b) => {
+              const unread = isUnread(b)
+              const m = b.last_message
+              return (
+                <li key={b.portal_path}>
+                  <button
+                    onClick={() => navigate(b.portal_path)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-white/[0.06] hover:bg-white/[0.04]"
+                  >
+                    <Avatar name={b.name} logo={b.logo_url} color={b.color} />
+                    <div className="min-w-0 flex-1 border-b border-white/[0.06] pb-3">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="truncate font-semibold">{b.name}</p>
+                        <span className={`shrink-0 text-xs ${unread ? 'font-semibold text-emerald-400' : 'text-white/40'}`}>
+                          {chatTime(m?.at ?? null)}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex items-center justify-between gap-2">
+                        <p className={`truncate text-sm ${unread ? 'text-white' : 'text-white/55'}`}>
+                          {m ? `${m.from_me ? 'Tú: ' : ''}${m.text}` : idlePreview(b)}
+                        </p>
+                        {unread && (
+                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[11px] font-bold text-black">
+                            1
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         </>
       )}
+
+      {/* Abajo, como la barra de WhatsApp. */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#06060f]/95 backdrop-blur"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <div className="mx-auto grid max-w-lg grid-cols-2">
+          {(
+            [
+              ['chats', 'Chats', MessageCircle],
+              ['discover', 'Descubrir', Search],
+            ] as const
+          ).map(([key, label, Icon]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex flex-col items-center gap-0.5 py-2.5 text-xs font-semibold ${tab === key ? 'text-white' : 'text-white/45'}`}
+            >
+              <Icon size={22} />
+              {label}
+            </button>
+          ))}
+        </div>
+      </nav>
     </main>
   )
 }
@@ -338,7 +379,7 @@ function Discover({ token }: { token: string }) {
     setError(null)
     try {
       const { data: out } = await api.post('/public/me/connect', { slug }, { headers })
-      navigate(`${out.portal_path}?chat=1`)
+      navigate(out.portal_path)
     } catch (err) {
       setError(getApiError(err, 'No se pudo unir a este negocio'))
       setJoining(null)
@@ -368,16 +409,7 @@ function Discover({ token }: { token: string }) {
         {data?.businesses.map((b) => (
           <div key={b.slug} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
             <div className="flex items-center gap-3">
-              {b.logo_url ? (
-                <img src={b.logo_url} alt="" className="h-12 w-12 rounded-xl object-cover" />
-              ) : (
-                <div
-                  className="flex h-12 w-12 items-center justify-center rounded-xl text-lg font-bold"
-                  style={{ background: `linear-gradient(135deg, ${b.color}, ${b.color}99)` }}
-                >
-                  {(b.name || '?')[0].toUpperCase()}
-                </div>
-              )}
+              <Avatar name={b.name} logo={b.logo_url} color={b.color} size={48} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">{b.name}</p>
                 <p className="truncate text-xs text-white/50">{[b.city, b.tagline].filter(Boolean).join(' · ')}</p>

@@ -16,8 +16,10 @@ from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.models.appointment import Appointment
+from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.coupon import Coupon
+from app.models.message import Message
 from app.models.user import User
 from app.services.availability_service import TZ
 from app.services.customer_account import (
@@ -108,6 +110,34 @@ def _account_phone(authorization: str) -> str:
     return phone
 
 
+async def _last_message(db: AsyncSession, contact_id) -> dict | None:
+    """El último mensaje con ese negocio, para la lista de chats (como en
+    WhatsApp): de la plática, o la última campaña que le llegó."""
+    from app.api.v1.portal import _INTERNAL_MESSAGE
+
+    rows = (await db.execute(
+        select(Message, Campaign)
+        .outerjoin(Campaign, Campaign.id == Message.campaign_id)
+        .where(Message.contact_id == contact_id, Message.status != "queued")
+        .order_by(Message.created_at.desc())
+        .limit(10)
+    )).all()
+    for m, campaign in rows:
+        if campaign is not None:
+            audio = (campaign.ab_test or {}).get("campaign_mode") in ("radio", "comunitaria")
+            text = f"{'🔊' if audio else '📣'} {campaign.name or 'Promoción'}"
+        elif m.content and not _INTERNAL_MESSAGE.match(m.content):
+            text = " ".join(m.content.split())
+        else:
+            continue
+        return {
+            "text": text[:120],
+            "at": m.created_at.isoformat() if m.created_at else None,
+            "from_me": m.direction == "inbound",
+        }
+    return None
+
+
 @router.get("/businesses")
 @limiter.limit("30/minute")
 async def my_businesses(
@@ -152,7 +182,11 @@ async def my_businesses(
                 "scheduled_at": next_appt.scheduled_at.astimezone(TZ).isoformat(),
             } if next_appt else None,
             "coupons": len(coupons),
+            "agent": advertiser.bot_name or "Asistente",
+            "last_message": await _last_message(db, contact.id),
         })
+    # Como en WhatsApp: arriba el que tuvo actividad más reciente.
+    out.sort(key=lambda b: (b["last_message"] or {}).get("at") or "", reverse=True)
     return {"phone": phone, "businesses": out}
 
 

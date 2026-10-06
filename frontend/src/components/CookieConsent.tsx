@@ -2,8 +2,16 @@ import { useState, useEffect } from 'react'
 
 type Consent = 'all' | 'necessary' | null
 
+// La app del cliente (/mi y su chat /c/...) solo guarda lo necesario para
+// funcionar (sesión, chats vistos) y no carga analítica ni cookies de terceros:
+// ahí el aviso no aplica y tapaba la caja de escribir. Su aviso de privacidad
+// va en la pantalla de entrada de /mi.
+const CUSTOMER_APP = /^\/(mi|c)(\/|$)/
+
 export default function CookieConsent() {
   const [consent, setConsent] = useState<Consent>(null)
+  // Vive fuera del router (main.tsx): la ruta se lee directo.
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : ''
 
   useEffect(() => {
     const stored = localStorage.getItem('cookie_consent') as Consent | null
@@ -18,6 +26,8 @@ export default function CookieConsent() {
   }
 
   if (consent) return null
+
+  if (CUSTOMER_APP.test(pathname)) return null
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100]">

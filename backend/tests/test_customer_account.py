@@ -16,6 +16,7 @@ from app.database import AsyncSessionLocal, engine
 from app.models.appointment import Appointment
 from app.models.contact import Contact
 from app.models.coupon import Coupon
+from app.models.message import Message
 from app.models.user import User
 from app.services import customer_account as ca
 
@@ -147,6 +148,7 @@ async def _cleanup(user_ids):
     async with AsyncSessionLocal() as db:
         for uid in user_ids:
             await db.execute(delete(Coupon).where(Coupon.advertiser_id == uid))
+            await db.execute(delete(Message).where(Message.advertiser_id == uid))
             await db.execute(delete(Appointment).where(Appointment.advertiser_id == uid))
             await db.execute(delete(Contact).where(Contact.advertiser_id == uid))
             await db.execute(delete(User).where(User.id == uid))
@@ -176,6 +178,33 @@ class TestEndpoints:
             assert tacos["next_appointment"]["service"] == "Mesa para 4" and tacos["coupons"] == 1
             assert tacos["loyalty"]["required"] == 5 and tacos["portal_path"].startswith("/c/")
             assert data["businesses"][0]["loyalty"] is None
+        finally:
+            await _cleanup(user_ids)
+
+    @pytest.mark.asyncio
+    async def test_chat_list_shows_last_message_newest_first(self):
+        # /mi es una lista de chats como WhatsApp: último mensaje y el más reciente arriba.
+        from sqlalchemy import select
+
+        user_ids, stored_phone, _, _ = await _seed()
+        try:
+            async with AsyncSessionLocal() as db:
+                ana_b = (await db.execute(select(Contact).where(Contact.advertiser_id == user_ids[1]))).scalar_one()
+                db.add_all([
+                    Message(advertiser_id=user_ids[1], contact_id=ana_b.id, direction="inbound",
+                            content="¿tienen mesa?", status="received",
+                            created_at=datetime.now(timezone.utc) - timedelta(minutes=5)),
+                    Message(advertiser_id=user_ids[1], contact_id=ana_b.id, direction="outbound",
+                            content="[PENDING:audio] {}", status="queued"),
+                    Message(advertiser_id=user_ids[1], contact_id=ana_b.id, direction="outbound",
+                            content="Sí, a las 8 te esperamos", status="sent"),
+                ])
+                await db.commit()
+                data = await my_businesses(request=_request(), authorization=f"Bearer {ca.make_account_token(ca.canonical_phone(stored_phone))}", db=db)
+            first = data["businesses"][0]
+            assert first["name"] == "Tacos El Primo"
+            assert first["last_message"]["text"] == "Sí, a las 8 te esperamos" and first["last_message"]["from_me"] is False
+            assert data["businesses"][1]["last_message"] is None
         finally:
             await _cleanup(user_ids)
 

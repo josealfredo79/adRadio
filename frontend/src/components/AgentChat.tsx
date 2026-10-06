@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FaceMood } from '@/components/BotFace'
 import MascotSmart from '@/components/MascotSmart'
 import api from '@/lib/api'
-import { ClipboardList, Mic, Send, ShoppingBag, Square, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Info, Mic, Send, ShoppingBag, Square, Volume2, VolumeX, X } from 'lucide-react'
 import type { SiteThemeDef } from '@/pages/publicSite/theme'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
@@ -93,6 +93,9 @@ export default function AgentChat({
   onClose,
   mascot3d = true,
   onEvent,
+  layout = 'sheet',
+  onInfo,
+  banner,
 }: {
   business: ChatBusiness
   theme: SiteThemeDef
@@ -113,7 +116,15 @@ export default function AgentChat({
   mascot3d?: boolean
   onEvent?: (event: 'message' | 'confirmed' | 'whatsapp') => void
   onClose: () => void
+  // 'screen': el chat ES la pantalla, como una conversación de WhatsApp (app del
+  // cliente /mi y su tarjeta /c/...): flecha atrás, ⓘ para la info del negocio
+  // y una franja fija arriba (sellos, cita, cupón). 'sheet': hoja encima de la
+  // página pública del negocio.
+  layout?: 'sheet' | 'screen'
+  onInfo?: () => void
+  banner?: React.ReactNode
 }) {
+  const screen = layout === 'screen'
   const color = business.color
   // La sesión se pide al abrir el chat, pero el primer mensaje puede salir
   // antes de que llegue (con texto precargado, el cliente toca Enviar al
@@ -326,17 +337,36 @@ export default function AgentChat({
         : (reaction ?? 'idle')
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center sm:items-center" onClick={onClose}>
+    <div
+      className={screen ? 'fixed inset-0 z-30 flex justify-center' : 'fixed inset-0 z-30 flex items-end justify-center sm:items-center'}
+      style={screen ? { background: theme.bg } : undefined}
+      onClick={screen ? undefined : onClose}
+    >
       {/* El fondo se oscurece aparte: si la hoja viviera dentro del mismo
           desvanecido, se vería transparente mientras sube. */}
-      <div className="anim-backdrop absolute inset-0 bg-black/50" aria-hidden />
+      {!screen && <div className="anim-backdrop absolute inset-0 bg-black/50" aria-hidden />}
       <div
-        className="anim-sheet h-sheet relative flex w-full max-w-lg flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl"
-        style={{ background: theme.bg, color: theme.text, border: `1px solid ${theme.cardBorder}` }}
+        className={
+          screen
+            ? 'relative flex h-[100dvh] w-full max-w-lg flex-col overflow-hidden'
+            : 'anim-sheet h-sheet relative flex w-full max-w-lg flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl'
+        }
+        style={{ background: theme.bg, color: theme.text, border: screen ? undefined : `1px solid ${theme.cardBorder}` }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: `1px solid ${theme.cardBorder}` }}>
+        <div
+          className={`flex items-center justify-between ${screen ? 'px-2' : 'px-5'} py-3`}
+          style={{
+            borderBottom: `1px solid ${theme.cardBorder}`,
+            paddingTop: screen ? 'max(0.75rem, env(safe-area-inset-top, 0px))' : undefined,
+          }}
+        >
           <div className="flex min-w-0 items-center gap-2">
+            {screen && (
+              <button onClick={onClose} aria-label="Atrás" className="press shrink-0 rounded-full p-2" style={{ color: theme.text }}>
+                <ArrowLeft size={22} />
+              </button>
+            )}
             {/* La mascota acompaña la plática: piensa mientras busca, se alegra al confirmar.
                 En modo voz sale grande abajo, así que aquí se quita. */}
             {!voiceMode && (
@@ -344,12 +374,21 @@ export default function AgentChat({
                 <MascotSmart mood={mood} size={44} color={color} allow3d={mascot3d} />
               </div>
             )}
-            <div className="min-w-0">
-            <p className="truncate font-semibold">{business.agent}</p>
-            <p className="text-xs" style={{ color: theme.muted }}>
-              {business.name} · responde al instante
-            </p>
-            </div>
+            <button
+              type="button"
+              onClick={screen ? onInfo : undefined}
+              disabled={!screen || !onInfo}
+              className="min-w-0 text-left"
+            >
+              <p className="truncate font-semibold">{screen ? business.name : business.agent}</p>
+              <p className="truncate text-xs" style={{ color: theme.muted }}>
+                {screen
+                  ? sending
+                    ? 'escribiendo…'
+                    : `${business.agent} · responde al instante`
+                  : `${business.name} · responde al instante`}
+              </p>
+            </button>
           </div>
           <div className="flex items-center gap-1">
             {voiceMode && (
@@ -362,11 +401,21 @@ export default function AgentChat({
                 {speaker.muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
               </button>
             )}
-            <button onClick={onClose} aria-label="Cerrar chat" className="rounded-full p-2" style={{ color: theme.muted }}>
-              <X size={20} />
-            </button>
+            {screen ? (
+              onInfo && (
+                <button onClick={onInfo} aria-label={`Info de ${business.name}`} className="press rounded-full p-2" style={{ color: theme.muted }}>
+                  <Info size={22} />
+                </button>
+              )
+            ) : (
+              <button onClick={onClose} aria-label="Cerrar chat" className="rounded-full p-2" style={{ color: theme.muted }}>
+                <X size={20} />
+              </button>
+            )}
           </div>
         </div>
+
+        {banner}
 
         {voiceMode && (
           <div className="flex shrink-0 flex-col items-center bg-[#0a0f2e] pt-1 pb-1">

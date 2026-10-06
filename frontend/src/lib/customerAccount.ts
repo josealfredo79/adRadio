@@ -19,3 +19,29 @@ export function saveAccountToken(token: string | null) {
     // almacenamiento bloqueado (modo privado): la sesión dura lo que la pestaña
   }
 }
+
+// Cuándo vio el cliente por última vez cada chat (por token de su tarjeta), para
+// el globito de "no leído" en la lista de /mi. Solo en este navegador.
+const SEEN_KEY = 'iaradio_chat_seen'
+
+function readSeen(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+export function markChatSeen(portalToken: string) {
+  try {
+    const seen = readSeen()
+    seen[portalToken] = new Date().toISOString()
+    localStorage.setItem(SEEN_KEY, JSON.stringify(seen))
+  } catch {
+    // sin almacenamiento (modo privado): no hay globito, nada más
+  }
+}
+
+export function chatSeenAt(portalToken: string): string | null {
+  return readSeen()[portalToken] ?? null
+}

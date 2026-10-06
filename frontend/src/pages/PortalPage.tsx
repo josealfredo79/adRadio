@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import SEO from '@/components/SEO'
 import AgentChat from '@/components/AgentChat'
 import { useNativeViewport } from '@/lib/useNativeViewport'
+import { markChatSeen, readAccountToken } from '@/lib/customerAccount'
 import {
   ArrowLeft,
   Bell,
@@ -29,6 +30,10 @@ import { MeshBackground, cardElevationStyle } from '@/pages/publicSite/component
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
 
 // Portal del cliente (/c/:token) y página de una promo (/c/:token/promo/:promoId).
+// Abre directo en el chat a pantalla completa, como una conversación de
+// WhatsApp (pedido del dueño 2026-10-05: "debe ser una app parecida a
+// WhatsApp, todo unificado"); citas, pedidos, tarjeta y promos viven en la
+// info del negocio (ⓘ), igual que el perfil de un contacto.
 // El token es la credencial (ver backend/app/services/portal_service.py): sin
 // login, solo lo de este cliente. Todo lo que pasa aquí — ver citas, cancelar,
 // platicar con el bot — es gratis; por WhatsApp cada mensaje lo cobra Meta.
@@ -148,8 +153,22 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function PortalPage() {
   const { token, promoId } = useParams<{ token: string; promoId?: string }>()
+  const navigate = useNavigate()
   const [chatPrefill, setChatPrefill] = useState<string | null>(null)
-  const [chatOpen, setChatOpen] = useState(false)
+  // Una promo abre su página; todo lo demás, el chat.
+  const [view, setView] = useState<'chat' | 'info'>(promoId ? 'info' : 'chat')
+  useEffect(() => {
+    setView(promoId ? 'info' : 'chat')
+  }, [promoId, token])
+  const chatOpen = view === 'chat'
+  const setChatOpen = (open: boolean) => setView(open ? 'chat' : 'info')
+  // Para el globito de "no leído" en la lista de chats de /mi.
+  useEffect(() => {
+    if (token && chatOpen) markChatSeen(token)
+    return () => {
+      if (token && chatOpen) markChatSeen(token)
+    }
+  }, [token, chatOpen])
 
   const { data, isLoading, isError } = useQuery<PortalData>({
     queryKey: ['portal', token],
@@ -211,13 +230,45 @@ export default function PortalPage() {
   const dark = isDarkTheme(theme)
   const color = data.business.color
 
+  if (chatOpen) {
+    // Atrás: a la lista de chats si entró con su número (/mi); si llegó por el
+    // link de WhatsApp, a la info del negocio.
+    const back = () => (readAccountToken() ? navigate('/mi') : setView('info'))
+    return (
+      <>
+        <SEO title={data.business.name} noIndex />
+        <style>{PUBLIC_SITE_STYLES}</style>
+        <AgentChat
+          layout="screen"
+          voiceBase={`/public/portal/${token}`}
+          portalToken={token!}
+          promoId={promoId}
+          business={data.business}
+          customerName={data.customer.first_name}
+          theme={theme}
+          prefill={chatPrefill}
+          onClose={back}
+          onInfo={() => setView('info')}
+          banner={<ChatStrip data={data} theme={theme} onOpen={() => setView('info')} />}
+        />
+      </>
+    )
+  }
+
   return (
     <>
       <SEO title={`Tu espacio en ${data.business.name}`} noIndex />
       <style>{PUBLIC_SITE_STYLES}</style>
-      <div className="min-h-screen font-sans pb-28" style={{ background: theme.bg, color: theme.text }}>
+      <div className="min-h-screen font-sans pb-12" style={{ background: theme.bg, color: theme.text }}>
         <MeshBackground color={color} dark={dark} />
         <div className="relative z-10 mx-auto max-w-lg px-4" style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top, 0px))' }}>
+          <button
+            onClick={() => setView('chat')}
+            className="press mb-4 inline-flex items-center gap-1.5 text-sm"
+            style={{ color: theme.muted }}
+          >
+            <ArrowLeft size={16} /> Volver al chat
+          </button>
           <BusinessHeader business={data.business} theme={theme} />
           {promoId ? (
             <PromoView token={token!} promoId={promoId} business={data.business} theme={theme} onWant={openChat} />
@@ -237,30 +288,42 @@ export default function PortalPage() {
           </p>
         </div>
 
-        {!chatOpen && (
-          <button
-            onClick={() => openChat()}
-            className="press fixed right-5 max-w-[calc(100vw-2.5rem)] whitespace-nowrap z-20 inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold text-white shadow-xl"
-            style={{ background: color, boxShadow: `0 10px 30px ${color}55`, bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
-          >
-            <MessageCircle size={18} />
-            <span className="truncate">Platicar con {data.business.agent.split(' ')[0]}</span>
-          </button>
-        )}
-        {chatOpen && (
-          <AgentChat
-            voiceBase={`/public/portal/${token}`}
-            portalToken={token!}
-            promoId={promoId}
-            business={data.business}
-            customerName={data.customer.first_name}
-            theme={theme}
-            prefill={chatPrefill}
-            onClose={() => setChatOpen(false)}
-          />
-        )}
       </div>
     </>
+  )
+}
+
+// La franja fija arriba del chat: lo importante de un vistazo (sellos,
+// próxima cita, cupones, avisos). Al tocarla se abre la info completa.
+function ChatStrip({ data, theme, onOpen }: { data: PortalData; theme: SiteThemeDef; onOpen: () => void }) {
+  const chips: string[] = []
+  if (data.loyalty)
+    chips.push(
+      data.loyalty.rewards_ready > 0 ? '🎁 ¡Premio listo!' : `🎟️ ${data.loyalty.stamps}/${data.loyalty.required} sellos`
+    )
+  const next = data.upcoming_appointments[0]
+  if (next) chips.push(`📅 ${fmtShort(next.scheduled_at)} ${fmtTime(next.scheduled_at)}`)
+  if (data.coupons.length) chips.push(`🎫 ${data.coupons.length} ${data.coupons.length === 1 ? 'cupón' : 'cupones'}`)
+  if (data.promotions.length) chips.push(`📣 ${data.promotions.length} ${data.promotions.length === 1 ? 'promo' : 'promos'}`)
+  if (data.push.available && data.push.subscribed_devices === 0) chips.push('🔔 Activa avisos')
+  if (!chips.length) return null
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex shrink-0 gap-2 overflow-x-auto px-3 py-2 text-left"
+      style={{ borderBottom: `1px solid ${theme.cardBorder}` }}
+    >
+      {chips.map((c) => (
+        <span
+          key={c}
+          className="shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium"
+          style={{ background: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}
+        >
+          {c}
+        </span>
+      ))}
+    </button>
   )
 }
 
