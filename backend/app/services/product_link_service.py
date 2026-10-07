@@ -39,6 +39,18 @@ async def mentioned_product(db: AsyncSession, advertiser_id, customer_text: str,
     return None
 
 
+RECENT_TURNS = 6
+
+
+def link_sent_recently(product: Product, messages: list[dict]) -> bool:
+    """¿Ya le mandamos este link hace poco? Si el cliente hace varias preguntas
+    seguidas del mismo producto ("¿tiene jardín?", "¿cuántos baños?"), el link
+    con foto va una vez, no en cada respuesta."""
+    url = product_url(product)
+    recent = [m for m in messages if m.get("role") == "assistant"][-RECENT_TURNS:]
+    return any(url in (m.get("content") or "") for m in recent)
+
+
 def with_product_link(reply: str, product: Product) -> str:
     """WhatsApp previsualiza el PRIMER link del mensaje: si la respuesta ya trae
     otro, el del producto va arriba para que la foto sea la suya."""

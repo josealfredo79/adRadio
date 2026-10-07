@@ -147,3 +147,19 @@ async def test_bot_sees_the_catalog_when_answering():
             await db.execute(delete(Product).where(Product.advertiser_id == uid))
             await db.execute(delete(User).where(User.id == uid))
             await db.commit()
+
+
+def test_product_link_is_not_repeated_in_consecutive_answers():
+    from app.services.product_link_service import link_sent_recently
+
+    p = _p("Casa Coyoacán")
+    history = [
+        {"role": "user", "content": "¿tienen la casa coyoacán?"},
+        {"role": "assistant", "content": with_product_link("Sí, está disponible.", p)},
+        {"role": "user", "content": "¿tiene jardín?"},
+    ]
+    assert link_sent_recently(p, history)
+    assert not link_sent_recently(p, history[:1])
+    # Mucho después (fuera de las últimas respuestas) se puede volver a mandar.
+    long_ago = history[:2] + [{"role": "assistant", "content": "ok"}] * 6
+    assert not link_sent_recently(p, long_ago)

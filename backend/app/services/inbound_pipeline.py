@@ -1201,12 +1201,13 @@ async def process_inbound_message(
     if reply and conv.status != "escalated" and not story_ack_reply and not pending_resume:
         try:
             from app.services.product_link_service import (
+                link_sent_recently,
                 mentioned_product,
                 with_product_link,
             )
 
             product = await mentioned_product(db, advertiser.id, audio_transcription or body_text, reply)
-            if product:
+            if product and not link_sent_recently(product, conv.messages or []):
                 reply = with_product_link(reply, product)
         except Exception:
             logger.warning("[PIPELINE] product link failed", exc_info=True)
