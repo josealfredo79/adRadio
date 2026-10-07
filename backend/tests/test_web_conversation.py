@@ -180,6 +180,18 @@ class TestWebChatInTheInbox:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
+    async def test_bot_on_the_web_remembers_the_whatsapp_chat(self):
+        # Sin esto, un cliente que pasaba de WhatsApp a la web recibía de
+        # nuevo la misma respuesta que ya le habían dado por WhatsApp.
+        user_id, cid, _ = await _seed()
+        try:
+            _, rag = await _web_chat(user_id, cid, "¿qué más sabes hacer?")
+            history = rag.await_args.kwargs["conversation_history"]
+            assert [h["content"] for h in history] == ["hola por WhatsApp"]
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
     async def test_web_only_customer_gets_a_conversation(self):
         user_id, cid, conv_id = await _seed()
         try:

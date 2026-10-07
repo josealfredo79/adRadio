@@ -106,14 +106,6 @@ async def widget_chat(
     redis_key = f"{CHAT_REDIS_PREFIX}{advertiser_id}:{session_id}"
     history: list[dict] = []
 
-    if redis:
-        raw = await redis.get(redis_key)
-        if raw:
-            try:
-                history = json.loads(raw)
-            except json.JSONDecodeError:
-                history = []
-
     contact: Contact | None = None
     if redis:
         contact_id_raw = await redis.get(f"{SESSION_CONTACT_REDIS_PREFIX}{advertiser_id}:{session_id}")
@@ -122,13 +114,26 @@ async def widget_chat(
             contact = await db.get(Contact, UUID(contact_id_str))
     unverified = bool(contact and redis and await redis.get(f"{UNVERIFIED_SESSION_PREFIX}{advertiser_id}:{session_id}"))
 
+    if contact is None and redis:
+        # Visitante anónimo: su única memoria es la sesión del navegador.
+        raw = await redis.get(redis_key)
+        if raw:
+            try:
+                history = json.loads(raw)
+            except json.JSONDecodeError:
+                history = []
+
     if contact is not None:
-        # El dueño pausó el bot para atender en persona: en la web tampoco
-        # contesta el bot — el mensaje le llega al dueño al Inbox, igual que
-        # en WhatsApp, y él responde desde ahí (ver web_conversation.py).
         from app.services.web_conversation import log_turns, open_conversation
 
         conv = await open_conversation(db, user.id, contact.id)
+        # Cliente conocido: la memoria es su plática completa (WhatsApp + web),
+        # igual que en WhatsApp. Si no, el bot no sabía lo que ya contestó por
+        # WhatsApp y lo repetía en la web.
+        history = list(conv.messages or [])[-CHAT_MAX_HISTORY:]
+        # El dueño pausó el bot para atender en persona: en la web tampoco
+        # contesta el bot — el mensaje le llega al dueño al Inbox, igual que
+        # en WhatsApp, y él responde desde ahí (ver web_conversation.py).
         if conv.status == "escalated":
             db.add(Message(advertiser_id=user.id, contact_id=contact.id, direction="inbound",
                            content=message, status="delivered", channel="web"))
@@ -202,12 +207,10 @@ async def widget_chat(
 
     needs_contact = contact is None and reply in (NEEDS_CONTACT_APPT, NEEDS_CONTACT_ORDER)
 
-    history.append({"role": "user", "content": message})
-    history.append({"role": "assistant", "content": reply})
-    history = history[-CHAT_MAX_HISTORY:]
-
-    if redis:
-        await redis.setex(redis_key, CHAT_REDIS_TTL, json.dumps(history))
+    if contact is None and redis:
+        history.append({"role": "user", "content": message})
+        history.append({"role": "assistant", "content": reply})
+        await redis.setex(redis_key, CHAT_REDIS_TTL, json.dumps(history[-CHAT_MAX_HISTORY:]))
 
     if contact is not None:
         # Cliente que entró desde su portal (/c/...): la plática queda en su
