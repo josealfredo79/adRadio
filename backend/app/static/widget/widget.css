@@ -129,16 +129,16 @@
 }
 .iaradio-bubble-user {
   align-self: flex-end;
-  background: #e1dbff;
-  background: color-mix(in srgb, var(--iaradio-color, #7c3aed) 20%, #fff);
+  background: #d6ccff;
+  background: color-mix(in srgb, var(--iaradio-color, #7c3aed) 32%, #fff);
 }
 .iaradio-bubble-user.iaradio-first { border-top-left-radius: 8px; border-top-right-radius: 0; }
 .iaradio-bubble-user.iaradio-first::before {
   left: auto;
   right: -7px;
   border-right: 0;
-  border-left: 8px solid #e1dbff;
-  border-left-color: color-mix(in srgb, var(--iaradio-color, #7c3aed) 20%, #fff);
+  border-left: 8px solid #d6ccff;
+  border-left-color: color-mix(in srgb, var(--iaradio-color, #7c3aed) 32%, #fff);
 }
 .iaradio-time {
   float: right;

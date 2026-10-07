@@ -66,6 +66,10 @@ export default function PublicSitePage() {
   // Chat web con el agente: gratis para el negocio y sin salir de la página
   // (antes los botones mandaban a WhatsApp, que Meta cobra).
   const [chatOpen, setChatOpen] = useState(false)
+  // Fotos o logo del dueño que no cargaron (archivo borrado, link roto): se
+  // ocultan y la página sigue con las fotos de stock de su giro.
+  const [broken, setBroken] = useState<string[]>([])
+  const markBroken = (src: string) => setBroken((b) => (b.includes(src) ? b : [...b, src]))
   const abVariant = mascotAb().variant
   const openChat = () => {
     setChatOpen(true)
@@ -141,7 +145,10 @@ export default function PublicSitePage() {
   const theme = getSiteTheme(site.site_theme)
   const dark = isDarkTheme(theme)
   // Portada: las fotos del dueño; si no tiene, su portada vieja; si no, las de stock de su giro.
-  const ownPhotos = site.site_photos?.length ? site.site_photos : site.hero_image_url ? [site.hero_image_url] : []
+  const ownPhotos = (site.site_photos?.length ? site.site_photos : site.hero_image_url ? [site.hero_image_url] : []).filter(
+    (src) => !broken.includes(src)
+  )
+  const logoUrl = site.logo_url && !broken.includes(site.logo_url) ? site.logo_url : ''
   const heroPhotos = ownPhotos.length ? ownPhotos : stockPhotos(site.business_category)
   const aboutPhoto = ownPhotos[1] ?? ownPhotos[0] ?? heroPhotos[1] ?? heroPhotos[0]
   const status = openStatus(site.business_hours)
@@ -179,7 +186,7 @@ export default function PublicSitePage() {
         <div className="relative z-10">
           <NavBar
             businessName={site.business_name}
-            logoUrl={site.logo_url}
+            logoUrl={logoUrl}
             categoryFallback={site.business_category}
             whatsappNumber={site.whatsapp_number}
             agent={site.agent}
@@ -189,10 +196,10 @@ export default function PublicSitePage() {
             onChat={openChat}
           />
 
-          <HeroSlider photos={heroPhotos} alt={site.business_name}>
+          <HeroSlider photos={heroPhotos} alt={site.business_name} onBroken={markBroken}>
             <div className="psite-hero-text relative mx-auto flex w-full max-w-6xl flex-col justify-end px-6 pb-16 pt-28 text-white sm:px-10 sm:pb-20">
-              {site.logo_url ? (
-                <img src={site.logo_url} alt="" className="mb-5 h-16 w-16 rounded-2xl object-cover shadow-xl ring-2 ring-white/70 sm:h-20 sm:w-20" />
+              {logoUrl ? (
+                <img src={logoUrl} alt="" onError={() => markBroken(logoUrl)} className="mb-5 h-16 w-16 rounded-2xl object-cover shadow-xl ring-2 ring-white/70 sm:h-20 sm:w-20" />
               ) : (
                 <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 text-4xl backdrop-blur-md ring-1 ring-white/30">
                   {categoryEmoji(site.business_category)}
@@ -450,8 +457,8 @@ export default function PublicSitePage() {
           <footer className="border-t px-6 pb-32 pt-10 text-sm" style={{ borderColor: theme.cardBorder, color: theme.muted }}>
             <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 text-center sm:flex-row sm:justify-between sm:text-left">
               <div className="flex items-center gap-3">
-                {site.logo_url ? (
-                  <img src={site.logo_url} alt="" className="h-10 w-10 rounded-xl object-cover" />
+                {logoUrl ? (
+                  <img src={logoUrl} alt="" className="h-10 w-10 rounded-xl object-cover" />
                 ) : (
                   <span className="text-2xl">{categoryEmoji(site.business_category)}</span>
                 )}

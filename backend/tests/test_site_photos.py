@@ -2,7 +2,7 @@
 achican y se enderezan), las ordena o quita, y la página las recibe."""
 import uuid
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -116,5 +116,47 @@ async def test_public_site_sends_photos_and_about():
             data = await get_public_site(request=req, slug=slug, db=db)
         assert data["site_photos"] == ["https://cdn.example.com/a.jpg"]
         assert data["site_about"] == "Cortes clásicos desde 1998."
+    finally:
+        await _cleanup(uid)
+
+
+@pytest.mark.asyncio
+async def test_old_cover_shows_up_as_first_photo_and_can_be_removed():
+    old = "https://cdn.example.com/hero-images/old.jpg"
+    uid = await _seed(hero_image_url=old)
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, uid)
+            # Quitarla: la lista que manda el editor ya no la trae.
+            out = await set_site_photos(body=SitePhotosOrder(photos=[]), db=db, current_user=user)
+            assert out.site_photos == [] and out.hero_image_url is None
+    finally:
+        await _cleanup(uid)
+
+
+@pytest.mark.asyncio
+async def test_new_photo_keeps_the_old_cover_first():
+    old = "https://cdn.example.com/hero-images/old.jpg"
+    uid = await _seed(hero_image_url=old)
+    try:
+        with patch("app.api.v1.profile.upload_bytes", new=AsyncMock(return_value="https://cdn.example.com/new.jpg")):
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, uid)
+                out = await upload_site_photo(file=_photo(800, 600), db=db, current_user=user)
+        assert out.site_photos == [old, "https://cdn.example.com/new.jpg"] and out.hero_image_url is None
+    finally:
+        await _cleanup(uid)
+
+
+@pytest.mark.asyncio
+async def test_logo_can_be_removed():
+    from app.api.v1.profile import delete_logo
+
+    uid = await _seed(logo_url="https://cdn.example.com/logos/x.png")
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, uid)
+            out = await delete_logo(db=db, current_user=user)
+        assert out.logo_url is None
     finally:
         await _cleanup(uid)

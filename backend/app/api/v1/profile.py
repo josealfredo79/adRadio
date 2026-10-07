@@ -160,6 +160,18 @@ async def upload_logo(
     return UserOut.model_validate(current_user)
 
 
+@router.delete("/me/logo", response_model=UserOut)
+async def delete_logo(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserOut:
+    """Quita el logo: la página vuelve a mostrar el emoji del giro."""
+    current_user.logo_url = None
+    await db.commit()
+    await db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
 MAX_HERO_IMAGE_SIZE = 8 * 1024 * 1024  # 8MB — foto de portada, más grande que el logo
 
 
@@ -208,6 +220,14 @@ def _shrink_photo(content: bytes) -> bytes:
         return out.getvalue()
 
 
+def _current_site_photos(user: User) -> list[str]:
+    """Las fotos del carrusel. La portada única de antes (hero_image_url) cuenta
+    como la primera: así el dueño la ve en el editor y la puede mover o quitar."""
+    if user.site_photos:
+        return list(user.site_photos)
+    return [user.hero_image_url] if user.hero_image_url else []
+
+
 @router.post("/me/site-photos", response_model=UserOut)
 async def upload_site_photo(
     file: UploadFile = File(...),
@@ -215,7 +235,7 @@ async def upload_site_photo(
     current_user: User = Depends(get_current_user),
 ) -> UserOut:
     """Agrega una foto al carrusel de la portada de la página pública."""
-    photos = list(current_user.site_photos or [])
+    photos = _current_site_photos(current_user)
     if len(photos) >= MAX_SITE_PHOTOS:
         raise HTTPException(status_code=400, detail=f"Puedes tener hasta {MAX_SITE_PHOTOS} fotos; borra una para subir otra")
     if file.content_type not in ALLOWED_LOGO_MIME_TYPES:
@@ -234,6 +254,7 @@ async def upload_site_photo(
     if not url:
         raise HTTPException(status_code=502, detail="No se pudo guardar la foto")
     current_user.site_photos = [*photos, url]
+    current_user.hero_image_url = None  # ya va dentro de site_photos
     await db.commit()
     await db.refresh(current_user)
     return UserOut.model_validate(current_user)
@@ -250,10 +271,11 @@ async def set_site_photos(
     current_user: User = Depends(get_current_user),
 ) -> UserOut:
     """Reordena o quita fotos del carrusel. Solo acepta fotos que ya son suyas."""
-    current = list(current_user.site_photos or [])
+    current = _current_site_photos(current_user)
     if any(u not in current for u in body.photos) or len(set(body.photos)) != len(body.photos):
         raise HTTPException(status_code=400, detail="Esas fotos no son de tu página")
     current_user.site_photos = body.photos
+    current_user.hero_image_url = None  # ya va dentro de site_photos (o el dueño la quitó)
     await db.commit()
     await db.refresh(current_user)
     return UserOut.model_validate(current_user)

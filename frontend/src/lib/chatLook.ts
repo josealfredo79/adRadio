@@ -49,7 +49,8 @@ export function chatPalette(color: string, dark: boolean): ChatPalette {
         wallpaper: '#efeae2',
         doodle: 'rgba(17,27,33,0.07)',
         incoming: '#ffffff',
-        outgoing: `color-mix(in srgb, ${color} 20%, #ffffff)`,
+        // 32%: con colores tierra (café, mostaza) al 20% la burbuja se perdía en el fondo beige.
+        outgoing: `color-mix(in srgb, ${color} 32%, #ffffff)`,
         text: '#111b21',
         meta: '#667781',
         ticks: '#53bdeb',

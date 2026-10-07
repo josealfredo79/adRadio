@@ -10,7 +10,8 @@ const MAX = 8
 // (como el logo): subir, mover y quitar. Sin fotos, la página usa las de stock de su giro.
 export default function SitePhotosEditor() {
   const { user, setUser } = useAuth()
-  const photos = user?.site_photos ?? []
+  // La portada única de antes (hero_image_url) cuenta como la primera foto.
+  const photos = user?.site_photos?.length ? user.site_photos : user?.hero_image_url ? [user.hero_image_url] : []
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState('')

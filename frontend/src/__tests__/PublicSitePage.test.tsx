@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -126,6 +126,13 @@ describe('PublicSitePage — hero image and footer', () => {
     expect(s.length).toBeGreaterThan(1)
     s.forEach((src) => expect(src).toMatch(/^\/stock\/restaurante\//))
     expect(screen.queryByText('Así es Tacos El Primo')).toBeNull()
+  })
+
+  it('falls back to stock photos when the owner photo does not load', () => {
+    renderPage([], { hero_image_url: 'https://cdn.example.com/hero-images/gone.jpg' })
+    const img = hero().querySelector('img.psite-slide') as HTMLImageElement
+    fireEvent.error(img)
+    slides(hero()).forEach((src) => expect(src).toMatch(/^\/stock\/restaurante\//))
   })
 
   it('shows the owner About text when set', () => {

@@ -300,6 +300,23 @@ function LandingPageWizard({ config, openSignal }: { config?: { color: string; g
               >
                 {uploadingLogo ? 'Subiendo...' : user?.logo_url ? 'Cambiar logo' : 'Subir logo'}
               </button>
+              {user?.logo_url && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setLogoError('')
+                    try {
+                      const r = await api.delete('/me/logo')
+                      setUser?.(r.data)
+                    } catch (err) {
+                      setLogoError(getApiError(err, 'No se pudo quitar el logo'))
+                    }
+                  }}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                >
+                  Quitar
+                </button>
+              )}
               <input
                 ref={logoInputRef}
                 type="file"

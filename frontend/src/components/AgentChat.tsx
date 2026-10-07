@@ -422,7 +422,10 @@ export default function AgentChat({
         {banner}
 
         {voiceMode && (
-          <div className="flex shrink-0 flex-col items-center bg-[#0a0f2e] pt-1 pb-1">
+          <div
+            className="flex shrink-0 flex-col items-center pt-1 pb-1"
+            style={{ background: `color-mix(in srgb, ${color} 22%, #0a0f2e)` }}
+          >
             <Suspense fallback={<div style={{ height: 150 }} />}>
               <Mascot3D mood={mood} getLevel={speaker.level} size={130} color={color} />
             </Suspense>

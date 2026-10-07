@@ -6,11 +6,26 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 // son las del dueño; sin fotos propias, las de stock de su giro.
 const SLIDE_MS = 5500
 
-export default function HeroSlider({ photos, alt, children }: { photos: string[]; alt: string; children: React.ReactNode }) {
+export default function HeroSlider({
+  photos,
+  alt,
+  children,
+  onBroken,
+}: {
+  photos: string[]
+  alt: string
+  children: React.ReactNode
+  // Una foto que no cargó: la página la quita (y, sin fotos propias, usa las de stock).
+  onBroken?: (src: string) => void
+}) {
   const [i, setI] = useState(0)
   const [paused, setPaused] = useState(false)
   const touchX = useRef<number | null>(null)
   const n = photos.length
+  // Si se quitó una foto rota, que el índice no apunte fuera de la lista.
+  useEffect(() => {
+    if (i >= n && n > 0) setI(0)
+  }, [i, n])
   const go = (d: number) => setI((v) => (v + d + n) % n)
 
   useEffect(() => {
@@ -41,6 +56,7 @@ export default function HeroSlider({ photos, alt, children }: { photos: string[]
           // La primera sale al instante; las demás cuando toca.
           loading={k === 0 ? 'eager' : 'lazy'}
           fetchPriority={k === 0 ? 'high' : 'low'}
+          onError={() => onBroken?.(src)}
           className={`psite-slide absolute inset-0 -z-20 h-full w-full object-cover ${k === i ? 'psite-slide-on' : ''}`}
         />
       ))}
