@@ -79,6 +79,8 @@ class InboundMessage:
     audio_transcription: str | None = None
     media_url: str | None = None
     external_message_id: str | None = None
+    # Nombre de perfil de WhatsApp (value.contacts[].profile.name del webhook).
+    profile_name: str | None = None
 
 
 # Respuestas de puro "sí / ok / gracias" a una invitación opt-in: no traen
@@ -538,10 +540,11 @@ async def process_inbound_message(
         )
     )
     contact = contact_result.scalar_one_or_none()
+    profile_name = (msg.profile_name or "").strip()[:255] or None
     if not contact:
         contact = Contact(
             advertiser_id=advertiser.id,
-            name=from_number,
+            name=profile_name or from_number,
             phone=from_number,
             source="landing",
         )
@@ -550,6 +553,11 @@ async def process_inbound_message(
         _is_new_contact = True
     else:
         _is_new_contact = False
+        # Contacto que se creó sin nombre (quedó el teléfono): ahora que
+        # WhatsApp nos dice cómo se llama, se lo ponemos. Un nombre que el
+        # dueño ya escribió no se toca.
+        if profile_name and (not contact.name or contact.name in (contact.phone, from_number)):
+            contact.name = profile_name
 
     # Voces del Barrio — save customer story from audio, reward the customer
     # with a VIP coupon, notify the owner, and acknowledge (instead of a RAG

@@ -349,6 +349,13 @@ async def meta_incoming(
                     # degrade to "no media download", never crash the webhook.
                     logger.error("[META WEBHOOK] Token decrypt failed for advertiser=%s", advertiser.id)
 
+            # Nombre de perfil de WhatsApp de cada remitente, por wa_id.
+            profile_names = {
+                c.get("wa_id"): (c.get("profile") or {}).get("name")
+                for c in value.get("contacts", [])
+                if c.get("wa_id")
+            }
+
             for msg in messages:
                 from_number = f"+{msg.get('from', '')}"
                 wamid = msg.get("id")
@@ -388,6 +395,7 @@ async def meta_incoming(
                     audio_transcription=audio_transcription,
                     media_url=media_url,
                     external_message_id=wamid,
+                    profile_name=profile_names.get(msg.get("from")),
                 )
 
                 async def _send(to: str, body: str, advertiser=advertiser) -> tuple[str | None, str | None]:
