@@ -189,6 +189,12 @@ async def _get_product_detail(db: AsyncSession, user: User, product_id: uuid.UUI
     out["whatsapp_number"] = _public_whatsapp_number(user)
     out["site_theme"] = user.site_theme or "medianoche"
     out["color"] = user.widget_color or "#25D366"
+    # Para abrir el chat web desde la página del producto ("Platicar sobre este producto").
+    out["advertiser_id"] = str(user.id)
+    out["agent"] = user.bot_name or "Asistente"
+    out["greeting"] = user.widget_greeting or ""
+    out["business_category"] = user.business_category or ""
+    out["account_available"] = settings.CUSTOMER_ACCOUNT_ENABLED
     return out
 
 

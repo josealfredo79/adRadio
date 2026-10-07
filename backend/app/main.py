@@ -362,6 +362,9 @@ _SPA_DIR = Path(__file__).parent / "static" / "dist"
 # UA not in the crawler list) fall through to the normal SPA unchanged.
 _PRODUCT_PAGE_RE = re.compile(r"^sitio/([^/]+)/producto/([0-9a-fA-F-]{36})$")
 _PRODUCT_PAGE_BY_ID_RE = re.compile(r"^p/([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})$")
+# La página del negocio (/sitio/{slug}) también, para que el link del
+# catálogo que manda el bot por WhatsApp salga con la portada del negocio.
+_SITE_PAGE_RE = re.compile(r"^sitio/([^/]+)/?$")
 _CRAWLER_UA_RE = re.compile(
     r"facebookexternalhit|WhatsApp|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot",
     re.IGNORECASE,
@@ -421,6 +424,39 @@ async def _render_product_og_html(
 </html>"""
 
 
+async def _render_site_og_html(slug: str, base_url: str) -> str | None:
+    from sqlalchemy import select
+
+    from app.database import AsyncSessionLocal
+    from app.models.user import User
+    from app.services.site_photos import cover_photo_url
+
+    async with AsyncSessionLocal() as db:
+        user = (await db.execute(select(User).where(User.slug == slug.lower()))).scalar_one_or_none()
+    if not user:
+        return None
+    name = user.business_name or "IaRadio"
+    title = html.escape(name)
+    description = html.escape(user.landing_tagline or f"Conoce {name}: catálogo, precios y chat al instante.")
+    image = html.escape(cover_photo_url(user, base_url))
+    page_url = html.escape(f"{base_url}/sitio/{user.slug}")
+    return f"""<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>{title}</title>
+<meta property="og:type" content="website">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{description}">
+<meta property="og:image" content="{image}">
+<meta property="og:url" content="{page_url}">
+<meta name="twitter:card" content="summary_large_image">
+<meta http-equiv="refresh" content="0;url={page_url}">
+</head>
+<body>Redirigiendo…</body>
+</html>"""
+
+
 if _SPA_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(_SPA_DIR / "assets")), name="spa-assets")
 
@@ -440,6 +476,12 @@ if _SPA_DIR.is_dir():
                 og_html = await _render_product_og_html(
                     product_by_id_match.group(2), base_url, advertiser_id=product_by_id_match.group(1),
                 )
+            if og_html:
+                return HTMLResponse(og_html)
+
+        site_match = _SITE_PAGE_RE.match(full_path)
+        if site_match and is_crawler:
+            og_html = await _render_site_og_html(site_match.group(1), str(request.base_url).rstrip("/"))
             if og_html:
                 return HTMLResponse(og_html)
 

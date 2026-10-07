@@ -729,7 +729,7 @@ async def process_inbound_message(
     # Catalog query (channel-agnostic, shared with the widget) — checked
     # first: narrowest, read-only, never creates a row, so it can't collide
     # with the appointment/order state machines below.
-    catalog_reply = await handle_catalog_query(db, advertiser, body_text)
+    catalog_reply = await handle_catalog_query(db, advertiser, body_text, channel="whatsapp")
     if catalog_reply is not None:
         updated_msgs = conv.messages + [
             {"role": "user", "content": body_text},
@@ -1195,6 +1195,21 @@ async def process_inbound_message(
                     await send_owner(owner_wa, f"⚠️ El bot falló respondiéndole a {contact_name} — revisa el Inbox.")
                 except Exception:
                     logger.warning("[HANDOFF] Failed to notify owner of bot-error handoff", exc_info=True)
+
+    # Si se habla de UN producto, su link: WhatsApp lo muestra con foto, nombre
+    # y precio en el mismo mensaje (sin costo extra) y al tocarlo sigue en la web.
+    if reply and conv.status != "escalated" and not story_ack_reply and not pending_resume:
+        try:
+            from app.services.product_link_service import (
+                mentioned_product,
+                with_product_link,
+            )
+
+            product = await mentioned_product(db, advertiser.id, audio_transcription or body_text, reply)
+            if product:
+                reply = with_product_link(reply, product)
+        except Exception:
+            logger.warning("[PIPELINE] product link failed", exc_info=True)
 
     # Bot Closer — si el lead está "hot" y el anunciante lo activó, el bot añade
     # una oferta con caducidad REAL (un Coupon que de verdad expira) al final de

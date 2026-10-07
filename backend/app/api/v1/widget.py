@@ -239,9 +239,16 @@ async def widget_chat(
             await db.rollback()
             logger.warning("[WIDGET-CHAT] Could not save web chat turn for contact=%s", contact.id, exc_info=True)
 
-    from app.services.product_card_service import extract_product_cards
+    from app.services.product_card_service import extract_product_cards, product_card
     try:
         cards = await extract_product_cards(reply, db)
+        if not cards and channel_reply is None:
+            # Respuesta del bot que habla de UN producto sin traer su link: su tarjeta con foto.
+            from app.services.product_link_service import mentioned_product
+
+            product = await mentioned_product(db, user.id, message, reply)
+            if product:
+                cards = [product_card(product)]
     except Exception:
         logger.warning("[WIDGET-CHAT] Failed to extract product cards", exc_info=True)
         cards = []

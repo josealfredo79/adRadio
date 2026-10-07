@@ -265,8 +265,15 @@ class TestRagService:
                 def scalar_one_or_none(self):
                     return user
 
-            # After fetchall returns [], the second db.execute returns the user
-            db.execute = AsyncMock(side_effect=[FakeResult(), FakeScalarResult()])
+            class EmptyCatalog:
+                def scalars(self):
+                    return self
+
+                def all(self):
+                    return []
+
+            # KB vacía, catálogo vacío (rag_service.catalog_context) y luego el usuario.
+            db.execute = AsyncMock(side_effect=[FakeResult(), EmptyCatalog(), FakeScalarResult()])
 
             from app.services.rag_service import answer_with_rag
             result = await answer_with_rag(

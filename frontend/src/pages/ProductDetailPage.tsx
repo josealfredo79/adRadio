@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
+import AgentChat from '@/components/AgentChat'
 import SEO from '@/components/SEO'
 import { ArrowLeft, Check, Copy, MessageCircle, Share2 } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
-import { waDigits, formatPrice } from '@/pages/publicSite/utils'
+import { categoryEmoji, waDigits, formatPrice } from '@/pages/publicSite/utils'
 import { MeshBackground, cardElevationStyle } from '@/pages/publicSite/components'
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
 
@@ -22,6 +23,11 @@ interface ProductDetail {
   whatsapp_number: string
   site_theme: string
   color: string
+  advertiser_id: string
+  agent: string
+  greeting: string
+  business_category: string
+  account_available: boolean
 }
 
 export default function ProductDetailPage() {
@@ -32,6 +38,8 @@ export default function ProductDetailPage() {
   const { slug, advertiserId, productId } = useParams<{ slug?: string; advertiserId?: string; productId: string }>()
   const [notFound, setNotFound] = useState(false)
   const [copied, setCopied] = useState(false)
+  // Chat web sobre ESTE producto: gratis para el negocio, a diferencia de WhatsApp.
+  const [chatOpen, setChatOpen] = useState(false)
 
   const apiPath = slug
     ? `/public/site/${slug}/products/${productId}`
@@ -127,7 +135,7 @@ export default function ProductDetailPage() {
               {product.photo_url ? (
                 <img src={product.photo_url} alt={product.name} className="h-full w-full object-cover" />
               ) : (
-                <span className="text-7xl">🎙️</span>
+                <span className="text-7xl">{categoryEmoji(product.category || product.business_category || '')}</span>
               )}
             </div>
             <div className="p-6 space-y-4">
@@ -141,17 +149,15 @@ export default function ProductDetailPage() {
               {product.description && <p className="leading-relaxed" style={{ color: theme.muted }}>{product.description}</p>}
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                {waHref && (
-                  <a
-                    href={waHref}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#25D366]/20 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300"
-                  >
-                    <MessageCircle size={18} />
-                    Preguntar por WhatsApp
-                  </a>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setChatOpen(true)}
+                  className="psite-btn-primary flex-1 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg"
+                  style={{ background: product.color }}
+                >
+                  <MessageCircle size={18} />
+                  Platicar sobre este producto
+                </button>
                 <button
                   onClick={handleShare}
                   className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-colors hover:opacity-80"
@@ -164,6 +170,14 @@ export default function ProductDetailPage() {
             </div>
           </div>
 
+          {waHref && (
+            <p className="mt-4 text-center text-sm">
+              <a href={waHref} target="_blank" rel="noreferrer" className="underline underline-offset-4 opacity-80 hover:opacity-100">
+                o pregunta por WhatsApp
+              </a>
+            </p>
+          )}
+
           <button
             onClick={() => navigator.clipboard.writeText(pageUrl)}
             className="mt-4 flex items-center gap-1.5 text-xs mx-auto hover:opacity-80"
@@ -173,6 +187,23 @@ export default function ProductDetailPage() {
             {pageUrl}
           </button>
         </div>
+        {chatOpen && (
+          <AgentChat
+            business={{
+              advertiser_id: product.advertiser_id,
+              name: product.business_name,
+              agent: product.agent,
+              color: product.color,
+              greeting: product.greeting,
+            }}
+            theme={theme}
+            voiceBase={product.slug ? `/public/site/${product.slug}` : ''}
+            joinPath={product.account_available && product.slug ? `/q/${product.slug}` : undefined}
+            whatsappHref={waHref ?? undefined}
+            prefill={`Hola, me interesa: ${product.name}`}
+            onClose={() => setChatOpen(false)}
+          />
+        )}
       </div>
     </>
   )

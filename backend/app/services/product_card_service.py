@@ -61,11 +61,15 @@ async def extract_product_cards(reply_text: str, db: AsyncSession, *, limit: int
             continue
 
         seen_ids.add(product_id_str)
-        cards.append({
-            "url": f"/p/{advertiser_id}/{product_id}",
-            "name": product.name,
-            "price": _format_price(product.price),
-            "photo_url": product.photo_url or "",
-        })
+        cards.append(product_card(product))
 
     return cards
+
+
+def product_card(product: Product) -> dict:
+    return {
+        "url": f"/p/{product.advertiser_id}/{product.id}",
+        "name": product.name,
+        "price": _format_price(product.price),
+        "photo_url": product.photo_url or "",
+    }

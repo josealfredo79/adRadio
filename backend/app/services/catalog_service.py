@@ -54,14 +54,43 @@ def format_catalog_text(products: list[Product], advertiser_id) -> str:
     return "\n".join(lines)
 
 
-async def handle_catalog_query(db: AsyncSession, advertiser: User, message: str) -> str | None:
+CATALOG_HIGHLIGHTS = 3
+
+
+def format_catalog_whatsapp(products: list[Product], advertiser: User) -> str:
+    """Por WhatsApp: UN link al catálogo en la web (la vista previa sale con la
+    portada del negocio) y 2–3 productos de muestra. Antes eran N links y
+    WhatsApp solo previsualiza el primero: se veía desordenado y casi nadie
+    tocaba los demás. Cada mensaje cuesta igual con o sin link; la plática
+    sigue gratis en la web. Sin página publicada (sin slug), la lista de siempre."""
+    if not advertiser.slug:
+        return format_catalog_text(products, advertiser.id)
+    link = f"{settings.BASE_URL}/sitio/{advertiser.slug}#catalogo"
+    sample = "\n".join(f"• {p.name} — {_format_price(p.price)}" for p in products[:CATALOG_HIGHLIGHTS])
+    more = len(products) - CATALOG_HIGHLIGHTS
+    extra = f"\n…y {more} más" if more > 0 else ""
+    return (
+        f"📋 *Nuestro catálogo*, con fotos y precios:\n{link}\n\n"
+        f"Algunos:\n{sample}{extra}\n\n"
+        "¿Te interesa alguno? Pregúntame y te paso los detalles 😊"
+    )
+
+
+async def handle_catalog_query(
+    db: AsyncSession, advertiser: User, message: str, *, channel: str = "web",
+) -> str | None:
     """Returns the catalog reply if *message* asks for it, or None (caller
-    keeps going with its normal flow: pedidos, citas, RAG, etc.)."""
+    keeps going with its normal flow: pedidos, citas, RAG, etc.).
+
+    channel="web": un link por producto (el chat los convierte en tarjetas con
+    foto). channel="whatsapp": un solo link al catálogo en la web."""
     if not detect_catalog_intent(message):
         return None
     products = await get_active_products(db, advertiser.id)
     if not products:
         return NO_CATALOG_REPLY
+    if channel == "whatsapp":
+        return format_catalog_whatsapp(products, advertiser)
     return format_catalog_text(products, advertiser.id)
 
 

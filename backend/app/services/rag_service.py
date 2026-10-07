@@ -61,6 +61,43 @@ async def search_knowledge(db: AsyncSession, advertiser_id: str, query: str) -> 
     return context
 
 
+CATALOG_MAX_PRODUCTS = 60
+CATALOG_DESC_CHARS = 220
+
+
+async def catalog_context(db: AsyncSession, advertiser_id: str) -> str:
+    """El catálogo del negocio (productos y servicios activos) para el contexto
+    del bot. Antes el bot solo veía la base de conocimiento y las instrucciones:
+    si el cliente preguntaba por un producto ("¿cuántas recámaras tiene el
+    penthouse?") y eso no estaba escrito ahí, no lo sabía aunque el producto
+    tuviera descripción y precio. "" si no hay productos o falla."""
+    from app.models.product import Product
+
+    try:
+        rows = (await db.execute(
+            select(Product)
+            .where(Product.advertiser_id == uuid.UUID(str(advertiser_id)), Product.active.is_(True))
+            .order_by(Product.category, Product.name)
+            .limit(CATALOG_MAX_PRODUCTS)
+        )).scalars().all()
+    except Exception:
+        logger.warning("[RAG] catalog context failed", exc_info=True)
+        return ""
+    if not rows:
+        return ""
+    lines = []
+    for p in rows:
+        price = f"${p.price:,.2f}" if p.price is not None else "precio a cotizar"
+        parts = [f"- {p.name} — {price}"]
+        if p.category:
+            parts.append(f"({p.category})")
+        if p.description:
+            desc = " ".join(p.description.split())
+            parts.append(f": {desc[:CATALOG_DESC_CHARS]}{'…' if len(desc) > CATALOG_DESC_CHARS else ''}")
+        lines.append(" ".join(parts))
+    return "CATÁLOGO (productos y servicios con su precio y descripción):\n" + "\n".join(lines)
+
+
 async def answer_with_rag(
     advertiser_id: str,
     query: str,
@@ -87,6 +124,9 @@ async def answer_with_rag(
     4. Generate response with Claude (temp=0.3, only from context).
     """
     context = await search_knowledge(db, advertiser_id, query)
+    catalog = await catalog_context(db, advertiser_id)
+    if catalog:
+        context = f"{catalog}\n\n{context}" if context else catalog
 
     user = await _fetch_user(advertiser_id, db)
     bot_instructions = user.bot_instructions if user else None
