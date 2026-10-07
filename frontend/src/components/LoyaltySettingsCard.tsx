@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useAuth, type LoyaltyConfig } from '@/contexts/AuthContext'
 import { Check, Loader2, Stamp } from 'lucide-react'
+import { LOYALTY_ANCHOR, LOYALTY_DEFAULTS } from '@/lib/loyalty'
 
-const DEFAULTS: LoyaltyConfig = { enabled: false, stamps_required: 8, reward: '' }
+const DEFAULTS = LOYALTY_DEFAULTS
 
 // Tarjeta de lealtad del portal del cliente (backend: loyalty_service.py). Es
 // el regalo que hace que el cliente prefiera la web a WhatsApp.
@@ -13,6 +14,12 @@ export default function LoyaltySettingsCard() {
   const qc = useQueryClient()
   const [cfg, setCfg] = useState<LoyaltyConfig>(DEFAULTS)
   const [saved, setSaved] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  // Desde el aviso del Dashboard (/app/settings#tarjeta-lealtad).
+  useEffect(() => {
+    if (window.location.hash === `#${LOYALTY_ANCHOR}`) rootRef.current?.scrollIntoView({ block: 'start' })
+  }, [])
 
   useEffect(() => {
     if (user?.loyalty_config) setCfg({ ...DEFAULTS, ...user.loyalty_config })
@@ -33,7 +40,7 @@ export default function LoyaltySettingsCard() {
     'w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none'
 
   return (
-    <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">
+    <div ref={rootRef} id={LOYALTY_ANCHOR} className="scroll-mt-4 rounded-xl bg-card p-6 shadow-sm border border-border space-y-4">
       <div className="flex items-center gap-2">
         <Stamp className="h-5 w-5 text-amber-500" />
         <h2 className="text-base font-semibold text-foreground">Tarjeta de lealtad</h2>
@@ -77,6 +84,11 @@ export default function LoyaltySettingsCard() {
               className={inputCls}
             />
           </div>
+          {!cfg.reward.trim() && (
+            <p className="sm:col-span-3 text-sm font-medium text-amber-700 dark:text-amber-400">
+              Escribe tu premio y guarda: hasta entonces tus clientes no ven la tarjeta.
+            </p>
+          )}
           <p className="sm:col-span-3 text-xs text-muted-foreground">
             ¿Te compraron en el mostrador? En Contactos puedes ponerle un sello a mano y entregarle su premio.
           </p>

@@ -191,3 +191,28 @@ def test_tools_registered_and_prompt_knows_today():
             "update_business_hours"} <= names
     prompt = _build_system_prompt(User(id=uuid.uuid4(), email="a@b.c", password_hash="x"))
     assert f"fecha {datetime.now(TZ):%Y-%m-%d}" in prompt
+
+
+@pytest.mark.asyncio
+async def test_loyalty_reward_is_asked_then_saved_only_after_confirmation():
+    user_id = await _seed_user()
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await _user(db, user_id)
+            # Tarjeta encendida por defecto pero sin premio: el Copiloto lo pide.
+            assert "set_loyalty_reward" in _build_system_prompt(user)
+            _, _, err = await _preview_confirm_tool(db, user, "set_loyalty_reward", {"reward": "  "})
+            assert "premio" in err
+            _, _, err = await _preview_confirm_tool(db, user, "set_loyalty_reward", {"reward": "Un corte", "stamps_required": 50})
+            assert "3 a 20" in err
+            summary, args, err = await _preview_confirm_tool(db, user, "set_loyalty_reward", {"reward": "Un corte gratis"})
+            assert err is None and "8 sellos" in summary and "Un corte gratis" in summary
+            assert user.loyalty_config is None  # todavía nada
+            _, err = await _execute_confirm_tool(db, user, "set_loyalty_reward", args)
+            assert err is None
+        async with AsyncSessionLocal() as db:
+            user = await _user(db, user_id)
+            assert user.loyalty_config == {"enabled": True, "stamps_required": 8, "reward": "Un corte gratis"}
+            assert "set_loyalty_reward" not in _build_system_prompt(user)
+    finally:
+        await _cleanup(user_id)

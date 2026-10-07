@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     # servicio gratis al mes por número). Si se confirma, subirlo a ~800 en
     # Railway para no agregar un paso extra cuando todavía no cuesta.
     PORTAL_INVITE_FROM_WA_REPLIES: int = 0
+    # Cobro de Meta por mensaje de servicio desde 2026-10-01: 1,000 gratis al
+    # mes por número y luego la tarifa del país del cliente (México: USD
+    # 0.0085 ≈ $0.16). Solo para calcularle al dueño cuánto le ahorra la web.
+    META_FREE_SERVICE_MESSAGES: int = 1000
+    META_SERVICE_PRICE_MXN: float = 0.16
 
     # Notificaciones web (Web Push, estándar VAPID) para los clientes que las
     # aceptan en su portal — gratis, a diferencia de WhatsApp. Generar con

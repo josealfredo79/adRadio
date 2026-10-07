@@ -3,11 +3,12 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { lazy, Suspense, useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic, Globe } from 'lucide-react'
+import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic, Globe, Gift } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
 import { loadDemoDraft } from '@/lib/demoDraft'
 import SEO from '@/components/SEO'
+import { LOYALTY_ANCHOR, loyaltyNeedsReward } from '@/lib/loyalty'
 import {
   LineChart,
   Line,
@@ -25,6 +26,11 @@ interface DashboardData {
   messages_sent_this_month: number
   /** Respuestas en el chat web del portal: WhatsApp que no se pagó */
   web_replies_this_month?: number
+  /** Clientes que escribieron este mes, y cuántos de ellos por la web */
+  customers_this_month?: number
+  web_customers_this_month?: number
+  /** Lo que Meta habría cobrado por las respuestas web (pasando las 1,000 gratis) */
+  web_savings_mxn_this_month?: number
   messages_remaining: number
   plan: string
   subscription_status: string
@@ -245,14 +251,45 @@ export default function DashboardPage() {
             </p>
           </div>
 
+          {/* La tarjeta de lealtad es el regalo que lleva al cliente a la web;
+              sin premio no se les ofrece. */}
+          {user && loyaltyNeedsReward(user.loyalty_config) && (
+            <Link
+              to={`/app/settings#${LOYALTY_ANCHOR}`}
+              className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 transition-shadow hover:shadow-md dark:border-amber-900 dark:bg-amber-950/30"
+            >
+              <Gift className="h-6 w-6 shrink-0 text-amber-600" />
+              <span className="text-sm text-foreground">
+                <strong>Falta un paso: ¿qué premio les das a tus clientes?</strong> Escríbelo en una línea
+                (ej. “un corte gratis”) y empiezan a juntar sellos en su tarjeta.
+              </span>
+            </Link>
+          )}
+
           {/* Ahorro: cada respuesta por la web es un WhatsApp que no se pagó */}
           {(data?.web_replies_this_month ?? 0) > 0 && (
             <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-900 dark:bg-emerald-950/30">
               <Globe className="h-6 w-6 shrink-0 text-emerald-600" />
               <p className="text-sm text-foreground">
-                Este mes tus clientes platicaron por la web y el bot les contestó{' '}
-                <strong>{formatNumber(data?.web_replies_this_month ?? 0)} veces</strong> sin usar WhatsApp:{' '}
-                son mensajes que <strong>no te cobró Meta</strong>.
+                Este mes{' '}
+                {(data?.customers_this_month ?? 0) > 0 && (
+                  <>
+                    <strong>
+                      {formatNumber(data?.web_customers_this_month ?? 0)} de {formatNumber(data?.customers_this_month ?? 0)}
+                    </strong>{' '}
+                    clientes platicaron por la web y{' '}
+                  </>
+                )}
+                el bot les contestó <strong>{formatNumber(data?.web_replies_this_month ?? 0)} veces</strong> sin usar
+                WhatsApp
+                {(data?.web_savings_mxn_this_month ?? 0) > 0 ? (
+                  <>
+                    : te ahorraste <strong>~${formatNumber(Math.round(data?.web_savings_mxn_this_month ?? 0))}</strong>{' '}
+                    que te habría cobrado Meta.
+                  </>
+                ) : (
+                  <>: son mensajes que <strong>no te cobró Meta</strong>.</>
+                )}
               </p>
             </div>
           )}

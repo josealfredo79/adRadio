@@ -1,5 +1,5 @@
 """Herramientas del Copiloto para el día a día del negocio ("Habla con IaRadio",
-paso 2): citas, pedidos, catálogo y horario.
+paso 2): citas, pedidos, catálogo, horario y el premio de la tarjeta de lealtad.
 
 Lectura (citas, pedidos, productos): se ejecutan directo. Cambios (crear o
 editar un producto, cambiar el horario): pasan por la misma confirmación
@@ -24,6 +24,7 @@ from app.models.order import Order
 from app.models.product import Product
 from app.models.user import User
 from app.services.availability_service import TZ
+from app.services.loyalty_service import LOYALTY_DEFAULTS
 from app.services.voice_setup import DAY_LABELS, DAYS, _clean_hours, render_hours
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ _MAX_LIST = 25
 PHOTO_KEY_PREFIX = "products/{user_id}/"
 
 READ_TOOLS = {"list_appointments", "list_orders", "list_products"}
-CHANGE_TOOLS = {"create_product", "update_product", "update_business_hours"}
+CHANGE_TOOLS = {"create_product", "update_product", "update_business_hours", "set_loyalty_reward"}
 
 TOOLS = [
     {
@@ -139,6 +140,22 @@ TOOLS = [
                 },
             },
             "required": ["changes"],
+        },
+    },
+    {
+        "name": "set_loyalty_reward",
+        "description": (
+            "Pone el premio de la tarjeta de lealtad (y la deja encendida): el cliente lo gana al "
+            "juntar los sellos. Usa las palabras del dueño, ej. \"Un corte gratis\". Opcional: "
+            "cuántos sellos (3 a 20). SIEMPRE requiere confirmación."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "reward": {"type": "string", "description": "El premio, en una línea."},
+                "stamps_required": {"type": "integer", "description": "Sellos para ganarlo (3 a 20)."},
+            },
+            "required": ["reward"],
         },
     },
 ]
@@ -407,6 +424,20 @@ async def preview_change(db: AsyncSession, user: User, tool_name: str, args: dic
         )
         return f"Cambiar el horario: {said}.", {"hours": new_hours}, None
 
+    if tool_name == "set_loyalty_reward":
+        reward = _clean_text(args.get("reward"), 120)
+        if not reward:
+            return None, None, "Dime qué premio gana el cliente al llenar su tarjeta."
+        current = {**LOYALTY_DEFAULTS, **(user.loyalty_config or {})}
+        stamps = args.get("stamps_required") or current["stamps_required"]
+        if not isinstance(stamps, int) or not 3 <= stamps <= 20:
+            return None, None, "La tarjeta puede tener de 3 a 20 sellos."
+        return (
+            f"Tarjeta de lealtad: al juntar {stamps} sellos, tu cliente gana \"{reward}\".",
+            {"reward": reward, "stamps_required": stamps},
+            None,
+        )
+
     return None, None, "No reconozco esa acción."
 
 
@@ -471,6 +502,17 @@ async def execute_change(db: AsyncSession, user: User, tool_name: str, args: dic
         logger.info("[COPILOT] business hours updated by %s", user.id)
         return {"hours": render_hours(hours)}, None
 
+    if tool_name == "set_loyalty_reward":
+        reward = _clean_text(args.get("reward"), 120)
+        stamps = args.get("stamps_required")
+        if not reward or not isinstance(stamps, int) or not 3 <= stamps <= 20:
+            return None, "Ese premio no es válido."
+        user.loyalty_config = {"enabled": True, "stamps_required": stamps, "reward": reward}
+        db.add(user)
+        await db.commit()
+        logger.info("[COPILOT] loyalty reward set by %s", user.id)
+        return {"reward": reward, "stamps_required": stamps}, None
+
     return None, "No reconozco esa acción."
 
 
@@ -487,4 +529,6 @@ def summarize(tool_name: str, data: dict) -> str:
         return f"Producto \"{data.get('name', '')}\" actualizado."
     if tool_name == "update_business_hours":
         return f"Horario actualizado: {data.get('hours', '')}."
+    if tool_name == "set_loyalty_reward":
+        return f"Tarjeta de lealtad lista: {data.get('stamps_required')} sellos = \"{data.get('reward', '')}\"."
     return tool_name

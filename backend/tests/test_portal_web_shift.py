@@ -108,6 +108,8 @@ async def test_portal_chat_is_saved_as_web_and_counted_apart_from_whatsapp():
             data = await dashboard(db=db, current_user=user, redis=None)
         assert data["web_replies_this_month"] == 1
         assert data["messages_sent_this_month"] == 1  # solo el de WhatsApp
+        assert data["customers_this_month"] == 1 and data["web_customers_this_month"] == 1
+        assert data["web_savings_mxn_this_month"] == 0  # todo cabe en las 1,000 gratis
     finally:
         await engine.dispose()
         async with AsyncSessionLocal() as db:

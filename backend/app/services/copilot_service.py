@@ -47,6 +47,7 @@ from app.services.analytics_service import capture_event, compute_analytics_summ
 from app.services.availability_service import TZ
 from app.services.campaign_stats_service import compute_campaign_stats, merge_stats
 from app.services.coupon_service import default_expiry, generate_coupon_code
+from app.services.loyalty_service import needs_reward
 from app.services.send_block_explain import preflight_campaign_send
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,19 @@ _MONTHS = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agos
            "septiembre", "octubre", "noviembre", "diciembre")
 
 
+def _loyalty_note(user: User) -> str:
+    """La tarjeta de lealtad viene encendida pero sin premio, y sin premio no se
+    les ofrece a los clientes: el Copiloto se lo pide al dueño (sin inventarlo)."""
+    if not needs_reward(user):
+        return ""
+    return (
+        "\nPendiente del negocio: su tarjeta de lealtad (sellos en la página del cliente) no tiene "
+        "premio, así que todavía no se les ofrece a sus clientes. Cuando el dueño salude o pregunte "
+        "qué falta, pregúntale UNA vez, en una línea, qué premio quiere dar al juntar los sellos "
+        "(ej. \"un corte gratis\") y guárdalo con set_loyalty_reward. No lo inventes tú.\n"
+    )
+
+
 def _build_system_prompt(user: User, channel: str = "panel") -> str:
     business = user.business_name or "tu negocio"
     channel_note = _CHANNEL_NOTES.get(channel, "")
@@ -138,7 +152,7 @@ Reglas estrictas:
 6. Listar contactos/campañas y consultar estadísticas son de lectura — ejecútalas
    directamente cuando te ayuden a responder. Crear un contacto es barato y reversible
    — también se ejecuta directo.
-{channel_note}"""
+{_loyalty_note(user)}{channel_note}"""
 
 
 # ─── Definición de herramientas (Anthropic tool-use schema) ──────────────────

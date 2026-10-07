@@ -21,7 +21,9 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-LOYALTY_DEFAULTS = {"enabled": False, "stamps_required": 8, "reward": ""}
+# Encendida por defecto (2026-10-07), pero sin premio no se ofrece: el premio
+# lo escribe el dueño (panel o Copiloto), nunca lo inventamos por él.
+LOYALTY_DEFAULTS = {"enabled": True, "stamps_required": 8, "reward": ""}
 # Lo que el cliente ve como motivo de cada sello en su tarjeta.
 SOURCE_LABELS = {
     "welcome": "Regalo de bienvenida",
@@ -30,6 +32,12 @@ SOURCE_LABELS = {
     "order": "Pedido",
     "manual": "Visita",
 }
+
+
+def needs_reward(advertiser: User) -> bool:
+    """La tarjeta está encendida pero falta el premio: hay que pedírselo al dueño."""
+    cfg = {**LOYALTY_DEFAULTS, **(advertiser.loyalty_config or {})}
+    return bool(cfg["enabled"]) and not (cfg["reward"] or "").strip()
 
 
 def loyalty_config(advertiser: User) -> dict | None:

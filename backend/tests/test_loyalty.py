@@ -91,6 +91,12 @@ class TestConfig:
         assert ls.loyalty_config(User(loyalty_config={**CONFIG, "enabled": False})) is None
         assert ls.loyalty_config(User(loyalty_config=CONFIG))["stamps_required"] == 3
 
+    def test_on_by_default_but_asks_the_owner_for_the_reward(self):
+        assert ls.needs_reward(User(loyalty_config=None))
+        assert ls.needs_reward(User(loyalty_config={"enabled": True, "reward": ""}))
+        assert not ls.needs_reward(User(loyalty_config={**CONFIG, "enabled": False}))
+        assert not ls.needs_reward(User(loyalty_config=CONFIG))
+
     def test_profile_validation(self):
         out = ProfileUpdate(loyalty_config={"enabled": True, "stamps_required": "10", "reward": " Café gratis "})
         assert out.loyalty_config == {"enabled": True, "stamps_required": 10, "reward": "Café gratis"}

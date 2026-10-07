@@ -27,6 +27,7 @@ from app.models.order import Order
 from app.models.user import User
 from app.schemas.auth import UserOut
 from app.schemas.profile import ProfileUpdate
+from app.services.meta_cost import web_savings_mxn
 from app.services.storage_service import upload_bytes
 
 logger = logging.getLogger(__name__)
@@ -366,6 +367,30 @@ async def dashboard(
         )
     )
 
+    # Respuestas de servicio por WhatsApp (bot o dueño, no campañas): las que
+    # Meta cobra pasando las 1,000 del mes. Con las de la web sale el ahorro.
+    wa_service_replies = await db.execute(
+        select(func.count()).where(
+            Message.advertiser_id == current_user.id,
+            Message.direction == "outbound",
+            Message.created_at >= first_of_month,
+            Message.channel.is_(None),
+            Message.campaign_id.is_(None),
+        )
+    )
+    # Cuántos de los clientes que escribieron este mes ya usan el chat web.
+    customers_month = await db.execute(
+        select(
+            func.count(func.distinct(Message.contact_id)),
+            func.count(func.distinct(Message.contact_id)).filter(Message.channel == "web"),
+        ).where(
+            Message.advertiser_id == current_user.id,
+            Message.direction == "inbound",
+            Message.created_at >= first_of_month,
+        )
+    )
+    customers_total, customers_web = customers_month.one()
+
     # Orders confirmed (all time)
     orders_confirmed = await db.execute(
         select(func.count()).where(
@@ -457,12 +482,16 @@ async def dashboard(
         round(coupons_redeemed / coupons_issued * 100, 1) if coupons_issued > 0 else 0.0
     )
 
+    web_replies_count = web_replies.scalar_one()
     data = {
         "contacts_total": contacts_total.scalar_one(),
         "campaigns_active": campaigns_active.scalar_one(),
         "automations_active": automations_active.scalar_one(),
         "messages_sent_this_month": messages_sent.scalar_one(),
-        "web_replies_this_month": web_replies.scalar_one(),
+        "web_replies_this_month": web_replies_count,
+        "customers_this_month": customers_total or 0,
+        "web_customers_this_month": customers_web or 0,
+        "web_savings_mxn_this_month": web_savings_mxn(wa_service_replies.scalar_one(), web_replies_count),
         "messages_remaining": current_user.messages_remaining,
         "plan": current_user.current_plan,
         "subscription_status": current_user.subscription_status,
