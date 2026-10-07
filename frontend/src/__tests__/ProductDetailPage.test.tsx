@@ -62,14 +62,19 @@ describe('ProductDetailPage', () => {
 
   it('shows a WhatsApp link pre-filled with the product name, addressed to the connected number', () => {
     renderPage(mockProduct)
-    const link = screen.getByText('Preguntar por WhatsApp').closest('a')
+    const link = screen.getByText('o pregunta por WhatsApp').closest('a')
     expect(link?.getAttribute('href')).toContain(encodeURIComponent('Taco al pastor'))
     expect(link?.getAttribute('href')).toContain('https://wa.me/5214437864292')
   })
 
   it('hides the WhatsApp button when no number is connected (wa.me/?text= with no recipient is broken)', () => {
     renderPage({ ...mockProduct, whatsapp_number: '' })
-    expect(screen.queryByText('Preguntar por WhatsApp')).toBeNull()
+    expect(screen.queryByText('o pregunta por WhatsApp')).toBeNull()
+  })
+
+  it('the main button is the web chat about this product, WhatsApp is secondary', () => {
+    renderPage(mockProduct)
+    expect(screen.getByRole('button', { name: /Platicar sobre este producto/ })).toBeDefined()
   })
 
   it('shows "Cotizar" when price is null', () => {
