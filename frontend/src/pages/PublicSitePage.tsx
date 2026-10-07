@@ -11,6 +11,7 @@ import { ArrowRight, Clock, MapPin, MessageCircle, Zap } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
 import { waDigits, categoryEmoji, openStatus, stockPhotos, DEFAULT_LANDING_SECTIONS, type BusinessHours, type LandingSectionId } from '@/pages/publicSite/utils'
 import HeroSlider from '@/pages/publicSite/HeroSlider'
+import { FLAT_LOGO, isFlatImage } from '@/lib/flatImage'
 import { MeshBackground, NavBar, BenefitsSection, SectionHeading, Avatar, ProductCard, BusinessHoursCard, cardElevationStyle, glowVar, SITE_SERIF } from '@/pages/publicSite/components'
 import type { NavLink } from '@/pages/publicSite/components'
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
@@ -196,10 +197,15 @@ export default function PublicSitePage() {
             onChat={openChat}
           />
 
-          <HeroSlider photos={heroPhotos} alt={site.business_name} onBroken={markBroken}>
+          <HeroSlider photos={heroPhotos} alt={site.business_name} color={site.color} onBroken={markBroken}>
             <div className="psite-hero-text relative mx-auto flex w-full max-w-6xl flex-col justify-end px-6 pb-16 pt-28 text-white sm:px-10 sm:pb-20">
               {logoUrl ? (
-                <img src={logoUrl} alt="" onError={() => markBroken(logoUrl)} className="mb-5 h-16 w-16 rounded-2xl object-cover shadow-xl ring-2 ring-white/70 sm:h-20 sm:w-20" />
+                <img
+                  src={logoUrl}
+                  alt=""
+                  onError={() => markBroken(logoUrl)}
+                  onLoad={(e) => { if (isFlatImage(e.currentTarget, FLAT_LOGO)) markBroken(logoUrl) }}
+                  className="mb-5 h-16 w-16 rounded-2xl object-cover shadow-xl ring-2 ring-white/70 sm:h-20 sm:w-20" />
               ) : (
                 <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 text-4xl backdrop-blur-md ring-1 ring-white/30">
                   {categoryEmoji(site.business_category)}

@@ -126,6 +126,46 @@ async def agent_test_link(
     return {"url": f"/c/{make_portal_token(contact.id)}"}
 
 
+# Diferencia media entre pixeles vecinos (0–765) en la imagen achicada a 32×32:
+# las fotos de stock dan 45–110, un degradado de relleno ~2 y un color liso 0. Mismo
+# cálculo que frontend/src/lib/flatImage.ts. Un logo sencillo tiene poco
+# borde, por eso su umbral es más estricto.
+FLAT_PHOTO = 8.0
+FLAT_LOGO = 0.6
+
+
+def _detail_score(content: bytes) -> float | None:
+    """None si no es una imagen legible."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    try:
+        with Image.open(BytesIO(content)) as img:
+            px = img.convert("RGB").resize((32, 32)).load()
+    except Exception:
+        return None
+    total, count = 0, 0
+    for y in range(32):
+        for x in range(32):
+            r, g, b = px[x, y]
+            for nx, ny in ((x + 1, y), (x, y + 1)):
+                if nx < 32 and ny < 32:
+                    r2, g2, b2 = px[nx, ny]
+                    total += abs(r - r2) + abs(g - g2) + abs(b - b2)
+                    count += 1
+    return total / count
+
+
+def _reject_flat(content: bytes, threshold: float, what: str) -> None:
+    score = _detail_score(content)
+    if score is not None and score < threshold:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Esa imagen es un fondo liso, no {what}. Sube una foto real de tu negocio.",
+        )
+
+
 ALLOWED_LOGO_MIME_TYPES = {
     "image/jpeg": "jpg",
     "image/png": "png",
@@ -147,6 +187,7 @@ async def upload_logo(
     content = await file.read()
     if len(content) > MAX_LOGO_SIZE:
         raise HTTPException(status_code=413, detail="La imagen supera el límite de 5MB")
+    _reject_flat(content, FLAT_LOGO, "un logo")
 
     ext = ALLOWED_LOGO_MIME_TYPES[file.content_type]
     key = f"logos/{current_user.id}/{uuid.uuid4()}.{ext}"
@@ -188,6 +229,7 @@ async def upload_hero_image(
     content = await file.read()
     if len(content) > MAX_HERO_IMAGE_SIZE:
         raise HTTPException(status_code=413, detail="La imagen supera el límite de 8MB")
+    _reject_flat(content, FLAT_PHOTO, "una foto")
 
     ext = ALLOWED_LOGO_MIME_TYPES[file.content_type]
     key = f"hero-images/{current_user.id}/{uuid.uuid4()}.{ext}"
@@ -243,6 +285,7 @@ async def upload_site_photo(
     content = await file.read()
     if len(content) > MAX_HERO_IMAGE_SIZE * 2:
         raise HTTPException(status_code=413, detail="La foto supera el límite de 16MB")
+    _reject_flat(content, FLAT_PHOTO, "una foto")
     try:
         import asyncio
 

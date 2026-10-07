@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { isFlatImage } from '@/lib/flatImage'
 
 // Carrusel de la portada: fotos a pantalla completa que cambian solas con un
 // fundido y un zoom lento (Ken Burns), deslizables con el dedo. Las primeras
@@ -9,11 +10,14 @@ const SLIDE_MS = 5500
 export default function HeroSlider({
   photos,
   alt,
+  color,
   children,
   onBroken,
 }: {
   photos: string[]
   alt: string
+  // El color del negocio tiñe el velo: foto, botones y texto combinan.
+  color: string
   children: React.ReactNode
   // Una foto que no cargó: la página la quita (y, sin fotos propias, usa las de stock).
   onBroken?: (src: string) => void
@@ -57,13 +61,17 @@ export default function HeroSlider({
           loading={k === 0 ? 'eager' : 'lazy'}
           fetchPriority={k === 0 ? 'high' : 'low'}
           onError={() => onBroken?.(src)}
+          // Un "fondo liso" no es una foto: se trata igual que una que no cargó.
+          onLoad={(e) => { if (isFlatImage(e.currentTarget)) onBroken?.(src) }}
           className={`psite-slide absolute inset-0 -z-20 h-full w-full object-cover ${k === i ? 'psite-slide-on' : ''}`}
         />
       ))}
       {/* Velo para que el texto se lea sobre cualquier foto. */}
       <div
         className="absolute inset-0 -z-10"
-        style={{ background: 'linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,.15) 35%, rgba(0,0,0,.55) 70%, rgba(0,0,0,.85) 100%)' }}
+        style={{
+          background: `linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,.12) 35%, color-mix(in srgb, ${color} 30%, rgba(0,0,0,.6)) 72%, color-mix(in srgb, ${color} 22%, rgba(0,0,0,.9)) 100%)`,
+        }}
       />
       {children}
       {n > 1 && (

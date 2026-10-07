@@ -21,9 +21,19 @@ from app.database import AsyncSessionLocal, engine
 from app.models.user import User
 
 
-def _photo(w=4000, h=3000) -> UploadFile:
+def _photo(w=4000, h=3000, flat=False) -> UploadFile:
+    """Una "foto" con detalle (cuadros de colores), o un fondo liso si flat."""
+    img = Image.new("RGB", (w, h), (200, 80, 40))
+    if not flat:
+        from PIL import ImageDraw
+
+        dr = ImageDraw.Draw(img)
+        step = max(w, h) // 24
+        for i in range(0, w, step):
+            for j in range(0, h, step):
+                dr.rectangle([i, j, i + step // 2, j + step // 2], fill=((i * 7) % 255, (j * 5) % 255, 120))
     buf = BytesIO()
-    Image.new("RGB", (w, h), (200, 80, 40)).save(buf, "JPEG", quality=95)
+    img.save(buf, "JPEG", quality=95)
     buf.seek(0)
     return UploadFile(file=buf, filename="foto.jpg", headers=Headers({"content-type": "image/jpeg"}))
 
@@ -158,5 +168,52 @@ async def test_logo_can_be_removed():
             user = await db.get(User, uid)
             out = await delete_logo(db=db, current_user=user)
         assert out.logo_url is None
+    finally:
+        await _cleanup(uid)
+
+
+@pytest.mark.asyncio
+async def test_flat_backgrounds_are_rejected_as_photos_and_logos():
+    from app.api.v1.profile import upload_logo
+
+    uid = await _seed()
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, uid)
+            with pytest.raises(HTTPException) as e:
+                await upload_site_photo(file=_photo(1200, 500, flat=True), db=db, current_user=user)
+            assert "fondo liso" in e.value.detail
+            # Un degradado tampoco es una foto.
+            # Como la "portada" de la cuenta demo: azul marino a verde azulado.
+            grad = Image.new("RGB", (1200, 500))
+            for x in range(1200):
+                t = x / 1199
+                for y in range(500):
+                    grad.putpixel((x, y), (int(14 + 31 * t), int(26 + 64 * t), int(62 + 34 * t)))
+            buf = BytesIO()
+            grad.save(buf, "JPEG")
+            buf.seek(0)
+            with pytest.raises(HTTPException):
+                await upload_site_photo(
+                    file=UploadFile(file=buf, filename="g.jpg", headers=Headers({"content-type": "image/jpeg"})),
+                    db=db, current_user=user,
+                )
+
+            def _upload(img):
+                b = BytesIO()
+                img.save(b, "PNG")
+                f = UploadFile(file=BytesIO(b.getvalue()), filename="l.png", headers=Headers({"content-type": "image/png"}))
+                return f
+
+            with pytest.raises(HTTPException):
+                await upload_logo(file=_upload(Image.new("RGB", (200, 200), (37, 211, 102))), db=db, current_user=user)
+            # Un logo sencillo (una marca sobre fondo blanco) sí pasa.
+            from PIL import ImageDraw
+
+            logo = Image.new("RGB", (200, 200), "white")
+            ImageDraw.Draw(logo).ellipse([60, 60, 140, 140], fill=(20, 60, 160))
+            with patch("app.api.v1.profile.upload_bytes", new=AsyncMock(return_value="https://cdn.example.com/l.png")):
+                out = await upload_logo(file=_upload(logo), db=db, current_user=user)
+            assert out.logo_url == "https://cdn.example.com/l.png"
     finally:
         await _cleanup(uid)
