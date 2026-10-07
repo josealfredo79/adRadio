@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 
 type Consent = 'all' | 'necessary' | null
 
-// La app del cliente (/mi y su chat /c/...) solo guarda lo necesario para
-// funcionar (sesión, chats vistos) y no carga analítica ni cookies de terceros:
-// ahí el aviso no aplica y tapaba la caja de escribir. Su aviso de privacidad
-// va en la pantalla de entrada de /mi.
-const CUSTOMER_APP = /^\/(mi|c)(\/|$)/
+// Lo que ve el cliente final (/mi, su chat /c/, la página del negocio /sitio,
+// productos /p/, registro /q/) solo guarda lo necesario para funcionar (sesión,
+// chats vistos, el link de recomendación) y no carga analítica ni cookies de
+// terceros: ahí el aviso no aplica y estorbaba (tapaba la caja de escribir y el
+// botón del chat). Su aviso de privacidad va en la pantalla de entrada de /mi.
+const CUSTOMER_APP = /^\/(mi|c|sitio|p|q)(\/|$)/
 
 export default function CookieConsent() {
   const [consent, setConsent] = useState<Consent>(null)

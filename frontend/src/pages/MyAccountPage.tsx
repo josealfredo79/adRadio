@@ -156,6 +156,17 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
     }
   }
 
+  // Con los 6 dígitos (pegados o tecleados) entra solo, sin buscar el botón.
+  const [triedCode, setTriedCode] = useState('')
+  useEffect(() => {
+    if (step === 'code' && code.length === 6 && code !== triedCode && !busy) {
+      setTriedCode(code)
+      void verify()
+    }
+    // verify lee el estado del momento; solo debe dispararse al completar el código.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, step])
+
   const verify = async () => {
     setBusy(true)
     setError(null)

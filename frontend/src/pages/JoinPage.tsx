@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { captureRef, readRef } from '@/lib/referral'
 import Honeypot from '@/components/Honeypot'
@@ -38,6 +38,18 @@ export default function JoinPage() {
   const [step, setStep] = useState<'form' | 'code'>('form')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Con los 6 dígitos (pegados o tecleados) entra solo, sin buscar el botón.
+  // (Ref: verify se define más abajo, después de los returns tempranos.)
+  const verifyRef = useRef<() => Promise<void>>()
+  const [triedCode, setTriedCode] = useState('')
+  useEffect(() => {
+    if (step === 'code' && code.length === 6 && code !== triedCode && !busy) {
+      setTriedCode(code)
+      void verifyRef.current?.()
+    }
+    // Solo debe dispararse al completar el código.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, step])
 
   if (isLoading) return <div className="min-h-screen bg-[#06060f]" />
   if (isError || !data) {
@@ -76,6 +88,7 @@ export default function JoinPage() {
       setBusy(false)
     }
   }
+  verifyRef.current = verify
 
   const input =
     'w-full rounded-2xl border border-white/15 bg-white/5 px-4 py-3.5 text-lg text-white placeholder-white/30 focus:outline-none'
