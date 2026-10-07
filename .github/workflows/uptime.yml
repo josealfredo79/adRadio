@@ -1,0 +1,65 @@
+# Monitoreo: cada 10 min revisa que producción de verdad funcione (base de
+# datos + Redis vía /health/ready, y que la página cargue). Si falla 3 veces
+# seguidas abre un issue "🚨 IaRadio caído" — GitHub le manda correo al dueño
+# del repo — y comenta en él mientras siga caído; al volver, lo cierra.
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Revisar producción
+        id: probe
+        run: |
+          fail=""
+          for attempt in 1 2 3; do
+            fail=""
+            ready=$(curl -s -o /tmp/ready.json -w '%{http_code}' -m 20 https://www.iaradio.online/health/ready || echo 000)
+            home=$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://www.iaradio.online/ || echo 000)
+            [ "$ready" = "200" ] || fail="$fail /health/ready=$ready($(head -c 120 /tmp/ready.json 2>/dev/null))"
+            [ "$home" = "200" ] || fail="$fail página=$home"
+            [ -z "$fail" ] && break
+            echo "Intento $attempt falló:$fail"
+            sleep 20
+          done
+          echo "fail=$fail" >> "$GITHUB_OUTPUT"
+
+      - name: Abrir o actualizar aviso de caída
+        if: steps.probe.outputs.fail != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAIL: ${{ steps.probe.outputs.fail }}
+        run: |
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --label caida --state open --json number -q '.[0].number')
+          when=$(TZ=America/Mexico_City date '+%Y-%m-%d %H:%M')
+          if [ -n "$n" ]; then
+            gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body "Sigue caído ($when):$FAIL"
+          else
+            gh label create caida -R "$GITHUB_REPOSITORY" --color B60205 --description "Producción caída (monitoreo)" 2>/dev/null || true
+            gh issue create -R "$GITHUB_REPOSITORY" --label caida --title "🚨 IaRadio caído" \
+              --body "El monitoreo detectó una falla a las $when (hora CDMX):$FAIL. Revisa Railway y Neon. Este aviso se cierra solo cuando vuelva."
+          fi
+          exit 1
+
+      - name: Cerrar aviso si ya volvió
+        if: steps.probe.outputs.fail == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --label caida --state open --json number -q '.[0].number')
+          if [ -n "$n" ]; then
+            gh issue close "$n" -R "$GITHUB_REPOSITORY" --comment "✅ Volvió a funcionar ($(TZ=America/Mexico_City date '+%Y-%m-%d %H:%M'))."
+          fi

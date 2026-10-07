@@ -285,6 +285,43 @@ if _WIDGET_DIR.is_dir():
     app.mount("/widget", StaticFiles(directory=str(_WIDGET_DIR)), name="widget-static")
 
 
+@app.get("/health/ready")
+async def health_ready():
+    """Para el monitoreo externo (UptimeRobot): ¿de verdad funciona? Revisa la
+    base de datos y Redis, no solo que el proceso esté vivo. 503 si algo falla.
+    /health se queda ligero para el healthcheck de Railway: si dependiera de la
+    base, una caída de Neon haría que Railway reiniciara el servicio sin parar.
+    No expone detalles del error."""
+    import asyncio
+
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+
+    from app.core.redis import get_redis
+    from app.database import engine
+
+    failing = []
+
+    async def _db():
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+
+    try:
+        await asyncio.wait_for(_db(), timeout=5)
+    except Exception:
+        logger.warning("[HEALTH] database check failed", exc_info=True)
+        failing.append("database")
+    try:
+        redis = await get_redis()
+        await asyncio.wait_for(redis.ping(), timeout=3)
+    except Exception:
+        logger.warning("[HEALTH] redis check failed", exc_info=True)
+        failing.append("redis")
+    if failing:
+        return JSONResponse({"status": "down", "failing": failing}, status_code=503)
+    return {"status": "ok"}
+
+
 @app.get("/health")
 async def health():
     if not settings.DEBUG:
