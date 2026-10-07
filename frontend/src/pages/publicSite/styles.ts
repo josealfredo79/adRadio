@@ -67,4 +67,25 @@ html {
   .psite-hover-lift, .psite-btn-primary { transition: box-shadow 200ms ease; }
   .psite-hover-lift:hover, .psite-btn-primary:hover, .psite-btn-primary:active { transform: none; }
 }
+/* Portada con carrusel */
+.psite-hero { min-height: 88vh; min-height: 88svh; }
+@media (min-width: 640px) { .psite-hero { min-height: 640px; height: 82vh; max-height: 820px; } }
+.psite-slide { opacity: 0; transform: scale(1.06); transition: opacity 1.2s ease, transform 7s linear; }
+.psite-slide-on { opacity: 1; transform: scale(1.0); }
+.psite-hero-arrow { display: none; background: rgba(0,0,0,.28); backdrop-filter: blur(6px); transition: background .2s ease; }
+@media (hover: hover) and (pointer: fine) and (min-width: 768px) {
+  .psite-hero-arrow { display: block; }
+  .psite-hero-arrow:hover { background: rgba(0,0,0,.5); }
+}
+.psite-hero-text > * { animation: psiteFadeUp .7s cubic-bezier(0.23, 1, 0.32, 1) both; }
+.psite-hero-text > *:nth-child(2) { animation-delay: .08s; }
+.psite-hero-text > *:nth-child(3) { animation-delay: .16s; }
+.psite-hero-text > *:nth-child(4) { animation-delay: .24s; }
+.psite-hero-text > *:nth-child(5) { animation-delay: .32s; }
+.psite-gallery img { transition: transform .5s cubic-bezier(0.23, 1, 0.32, 1); }
+@media (hover: hover) and (pointer: fine) { .psite-gallery a:hover img { transform: scale(1.05); } }
+@media (prefers-reduced-motion: reduce) {
+  .psite-slide { transition: opacity .6s ease; transform: none; }
+  .psite-hero-text > * { animation: none; }
+}
 `

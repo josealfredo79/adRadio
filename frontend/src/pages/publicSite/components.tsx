@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Clock, Menu, MessageCircle, ShieldCheck, Sparkles, X } from 'lucide-react'
-import { categoryEmoji, formatBusinessHours, formatPrice, waDigits } from './utils'
+import { categoryEmoji, formatBusinessHours, formatPrice, productEmoji, waDigits } from './utils'
 import type { BusinessHours } from './utils'
 import type { SiteThemeDef } from './theme'
 import { isDarkTheme } from './theme'
@@ -86,7 +86,7 @@ export function NavBar({
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
     >
-      <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between gap-6">
+      <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-6">
         <a href="#" className="flex items-center gap-2.5 min-w-0">
           {logoUrl ? (
             <img src={logoUrl} alt={businessName} className="h-9 w-9 rounded-lg object-cover shrink-0" />
@@ -225,9 +225,9 @@ export function BenefitsSection({
   ]
 
   return (
-    <section id="beneficios" className="psite-anchor max-w-4xl mx-auto px-6 pt-16 pb-4">
+    <section id="beneficios" className="psite-anchor max-w-6xl mx-auto px-6 pt-20 pb-4">
       <SectionHeading eyebrow="Beneficios" title={`¿Por qué elegir a ${businessName}?`} color={color} />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {benefits.map((b, idx) => (
           <div
             key={b.title}
@@ -377,7 +377,10 @@ export function ProductCard({
           🔥 Más vendido
         </span>
       )}
-      <div className="h-36 flex items-center justify-center overflow-hidden relative" style={{ background: theme.cardBg }}>
+      <div
+        className="h-44 flex items-center justify-center overflow-hidden relative"
+        style={{ background: product.photo_url ? theme.cardBg : `linear-gradient(135deg, ${color}2e, ${color}0d)` }}
+      >
         {product.category && (
           <span
             className="absolute top-2 left-2 z-10 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white"
@@ -389,7 +392,7 @@ export function ProductCard({
         {product.photo_url ? (
           <img src={product.photo_url} alt={product.name} className="h-full w-full object-cover" />
         ) : (
-          <span className="text-4xl">{categoryEmoji(product.category || categoryFallback)}</span>
+          <span className="text-5xl drop-shadow-sm">{productEmoji(product.category, categoryFallback)}</span>
         )}
       </div>
       <div className="p-4 space-y-1">

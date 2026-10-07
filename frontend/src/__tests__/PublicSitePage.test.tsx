@@ -18,6 +18,8 @@ const mockSite = {
   hero_image_url: '',
   site_theme: 'medianoche',
   whatsapp_number: '',
+  site_photos: [] as string[],
+  site_about: '',
 }
 
 function setupQueryClient(products: unknown[], siteOverrides: Partial<typeof mockSite> = {}, stories: unknown[] = []) {
@@ -87,16 +89,14 @@ describe('PublicSitePage — logo and theme', () => {
   })
 
   it('renders the logo image instead of the category emoji when logo_url is set', () => {
-    renderPage([], { logo_url: 'https://cdn.example.com/logos/foo.jpg' })
-    // logo appears twice: once in the sticky nav, once in the hero header
-    const imgs = screen.getAllByAltText('Tacos El Primo') as HTMLImageElement[]
-    expect(imgs.length).toBe(2)
-    imgs.forEach((img) => expect(img.src).toBe('https://cdn.example.com/logos/foo.jpg'))
+    const { container } = renderPage([], { logo_url: 'https://cdn.example.com/logos/foo.jpg' })
+    // nav, portada y pie de página
+    expect(container.querySelectorAll('img[src="https://cdn.example.com/logos/foo.jpg"]').length).toBe(3)
   })
 
   it('falls back to the category emoji when no logo_url is set', () => {
-    renderPage([])
-    expect(screen.queryByAltText('Tacos El Primo')).toBeNull()
+    const { container } = renderPage([])
+    expect(container.querySelector('img[src*="logos"]')).toBeNull()
   })
 })
 
@@ -105,17 +105,32 @@ describe('PublicSitePage — hero image and footer', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders the hero image as the header background when hero_image_url is set', () => {
-    renderPage([], { hero_image_url: 'https://cdn.example.com/hero-images/foo.jpg' })
-    const header = screen.getByRole('heading', { level: 1, name: 'Tacos El Primo' }).closest('header') as HTMLElement
-    expect(header.style.backgroundImage).toContain('https://cdn.example.com/hero-images/foo.jpg')
+  const slides = (header: HTMLElement) => Array.from(header.querySelectorAll('img.psite-slide')).map((i) => i.getAttribute('src'))
+  const hero = () => screen.getByRole('heading', { level: 1, name: 'Tacos El Primo' }).closest('header') as HTMLElement
+
+  it('uses the owner photos in the slider, in order, and shows a gallery', () => {
+    const photos = ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg', 'https://cdn.example.com/c.jpg']
+    renderPage([], { site_photos: photos })
+    expect(slides(hero())).toEqual(photos)
+    expect(screen.getByText('Así es Tacos El Primo')).toBeDefined()
   })
 
-  it('falls back to the plain gradient header when no hero_image_url is set', () => {
+  it('keeps an old cover photo (hero_image_url) as the only slide', () => {
+    renderPage([], { hero_image_url: 'https://cdn.example.com/hero-images/foo.jpg' })
+    expect(slides(hero())).toEqual(['https://cdn.example.com/hero-images/foo.jpg'])
+  })
+
+  it('without photos uses stock photos of its category and no gallery (stock is never shown as theirs)', () => {
     renderPage([])
-    const header = screen.getByRole('heading', { level: 1, name: 'Tacos El Primo' }).closest('header') as HTMLElement
-    expect(header.style.background).toContain('linear-gradient')
-    expect(header.style.backgroundImage).not.toContain('cdn.example.com')
+    const s = slides(hero())
+    expect(s.length).toBeGreaterThan(1)
+    s.forEach((src) => expect(src).toMatch(/^\/stock\/restaurante\//))
+    expect(screen.queryByText('Así es Tacos El Primo')).toBeNull()
+  })
+
+  it('shows the owner About text when set', () => {
+    renderPage([], { site_about: 'Tacos de trompo desde 1990.' })
+    expect(screen.getByText('Tacos de trompo desde 1990.')).toBeDefined()
   })
 
   it('shows a WhatsApp contact link in the footer when whatsapp_number is set', () => {
@@ -131,7 +146,7 @@ describe('PublicSitePage — hero image and footer', () => {
 
   it('always shows the copyright line in the footer', () => {
     renderPage([])
-    expect(screen.getByText(/Todos los derechos reservados/)).toBeDefined()
+    expect(screen.getByText(/Página hecha con IaRadio/)).toBeDefined()
   })
 })
 

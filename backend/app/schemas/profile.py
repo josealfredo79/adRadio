@@ -26,6 +26,8 @@ class ProfileUpdate(BaseModel):
     widget_position: str | None = None
     slug: str | None = None
     landing_tagline: str | None = None
+    # "Sobre nosotros" de la página pública; "" lo borra.
+    site_about: str | None = None
     site_theme: str | None = None
     landing_sections: list[str] | None = None
     business_hours: dict[str, list[str] | None] | None = None
@@ -40,6 +42,16 @@ class ProfileUpdate(BaseModel):
     # "" borra; None no lo toca.
     payment_link: str | None = None
     payment_transfer: str | None = None
+
+    @field_validator("site_about")
+    @classmethod
+    def validate_site_about(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if len(v) > 600:
+            raise ValueError("El texto de Sobre nosotros puede tener hasta 600 caracteres")
+        return v
 
     @field_validator("loyalty_config")
     @classmethod

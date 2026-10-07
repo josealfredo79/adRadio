@@ -189,6 +189,76 @@ async def upload_hero_image(
     return UserOut.model_validate(current_user)
 
 
+MAX_SITE_PHOTOS = 8
+SITE_PHOTO_MAX_SIDE = 1800
+
+
+def _shrink_photo(content: bytes) -> bytes:
+    """Fotos del celular de 5–12 MB → JPEG de ~300 KB: el carrusel carga rápido
+    con datos móviles. También endereza la foto (EXIF) y quita la ubicación."""
+    from io import BytesIO
+
+    from PIL import Image, ImageOps
+
+    with Image.open(BytesIO(content)) as img:
+        img = ImageOps.exif_transpose(img).convert("RGB")
+        img.thumbnail((SITE_PHOTO_MAX_SIDE, SITE_PHOTO_MAX_SIDE))
+        out = BytesIO()
+        img.save(out, "JPEG", quality=82, optimize=True, progressive=True)
+        return out.getvalue()
+
+
+@router.post("/me/site-photos", response_model=UserOut)
+async def upload_site_photo(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserOut:
+    """Agrega una foto al carrusel de la portada de la página pública."""
+    photos = list(current_user.site_photos or [])
+    if len(photos) >= MAX_SITE_PHOTOS:
+        raise HTTPException(status_code=400, detail=f"Puedes tener hasta {MAX_SITE_PHOTOS} fotos; borra una para subir otra")
+    if file.content_type not in ALLOWED_LOGO_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Sube una foto JPG, PNG o WEBP")
+    content = await file.read()
+    if len(content) > MAX_HERO_IMAGE_SIZE * 2:
+        raise HTTPException(status_code=413, detail="La foto supera el límite de 16MB")
+    try:
+        import asyncio
+
+        content = await asyncio.to_thread(_shrink_photo, content)
+    except Exception:
+        raise HTTPException(status_code=400, detail="No pude leer esa imagen; prueba con otra foto")
+
+    url = await upload_bytes(content, f"site-photos/{current_user.id}/{uuid.uuid4()}.jpg", "image/jpeg")
+    if not url:
+        raise HTTPException(status_code=502, detail="No se pudo guardar la foto")
+    current_user.site_photos = [*photos, url]
+    await db.commit()
+    await db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
+class SitePhotosOrder(BaseModel):
+    photos: list[str]
+
+
+@router.put("/me/site-photos", response_model=UserOut)
+async def set_site_photos(
+    body: SitePhotosOrder,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserOut:
+    """Reordena o quita fotos del carrusel. Solo acepta fotos que ya son suyas."""
+    current = list(current_user.site_photos or [])
+    if any(u not in current for u in body.photos) or len(set(body.photos)) != len(body.photos):
+        raise HTTPException(status_code=400, detail="Esas fotos no son de tu página")
+    current_user.site_photos = body.photos
+    await db.commit()
+    await db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
 class TaglineSuggestRequest(BaseModel):
     hint: str = ""
 

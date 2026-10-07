@@ -67,6 +67,8 @@ async def get_public_site(request: Request, slug: str, db: AsyncSession = Depend
         "tagline": user.landing_tagline or "",
         "logo_url": user.logo_url or "",
         "hero_image_url": user.hero_image_url or "",
+        "site_photos": user.site_photos or [],
+        "site_about": user.site_about or "",
         "site_theme": user.site_theme or "medianoche",
         "whatsapp_number": _public_whatsapp_number(user),
         "business_hours": user.business_hours or DEFAULT_BUSINESS_HOURS,

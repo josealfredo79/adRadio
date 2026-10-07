@@ -23,6 +23,8 @@ interface User {
   email_verified: boolean
   logo_url: string | null
   hero_image_url: string | null
+  site_photos?: string[] | null
+  site_about?: string | null
   widget_color: string
   widget_greeting: string
   widget_position: string

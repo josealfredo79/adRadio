@@ -15,6 +15,11 @@ const CATEGORY_EMOJI: Record<string, string> = {
   educacion: '📚', educación: '📚', escuela: '📚', academia: '📚',
   tienda: '🛍️', comercio: '🛍️',
   hotel: '🏨', turismo: '🏨',
+  panader: '🥐', pastel: '🎂', cafe: '☕', café: '☕',
+  barber: '💈', corte: '💈', uñas: '💅',
+  farmacia: '💊', ferreter: '🔨', construc: '🏗️',
+  corporativo: '💼', consultor: '💼', empresa: '💼', servicio: '💼',
+  tecnolog: '💻', software: '💻',
 }
 
 export function categoryEmoji(category: string): string {
@@ -23,6 +28,12 @@ export function categoryEmoji(category: string): string {
     if (key.includes(k)) return emoji
   }
   return '🎙️'
+}
+
+/** El emoji del producto; si su categoría no dice nada ("Combos"), el del giro del negocio. */
+export function productEmoji(productCategory: string, businessCategory: string): string {
+  const own = categoryEmoji(productCategory || '')
+  return own !== '🎙️' ? own : categoryEmoji(businessCategory || '')
 }
 
 export type BusinessHours = Record<string, [string, string] | null>
@@ -78,4 +89,53 @@ export function formatBusinessHours(hours: BusinessHours | null | undefined): { 
     i = j + 1
   }
   return rows
+}
+
+// Fotos de stock (CC0, StockSnap) por giro para la portada mientras el dueño
+// no suba las suyas. Viven en public/stock/{giro}/{n}.jpg.
+const STOCK_COUNT: Record<string, number> = {
+  restaurante: 5, tienda: 5, belleza: 5, gimnasio: 5, farmacia: 5, ferreteria: 5, panaderia: 5,
+  corporativo: 5, inmobiliaria: 5, educacion: 5, automotriz: 5, tecnologia: 5, otro: 5,
+}
+const STOCK_KEYWORDS: [string, string][] = [
+  ['restaur', 'restaurante'], ['comida', 'restaurante'], ['taquer', 'restaurante'], ['cocina', 'restaurante'], ['bar', 'restaurante'],
+  ['panader', 'panaderia'], ['pastel', 'panaderia'], ['cafe', 'panaderia'], ['café', 'panaderia'],
+  ['belleza', 'belleza'], ['estetic', 'belleza'], ['estétic', 'belleza'], ['salon', 'belleza'], ['salón', 'belleza'], ['barber', 'belleza'], ['spa', 'belleza'], ['uñas', 'belleza'],
+  ['gimnasio', 'gimnasio'], ['fitness', 'gimnasio'], ['deporte', 'gimnasio'],
+  ['farmacia', 'farmacia'], ['salud', 'farmacia'], ['clinic', 'farmacia'], ['clínic', 'farmacia'], ['dental', 'farmacia'], ['medic', 'farmacia'], ['médic', 'farmacia'],
+  ['ferreter', 'ferreteria'], ['construc', 'ferreteria'],
+  ['tienda', 'tienda'], ['ropa', 'tienda'], ['boutique', 'tienda'], ['moda', 'tienda'], ['comercio', 'tienda'],
+  ['inmobil', 'inmobiliaria'], ['bienes', 'inmobiliaria'], ['terreno', 'inmobiliaria'], ['casa', 'inmobiliaria'],
+  ['educa', 'educacion'], ['escuela', 'educacion'], ['academia', 'educacion'], ['curso', 'educacion'],
+  ['automotr', 'automotriz'], ['taller', 'automotriz'], ['auto', 'automotriz'], ['mecánic', 'automotriz'], ['mecanic', 'automotriz'],
+  ['tecnolog', 'tecnologia'], ['software', 'tecnologia'], ['commerce', 'tecnologia'],
+  ['corporativo', 'corporativo'], ['consultor', 'corporativo'], ['servicio', 'corporativo'], ['empresa', 'corporativo'], ['abogad', 'corporativo'], ['legal', 'corporativo'],
+]
+
+export function stockGiro(category: string): string {
+  const key = (category || '').toLowerCase().trim()
+  if (STOCK_COUNT[key]) return key
+  for (const [k, giro] of STOCK_KEYWORDS) if (key.includes(k)) return giro
+  return 'otro'
+}
+
+export function stockPhotos(category: string): string[] {
+  const giro = stockGiro(category)
+  return Array.from({ length: STOCK_COUNT[giro] }, (_, i) => `/stock/${giro}/${i + 1}.jpg`)
+}
+
+const JS_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+
+/** "Abierto ahora · cierra 18:00", "Cerrado · abre mañana 9:00"… con la hora del visitante. */
+export function openStatus(hours: BusinessHours | null | undefined, now = new Date()): { open: boolean; label: string } | null {
+  if (!hours) return null
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const today = hours[JS_DAYS[now.getDay()]] ?? null
+  if (today && hhmm >= today[0] && hhmm < today[1]) return { open: true, label: `Abierto ahora · cierra ${today[1]}` }
+  if (today && hhmm < today[0]) return { open: false, label: `Cerrado · abre hoy ${today[0]}` }
+  for (let d = 1; d <= 7; d++) {
+    const next = hours[JS_DAYS[(now.getDay() + d) % 7]] ?? null
+    if (next) return { open: false, label: `Cerrado · abre ${d === 1 ? 'mañana' : DAY_LABELS[JS_DAYS[(now.getDay() + d) % 7]].toLowerCase()} ${next[0]}` }
+  }
+  return null
 }

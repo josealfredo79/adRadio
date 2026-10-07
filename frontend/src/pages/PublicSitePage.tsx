@@ -7,10 +7,11 @@ import AgentChat from '@/components/AgentChat'
 import MascotSmart from '@/components/MascotSmart'
 import { mascotAb, trackMascot } from '@/lib/mascotAb'
 import { useNativeViewport } from '@/lib/useNativeViewport'
-import { MapPin, MessageCircle } from 'lucide-react'
+import { ArrowRight, Clock, MapPin, MessageCircle, Zap } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
-import { waDigits, categoryEmoji, DEFAULT_LANDING_SECTIONS, type BusinessHours, type LandingSectionId } from '@/pages/publicSite/utils'
-import { MeshBackground, NavBar, BenefitsSection, Badge, SectionHeading, Avatar, ProductCard, BusinessHoursCard, cardElevationStyle, glowVar, SITE_SERIF } from '@/pages/publicSite/components'
+import { waDigits, categoryEmoji, openStatus, stockPhotos, DEFAULT_LANDING_SECTIONS, type BusinessHours, type LandingSectionId } from '@/pages/publicSite/utils'
+import HeroSlider from '@/pages/publicSite/HeroSlider'
+import { MeshBackground, NavBar, BenefitsSection, SectionHeading, Avatar, ProductCard, BusinessHoursCard, cardElevationStyle, glowVar, SITE_SERIF } from '@/pages/publicSite/components'
 import type { NavLink } from '@/pages/publicSite/components'
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
 
@@ -27,6 +28,8 @@ interface PublicSite {
   tagline: string
   logo_url: string
   hero_image_url: string
+  site_photos: string[]
+  site_about: string
   site_theme: string
   whatsapp_number: string
   business_hours: BusinessHours | null
@@ -137,6 +140,11 @@ export default function PublicSitePage() {
 
   const theme = getSiteTheme(site.site_theme)
   const dark = isDarkTheme(theme)
+  // Portada: las fotos del dueño; si no tiene, su portada vieja; si no, las de stock de su giro.
+  const ownPhotos = site.site_photos?.length ? site.site_photos : site.hero_image_url ? [site.hero_image_url] : []
+  const heroPhotos = ownPhotos.length ? ownPhotos : stockPhotos(site.business_category)
+  const aboutPhoto = ownPhotos[1] ?? ownPhotos[0] ?? heroPhotos[1] ?? heroPhotos[0]
+  const status = openStatus(site.business_hours)
 
   const sections: LandingSectionId[] = site.landing_sections?.length ? site.landing_sections : DEFAULT_LANDING_SECTIONS
 
@@ -181,90 +189,121 @@ export default function PublicSitePage() {
             onChat={openChat}
           />
 
-          <header
-            className="px-6 py-20 text-center relative overflow-hidden"
-            style={
-              site.hero_image_url
-                ? { backgroundImage: `url(${site.hero_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                : { background: `linear-gradient(180deg, ${site.color}33 0%, transparent 100%)` }
-            }
-          >
-            {/* Con foto de portada el texto siempre es blanco sobre un velo oscuro,
-                sin importar el tema elegido — necesario para que se lea encima de
-                cualquier foto real, no solo de los gradientes planos curados. */}
-            {site.hero_image_url && (
-              <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,.65) 100%)' }} />
-            )}
-            <div className="relative" style={site.hero_image_url ? { color: '#fff' } : undefined}>
+          <HeroSlider photos={heroPhotos} alt={site.business_name}>
+            <div className="psite-hero-text relative mx-auto flex w-full max-w-6xl flex-col justify-end px-6 pb-16 pt-28 text-white sm:px-10 sm:pb-20">
               {site.logo_url ? (
-                <img src={site.logo_url} alt={site.business_name} className="h-20 w-20 rounded-2xl object-cover mx-auto mb-4 shadow-lg" />
+                <img src={site.logo_url} alt="" className="mb-5 h-16 w-16 rounded-2xl object-cover shadow-xl ring-2 ring-white/70 sm:h-20 sm:w-20" />
               ) : (
-                <div className="text-6xl mb-4">{categoryEmoji(site.business_category)}</div>
+                <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 text-4xl backdrop-blur-md ring-1 ring-white/30">
+                  {categoryEmoji(site.business_category)}
+                </span>
               )}
               <h1
-                className={`${site.business_name.length > 40 ? 'text-2xl sm:text-3xl' : 'text-3xl sm:text-4xl'} font-medium text-balance`}
-                style={{ fontFamily: SITE_SERIF }}
+                className={`${site.business_name.length > 32 ? 'text-4xl sm:text-6xl' : 'text-5xl sm:text-7xl'} max-w-4xl font-medium leading-[1.02] tracking-tight text-balance`}
+                style={{ fontFamily: SITE_SERIF, textShadow: '0 2px 24px rgba(0,0,0,.35)' }}
               >
                 {site.business_name}
               </h1>
-              {site.tagline && (
-                <p className="mt-3 text-lg" style={site.hero_image_url ? { color: 'rgba(255,255,255,.85)' } : { color: theme.muted }}>
-                  {site.tagline}
-                </p>
-              )}
-              <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
-                {site.business_category && (
-                  <Badge color={site.color} onPhoto={!!site.hero_image_url} icon={<span>{categoryEmoji(site.business_category)}</span>}>
-                    {site.business_category}
-                  </Badge>
+              {site.tagline && <p className="mt-4 max-w-2xl text-lg text-white/90 sm:text-xl">{site.tagline}</p>}
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                {status && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1.5 text-xs font-semibold backdrop-blur-md ring-1 ring-white/20">
+                    <span className={`h-2 w-2 rounded-full ${status.open ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                    {status.label}
+                  </span>
                 )}
                 {site.city && (
-                  <Badge color={site.color} onPhoto={!!site.hero_image_url} icon={<MapPin size={12} />}>
-                    {site.city}
-                  </Badge>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1.5 text-xs font-semibold backdrop-blur-md ring-1 ring-white/20">
+                    <MapPin size={12} /> {site.city}
+                  </span>
                 )}
               </div>
-              {/* El agente 3D: saluda y al tocarlo abre el chat (texto o voz). */}
-              <button
-                type="button"
-                onClick={openChat}
-                aria-label={`Platicar con ${site.agent}`}
-                className="mt-6 mx-auto flex flex-col items-center"
-              >
-                <span
-                  className="relative mb-1 rounded-2xl px-4 py-2 text-sm font-medium shadow-lg"
-                  style={{ background: theme.cardBg, color: theme.text, border: `1px solid ${theme.cardBorder}` }}
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={openChat}
+                  className="psite-btn-primary inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-semibold shadow-xl"
+                  style={{ background: site.color, color: '#fff', ...glowVar(site.color, theme) }}
                 >
-                  ¡Hola! Soy {site.agent} 👋 ¿Te ayudo?
-                </span>
-                {/* Sale al instante en imagen; el 3D entra después y solo en la
-                    mitad de los visitantes (prueba A/B, lib/mascotAb.ts). */}
-                <MascotSmart mood="happy" size={170} color={site.color} allow3d={abVariant === '3d'} />
-              </button>
-              <button
-                type="button"
-                onClick={openChat}
-                className="psite-btn-primary mt-2 inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-lg"
-                style={{ background: `linear-gradient(135deg, ${site.color}, ${site.color}cc)`, color: '#fff', ...glowVar(site.color, theme) }}
-              >
-                <MessageCircle size={16} />
-                Platica con {site.agent}
-              </button>
-              {site.whatsapp_number && (
-                <p className="mt-3 text-sm">
+                  <MessageCircle size={18} />
+                  Platica con {site.agent}
+                </button>
+                {!!products?.length && (
                   <a
-                    href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
-                    onClick={() => trackMascot(slug, 'whatsapp')}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline underline-offset-4 opacity-80 hover:opacity-100"
+                    href="#catalogo"
+                    className="psite-btn-primary inline-flex items-center gap-2 rounded-full bg-white/15 px-6 py-3.5 text-[15px] font-semibold text-white ring-1 ring-white/40 backdrop-blur-md"
                   >
-                    o escríbenos por WhatsApp
+                    Ver catálogo <ArrowRight size={16} />
                   </a>
-                </p>
+                )}
+              </div>
+              {site.whatsapp_number && (
+                <a
+                  href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
+                  onClick={() => trackMascot(slug, 'whatsapp')}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 w-fit text-sm text-white/80 underline underline-offset-4 hover:text-white"
+                >
+                  o escríbenos por WhatsApp
+                </a>
               )}
             </div>
-          </header>
+          </HeroSlider>
+
+          {/* Lo que el cliente quiere saber de un vistazo. */}
+          <section className="relative z-10 mx-auto -mt-8 max-w-5xl px-4 sm:px-6">
+            <div
+              className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl sm:grid-cols-3"
+              style={{ background: theme.cardBorder, ...cardElevationStyle(theme) }}
+            >
+              {[
+                { icon: Clock, title: status?.open ? 'Abierto ahora' : 'Horario', text: status?.label.split(' · ')[1] ?? 'Consulta nuestro horario abajo', href: '#horario' },
+                { icon: Zap, title: 'Respuesta al instante', text: `${site.agent} te atiende por chat, texto o voz`, onClick: openChat },
+                { icon: MapPin, title: site.city || 'Visítanos', text: site.city ? `${site.business_name} en ${site.city}` : 'Pregúntanos cómo llegar', onClick: openChat },
+              ].map((it) => {
+                const body = (
+                  <>
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" style={{ background: `${site.color}1f`, color: site.color }}>
+                      <it.icon size={20} />
+                    </span>
+                    <span className="min-w-0 text-left">
+                      <span className="block text-sm font-semibold" style={{ color: theme.text }}>{it.title}</span>
+                      <span className="block truncate text-sm" style={{ color: theme.muted }}>{it.text}</span>
+                    </span>
+                  </>
+                )
+                const cls = 'flex items-center gap-3 px-5 py-4 transition-opacity hover:opacity-90'
+                const st = { background: dark ? '#10121c' : theme.cardBg }
+                return it.href ? (
+                  <a key={it.title} href={it.href} className={cls} style={st}>{body}</a>
+                ) : (
+                  <button key={it.title} type="button" onClick={it.onClick} className={cls} style={st}>{body}</button>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* Galería: solo fotos reales del negocio (las de stock no se presentan como suyas). */}
+          {ownPhotos.length >= 2 && (
+            <section id="galeria" className="psite-anchor mx-auto max-w-6xl px-6 pt-20">
+              <SectionHeading eyebrow="Galería" title={`Así es ${site.business_name}`} color={site.color} />
+              <div className="psite-gallery grid auto-rows-[160px] grid-cols-2 gap-3 sm:auto-rows-[220px] sm:grid-cols-4">
+                {ownPhotos.slice(0, 8).map((src, k) => (
+                  <a
+                    key={src}
+                    href={src}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`overflow-hidden rounded-2xl ${k === 0 ? 'col-span-2 row-span-2' : ''}`}
+                    style={cardElevationStyle(theme)}
+                  >
+                    <img src={src} alt={`${site.business_name} — foto ${k + 1}`} loading="lazy" className="h-full w-full object-cover" />
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
 
           {sections.map((id) => {
             switch (id) {
@@ -273,7 +312,7 @@ export default function PublicSitePage() {
 
               case 'opiniones':
                 return stories?.length ? (
-                  <section key={id} id="opiniones" className="psite-anchor max-w-4xl mx-auto px-6 pt-16 pb-4">
+                  <section key={id} id="opiniones" className="psite-anchor max-w-6xl mx-auto px-6 pt-20 pb-4">
                     <SectionHeading eyebrow="Historias reales" title="Lo que dicen nuestros clientes" color={site.color} />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {stories.map((s, idx) => (
@@ -308,7 +347,7 @@ export default function PublicSitePage() {
                 return (
                   <Fragment key={id}>
                     {!!bestsellers.length && (
-                      <section className="max-w-4xl mx-auto px-6 pb-4">
+                      <section className="max-w-6xl mx-auto px-6 pt-20 pb-4">
                         <SectionHeading eyebrow="Tendencia" title="🔥 Los favoritos de nuestros clientes" color={site.color} />
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                           {bestsellers.map((p, idx) => (
@@ -327,7 +366,7 @@ export default function PublicSitePage() {
                       </section>
                     )}
                     {!!products?.length && (
-                      <section id="catalogo" className="psite-anchor max-w-4xl mx-auto px-6 pb-16">
+                      <section id="catalogo" className="psite-anchor max-w-6xl mx-auto px-6 pt-20 pb-20">
                         <SectionHeading eyebrow="Catálogo" title="Nuestro catálogo" color={site.color} />
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                           {products.map((p, idx) => (
@@ -349,17 +388,37 @@ export default function PublicSitePage() {
 
               case 'nosotros_horario':
                 return (
-                  <section key={id} className="max-w-4xl mx-auto px-6 pb-16 grid grid-cols-1 sm:grid-cols-2 gap-8 items-start">
-                    <div id="nosotros" className="psite-anchor">
-                      <SectionHeading eyebrow="Sobre nosotros" title={`Conoce a ${site.business_name}`} color={site.color} />
-                      <p className="leading-relaxed text-center sm:text-left" style={{ color: theme.muted }}>
-                        Bienvenido a {site.business_name}
-                        {site.city ? ` en ${site.city}` : ''}. Escríbenos por el chat en la esquina de tu pantalla y {site.agent}{' '}
-                        te va a atender al instante.
-                      </p>
-                    </div>
-                    <div id="horario" className="psite-anchor">
-                      <BusinessHoursCard hours={site.business_hours} color={site.color} theme={theme} />
+                  <section key={id} className="mx-auto max-w-6xl px-6 pb-20">
+                    <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
+                      <div id="nosotros" className="psite-anchor relative">
+                        <img
+                          src={aboutPhoto}
+                          alt={site.business_name}
+                          loading="lazy"
+                          className="aspect-[4/3] w-full rounded-3xl object-cover"
+                          style={cardElevationStyle(theme)}
+                        />
+                        <div
+                          className="absolute -bottom-5 left-5 right-5 rounded-2xl px-5 py-4 sm:left-auto sm:right-6 sm:w-72"
+                          style={{ background: dark ? '#10121c' : theme.cardBg, border: `1px solid ${theme.cardBorder}`, ...cardElevationStyle(theme) }}
+                        >
+                          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: site.color }}>Te atiende</p>
+                          <p className="mt-1 text-sm" style={{ color: theme.text }}>
+                            <strong>{site.agent}</strong>, por chat o con tu voz, a la hora que quieras.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="pt-6 lg:pt-0">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-widest" style={{ color: site.color }}>Sobre nosotros</p>
+                        <h2 className="text-3xl font-medium sm:text-4xl" style={{ fontFamily: SITE_SERIF }}>Conoce a {site.business_name}</h2>
+                        <p className="mt-4 whitespace-pre-line text-[17px] leading-relaxed" style={{ color: theme.muted }}>
+                          {site.site_about ||
+                            `Bienvenido a ${site.business_name}${site.city ? `, en ${site.city}` : ''}. Pregúntale a ${site.agent} lo que necesites: precios, disponibilidad, citas o pedidos. Te responde al instante.`}
+                        </p>
+                        <div id="horario" className="psite-anchor mt-8">
+                          <BusinessHoursCard hours={site.business_hours} color={site.color} theme={theme} />
+                        </div>
+                      </div>
                     </div>
                   </section>
                 )
@@ -369,57 +428,79 @@ export default function PublicSitePage() {
             }
           })}
 
-          <section className="max-w-2xl mx-auto px-6 pb-16 text-center">
-            <div
-              className="rounded-3xl p-10"
-              style={{ background: `linear-gradient(135deg, ${site.color}, ${site.color}cc)`, ...glowVar(site.color, theme) }}
-            >
-              <p className="font-medium text-white text-xl mb-1" style={{ fontFamily: SITE_SERIF }}>
-                ¿Listo para escribirnos?
-              </p>
-              <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,.85)' }}>
-                Un mensaje y {site.agent} te responde al instante.
-              </p>
+          {/* Cierre con foto: la última invitación a escribir. */}
+          <section className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
+            <div className="relative isolate overflow-hidden rounded-3xl px-6 py-16 text-center text-white sm:py-20">
+              <img src={heroPhotos[heroPhotos.length > 2 ? 2 : 0]} alt="" loading="lazy" className="absolute inset-0 -z-20 h-full w-full object-cover" />
+              <div className="absolute inset-0 -z-10" style={{ background: `linear-gradient(135deg, ${site.color}e6, rgba(0,0,0,.72))` }} />
+              <p className="text-3xl font-medium sm:text-4xl" style={{ fontFamily: SITE_SERIF }}>¿Listo para escribirnos?</p>
+              <p className="mx-auto mt-3 max-w-md text-white/85">Un mensaje y {site.agent} te responde al instante: precios, citas, pedidos.</p>
               <button
                 type="button"
                 onClick={openChat}
-                className="psite-btn-primary inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-lg"
-                style={{ background: '#fff', color: site.color }}
+                className="psite-btn-primary mt-7 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-[15px] font-semibold shadow-xl"
+                style={{ color: site.color }}
               >
-                <MessageCircle size={16} />
+                <MessageCircle size={18} />
                 Platica con {site.agent}
               </button>
             </div>
           </section>
 
-          <footer className="border-t px-6 py-8 pb-32 text-center text-sm" style={{ borderColor: theme.cardBorder, color: theme.muted }}>
-            {site.whatsapp_number && (
-              <a
-                href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 font-medium hover:opacity-80 transition-opacity"
-                style={{ color: theme.text }}
-              >
-                <MessageCircle size={14} />
-                {site.whatsapp_number}
-              </a>
-            )}
-            <p className="mt-3">
-              © {new Date().getFullYear()} {site.business_name}. Todos los derechos reservados.
-            </p>
+          <footer className="border-t px-6 pb-32 pt-10 text-sm" style={{ borderColor: theme.cardBorder, color: theme.muted }}>
+            <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 text-center sm:flex-row sm:justify-between sm:text-left">
+              <div className="flex items-center gap-3">
+                {site.logo_url ? (
+                  <img src={site.logo_url} alt="" className="h-10 w-10 rounded-xl object-cover" />
+                ) : (
+                  <span className="text-2xl">{categoryEmoji(site.business_category)}</span>
+                )}
+                <div>
+                  <p className="font-semibold" style={{ color: theme.text }}>{site.business_name}</p>
+                  {site.city && <p className="text-xs">{site.city}</p>}
+                </div>
+              </div>
+              <div className="flex flex-col items-center gap-1 sm:items-end">
+                {site.whatsapp_number && (
+                  <a
+                    href={`https://wa.me/${waDigits(site.whatsapp_number)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 font-medium transition-opacity hover:opacity-80"
+                    style={{ color: theme.text }}
+                  >
+                    <MessageCircle size={14} />
+                    {site.whatsapp_number}
+                  </a>
+                )}
+                <p className="text-xs">© {new Date().getFullYear()} {site.business_name} · Página hecha con IaRadio</p>
+              </div>
+            </div>
           </footer>
         </div>
 
+        {/* La mascota es el botón del chat: saluda y al tocarla abre la plática
+            (3D o imagen fija según la prueba A/B, lib/mascotAb.ts). */}
         {!chatOpen && (
           <button
             type="button"
             onClick={openChat}
-            className="press fixed right-5 max-w-[calc(100vw-2.5rem)] whitespace-nowrap z-30 inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold text-white shadow-xl"
-            style={{ background: site.color, boxShadow: `0 10px 30px ${site.color}55`, bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
+            aria-label={`Platicar con ${site.agent}`}
+            className="press fixed right-4 z-30 flex items-end gap-1"
+            style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
           >
-            <MessageCircle size={18} />
-            <span className="truncate">Platicar con {site.agent.split(' ')[0]}</span>
+            <span
+              className="mb-6 max-w-[11rem] rounded-2xl rounded-br-sm px-3.5 py-2 text-left text-sm font-medium shadow-xl"
+              style={{ background: dark ? '#1b1f2e' : '#fff', color: theme.text, border: `1px solid ${theme.cardBorder}` }}
+            >
+              ¡Hola! Soy {site.agent.split(' ')[0]} 👋 ¿Te ayudo?
+            </span>
+            <span
+              className="flex h-[76px] w-[76px] items-center justify-center rounded-full bg-white shadow-2xl"
+              style={{ boxShadow: `0 0 0 3px ${site.color}, 0 12px 32px ${site.color}66` }}
+            >
+              <MascotSmart mood="happy" size={70} color={site.color} allow3d={abVariant === '3d'} />
+            </span>
           </button>
         )}
         {chatOpen && (

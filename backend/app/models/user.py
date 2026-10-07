@@ -50,6 +50,10 @@ class User(Base):
     # Foto de portada opcional del header de la landing pública — distinta del
     # logo (logo_url), que sigue siendo el ícono redondo.
     hero_image_url: Mapped[str | None] = mapped_column(Text)
+    # Fotos del carrusel de la portada (URLs en orden, máx. 8) y el texto de
+    # "Sobre nosotros". Sin fotos, la página usa fotos de stock de su giro.
+    site_photos: Mapped[list | None] = mapped_column(JSONB)
+    site_about: Mapped[str | None] = mapped_column(String(600))
     phone: Mapped[str | None] = mapped_column(String(20))
     # Número personal del dueño del negocio para notificaciones (pedido nuevo,
     # cita agendada, etc.) — independiente del número de WhatsApp Business

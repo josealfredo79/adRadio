@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Copy, CheckCheck, ExternalLink, Smartphone, Palette, MessageSquare, MoveHorizontal, Save, Sparkles, Globe, ArrowRight, ArrowLeft, ArrowUp, ArrowDown, Pencil, Image as ImageIcon } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
+import SitePhotosEditor from '@/components/SitePhotosEditor'
 import SEO from '@/components/SEO'
 import { useAuth } from '@/contexts/AuthContext'
 import { SITE_THEMES } from '@/pages/publicSite/theme'
@@ -84,6 +85,7 @@ function LandingPageWizard({ config, openSignal }: { config?: { color: string; g
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [slug, setSlug] = useState(user?.slug ?? slugify(user?.business_name ?? ''))
   const [tagline, setTagline] = useState(user?.landing_tagline ?? '')
+  const [about, setAbout] = useState(user?.site_about ?? '')
   const [siteTheme, setSiteTheme] = useState(user?.site_theme ?? 'medianoche')
   const [accentColor, setAccentColor] = useState(user?.widget_color ?? '#25D366')
   const [sectionOrder, setSectionOrder] = useState<SectionRow[]>(() => seedSectionOrder(user?.landing_sections as LandingSectionId[] | undefined))
@@ -94,9 +96,6 @@ function LandingPageWizard({ config, openSignal }: { config?: { color: string; g
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [logoError, setLogoError] = useState('')
-  const heroInputRef = useRef<HTMLInputElement>(null)
-  const [uploadingHero, setUploadingHero] = useState(false)
-  const [heroError, setHeroError] = useState('')
 
   const slugValid = SLUG_RE.test(slug)
   const hoursValid = DAY_ORDER.every((day) => {
@@ -129,6 +128,7 @@ function LandingPageWizard({ config, openSignal }: { config?: { color: string; g
         api.patch('/me', {
           slug,
           landing_tagline: tagline,
+          site_about: about,
           site_theme: siteTheme,
           landing_sections: sectionOrder.filter((s) => s.visible).map((s) => s.id),
           business_hours: businessHours,
@@ -165,25 +165,10 @@ function LandingPageWizard({ config, openSignal }: { config?: { color: string; g
     }
   }
 
-  const handleHeroUpload = async (file: File) => {
-    const fd = new FormData()
-    fd.append('file', file)
-    setUploadingHero(true)
-    setHeroError('')
-    try {
-      const r = await api.post('/me/hero-image', fd)
-      if (setUser) setUser(r.data)
-    } catch (err: unknown) {
-      setHeroError(getApiError(err, 'No se pudo subir la foto de portada'))
-    } finally {
-      setUploadingHero(false)
-      if (heroInputRef.current) heroInputRef.current.value = ''
-    }
-  }
-
   const startEditing = (openToStep: 1 | 2 | 3 = 1) => {
     setSlug(user?.slug ?? slugify(user?.business_name ?? ''))
     setTagline(user?.landing_tagline ?? '')
+    setAbout(user?.site_about ?? '')
     setSiteTheme(user?.site_theme ?? 'medianoche')
     setAccentColor(user?.widget_color ?? '#25D366')
     setSectionOrder(seedSectionOrder(user?.landing_sections as LandingSectionId[] | undefined))
@@ -191,7 +176,6 @@ function LandingPageWizard({ config, openSignal }: { config?: { color: string; g
     setAiHint('')
     setAiSuggestions(null)
     setLogoError('')
-    setHeroError('')
     setStep(openToStep)
     publishMutation.reset()
     suggestMutation.reset()
@@ -330,38 +314,8 @@ function LandingPageWizard({ config, openSignal }: { config?: { color: string; g
             {logoError && <p className="text-xs text-red-500">{logoError}</p>}
           </div>
 
-          {/* Foto de portada */}
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Foto de portada (opcional)</label>
-            <div className="flex items-center gap-3">
-              {user?.hero_image_url ? (
-                <img src={user.hero_image_url} alt="Portada" className="h-12 w-20 rounded-lg object-cover border border-gray-200 dark:border-gray-800" />
-              ) : (
-                <div className="h-12 w-20 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center text-gray-300 dark:text-gray-600">
-                  <ImageIcon size={18} />
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => heroInputRef.current?.click()}
-                disabled={uploadingHero}
-                className="flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 dark:bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
-              >
-                {uploadingHero ? 'Subiendo...' : user?.hero_image_url ? 'Cambiar foto' : 'Subir foto'}
-              </button>
-              <input
-                ref={heroInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) handleHeroUpload(file)
-                }}
-              />
-            </div>
-            {heroError && <p className="text-xs text-red-500">{heroError}</p>}
-          </div>
+          {/* Fotos del carrusel (portada y galería) */}
+          <SitePhotosEditor />
 
           {/* Tema de color */}
           <div className="space-y-2">
@@ -393,6 +347,19 @@ function LandingPageWizard({ config, openSignal }: { config?: { color: string; g
               className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm bg-transparent text-gray-900 dark:text-gray-100 focus:border-brand-500 dark:focus:border-brand-400 focus:outline-none resize-none"
             />
             <p className="text-xs text-gray-400 dark:text-gray-500 text-right">{tagline.length}/140</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Sobre nosotros (opcional)</label>
+            <textarea
+              value={about}
+              onChange={(e) => setAbout(e.target.value)}
+              maxLength={600}
+              rows={4}
+              placeholder="Ej. Somos una barbería familiar en el centro desde 1998. Cortes clásicos y modernos, con cita o sin cita."
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm bg-transparent text-gray-900 dark:text-gray-100 focus:border-brand-500 dark:focus:border-brand-400 focus:outline-none resize-none"
+            />
+            <p className="text-xs text-gray-400 dark:text-gray-500 text-right">{about.length}/600</p>
           </div>
 
           {/* Generar con IA */}
