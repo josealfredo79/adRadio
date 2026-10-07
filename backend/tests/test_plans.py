@@ -205,6 +205,8 @@ class TestEconomyRouting:
              patch.object(llm_client, "is_openrouter_configured", return_value=True), \
              patch.object(llm_client, "_get_groq_client", return_value="groq"), \
              patch.object(llm_client, "_get_openrouter_client", return_value="openrouter"), \
+             patch.object(llm_client.settings, "OPENROUTER_MODEL", "free-model"), \
+             patch.object(llm_client.settings, "GROQ_CHAT_MODEL", "groq-model"), \
              patch.object(llm_client, "_openai_compatible_completion", side_effect=fake):
             assert await llm_client.chat_completion([{"role": "user", "content": "hola"}], economy=economy) == "ok"
         assert calls == [first]
