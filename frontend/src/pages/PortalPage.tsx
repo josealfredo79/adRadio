@@ -28,6 +28,7 @@ import { getSiteTheme, isDarkTheme, type SiteThemeDef } from '@/pages/publicSite
 import { waDigits } from '@/pages/publicSite/utils'
 import { MeshBackground, cardElevationStyle } from '@/pages/publicSite/components'
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
+import { referralLink } from '@/lib/referral'
 
 // Portal del cliente (/c/:token) y página de una promo (/c/:token/promo/:promoId).
 // Abre directo en el chat a pantalla completa, como una conversación de
@@ -121,6 +122,8 @@ interface PortalData {
   past_appointments: PortalAppointment[]
   orders: PortalOrder[]
   coupons: PortalCoupon[]
+  /** Su código para recomendar el negocio ("" sin tarjeta de lealtad). */
+  referral_code?: string
 }
 
 const TZ = 'America/Mexico_City'
@@ -402,6 +405,10 @@ function PortalHome({
         <LoyaltyCardView loyalty={data.loyalty} color={color} business={business.name} storageKey={`stamps-seen:${token}`} />
       )}
 
+      {data.loyalty && data.referral_code && business.slug && (
+        <ReferralCard theme={theme} color={color} business={business.name} slug={business.slug} code={data.referral_code} />
+      )}
+
       <div className="mt-6 grid grid-cols-3 gap-2">
         <QuickAction theme={theme} color={color} icon={<CalendarDays size={20} />} label="Agendar" onClick={() => onChat('Quiero agendar una cita')} />
         {business.slug ? (
@@ -543,6 +550,65 @@ function PortalHome({
         </div>
       )}
     </main>
+  )
+}
+
+// Recomiéndalo a un amigo: comparte su link personal; si el amigo se registra
+// con él, el cliente gana un sello (backend: referral_service.py).
+function ReferralCard({
+  theme,
+  color,
+  business,
+  slug,
+  code,
+}: {
+  theme: SiteThemeDef
+  color: string
+  business: string
+  slug: string
+  code: string
+}) {
+  const [copied, setCopied] = useState(false)
+  const share = async () => {
+    const url = referralLink(slug, code)
+    const text = `Te recomiendo ${business} 👌 Mira:`
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: business, text, url })
+        return
+      } catch {
+        // canceló el menú de compartir: se copia
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(`${text} ${url}`)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    } catch {
+      // sin portapapeles: nada que hacer
+    }
+  }
+  return (
+    <section
+      className="mt-4 flex items-center gap-3 rounded-2xl p-4"
+      style={{ background: theme.cardBg, border: `1px solid ${theme.cardBorder}`, ...cardElevationStyle(theme) }}
+    >
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl" style={{ background: `${color}1f` }}>
+        🤝
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold" style={{ color: theme.text }}>Recomienda a {business} y gana un sello</p>
+        <p className="text-xs" style={{ color: theme.muted }}>Cuando un amigo se registre con tu link, te llega un sello.</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => void share()}
+        className="press shrink-0 rounded-full px-4 py-2 text-sm font-semibold text-white"
+        style={{ background: color }}
+      >
+        {copied ? '¡Copiado!' : 'Compartir'}
+      </button>
+    </section>
   )
 }
 

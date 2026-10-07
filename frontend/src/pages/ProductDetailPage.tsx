@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import AgentChat from '@/components/AgentChat'
+import { captureRef } from '@/lib/referral'
 import SEO from '@/components/SEO'
 import { ArrowLeft, Check, Copy, MessageCircle, Share2 } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
@@ -58,6 +59,9 @@ export default function ProductDetailPage() {
     enabled: !!(slug || advertiserId) && !!productId,
     retry: false,
   })
+
+  const productSlug = product?.slug
+  useEffect(() => captureRef(productSlug), [productSlug])
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-[#06060f] text-white">Cargando...</div>

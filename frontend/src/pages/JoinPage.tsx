@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { captureRef, readRef } from '@/lib/referral'
 import { useQuery } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
@@ -19,6 +20,8 @@ interface JoinInfo {
 
 export default function JoinPage() {
   const { slug } = useParams<{ slug: string }>()
+  // Llegó con el link de recomendación de otro cliente (?r=): se guarda para el registro.
+  useEffect(() => captureRef(slug), [slug])
   useNativeViewport('#06060f')
   const navigate = useNavigate()
   const { data, isLoading, isError } = useQuery<JoinInfo>({
@@ -63,7 +66,7 @@ export default function JoinPage() {
     setBusy(true)
     setError(null)
     try {
-      const { data: out } = await api.post(`/public/join/${slug}/verify`, { name, phone, code })
+      const { data: out } = await api.post(`/public/join/${slug}/verify`, { name, phone, code, ref: readRef(slug) })
       saveAccountToken(out.account_token)
       navigate(out.portal_path, { replace: true })
     } catch (err) {

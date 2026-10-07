@@ -47,6 +47,7 @@ from app.services.availability_service import TZ
 from app.services.claude_service import personalize_message
 from app.services.loyalty_service import add_stamp, get_card
 from app.services.portal_service import read_portal_token
+from app.services.referral_service import make_ref_code
 from app.services.web_push import push_enabled
 from app.services.widget_order_service import ORDER_RESUME_WINDOW
 
@@ -191,6 +192,8 @@ async def get_portal(request: Request, token: str, db: AsyncSession = Depends(ge
         ],
         "coupons": [_coupon_out(c) for c in coupons],
         "loyalty": loyalty,
+        # Su link para recomendar el negocio (con tarjeta de lealtad activa).
+        "referral_code": make_ref_code(contact.id) if loyalty else "",
     }
 
 

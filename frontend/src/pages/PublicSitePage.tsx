@@ -11,6 +11,7 @@ import { ArrowRight, Clock, MapPin, MessageCircle, Zap } from 'lucide-react'
 import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
 import { waDigits, categoryEmoji, openStatus, stockPhotos, DEFAULT_LANDING_SECTIONS, type BusinessHours, type LandingSectionId } from '@/pages/publicSite/utils'
 import HeroSlider from '@/pages/publicSite/HeroSlider'
+import { captureRef } from '@/lib/referral'
 import { FLAT_LOGO, isFlatImage } from '@/lib/flatImage'
 import { MeshBackground, NavBar, BenefitsSection, SectionHeading, Avatar, ProductCard, BusinessHoursCard, cardElevationStyle, glowVar, SITE_SERIF } from '@/pages/publicSite/components'
 import type { NavLink } from '@/pages/publicSite/components'
@@ -120,6 +121,7 @@ export default function PublicSitePage() {
   const siteSlug = site?.slug
   useEffect(() => {
     if (siteSlug) trackMascot(siteSlug, 'view')
+    captureRef(siteSlug)
   }, [siteSlug])
 
   useEffect(() => {

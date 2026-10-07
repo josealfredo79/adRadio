@@ -31,6 +31,7 @@ SOURCE_LABELS = {
     "appointment": "Cita",
     "order": "Pedido",
     "manual": "Visita",
+    "referral": "Recomendaste a un amigo",
 }
 
 

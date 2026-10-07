@@ -141,6 +141,17 @@ async def join_verify(
         db.add(contact)
         await db.commit()
         await db.refresh(contact)
+        # Llegó por el link de recomendación de otro cliente: sello para él.
+        # Solo aquí, con el número ya verificado por código (si no, se
+        # podrían inventar números para juntar sellos).
+        from app.services.referral_service import reward_referral
+
+        try:
+            if await reward_referral(db, user, body.get("ref"), contact):
+                await db.commit()
+        except Exception:
+            await db.rollback()
+            logger.warning("[JOIN] referral reward failed", exc_info=True)
         from app.services.owner_alerts import alert_new_customer
 
         await alert_new_customer(redis, user, name, "tu QR de mostrador")
