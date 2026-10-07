@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings
@@ -259,7 +260,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_WINDOW: int = 60  # segundos
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # APP_ENV_FILE="" (lo pone tests/conftest.py) = no leer ningún .env: así
+    # los tests en la compu no ven las claves de producción de backend/.env.
+    model_config = {"env_file": os.environ.get("APP_ENV_FILE", ".env") or None, "env_file_encoding": "utf-8"}
 
 
 @lru_cache

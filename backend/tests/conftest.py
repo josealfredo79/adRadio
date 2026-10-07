@@ -7,12 +7,26 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Real-DB tests must never touch production — .env.test points DATABASE_URL at a
-# dedicated Neon branch instead. Loaded here, before any app.* import anywhere in
-# the test session, so it overrides whatever backend/.env (production) would set.
+# Los tests usan SIEMPRE una base local (Docker en la compu, el servicio de
+# Postgres en el CI) — nunca Neon. La rama de pruebas de Neon vivía en el mismo
+# proyecto que producción y compartía su cuota de cómputo: correr la suite
+# agotó la cuota y tumbó producción (2026-09-19). .env.test (local, no va al
+# repo) se carga antes de cualquier import de app.*; scripts/test_local.sh
+# levanta Postgres y Redis en Docker y corre la suite.
 load_dotenv(Path(__file__).resolve().parent.parent / ".env.test", override=True)
 
 import os
+
+# Que la app no lea backend/.env (producción) en los tests: solo .env.test y el entorno.
+os.environ["APP_ENV_FILE"] = ""
+
+_LOCAL_DB_HOSTS = ("@localhost", "@127.0.0.1", "@postgres:", "@db:")
+_db_url = os.environ.get("DATABASE_URL", "")
+if not any(h in _db_url for h in _LOCAL_DB_HOSTS):
+    raise RuntimeError(
+        "Los tests solo corren contra una base LOCAL (localhost). DATABASE_URL apunta a otro lado "
+        f"({_db_url.split('@')[-1].split('/')[0] or 'sin definir'}). Usa scripts/test_local.sh."
+    )
 
 # Fake encryption key so tests never depend on (or use) production's from
 # backend/.env, and work in CI where there is no .env at all. Env vars beat the
