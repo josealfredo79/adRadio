@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Send } from 'lucide-react'
+import { X, Send, CheckCheck } from 'lucide-react'
 import MascotSmart from '@/components/MascotSmart'
+import BubbleTail from '@/components/BubbleTail'
+import { chatPalette, hhmm, wallpaperPattern } from '@/lib/chatLook'
 
 interface ProductCard {
   url: string
@@ -13,15 +15,16 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   cards?: ProductCard[]
+  at?: string
 }
 
 const STORAGE_KEY = 'iaradio_demo_session'
 // Los colores del chat de la app del cliente (verde IaRadio, fondo oscuro).
 const GREEN = '#25D366'
+const PAL = chatPalette(GREEN, true)
 const BG = '#0b0d16'
 const CARD = '#151926'
 const BORDER = 'rgba(255,255,255,0.09)'
-const MUTED = 'rgba(255,255,255,0.55)'
 const API_BASE = `${import.meta.env.VITE_API_URL ?? ''}/api/v1`
 const SITE_ORIGIN = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -78,6 +81,7 @@ export default function ChatWidget() {
       setMessages([
         {
           role: 'assistant',
+          at: new Date().toISOString(),
           content:
             '👋 ¡Hola! Soy Alex, el asistente de IaRadio.\n\n¿Te gustaría saber cómo podemos ayudarte a automatizar tus ventas por WhatsApp con IA?',
         },
@@ -101,7 +105,7 @@ export default function ChatWidget() {
     const text = input.trim()
     if (!text || loading) return
     setInput('')
-    setMessages((prev) => [...prev, { role: 'user', content: text }])
+    setMessages((prev) => [...prev, { role: 'user', content: text, at: new Date().toISOString() }])
     setLoading(true)
 
     let sid = sessionId
@@ -119,12 +123,13 @@ export default function ChatWidget() {
       })
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply, cards: data.cards }])
+      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply, cards: data.cards, at: new Date().toISOString() }])
     } catch {
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
+          at: new Date().toISOString(),
           content: 'Lo siento, hubo un error al conectar. ¿Puedes intentar de nuevo? 🙏',
         },
       ])
@@ -143,51 +148,70 @@ export default function ChatWidget() {
           className="mb-3 flex h-[70dvh] max-h-[34rem] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-3xl shadow-2xl sm:w-96"
           style={{ animation: 'fadeUp 0.3s ease', background: BG, color: '#fff', border: `1px solid ${BORDER}` }}
         >
-          <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
+          {/* Mismo encabezado que el chat de los negocios (AgentChat): estilo WhatsApp. */}
+          <div className="flex items-center justify-between px-3 py-2 shadow-sm" style={{ background: GREEN, color: PAL.onBrand }}>
             <div className="flex min-w-0 items-center gap-2">
-              <div className="-my-1 shrink-0">
-                <MascotSmart mood={loading ? 'thinking' : 'idle'} size={44} color={GREEN} />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95">
+                <MascotSmart mood={loading ? 'thinking' : 'idle'} size={40} color={GREEN} />
               </div>
               <div className="min-w-0">
-                <p className="truncate font-semibold">Alex · IaRadio</p>
-                <p className="truncate text-xs" style={{ color: MUTED }}>
-                  {loading ? 'escribiendo…' : 'Asistente · responde al instante'}
-                </p>
+                <p className="truncate text-[16px] font-semibold leading-tight">Alex · IaRadio</p>
+                <p className="truncate text-xs leading-tight opacity-80">{loading ? 'escribiendo…' : 'en línea'}</p>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Cerrar chat" className="rounded-full p-2" style={{ color: MUTED }}>
+            <button onClick={() => setOpen(false)} aria-label="Cerrar chat" className="rounded-full p-2 opacity-90">
               <X size={20} />
             </button>
           </div>
 
-          <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4">
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                style={{ animation: 'fadeUp 0.3s ease' }}
-              >
-                <div className={`flex max-w-[85%] flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  <div
-                    className="whitespace-pre-line rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed"
-                    style={
-                      msg.role === 'user'
-                        ? { background: GREEN, color: '#fff', borderBottomRightRadius: 6 }
-                        : { background: CARD, border: `1px solid ${BORDER}`, borderBottomLeftRadius: 6 }
-                    }
-                  >
-                    {msg.content}
+          <div
+            className="custom-scrollbar flex-1 overflow-y-auto overscroll-contain px-3 py-3"
+            style={{ background: PAL.wallpaper, backgroundImage: wallpaperPattern(PAL.doodle), backgroundSize: '160px 160px' }}
+          >
+            {messages.map((msg, i) => {
+              const mine = msg.role === 'user'
+              const first = i === 0 || messages[i - 1].role !== msg.role
+              const fill = mine ? PAL.outgoing : PAL.incoming
+              return (
+                <div
+                  key={i}
+                  className={`flex ${mine ? 'justify-end' : 'justify-start'} ${first ? 'mt-2.5' : 'mt-0.5'}`}
+                  style={{ animation: 'fadeUp 0.3s ease' }}
+                >
+                  <div className={`flex max-w-[85%] flex-col gap-1.5 ${mine ? 'items-end' : 'items-start'}`}>
+                    <div
+                      className="relative rounded-lg px-2.5 py-1.5 text-[15px] leading-snug shadow-sm"
+                      style={{
+                        background: fill,
+                        color: PAL.text,
+                        ...(first ? (mine ? { borderTopRightRadius: 0 } : { borderTopLeftRadius: 0 }) : {}),
+                      }}
+                    >
+                      {first && <BubbleTail side={mine ? 'right' : 'left'} fill={fill} />}
+                      <span className="whitespace-pre-line break-words">{msg.content}</span>
+                      <span className="float-right ml-2 mt-1.5 flex translate-y-0.5 items-center gap-0.5 text-[11px] leading-none" style={{ color: PAL.meta }}>
+                        {msg.at ? hhmm(msg.at) : ''}
+                        {mine && <CheckCheck size={15} style={{ color: PAL.ticks }} aria-label="Entregado" />}
+                      </span>
+                    </div>
+                    {msg.cards?.map((card) => (
+                      <ProductCardPreview key={card.url} card={card} />
+                    ))}
                   </div>
-                  {msg.cards?.map((card) => (
-                    <ProductCardPreview key={card.url} card={card} />
-                  ))}
                 </div>
-              </div>
-            ))}
+              )
+            })}
             {loading && (
-              <div className="flex justify-start">
-                <div className="rounded-2xl px-4 py-2.5 text-sm" style={{ background: CARD, color: MUTED }}>
-                  Escribiendo…
+              <div className="mt-2.5 flex justify-start">
+                <div
+                  className="relative flex items-center gap-1 rounded-lg px-3.5 py-3 shadow-sm"
+                  style={{ background: PAL.incoming, borderTopLeftRadius: 0 }}
+                  aria-label="Escribiendo…"
+                >
+                  <BubbleTail side="left" fill={PAL.incoming} />
+                  {[0, 1, 2].map((d) => (
+                    <span key={d} className="typing-dot h-2 w-2 rounded-full" style={{ background: PAL.meta, animationDelay: `${d * 160}ms` }} />
+                  ))}
                 </div>
               </div>
             )}
@@ -199,28 +223,28 @@ export default function ChatWidget() {
               e.preventDefault()
               void send()
             }}
-            className="flex items-center gap-2 p-3"
-            style={{ borderTop: `1px solid ${BORDER}` }}
+            className="flex items-center gap-1.5 px-2 py-2"
+            style={{ background: PAL.bar }}
           >
             <input
               ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Escribe tu mensaje…"
+              placeholder="Mensaje"
               disabled={loading}
               enterKeyHint="send"
-              className="min-w-0 flex-1 rounded-full bg-transparent px-4 py-3 text-base text-white outline-none placeholder:text-white/40 disabled:opacity-50"
-              style={{ border: `1px solid ${BORDER}` }}
+              className="min-w-0 flex-1 rounded-full px-4 py-3 text-base outline-none placeholder:text-white/40 disabled:opacity-50"
+              style={{ background: PAL.field, color: PAL.text }}
             />
             <button
               type="submit"
               disabled={loading || !input.trim()}
               aria-label="Enviar"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-95 disabled:opacity-50"
-              style={{ background: GREEN }}
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+              style={{ background: GREEN, color: PAL.onBrand }}
             >
-              <Send size={18} />
+              <Send size={19} />
             </button>
           </form>
         </div>

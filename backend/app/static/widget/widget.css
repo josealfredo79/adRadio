@@ -1,4 +1,5 @@
-/* IaRadio WhatsApp Widget */
+/* Widget de chat de IaRadio: con cara de WhatsApp (lo que el cliente ya sabe
+   usar) y el toque IaRadio: color del negocio y fondo con radios y micrófonos. */
 #iaradio-widget-btn {
   position: fixed;
   bottom: 24px;
@@ -54,7 +55,7 @@
 #iaradio-widget-header {
   background: var(--iaradio-color, #25D366);
   color: #fff;
-  padding: 16px 18px;
+  padding: 10px 14px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -63,7 +64,7 @@
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.25);
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,39 +76,95 @@
 #iaradio-widget-header .sub { font-size: 12px; opacity: 0.85; margin-top: 2px; }
 #iaradio-widget-body {
   padding: 0;
-  background: #f0f4f8;
+  background-color: #efeae2;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22160%22%20height%3D%22160%22%20viewBox%3D%220%200%20160%20160%22%20fill%3D%22none%22%20stroke%3D%22rgba%2817%2C27%2C33%2C0.07%29%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%2214%22%20y%3D%2222%22%20width%3D%2234%22%20height%3D%2222%22%20rx%3D%224%22/%3E%3Ccircle%20cx%3D%2225%22%20cy%3D%2233%22%20r%3D%225%22/%3E%3Cpath%20d%3D%22M36%2029h8M36%2035h8M20%2022l18-9%22/%3E%3Crect%20x%3D%22104%22%20y%3D%2212%22%20width%3D%2210%22%20height%3D%2217%22%20rx%3D%225%22/%3E%3Cpath%20d%3D%22M99%2025a10%2010%200%200%200%2020%200M109%2035v6%22/%3E%3Cpath%20d%3D%22M70%2070a10%2010%200%200%201%200%2014M76%2064a19%2019%200%200%201%200%2026M64%2070a10%2010%200%200%200%200%2014M58%2064a19%2019%200%200%200%200%2026%22/%3E%3Ccircle%20cx%3D%2267%22%20cy%3D%2277%22%20r%3D%222%22/%3E%3Cpath%20d%3D%22M128%2074v-14l12-3v14%22/%3E%3Ccircle%20cx%3D%22125%22%20cy%3D%2274%22%20r%3D%223%22/%3E%3Ccircle%20cx%3D%22137%22%20cy%3D%2271%22%20r%3D%223%22/%3E%3Cpath%20d%3D%22M30%20104l3%206%206%201-4.5%204.5%201%206.5-5.5-3-5.5%203%201-6.5L21%20111l6-1z%22/%3E%3Cpath%20d%3D%22M92%20112h24a5%205%200%200%201%205%205v10a5%205%200%200%201-5%205h-14l-7%206v-6h-3a5%205%200%200%201-5-5v-10a5%205%200%200%201%205-5z%22/%3E%3Cpath%20d%3D%22M140%20132c-3-4-9-2-9%203%200%204%209%209%209%209s9-5%209-9c0-5-6-7-9-3z%22/%3E%3Cpath%20d%3D%22M54%20140a6%206%200%200%201%2012%200M50%20140a10%2010%200%200%201%2020%200%22/%3E%3C/svg%3E");
+  background-size: 160px 160px;
   flex: 1;
   min-height: 0;
 }
 #iaradio-widget-messages {
-  padding: 16px 18px;
-  max-height: 320px;
+  padding: 12px 14px;
+  max-height: 340px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
+}
+.iaradio-notice {
+  align-self: center;
+  max-width: 90%;
+  margin-bottom: 8px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #fff3c4;
+  color: #54656f;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  box-shadow: 0 1px 1px rgba(0,0,0,0.08);
 }
 .iaradio-bubble {
+  position: relative;
+  align-self: flex-start;
   background: #fff;
-  border-radius: 0 12px 12px 12px;
-  padding: 10px 14px;
-  font-size: 14px;
-  color: #333;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-  max-width: 88%;
-  line-height: 1.4;
+  border-radius: 8px;
+  padding: 6px 9px 7px;
+  font-size: 14.5px;
+  color: #111b21;
+  box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+  max-width: 82%;
+  line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
 }
-.iaradio-bubble-user {
-  background: var(--iaradio-color, #25D366);
-  color: #fff;
-  border-radius: 12px 0 12px 12px;
-  align-self: flex-end;
+.iaradio-bubble.iaradio-first { margin-top: 8px; border-top-left-radius: 0; }
+.iaradio-bubble.iaradio-first::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -7px;
+  border-top: 0 solid transparent;
+  border-right: 8px solid #fff;
+  border-bottom: 10px solid transparent;
 }
-.iaradio-bubble-typing {
-  opacity: 0.6;
-  font-style: italic;
+.iaradio-bubble-user {
+  align-self: flex-end;
+  background: #e1dbff;
+  background: color-mix(in srgb, var(--iaradio-color, #7c3aed) 20%, #fff);
+}
+.iaradio-bubble-user.iaradio-first { border-top-left-radius: 8px; border-top-right-radius: 0; }
+.iaradio-bubble-user.iaradio-first::before {
+  left: auto;
+  right: -7px;
+  border-right: 0;
+  border-left: 8px solid #e1dbff;
+  border-left-color: color-mix(in srgb, var(--iaradio-color, #7c3aed) 20%, #fff);
+}
+.iaradio-time {
+  float: right;
+  margin: 6px 0 -4px 10px;
+  font-size: 11px;
+  line-height: 1;
+  color: #667781;
+  white-space: nowrap;
+}
+.iaradio-bubble-user .iaradio-time { color: #53bdeb; }
+.iaradio-typing { display: flex; gap: 4px; padding: 11px 13px; }
+.iaradio-typing i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8696a0;
+  animation: iaradio-dot 1.2s ease-in-out infinite;
+}
+.iaradio-typing i:nth-child(2) { animation-delay: .16s; }
+.iaradio-typing i:nth-child(3) { animation-delay: .32s; }
+@keyframes iaradio-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .iaradio-typing i { animation: none; opacity: .7; }
 }
 .iaradio-product-card {
   display: flex;
@@ -164,16 +221,17 @@
 #iaradio-widget-input-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  background: #fff;
-  border-top: 1px solid #eef1f4;
+  gap: 6px;
+  padding: 8px 8px;
+  background: #f0f2f5;
 }
 #iaradio-widget-input {
   flex: 1;
-  border: 1px solid #e2e6ea;
-  border-radius: 20px;
-  padding: 9px 14px;
+  border: 1px solid transparent;
+  background: #fff;
+  color: #111b21;
+  border-radius: 22px;
+  padding: 10px 14px;
   font-size: 14px;
   outline: none;
   font-family: inherit;
@@ -184,8 +242,8 @@
 }
 #iaradio-widget-send {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: none;
   background: var(--iaradio-color, #25D366);
@@ -200,7 +258,7 @@
 .hidden { display: none !important; }
 #iaradio-widget-lead {
   padding: 0 18px 10px;
-  background: #fff;
+  background: #f0f2f5;
 }
 #iaradio-widget-lead-toggle {
   width: 100%;
@@ -249,8 +307,8 @@
   margin: 0;
 }
 #iaradio-widget-footer {
-  padding: 8px 18px 14px;
-  background: #fff;
+  padding: 4px 18px 14px;
+  background: #f0f2f5;
 }
 #iaradio-widget-footer a {
   display: flex;
@@ -259,6 +317,7 @@
   gap: 8px;
   color: var(--iaradio-color, #25D366);
   border: 1px solid #e2e6ea;
+  background: #fff;
   border-radius: 10px;
   padding: 9px;
   text-decoration: none;

@@ -2,8 +2,10 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FaceMood } from '@/components/BotFace'
 import MascotSmart from '@/components/MascotSmart'
 import api from '@/lib/api'
-import { ArrowLeft, ClipboardList, Info, Mic, Send, ShoppingBag, Square, Volume2, VolumeX, X } from 'lucide-react'
-import type { SiteThemeDef } from '@/pages/publicSite/theme'
+import { ArrowLeft, CheckCheck, ClipboardList, Info, Mic, Send, ShoppingBag, Square, Volume2, VolumeX, X } from 'lucide-react'
+import { isDarkTheme, type SiteThemeDef } from '@/pages/publicSite/theme'
+import BubbleTail from '@/components/BubbleTail'
+import { chatPalette, dayLabel, hhmm, wallpaperPattern } from '@/lib/chatLook'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 
@@ -48,6 +50,8 @@ interface ChatTurn {
   fromOwner?: boolean
   // Aviso del sistema, no un mensaje (ej. "le llegó al negocio").
   note?: boolean
+  // Cuándo (ISO): la hora en la burbuja y las etiquetas "Hoy" / "Ayer".
+  at?: string
 }
 
 interface HistoryMessage {
@@ -184,7 +188,7 @@ export default function AgentChat({
       // Visitante de la página: sin historial, solo el saludo.
       const greeting = chatGreeting(business, customerName, false)
       // Sin repetirlo si el efecto corre dos veces (StrictMode en desarrollo).
-      setTurns((t) => (t[0]?.content === greeting ? t : [{ role: 'assistant', content: greeting }, ...t]))
+      setTurns((t) => (t[0]?.content === greeting ? t : [{ role: 'assistant', content: greeting, at: new Date().toISOString() }, ...t]))
       setHistoryLoaded(true)
       return () => {
         alive = false
@@ -206,10 +210,10 @@ export default function AgentChat({
         const last = msgs[msgs.length - 1]?.at
         const stale = !last || Date.now() - new Date(last).getTime() > GREET_AGAIN_AFTER_MS
         const greeting: ChatTurn[] = stale
-          ? [{ role: 'assistant', content: chatGreeting(business, customerName, msgs.length > 0) }]
+          ? [{ role: 'assistant', content: chatGreeting(business, customerName, msgs.length > 0), at: new Date().toISOString() }]
           : []
         setTurns((t) => [
-          ...msgs.map((m) => ({ role: m.role, content: m.content, fromOwner: m.from_owner })),
+          ...msgs.map((m) => ({ role: m.role, content: m.content, fromOwner: m.from_owner, at: m.at ?? undefined })),
           ...greeting,
           ...t,
         ])
@@ -231,7 +235,7 @@ export default function AgentChat({
           // Lo demás (lo que escribió el cliente y lo que contestó el bot) ya está en pantalla.
           const owner = msgs.filter((m) => m.from_owner)
           if (owner.length)
-            setTurns((t) => [...t, ...owner.map((m) => ({ role: 'assistant' as const, content: m.content, fromOwner: true }))])
+            setTurns((t) => [...t, ...owner.map((m) => ({ role: 'assistant' as const, content: m.content, fromOwner: true, at: m.at ?? undefined }))])
         })
         .catch(() => {})
     }, OWNER_REPLY_POLL_MS)
@@ -253,7 +257,7 @@ export default function AgentChat({
     if (text === undefined) setInput('')
     setSentHere(true)
     onEvent?.('message')
-    setTurns((t) => [...t, { role: 'user', content: message }])
+    setTurns((t) => [...t, { role: 'user', content: message, at: new Date().toISOString() }])
     setSending(true)
     try {
       const sessionId = await sessionRef.current
@@ -276,6 +280,7 @@ export default function AgentChat({
         {
           role: 'assistant',
           content: reply,
+          at: new Date().toISOString(),
           cards: r.data.cards ?? [],
           needsContact: !!r.data.needs_contact,
           confirm: !!r.data.confirm,
@@ -336,10 +341,12 @@ export default function AgentChat({
         ? 'speaking'
         : (reaction ?? 'idle')
 
+  const pal = chatPalette(color, isDarkTheme(theme))
+
   return (
     <div
       className={screen ? 'fixed inset-0 z-30 flex justify-center' : 'fixed inset-0 z-30 flex items-end justify-center sm:items-center'}
-      style={screen ? { background: theme.bg } : undefined}
+      style={screen ? { background: pal.wallpaper } : undefined}
       onClick={screen ? undefined : onClose}
     >
       {/* El fondo se oscurece aparte: si la hoja viviera dentro del mismo
@@ -351,64 +358,61 @@ export default function AgentChat({
             ? 'relative flex h-[100dvh] w-full max-w-lg flex-col overflow-hidden'
             : 'anim-sheet h-sheet relative flex w-full max-w-lg flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl'
         }
-        style={{ background: theme.bg, color: theme.text, border: screen ? undefined : `1px solid ${theme.cardBorder}` }}
+        style={{ background: pal.wallpaper, color: pal.text }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Encabezado como el de WhatsApp, en el color del negocio. */}
         <div
-          className={`flex items-center justify-between ${screen ? 'px-2' : 'px-5'} py-3`}
+          className={`flex items-center justify-between ${screen ? 'px-1.5' : 'px-3'} py-2 shadow-sm`}
           style={{
-            borderBottom: `1px solid ${theme.cardBorder}`,
-            paddingTop: screen ? 'max(0.75rem, env(safe-area-inset-top, 0px))' : undefined,
+            background: color,
+            color: pal.onBrand,
+            paddingTop: screen ? 'max(0.5rem, env(safe-area-inset-top, 0px))' : undefined,
           }}
         >
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
             {screen && (
-              <button onClick={onClose} aria-label="Atrás" className="press shrink-0 rounded-full p-2" style={{ color: theme.text }}>
+              <button onClick={onClose} aria-label="Atrás" className="press shrink-0 rounded-full p-1.5">
                 <ArrowLeft size={22} />
               </button>
             )}
-            {/* La mascota acompaña la plática: piensa mientras busca, se alegra al confirmar.
+            {/* La mascota es la foto de perfil: piensa mientras busca, se alegra al confirmar.
                 En modo voz sale grande abajo, así que aquí se quita. */}
             {!voiceMode && (
-              <div className="-my-1 shrink-0">
-                <MascotSmart mood={mood} size={44} color={color} allow3d={mascot3d} />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95">
+                <MascotSmart mood={mood} size={40} color={color} allow3d={mascot3d} />
               </div>
             )}
             <button
               type="button"
               onClick={screen ? onInfo : undefined}
               disabled={!screen || !onInfo}
-              className="min-w-0 text-left"
+              className="min-w-0 pl-1 text-left"
             >
-              <p className="truncate font-semibold">{screen ? business.name : business.agent}</p>
-              <p className="truncate text-xs" style={{ color: theme.muted }}>
-                {screen
-                  ? sending
-                    ? 'escribiendo…'
-                    : `${business.agent} · responde al instante`
-                  : `${business.name} · responde al instante`}
+              <p className="truncate text-[16px] font-semibold leading-tight">{screen ? business.name : business.agent}</p>
+              <p className="truncate text-xs leading-tight opacity-80">
+                {sending ? 'escribiendo…' : screen ? `${business.agent} · en línea` : `${business.name} · en línea`}
               </p>
             </button>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center">
             {voiceMode && (
               <button
                 onClick={() => speaker.setMuted(!speaker.muted)}
                 aria-label={speaker.muted ? 'Activar la voz' : 'Silenciar la voz'}
-                className="rounded-full p-2"
-                style={{ color: theme.muted }}
+                className="rounded-full p-2 opacity-90"
               >
                 {speaker.muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
               </button>
             )}
             {screen ? (
               onInfo && (
-                <button onClick={onInfo} aria-label={`Info de ${business.name}`} className="press rounded-full p-2" style={{ color: theme.muted }}>
+                <button onClick={onInfo} aria-label={`Info de ${business.name}`} className="press rounded-full p-2 opacity-90">
                   <Info size={22} />
                 </button>
               )
             ) : (
-              <button onClick={onClose} aria-label="Cerrar chat" className="rounded-full p-2" style={{ color: theme.muted }}>
+              <button onClick={onClose} aria-label="Cerrar chat" className="rounded-full p-2 opacity-90">
                 <X size={20} />
               </button>
             )}
@@ -425,112 +429,144 @@ export default function AgentChat({
           </div>
         )}
 
-        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4">
-          {turns.map((t, i) =>
-            t.note ? (
-              <p key={i} className="anim-bubble mx-auto max-w-[85%] text-center text-xs" style={{ color: theme.muted }}>
-                {t.content}
-              </p>
-            ) : (
-            <div key={i} className={i >= historyCount ? 'anim-bubble' : undefined}>
-              {t.fromOwner && (
-                <p className="mb-1 text-xs font-semibold" style={{ color }}>
-                  {business.name} te respondió
-                </p>
-              )}
-              <div className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className="max-w-[85%] whitespace-pre-line rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed"
-                  style={
-                    t.role === 'user'
-                      ? { background: color, color: '#fff', borderBottomRightRadius: 6 }
-                      : { background: theme.cardBg, border: `1px solid ${theme.cardBorder}`, borderBottomLeftRadius: 6 }
-                  }
-                >
-                  {renderChatText(t.content)}
-                </div>
-              </div>
-              {t.confirm && i === turns.length - 1 && !sending && (
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={() => void send('Sí, confírmalo')}
-                    className="press rounded-full px-4 py-2 text-sm font-semibold text-white"
-                    style={{ background: color }}
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto overscroll-contain px-3 py-3"
+          style={{ backgroundImage: wallpaperPattern(pal.doodle), backgroundSize: '160px 160px' }}
+        >
+          {/* El toque IaRadio: como el aviso amarillo de WhatsApp, pero diciendo lo que vale este chat. */}
+          <p
+            className="mx-auto mb-3 max-w-[88%] rounded-lg px-3 py-1.5 text-center text-[12.5px] leading-snug shadow-sm"
+            style={{ background: pal.notice, color: pal.noticeText }}
+          >
+            📻 Chat de {business.name} con IaRadio: te contestan al instante y no gasta tus datos de WhatsApp.
+          </p>
+          {turns.map((t, i) => {
+            const prev = turns[i - 1]
+            const day = t.at ? dayLabel(t.at) : null
+            const prevDay = prev?.at ? dayLabel(prev.at) : null
+            const showDay = !!day && day !== prevDay
+            const firstOfGroup = showDay || !prev || prev.role !== t.role || !!prev.note || prev.fromOwner !== t.fromOwner
+            const mine = t.role === 'user'
+            return (
+              <div key={i} className={i >= historyCount ? 'anim-bubble' : undefined}>
+                {showDay && (
+                  <p
+                    className="mx-auto my-3 w-fit rounded-lg px-3 py-1 text-xs font-medium shadow-sm"
+                    style={{ background: pal.incoming, color: pal.meta }}
                   >
-                    Sí, confírmalo
-                  </button>
-                  <button
-                    onClick={() => void send('No, gracias')}
-                    className="press rounded-full px-4 py-2 text-sm font-semibold"
-                    style={{ border: `1px solid ${theme.cardBorder}`, color: theme.text }}
+                    {day}
+                  </p>
+                )}
+                {t.note ? (
+                  <p
+                    className="mx-auto my-2 w-fit max-w-[85%] rounded-lg px-3 py-1 text-center text-xs shadow-sm"
+                    style={{ background: pal.notice, color: pal.noticeText }}
                   >
-                    No
-                  </button>
-                </div>
-              )}
-              {t.needsContact && (joinPath || whatsappHref) && (
-                <a
-                  href={joinPath || whatsappHref}
-                  target={joinPath ? undefined : '_blank'}
-                  onClick={() => { if (!joinPath) onEvent?.('whatsapp') }}
-                  rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white"
-                  style={{ background: color }}
-                >
-                  <ClipboardList size={16} /> {joinPath ? 'Dejar mis datos (te llega un código)' : 'Seguir por WhatsApp'}
-                </a>
-              )}
-              {/* Productos que mencionó el bot: foto, precio y "Lo quiero" */}
-              {t.cards && t.cards.length > 0 && (
-                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                  {t.cards.map((c) => (
-                    <div
-                      key={c.url}
-                      className="w-36 shrink-0 overflow-hidden rounded-2xl"
-                      style={{ background: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}
-                    >
-                      <a href={c.url} target="_blank" rel="noopener noreferrer">
-                        {c.photo_url ? (
-                          <img src={c.photo_url} alt={c.name} className="h-24 w-full object-cover" loading="lazy" />
-                        ) : (
-                          <div className="flex h-24 items-center justify-center" style={{ color: theme.muted }}>
-                            <ShoppingBag size={28} />
-                          </div>
+                    {t.content}
+                  </p>
+                ) : (
+                  <div className={firstOfGroup ? 'mt-2.5' : 'mt-0.5'}>
+                    <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className="relative max-w-[82%] rounded-lg px-2.5 pb-1.5 pt-1.5 text-[15px] leading-snug shadow-sm"
+                        style={{
+                          background: mine ? pal.outgoing : pal.incoming,
+                          color: pal.text,
+                          ...(firstOfGroup ? (mine ? { borderTopRightRadius: 0 } : { borderTopLeftRadius: 0 }) : {}),
+                        }}
+                      >
+                        {firstOfGroup && <BubbleTail side={mine ? 'right' : 'left'} fill={mine ? pal.outgoing : pal.incoming} />}
+                        {t.fromOwner && firstOfGroup && (
+                          <p className="mb-0.5 text-[13px] font-semibold" style={{ color: pal.accent }}>
+                            {business.name} en persona
+                          </p>
                         )}
-                      </a>
-                      <div className="p-2.5">
-                        <p className="line-clamp-2 text-sm font-semibold leading-snug">{c.name}</p>
-                        {c.price && <p className="text-sm" style={{ color: theme.muted }}>{c.price}</p>}
-                        <button
-                          onClick={() => void send(`Quiero ${c.name}`)}
-                          disabled={sending}
-                          className="mt-2 w-full rounded-full py-1.5 text-sm font-semibold text-white disabled:opacity-50"
-                          style={{ background: color }}
-                        >
-                          Lo quiero
-                        </button>
+                        <span className="whitespace-pre-line break-words">{renderChatText(t.content)}</span>
+                        {/* Hora y palomitas abajo a la derecha, como en WhatsApp. */}
+                        <span className="float-right ml-2 mt-1.5 flex translate-y-0.5 items-center gap-0.5 text-[11px] leading-none" style={{ color: pal.meta }}>
+                          {t.at ? hhmm(t.at) : ''}
+                          {mine && <CheckCheck size={15} style={{ color: pal.ticks }} aria-label="Entregado" />}
+                        </span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    {t.confirm && i === turns.length - 1 && !sending && (
+                      <div className="mt-1.5 flex gap-2">
+                        <button
+                          onClick={() => void send('Sí, confírmalo')}
+                          className="press rounded-full px-4 py-2 text-sm font-semibold shadow-sm"
+                          style={{ background: color, color: pal.onBrand }}
+                        >
+                          Sí, confírmalo
+                        </button>
+                        <button
+                          onClick={() => void send('No, gracias')}
+                          className="press rounded-full px-4 py-2 text-sm font-semibold shadow-sm"
+                          style={{ background: pal.incoming, color: pal.text }}
+                        >
+                          No
+                        </button>
+                      </div>
+                    )}
+                    {t.needsContact && (joinPath || whatsappHref) && (
+                      <a
+                        href={joinPath || whatsappHref}
+                        target={joinPath ? undefined : '_blank'}
+                        onClick={() => { if (!joinPath) onEvent?.('whatsapp') }}
+                        rel="noreferrer"
+                        className="mt-1.5 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-sm"
+                        style={{ background: color, color: pal.onBrand }}
+                      >
+                        <ClipboardList size={16} /> {joinPath ? 'Dejar mis datos (te llega un código)' : 'Seguir por WhatsApp'}
+                      </a>
+                    )}
+                    {/* Productos que mencionó el bot: foto, precio y "Lo quiero" */}
+                    {t.cards && t.cards.length > 0 && (
+                      <div className="mt-1.5 flex gap-2 overflow-x-auto pb-1">
+                        {t.cards.map((c) => (
+                          <div key={c.url} className="w-36 shrink-0 overflow-hidden rounded-lg shadow-sm" style={{ background: pal.incoming }}>
+                            <a href={c.url} target="_blank" rel="noopener noreferrer">
+                              {c.photo_url ? (
+                                <img src={c.photo_url} alt={c.name} className="h-24 w-full object-cover" loading="lazy" />
+                              ) : (
+                                <div className="flex h-24 items-center justify-center" style={{ color: pal.meta }}>
+                                  <ShoppingBag size={28} />
+                                </div>
+                              )}
+                            </a>
+                            <div className="p-2.5">
+                              <p className="line-clamp-2 text-sm font-semibold leading-snug">{c.name}</p>
+                              {c.price && <p className="text-sm" style={{ color: pal.meta }}>{c.price}</p>}
+                              <button
+                                onClick={() => void send(`Quiero ${c.name}`)}
+                                disabled={sending}
+                                className="mt-2 w-full rounded-full py-1.5 text-sm font-semibold disabled:opacity-50"
+                                style={{ background: color, color: pal.onBrand }}
+                              >
+                                Lo quiero
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             )
-          )}
+          })}
           {historyLoaded && !sentHere && (
-            <div className="mx-auto mt-2 max-w-sm text-center">
-              <p className="text-sm" style={{ color: theme.muted }}>
-                {micAvailable
-                  ? 'Pregúntame lo que quieras: escríbeme o toca el micrófono y háblame.'
-                  : 'Pregúntame lo que quieras: precios, horarios, agendar o hacer un pedido.'}
+            <div className="mx-auto mt-4 max-w-sm text-center">
+              <p className="mx-auto w-fit rounded-lg px-3 py-1 text-xs shadow-sm" style={{ background: pal.incoming, color: pal.meta }}>
+                {micAvailable ? 'Escríbeme o toca el micrófono y háblame 🎙️' : 'Pregúntame precios, horarios, citas o pedidos'}
               </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
                 {QUICK_ASKS.map((q) => (
                   <button
                     key={q}
                     onClick={() => void send(q)}
-                    className="press rounded-full px-3.5 py-2 text-sm"
-                    style={{ border: `1px solid ${theme.cardBorder}`, color: theme.text }}
+                    className="press rounded-full px-3.5 py-2 text-sm font-medium shadow-sm"
+                    style={{ background: pal.incoming, color: pal.accent }}
                   >
                     {q}
                   </button>
@@ -539,9 +575,20 @@ export default function AgentChat({
             </div>
           )}
           {sending && (
-            <div className="flex justify-start">
-              <div className="rounded-2xl px-4 py-2.5 text-sm" style={{ background: theme.cardBg, color: theme.muted }}>
-                {voiceMode ? 'Pensando…' : 'Escribiendo…'}
+            <div className="mt-2.5 flex justify-start">
+              <div
+                className="relative flex items-center gap-1 rounded-lg px-3.5 py-3 shadow-sm"
+                style={{ background: pal.incoming, borderTopLeftRadius: 0 }}
+                aria-label={voiceMode ? 'Pensando…' : 'Escribiendo…'}
+              >
+                <BubbleTail side="left" fill={pal.incoming} />
+                {[0, 1, 2].map((d) => (
+                  <span
+                    key={d}
+                    className="typing-dot h-2 w-2 rounded-full"
+                    style={{ background: pal.meta, animationDelay: `${d * 160}ms` }}
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -552,25 +599,27 @@ export default function AgentChat({
             e.preventDefault()
             void send(undefined, false)
           }}
-          className="flex items-center gap-2 p-3"
+          className="flex items-center gap-1.5 px-2 pt-2"
           style={{
-            borderTop: `1px solid ${theme.cardBorder}`,
+            background: pal.bar,
             // Arriba de la barra de inicio del iPhone cuando está instalada como app.
-            paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))',
+            paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))',
           }}
         >
           {recording ? (
-            <p className="flex-1 px-2 text-[15px]" style={{ color: theme.muted }}>Te escucho… toca el cuadro rojo al terminar</p>
+            <p className="flex-1 rounded-full px-4 py-3 text-[15px]" style={{ background: pal.field, color: pal.meta }}>
+              🔴 Te escucho… toca el cuadro al terminar
+            </p>
           ) : (
             <input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               maxLength={500}
-              placeholder="Escribe tu mensaje…"
+              placeholder="Mensaje"
               enterKeyHint="send"
-              className="min-w-0 flex-1 rounded-full bg-transparent px-4 py-3 text-base outline-none"
-              style={{ border: `1px solid ${theme.cardBorder}`, color: theme.text }}
+              className="min-w-0 flex-1 rounded-full px-4 py-3 text-base outline-none"
+              style={{ background: pal.field, color: pal.text }}
             />
           )}
           {micAvailable && !input.trim() ? (
@@ -579,20 +628,20 @@ export default function AgentChat({
               onClick={() => void (recording ? stopRecording() : startRecording())}
               disabled={sending}
               aria-label={recording ? 'Terminar de hablar' : 'Hablar'}
-              className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-50"
-              style={{ background: recording ? '#f43f5e' : color }}
+              className="press flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-sm disabled:opacity-50"
+              style={{ background: recording ? '#f43f5e' : color, color: recording ? '#fff' : pal.onBrand }}
             >
-              {recording ? <Square size={16} fill="currentColor" /> : <Mic size={20} />}
+              {recording ? <Square size={16} fill="currentColor" /> : <Mic size={21} />}
             </button>
           ) : (
             <button
               type="submit"
               disabled={!input.trim() || sending}
               aria-label="Enviar"
-              className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-50"
-              style={{ background: color }}
+              className="press flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-sm disabled:opacity-50"
+              style={{ background: color, color: pal.onBrand }}
             >
-              <Send size={18} />
+              <Send size={19} />
             </button>
           )}
         </form>

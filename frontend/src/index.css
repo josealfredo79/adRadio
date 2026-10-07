@@ -110,6 +110,12 @@
 }
 .anim-bubble { animation: bubble-in 220ms var(--ease-out) both; }
 .anim-stamp { animation: stamp-in 480ms var(--ease-out) both; }
+/* Los tres puntos de "escribiendo…" del chat web (como en WhatsApp). */
+.typing-dot { animation: typing-dot 1.2s ease-in-out infinite; }
+@keyframes typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
 .press {
   transition: transform 160ms var(--ease-out);
 }
@@ -119,6 +125,7 @@
 @media (prefers-reduced-motion: reduce) {
   /* Menos movimiento, no cero: se queda el desvanecido, se va el desplazamiento. */
   .anim-sheet, .anim-bubble, .anim-stamp { animation: fade-in 150ms ease-out both; }
+  .typing-dot { animation: none; opacity: .7; }
   .press:active { transform: none; }
 }
 
