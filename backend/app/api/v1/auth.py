@@ -36,7 +36,6 @@ from app.schemas.auth import (
     VerifyEmailRequest,
 )
 from app.services.analytics_service import capture_event, identify_user
-from app.services.demo_data_service import seed_demo_data
 
 logger = logging.getLogger(__name__)
 
@@ -119,9 +118,6 @@ async def verify_email(
         user.messages_remaining = 50
         user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)
     await db.commit()
-
-    # Seed demo data so dashboard is not empty
-    await seed_demo_data(user.id, user.business_name or "Mi negocio", db)
 
     await redis.delete(f"email_verify:{body.email}")
 

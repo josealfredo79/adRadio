@@ -416,39 +416,6 @@ class TestBotConversation:
         assert is_order_status("Hola qué tal") is False
 
 
-class TestDemoDataService:
-    """Tests para el servicio de datos demo."""
-
-    @pytest.mark.asyncio
-    async def test_seed_demo_data_creates_contacts(self):
-        from app.models.campaign import Campaign
-        from app.models.contact import Contact
-        from app.models.knowledge_base import KnowledgeBase
-        from app.services.demo_data_service import seed_demo_data
-
-        db = AsyncMock()
-        db.add = MagicMock()
-        db.commit = AsyncMock()
-        db.rollback = AsyncMock()
-
-        adv_id = uuid.uuid4()
-        await seed_demo_data(adv_id, "Mi Negocio", db)
-
-        # Verify 3 contacts added
-        contact_calls = [c for c in db.add.call_args_list if isinstance(c[0][0], Contact)]
-        assert len(contact_calls) == 3
-
-        # Verify 1 campaign
-        campaign_calls = [c for c in db.add.call_args_list if isinstance(c[0][0], Campaign)]
-        assert len(campaign_calls) == 1
-
-        # Verify 1 KB entry
-        kb_calls = [c for c in db.add.call_args_list if isinstance(c[0][0], KnowledgeBase)]
-        assert len(kb_calls) == 1
-
-        db.commit.assert_awaited_once()
-
-
 class TestMessageQuota:
     """Tests para verificación de cuota de mensajes."""
 
