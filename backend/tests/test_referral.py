@@ -75,7 +75,7 @@ async def test_friend_who_joins_with_the_link_gives_a_stamp_once():
 
 @pytest.mark.asyncio
 async def test_no_stamp_for_yourself_or_for_another_business():
-    uid, slug = await _seed()
+    uid, _slug = await _seed()
     other_uid, other_slug = await _seed()
     redis = MemRedis()
     try:

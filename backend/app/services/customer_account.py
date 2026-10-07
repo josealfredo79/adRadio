@@ -115,6 +115,20 @@ async def issue_code(redis, phone: str) -> str:
         await redis.expire(day_key, 24 * 3600)
     if sent_today > CODE_DAILY_MAX:
         raise CodeError("Ya pediste muchos códigos hoy. Intenta mañana.")
+    # Tope para TODO el número central (/mi + QR de todos los negocios): bots
+    # rotando IPs y números al azar le mandarían códigos a desconocidos — cada
+    # uno cobrado, y si los reportan, Meta baja la calidad del número central.
+    global_key = f"otp_global:{time.strftime('%Y-%m-%d')}"
+    global_today = await redis.incr(global_key)
+    if global_today == 1:
+        await redis.expire(global_key, 24 * 3600)
+    if global_today > settings.OTP_GLOBAL_DAILY_MAX:
+        if global_today == settings.OTP_GLOBAL_DAILY_MAX + 1:
+            logger.critical(
+                "[OTP] Tope global de códigos del día alcanzado (%s): posible ataque de bots, se frenan los envíos",
+                settings.OTP_GLOBAL_DAILY_MAX,
+            )
+        raise CodeError("Por ahora no podemos mandar códigos. Intenta en unas horas.")
     code = f"{secrets.randbelow(10**6):06d}"
     await redis.set(f"otp:{phone}", _code_hash(phone, code), ex=CODE_TTL_SECONDS)
     await redis.set(f"otp_tries:{phone}", "0", ex=CODE_TTL_SECONDS)

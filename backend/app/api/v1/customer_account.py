@@ -12,6 +12,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.bot_guard import is_honeypot_hit
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
@@ -79,7 +80,7 @@ async def request_code(
         raise HTTPException(status_code=400, detail="Escribe tu número de WhatsApp a 10 dígitos")
     redis = _need_redis(redis)
     # Solo se gasta un WhatsApp (lo cobra Meta) si de verdad es cliente de alguien.
-    if not await _contacts_for(db, phone):
+    if is_honeypot_hit(body, request, "account_code") or not await _contacts_for(db, phone):
         return {"message": CODE_SENT}
     try:
         code = await issue_code(redis, phone)

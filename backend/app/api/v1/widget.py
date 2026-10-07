@@ -77,6 +77,42 @@ async def get_widget_snippet(
     return {"snippet": snippet}
 
 
+ANON_SESSION_MAX_MESSAGES = 60
+ANON_LIMIT_REPLY = (
+    "Ahora mismo tenemos muchísimas consultas 🙏 Déjanos tus datos o escríbenos "
+    "por WhatsApp y te atendemos en cuanto podamos."
+)
+
+
+async def _anon_chat_over_limit(redis, advertiser_id, session_id: str, *, new_session: bool) -> bool:
+    """Si Redis falla o responde raro, no se bloquea a nadie (mejor dejar pasar
+    a un bot que cerrarle el chat a un cliente real)."""
+    try:
+        return await _anon_chat_counts(redis, advertiser_id, session_id, new_session=new_session)
+    except Exception:
+        logger.warning("[BOT] anon chat limit check failed", exc_info=True)
+        return False
+
+
+async def _anon_chat_counts(redis, advertiser_id, session_id: str, *, new_session: bool) -> bool:
+    import time as _time
+
+    if new_session:
+        day_key = f"webchat_anon:{advertiser_id}:{_time.strftime('%Y-%m-%d')}"
+        started = int(await redis.incr(day_key))
+        if started == 1:
+            await redis.expire(day_key, 24 * 3600)
+        if started > settings.WEB_ANON_CHATS_DAILY_MAX:
+            if started == settings.WEB_ANON_CHATS_DAILY_MAX + 1:
+                logger.warning("[BOT] negocio %s llegó al tope de chats anónimos del día", advertiser_id)
+            return True
+    sess_key = f"webchat_anon_msgs:{advertiser_id}:{session_id}"
+    sent = int(await redis.incr(sess_key))
+    if sent == 1:
+        await redis.expire(sess_key, 24 * 3600)
+    return sent > ANON_SESSION_MAX_MESSAGES
+
+
 @router.post("/chat/{advertiser_id}")
 @limiter.limit("15/minute")
 async def widget_chat(
@@ -122,6 +158,11 @@ async def widget_chat(
                 history = json.loads(raw)
             except json.JSONDecodeError:
                 history = []
+        # Contra bots: cada mensaje llama a la IA (cuesta y gasta la cuota de
+        # conversaciones del negocio). Tope de chats anónimos nuevos al día por
+        # negocio y de mensajes por chat. Los clientes verificados no cuentan.
+        if await _anon_chat_over_limit(redis, advertiser_id, session_id, new_session=not raw):
+            return {"reply": ANON_LIMIT_REPLY, "session_id": session_id, "cards": []}
 
     if contact is not None:
         from app.services.web_conversation import log_turns, open_conversation
@@ -280,6 +321,11 @@ async def widget_capture_lead(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    from app.core.bot_guard import is_honeypot_hit
+
+    if is_honeypot_hit(body, request, "widget_lead"):
+        return {"message": "ok", "session_id": body.get("session_id") or str(uuid_module.uuid4())}
+
     result = await db.execute(select(User).where(User.id == advertiser_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -306,7 +352,11 @@ async def widget_capture_lead(
             "session_id": body.get("session_id") or str(uuid_module.uuid4()),
         }
     if not contact:
-        contact = Contact(advertiser_id=advertiser_id, name=name, phone=phone, source="widget")
+        # Número sin verificar (cualquiera puede escribir uno ajeno, o un bot
+        # inventarlo): sin consentimiento confirmado no recibe campañas en frío
+        # hasta que escriba por WhatsApp (campaign_ops / inbound_pipeline).
+        contact = Contact(advertiser_id=advertiser_id, name=name, phone=phone, source="widget",
+                          consent_status="unconfirmed")
         db.add(contact)
         await db.flush()
 

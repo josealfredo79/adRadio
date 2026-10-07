@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     # mes por número y luego la tarifa del país del cliente (México: USD
     # 0.0085 ≈ $0.16). Solo para calcularle al dueño cuánto le ahorra la web.
     META_FREE_SERVICE_MESSAGES: int = 1000
+    # Seguridad contra bots: tope de códigos por WhatsApp al día para todo el
+    # número central, y de chats anónimos (sin número verificado) al día por negocio.
+    OTP_GLOBAL_DAILY_MAX: int = 300
+    WEB_ANON_CHATS_DAILY_MAX: int = 300
     META_SERVICE_PRICE_MXN: float = 0.16
 
     # Notificaciones web (Web Push, estándar VAPID) para los clientes que las

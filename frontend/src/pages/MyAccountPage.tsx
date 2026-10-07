@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import Honeypot from '@/components/Honeypot'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 import { useNativeViewport } from '@/lib/useNativeViewport'
@@ -135,6 +136,7 @@ export default function MyAccountPage() {
 function Login({ onToken }: { onToken: (t: string) => void }) {
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
+  const [trap, setTrap] = useState('')
   const [step, setStep] = useState<'phone' | 'code'>('phone')
   const [busy, setBusy] = useState(false)
   const [info, setInfo] = useState<string | null>(null)
@@ -144,7 +146,7 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
     setBusy(true)
     setError(null)
     try {
-      const { data } = await api.post('/public/me/code', { phone })
+      const { data } = await api.post('/public/me/code', { phone, website: trap })
       setInfo(data.message)
       setStep('code')
     } catch (err) {
@@ -184,6 +186,7 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
           void (step === 'phone' ? askCode() : verify())
         }}
       >
+        <Honeypot value={trap} onChange={setTrap} />
         <label className="block text-sm text-white/60">Tu número de WhatsApp</label>
         <input
           type="tel"

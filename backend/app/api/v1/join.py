@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.bot_guard import is_honeypot_hit
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
@@ -101,6 +102,8 @@ async def join_code(
     user = await _business(db, slug)
     _clean_name(body.get("name"))
     phone = _phone(body.get("phone"))
+    if is_honeypot_hit(body, request, "join_code"):
+        return {"message": "Te mandamos un código por WhatsApp."}
     day_key = f"join_codes:{user.id}:{time.strftime('%Y-%m-%d')}"
     if await redis.incr(day_key) > BUSINESS_DAILY_CODES:
         raise HTTPException(status_code=429, detail="Intenta más tarde.")

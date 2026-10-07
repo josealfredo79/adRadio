@@ -44,6 +44,8 @@
       '<form id="iaradio-widget-lead-form" class="hidden">' +
         '<input id="iaradio-widget-lead-name" type="text" placeholder="Tu nombre" autocomplete="name" />' +
         '<input id="iaradio-widget-lead-phone" type="tel" placeholder="Tu teléfono (con código de país)" autocomplete="tel" />' +
+        // Campo trampa para bots (backend: app/core/bot_guard.py): fuera de la pantalla.
+        '<input id="iaradio-widget-lead-website" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-10000px;width:1px;height:1px;opacity:0" />' +
         '<button type="submit">Enviar mis datos</button>' +
         '<p id="iaradio-widget-lead-error" class="hidden"></p>' +
       '</form>' +
@@ -109,7 +111,12 @@
     fetch(apiBase + '/widget/lead/' + advertiserId, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, phone: _formatPhone(phone), session_id: sessionId }),
+      body: JSON.stringify({
+        name: name,
+        phone: _formatPhone(phone),
+        session_id: sessionId,
+        website: (popup.querySelector('#iaradio-widget-lead-website') || {}).value || '',
+      }),
     })
       .then(function (res) {
         if (!res.ok) return res.json().then(function (d) { throw new Error(d.detail || 'Error'); });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { captureRef, readRef } from '@/lib/referral'
+import Honeypot from '@/components/Honeypot'
 import { useQuery } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
@@ -31,6 +32,7 @@ export default function JoinPage() {
     retry: false,
   })
   const [name, setName] = useState('')
+  const [trap, setTrap] = useState('')
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [step, setStep] = useState<'form' | 'code'>('form')
@@ -53,7 +55,7 @@ export default function JoinPage() {
     setBusy(true)
     setError(null)
     try {
-      await api.post(`/public/join/${slug}/code`, { name, phone })
+      await api.post(`/public/join/${slug}/code`, { name, phone, website: trap })
       setStep('code')
     } catch (err) {
       setError(getApiError(err, 'No se pudo mandar el código'))
@@ -132,6 +134,7 @@ export default function JoinPage() {
                   void (step === 'form' ? askCode() : verify())
                 }}
               >
+                <Honeypot value={trap} onChange={setTrap} />
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
