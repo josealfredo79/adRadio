@@ -176,8 +176,10 @@ async def test_webhook_passes_voice_and_photo_to_the_owner_flow():
         assert hom.call_args.kwargs["text"] == "tinte a 450" and hom.call_args.kwargs["voice"] is False
 
 
-async def _webhook(monkeypatch, *, bot_on_number: bool, owners: set[str]):
-    """Mensajes al número central: uno de un dueño registrado y uno de alguien más."""
+async def _webhook(monkeypatch, *, bot_on_number: bool, owners: set[str], customers: dict[str, str] | None = None):
+    """Mensajes al número central: uno de un dueño registrado y uno de alguien
+    más. `customers`: número → respuesta de redirección (cliente de un negocio)."""
+    customers = customers or {}
     from unittest.mock import MagicMock
 
     from starlette.requests import Request
@@ -208,19 +210,33 @@ async def _webhook(monkeypatch, *, bot_on_number: bool, owners: set[str]):
         patch.object(mi, "_validate_signature", AsyncMock(return_value=True)),
         patch.object(mi, "is_registered_owner", AsyncMock(side_effect=lambda _db, n: n in owners)),
         patch.object(mi, "_handle_platform_message", AsyncMock()) as hpm,
+        patch.object(mi, "customer_redirect_reply", AsyncMock(side_effect=lambda _db, n, **_: customers.get(n))),
+        patch.object(mi, "send_platform_text", AsyncMock(return_value=("wamid", None))) as spt,
     ):
         await mi.meta_incoming.__wrapped__(request, db=db)
-    return hpm, db
+    return hpm, db, spt
 
 
 async def test_central_number_owner_gets_copilot_and_others_get_the_bot(monkeypatch):
-    hpm, db = await _webhook(monkeypatch, bot_on_number=True, owners={"+5215511111111"})
+    hpm, db, spt = await _webhook(monkeypatch, bot_on_number=True, owners={"+5215511111111"})
     assert [c.args[1]["id"] for c in hpm.call_args_list] == ["w1"]
     # El otro mensaje siguió al pipeline del bot (búsqueda del negocio por número).
     assert db.execute.await_count == 2
+    spt.assert_not_awaited()
+
+
+async def test_central_number_customer_of_a_business_is_sent_to_it_not_to_the_sales_bot(monkeypatch):
+    hpm, db, spt = await _webhook(
+        monkeypatch, bot_on_number=True, owners={"+5215511111111"},
+        customers={"+5215522222222": "Para hablar con Barbería, entra aquí: …/c/x"},
+    )
+    assert [c.args[1]["id"] for c in hpm.call_args_list] == ["w1"]
+    spt.assert_awaited_once_with("+5215522222222", "Para hablar con Barbería, entra aquí: …/c/x")
+    # No llegó al pipeline del bot de ventas.
+    assert db.execute.await_count == 1
 
 
 async def test_central_number_without_a_bot_keeps_everything_in_the_owner_channel(monkeypatch):
-    hpm, db = await _webhook(monkeypatch, bot_on_number=False, owners={"+5215511111111"})
+    hpm, db, _ = await _webhook(monkeypatch, bot_on_number=False, owners={"+5215511111111"})
     assert [c.args[1]["id"] for c in hpm.call_args_list] == ["w1", "w2"]
     assert db.execute.await_count == 1

@@ -23,6 +23,7 @@ from app.core.crypto import EncryptedValue, decrypt_secret
 from app.core.rate_limiter import limiter
 from app.database import get_db
 from app.models.user import User
+from app.services.central_number_redirect import customer_redirect_reply
 from app.services.inbound_pipeline import InboundMessage, process_inbound_message
 from app.services.message_status_service import apply_status_update
 from app.services.meta_client import download_media
@@ -293,17 +294,31 @@ async def meta_incoming(
 
             if platform_enabled() and phone_number_id == settings.IARADIO_WA_PHONE_NUMBER_ID:
                 # Número central de IaRadio. Si escribe un DUEÑO registrado, es
-                # su Copiloto (no entra al pipeline del bot). Si escribe
-                # cualquier otra persona y este número también es el bot de
-                # una cuenta (la de IaRadio, que atiende a interesados), le
-                # contesta ese bot como siempre.
+                # su Copiloto (no entra al pipeline del bot). Si escribe el
+                # CLIENTE de algún negocio (le llegó su código por aquí), se le
+                # manda a su negocio. Cualquier otra persona, si este número
+                # también es el bot de una cuenta (la de IaRadio, que atiende a
+                # interesados), le contesta ese bot como siempre.
                 bot_owner = (await db.execute(
                     select(User.id).where(User.meta_phone_number_id == phone_number_id)
                 )).first()
                 others = []
                 for msg in messages:
-                    if bot_owner and not await is_registered_owner(db, f"+{msg.get('from', '')}"):
-                        others.append(msg)
+                    from_number = f"+{msg.get('from', '')}"
+                    if bot_owner and not await is_registered_owner(db, from_number):
+                        try:
+                            redirect = await customer_redirect_reply(db, from_number, central_account_id=bot_owner[0])
+                        except Exception:
+                            logger.exception("[META WEBHOOK] Customer redirect lookup failed for wamid=%s", msg.get("id"))
+                            redirect = None
+                        if redirect:
+                            logger.info("[META WEBHOOK] central: customer ...%s sent to their business", from_number[-4:])
+                            try:
+                                await send_platform_text(from_number, redirect)
+                            except Exception:
+                                logger.exception("[META WEBHOOK] Customer redirect send failed for wamid=%s", msg.get("id"))
+                        else:
+                            others.append(msg)
                         continue
                     try:
                         await _handle_platform_message(db, msg)
