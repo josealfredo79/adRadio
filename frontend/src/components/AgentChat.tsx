@@ -307,17 +307,25 @@ export default function AgentChat({
         return
       }
       const reply: string = r.data.reply
-      setTurns((t) => [
-        ...t,
-        {
-          role: 'assistant',
-          content: reply,
-          at: new Date().toISOString(),
-          cards: r.data.cards ?? [],
-          needsContact: !!r.data.needs_contact,
-          confirm: !!r.data.confirm,
-        },
-      ])
+      setTurns((t) => {
+        // Sin repetir una tarjeta que acaba de salir (ej. tocó "Lo quiero" en
+        // ella y el bot habla del mismo producto).
+        const recent = new Set(
+          t.slice(-4).flatMap((turn) => (turn.cards ?? []).map((c) => c.url))
+        )
+        const cards: ProductCard[] = (r.data.cards ?? []).filter((c: ProductCard) => !recent.has(c.url))
+        return [
+          ...t,
+          {
+            role: 'assistant',
+            content: reply,
+            at: new Date().toISOString(),
+            cards,
+            needsContact: !!r.data.needs_contact,
+            confirm: !!r.data.confirm,
+          },
+        ]
+      })
       if (reply.trimStart().startsWith('✅')) {
         react('happy', 2500)
         onEvent?.('confirmed')
