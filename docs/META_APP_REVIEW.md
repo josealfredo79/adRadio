@@ -107,8 +107,12 @@ en el campo de instrucciones de prueba. No usar la cuenta personal.
 > - We periodically read the phone number's quality rating and messaging limit
 >   tier and show them in a health panel, so the business can slow down
 >   campaigns before its number is restricted.
-> - We use the names of the business's approved message templates to send
->   them when the 24-hour window is closed.
+> - The business creates its message templates from AdRadio (Settings >
+>   WhatsApp): we submit them with POST /{waba_id}/message_templates and list
+>   them with their live review status (approved, in review, rejected with
+>   reason), so the owner never has to leave AdRadio.
+> - We use the business's approved message templates to send reminders and
+>   to resume conversations when the 24-hour window is closed.
 >
 > We only access the WhatsApp Business Accounts that businesses explicitly
 > connect to AdRadio.
