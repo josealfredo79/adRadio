@@ -37,8 +37,8 @@ BOOKING_REDIS_TTL = 3600
 MAX_SLOTS_SHOWN = 6
 
 NEEDS_CONTACT_REPLY = (
-    "¡Con gusto te ayudo a agendar! 📅 Para poder contactarte y confirmar tu cita, "
-    "primero déjame tus datos con el botón \"📋 Dejar mis datos\" de aquí abajo."
+    "¡Con gusto te ayudo a agendar! 📅 Para confirmar tu cita solo necesito tu "
+    "nombre y tu WhatsApp — déjalos aquí abajo 👇"
 )
 
 _WEEKDAYS_ES = {

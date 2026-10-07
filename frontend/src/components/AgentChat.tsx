@@ -5,6 +5,7 @@ import api from '@/lib/api'
 import { ArrowLeft, CheckCheck, ClipboardList, Info, Mic, Send, ShoppingBag, Square, Volume2, VolumeX, X } from 'lucide-react'
 import { isDarkTheme, type SiteThemeDef } from '@/pages/publicSite/theme'
 import BubbleTail from '@/components/BubbleTail'
+import InlineJoin from '@/components/InlineJoin'
 import { chatPalette, dayLabel, hhmm, wallpaperPattern } from '@/lib/chatLook'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
@@ -251,13 +252,44 @@ export default function AgentChat({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [turns, sending])
 
-  const send = async (text?: string, spoken = voiceMode) => {
+  // Registro dentro del chat (InlineJoin): el slug sale de joinPath (/q/{slug}).
+  const joinSlug = joinPath?.startsWith('/q/') ? joinPath.slice(3) : null
+  const [joinedToken, setJoinedToken] = useState<string | null>(null)
+  const lastNeedsContact = turns.reduce((acc, t, k) => (t.needsContact ? k : acc), -1)
+
+  const onJoined = (token: string, firstName: string) => {
+    setJoinedToken(token)
+    // Desde aquí la plática ya es del cliente verificado (como en su portal).
+    sessionRef.current = api
+      .post(`/public/portal/${token}/chat-session`)
+      .then((r) => r.data.session_id as string)
+      .catch(() => null)
+    // Abrir su tarjeta le da el sello de bienvenida.
+    void api.get(`/public/portal/${token}`).catch(() => {})
+    setTurns((t) => [
+      ...t,
+      {
+        role: 'assistant',
+        note: true,
+        at: new Date().toISOString(),
+        content: `¡Listo${firstName ? `, ${firstName}` : ''}! Ya eres cliente de ${business.name} 🎉`,
+      },
+    ])
+    react('happy', 2500)
+    // Lo que había pedido (la cita, el pedido) sigue solo, sin repetirlo.
+    const asked = [...turns].slice(0, lastNeedsContact).reverse().find((t) => t.role === 'user')?.content
+    if (asked) setTimeout(() => void send(asked, false, false), 300)
+  }
+
+  // echo=false: se manda sin volver a pintar la burbuja del cliente (al
+  // retomar lo que pidió antes de registrarse).
+  const send = async (text?: string, spoken = voiceMode, echo = true) => {
     const message = (text ?? input).trim()
     if (!message || sending) return
     if (text === undefined) setInput('')
     setSentHere(true)
     onEvent?.('message')
-    setTurns((t) => [...t, { role: 'user', content: message, at: new Date().toISOString() }])
+    if (echo) setTurns((t) => [...t, { role: 'user', content: message, at: new Date().toISOString() }])
     setSending(true)
     try {
       const sessionId = await sessionRef.current
@@ -270,7 +302,7 @@ export default function AgentChat({
         setTurns((t) =>
           t[t.length - 2]?.note
             ? t
-            : [...t, { role: 'assistant', note: true, content: `Tu mensaje le llegó a ${business.name}. Te contesta aquí mismo.` }]
+            : [...t, { role: 'assistant', note: true, at: new Date().toISOString(), content: `Tu mensaje le llegó a ${business.name}. Te contesta aquí mismo.` }]
         )
         return
       }
@@ -511,16 +543,19 @@ export default function AgentChat({
                         </button>
                       </div>
                     )}
-                    {t.needsContact && (joinPath || whatsappHref) && (
+                    {t.needsContact && joinSlug && i === lastNeedsContact && !joinedToken && (
+                      <InlineJoin slug={joinSlug} color={color} onBrand={pal.onBrand} pal={pal} onVerified={onJoined} />
+                    )}
+                    {t.needsContact && !joinSlug && whatsappHref && (
                       <a
-                        href={joinPath || whatsappHref}
-                        target={joinPath ? undefined : '_blank'}
-                        onClick={() => { if (!joinPath) onEvent?.('whatsapp') }}
+                        href={whatsappHref}
+                        target="_blank"
+                        onClick={() => onEvent?.('whatsapp')}
                         rel="noreferrer"
                         className="mt-1.5 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-sm"
                         style={{ background: color, color: pal.onBrand }}
                       >
-                        <ClipboardList size={16} /> {joinPath ? 'Dejar mis datos (te llega un código)' : 'Seguir por WhatsApp'}
+                        <ClipboardList size={16} /> Seguir por WhatsApp
                       </a>
                     )}
                     {/* Productos que mencionó el bot: foto, precio y "Lo quiero" */}

@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 ORDER_RESUME_WINDOW = timedelta(hours=2)
 
 NEEDS_CONTACT_REPLY = (
-    "¡Con gusto te ayudo con tu pedido! 🛒 Para poder contactarte y confirmarlo, "
-    "primero déjame tus datos con el botón \"📋 Dejar mis datos\" de aquí abajo."
+    "¡Con gusto te ayudo con tu pedido! 🛒 Para confirmártelo solo necesito tu "
+    "nombre y tu WhatsApp — déjalos aquí abajo 👇"
 )
 
 
