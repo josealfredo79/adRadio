@@ -266,23 +266,22 @@ def send_welcome_cuna(self, advertiser_id: str, to: str, business_name: str):
     async def _run():
         from sqlalchemy import select
 
-        from app.config import settings
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.user import User
         from app.services.meta_service import send_whatsapp_media
         from app.services.radio_service import generate_radio_ad
 
-        r2_url = await generate_radio_ad(
+        # Ya es la URL pública (/api/v1/radio/audio/radio/...). No reconstruirla:
+        # cortar en "/radio/" agarraba el de /api/v1/radio/ y duplicaba "audio",
+        # Meta recibía 404 y la cuña fallaba con 131053.
+        audio_url = await generate_radio_ad(
             business_name=business_name,
             message_or_intent=f"Bienvenido a {business_name}. Descubre nuestras ofertas.",
             country="mx",
             mode="classic",
         )
-        if not r2_url:
+        if not audio_url:
             return
-
-        key = r2_url.split("/radio/", 1)[-1]
-        audio_url = f"{settings.BASE_URL.rstrip('/')}/api/v1/radio/audio/{key}"
 
         # ORM rows can't cross the Celery broker — re-fetch the advertiser here.
         async with AsyncSessionLocal() as db:
