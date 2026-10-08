@@ -163,3 +163,35 @@ def test_product_link_is_not_repeated_in_consecutive_answers():
     # Mucho después (fuera de las últimas respuestas) se puede volver a mandar.
     long_ago = history[:2] + [{"role": "assistant", "content": "ok"}] * 6
     assert not link_sent_recently(p, long_ago)
+
+
+@pytest.mark.asyncio
+async def test_bot_knows_the_business_hours_and_city():
+    """"¿Cuál es su horario?" se contesta con el horario configurado (el de la
+    agenda), aunque no esté escrito en la base de conocimiento."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.rag_service import answer_with_rag
+
+    await engine.dispose()
+    async with AsyncSessionLocal() as db:
+        user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x", business_name="Barbería El Primo", city="Tlaxiaco",
+                    bot_instructions="Somos una barbería familiar.",
+                    business_hours={"mon": ["09:00", "18:00"], "sun": None})
+        db.add(user)
+        await db.commit()
+        uid = user.id
+    try:
+        gen = AsyncMock(return_value="Abrimos de lunes a sábado.")
+        with patch("app.services.rag_service.generate_bot_response", gen), \
+                patch("app.services.rag_service.get_embedding", AsyncMock(side_effect=Exception("sin embeddings"))):
+            async with AsyncSessionLocal() as db:
+                await answer_with_rag(advertiser_id=str(uid), query="¿cuál es su horario?", conversation_history=[], db=db)
+        ctx = gen.await_args.kwargs["advertiser_context"]
+        assert "Horario de atención: Lunes 09:00–18:00; Domingo cerrado" in ctx
+        assert "Ciudad: Tlaxiaco" in ctx
+    finally:
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(User).where(User.id == uid))
+            await db.commit()

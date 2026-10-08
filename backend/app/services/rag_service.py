@@ -98,6 +98,23 @@ async def catalog_context(db: AsyncSession, advertiser_id: str) -> str:
     return "CATÁLOGO (productos y servicios con su precio y descripción):\n" + "\n".join(lines)
 
 
+def business_facts(user: User) -> str:
+    """Datos fijos del negocio para el contexto del bot: horario de atención (el
+    mismo que usa la agenda de citas) y ciudad. Antes el bot contestaba "no
+    tengo ese dato" a "¿cuál es su horario?" si no estaba escrito en la base de
+    conocimiento o en las instrucciones, aunque el negocio lo tuviera configurado."""
+    from app.services.availability_service import DEFAULT_BUSINESS_HOURS
+    from app.services.voice_setup import render_hours
+
+    lines = [f"Negocio: {user.business_name or 'el negocio'}"]
+    if user.city:
+        lines.append(f"Ciudad: {user.city}")
+    hours = render_hours(user.business_hours or DEFAULT_BUSINESS_HOURS)
+    if hours:
+        lines.append(f"Horario de atención: {hours}")
+    return "DATOS DEL NEGOCIO:\n" + "\n".join(lines)
+
+
 async def answer_with_rag(
     advertiser_id: str,
     query: str,
@@ -143,6 +160,11 @@ async def answer_with_rag(
     # ask_owner, also with neither: a brand-new business with nothing loaded
     # yet is exactly when the bot must ask the owner instead of greeting.
     if bot_instructions or context or ask_owner or customer_note:
+        # Horario y ciudad van siempre que se llama a la IA, pero no la disparan
+        # solos: un negocio sin nada cargado sigue con el saludo fijo, gratis.
+        if user:
+            facts = business_facts(user)
+            context = f"{facts}\n\n{context}" if context else facts
         economy = False
         if conversation_key:
             from app.services.plan_usage import register_bot_conversation
