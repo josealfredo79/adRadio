@@ -12,6 +12,7 @@ from app.api.v1.payments import PLANS
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
+from app.services.chat_quick_asks import IARADIO_ACCOUNT_EMAIL
 from app.services.claude_service import generate_bot_response
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ DEMO_BOT_PERSONALITY = (
 # which is exactly what happened before this fix (confirmed live: a real
 # visitor asked for a service link and got refused, even though a real
 # link existed for every plan).
-DEMO_PLANS_ADVERTISER_EMAIL = "tecnologicotlaxiaco@gmail.com"
+DEMO_PLANS_ADVERTISER_EMAIL = IARADIO_ACCOUNT_EMAIL
 
 
 def _format_plans() -> str:

@@ -26,6 +26,9 @@ export interface ChatBusiness {
   agent: string
   color: string
   greeting: string
+  // Botones de arranque propios del negocio (ej. la cuenta de ventas de
+  // IaRadio); si no vienen, van los de siempre (QUICK_ASKS).
+  quick_asks?: { icon: string; text: string }[] | null
 }
 
 function renderChatText(text: string): React.ReactNode[] {
@@ -685,7 +688,7 @@ export default function AgentChat({
               </p>
               {/* En una fila, como accesos directos: ícono arriba y texto abajo (cabe en el celular). */}
               <div className="mt-3 grid grid-cols-4 gap-2">
-                {QUICK_ASKS.map((q) => (
+                {(business.quick_asks?.length ? business.quick_asks : QUICK_ASKS).map((q) => (
                   <button
                     key={q.text}
                     onClick={() => void send(q.text)}

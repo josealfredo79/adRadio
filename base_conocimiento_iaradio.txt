@@ -1,128 +1,65 @@
-# Base de Conocimiento — IaRadio
-
-## Identidad del Bot
-- Nombre del asistente: Asesor Virtual de IaRadio
-- Tono: Profesional, empático y persuasivo
-- Objetivo: Calificar leads, agendar videollamadas y cerrar ventas del servicio IaRadio
+# Base de Conocimiento — IaRadio (actualizada 2026-10-08)
 
 ## ¿Qué es IaRadio?
-IaRadio es una plataforma SaaS de inteligencia artificial que automatiza la atención al cliente y la publicidad de negocios locales a través de WhatsApp.
+IaRadio le da a un negocio local (restaurante, estética, consultorio, inmobiliaria, tienda…) su página web con un asistente de IA que atiende a sus clientes las 24 horas: contesta dudas, muestra el catálogo con precios, agenda citas, toma pedidos y manda promociones. Se configura en minutos, hasta hablando, sin saber de tecnología.
 
-### Canal: SOLO WhatsApp
-IaRadio funciona EXCLUSIVAMENTE por WhatsApp. NO ofrecemos SMS, mensajes de texto, email marketing, llamadas telefónicas, Instagram, Facebook Messenger ni ningún otro canal. Todo —campañas masivas, recordatorios de citas, notificaciones, cupones, comerciales de radio, notas de voz— ocurre dentro de WhatsApp. Si un cliente pregunta por SMS o cualquier otro canal, la respuesta es: "IaRadio trabaja solo por WhatsApp; ahí concentramos toda la automatización porque es donde tus clientes ya te leen." No prometas canales que no existen ni los describas como "próximamente".
+## Canales: dónde atiende IaRadio (y dónde NO)
+SÍ:
+- **Página web del negocio** (iaradio.online/sitio/nombre-del-negocio) con su chat, catálogo, fotos, horario, ubicación y agenda.
+- **Chat web** estilo WhatsApp: desde su página, desde un link directo, o como burbuja de chat en la página web que el negocio ya tenga.
+- **App del cliente** en el celular (sin descargar nada de una tienda): el cliente ve sus citas, pedidos, su tarjeta de lealtad y platica con el negocio.
+- **Notificaciones web** al celular de los clientes que usan la app: recordatorios y promociones gratis, sin costo de Meta.
+- **WhatsApp**: el bot contesta y se mandan campañas por WhatsApp desde el número del negocio (requiere conectar el número del negocio con Meta).
+- El correo se usa SOLO para avisos al dueño y códigos de acceso.
 
-### Funcionalidades principales
-- Bot de WhatsApp con IA que responde clientes automáticamente usando la base de conocimiento del negocio
-- Campañas publicitarias con mensajes masivos personalizados
-- Generación de comerciales de radio con IA (voz sintética)
-- Sistema de pedidos automatizado
-- Cupones de descuento con QR
-- Automatizaciones para cumpleaños, seguimiento, recordatorios
-- Base de conocimiento (RAG) para que el bot responda con información real
+NO existen (no los ofrezcas, ni como "próximamente"):
+- Facebook Messenger, Instagram, SMS, llamadas telefónicas, Telegram.
+- Campañas o promociones por correo electrónico (email marketing).
+Si preguntan por alguno: "Eso no lo manejamos. IaRadio atiende por tu página web con chat, la app de tus clientes y WhatsApp; ahí es donde tus clientes ya están."
 
-### Tecnología
-- IA: Claude Sonnet/Haiku de Anthropic
-- Embeddings: OpenAI text-embedding-3-small
-- Voz: Fish Audio / ElevenLabs
-- RAG: pgvector (búsqueda semántica)
+## Qué incluye
+- Asistente con IA que contesta con la información real del negocio (catálogo, precios, horario, preguntas frecuentes, documentos que suba el dueño).
+- Agenda de citas con botones: el cliente toca el día y la hora; recordatorios automáticos; se puede sincronizar con Google Calendar.
+- Pedidos desde el chat.
+- Catálogo de productos o servicios con fotos y precios.
+- Tarjeta de lealtad digital (sellos y premio que pone el dueño).
+- Cupones de descuento.
+- Campañas y promociones por WhatsApp y por notificación web.
+- Banners y anuncios de audio tipo radio hechos con IA (según el plan).
+- Copiloto: el dueño le pide cosas en lenguaje normal ("sube el precio del corte a $150", "¿quién tiene cita mañana?") y lo hace.
+- Configuración por voz: el dueño cuenta cómo es su negocio hablando y el asistente queda listo.
+- Si el bot no sabe algo, le pregunta al dueño y le contesta al cliente después.
 
-## Planes y Precios
+## Planes y precios (pesos mexicanos, al mes)
+- **Arranque — $449**: 300 conversaciones del bot, 150 envíos de campaña por WhatsApp, citas, pedidos y cupones, 1 usuario.
+- **Negocio — $899** (el más elegido): 1,000 conversaciones, 500 envíos, bot con documentos e información del negocio, banners con IA, 4 anuncios de radio al mes, automatizaciones, 2 usuarios.
+- **Crecimiento — $1,799**: 3,000 conversaciones, 1,500 envíos, 15 anuncios de radio, secuencias, pruebas A/B, API, 5 usuarios.
+- **Empresa — desde $4,999**: a la medida, marca blanca; se cotiza escribiendo a soporte@iaradio.online.
+- En TODOS los planes: página del negocio, app del cliente y notificaciones web ilimitadas.
+- Pago anual: 12 meses al precio de 10.
+- Programa Fundadores (lugares limitados): Arranque a $319 y Negocio a $629, precio fijo por 12 meses.
+- Paquetes extra: +500 conversaciones $149 (no vencen); +500 envíos $99.
+- Una "conversación" es un cliente atendido por la IA dentro de 24 horas, sin importar cuántos mensajes.
+- Si se acaban las conversaciones, el bot NO se apaga: sigue contestando, un poco más sencillo.
+- Los cargos de WhatsApp los cobra Meta directo en la cuenta del negocio; no van incluidos. Con la app y las notificaciones web el negocio paga menos a Meta.
+- Sin contrato: se cancela cuando quiera.
 
-### Plan Starter — $499/mes
-- 200 mensajes al mes
-- Bot de WhatsApp básico
-- Campañas publicitarias
-- Importación de contactos por CSV
-- Base de conocimiento (sube PDF, DOCX, TXT)
+## Prueba gratis
+15 días gratis, sin tarjeta. Se empieza armando la página del negocio en unos minutos.
 
-### Plan Growth — $999/mes
-- 500 mensajes al mes
-- Todo lo de Starter
-- Bot con RAG (inteligencia aumentada con base de conocimiento)
-- 3 comerciales de radio al mes
-- Cupones con QR
+## Preguntas frecuentes
+**¿Necesito saber de computación?** No. Se configura contestando unas preguntas o hablando, y todo se puede cambiar después.
+**¿Mis clientes tienen que instalar algo?** No. Abren un link; si quieren, agregan la app a su pantalla de inicio.
+**¿Puedo usar mi número de WhatsApp?** Sí, conectándolo con Meta desde Configuración. Mientras tanto, el negocio ya puede atender por su página, el chat web y la app.
+**¿Qué pasa con lo que mi cliente me escribe cuando no estoy?** El asistente contesta al momento con tu información; si no sabe algo, te pregunta a ti.
+**¿Cuánto tarda en estar listo?** Unos minutos.
 
-### Plan Pro — $2,499/mes
-- 1,000 mensajes al mes
-- Todo lo de Growth
-- Comerciales de radio ilimitados
-- Número de WhatsApp dedicado
-- URLs personalizadas para cupones
-- Automatizaciones ilimitadas
+## Cómo atender a un interesado
+1. Saludar y preguntar a qué se dedica su negocio.
+2. Explicar en una o dos frases cómo le ayudaría IaRadio a ESE giro (ej. estética: citas con botones y recordatorios; restaurante: menú y pedidos).
+3. Invitarlo a armar su página gratis (15 días, sin tarjeta).
+4. Si pregunta precio: "Desde $449 al mes; el más elegido es Negocio, $899".
+5. Si duda: recordar que la prueba es gratis y que todo se cambia después.
 
-### Plan Business — $6,799/mes
-- 3,000 mensajes al mes
-- Todo lo de Pro
-- Multi-agente IA (varios bots)
-- Campañas saga (radionovela)
-- Pruebas A/B en campañas
-- Panel de análisis avanzado
-
-### Plan Enterprise — $19,999/mes
-- 10,000 mensajes al mes
-- Todo lo de Business
-- Multi-número WhatsApp
-- White-label (marca blanca)
-- SLA prioritario
-- Onboarding dedicado
-
-## Preguntas Frecuentes
-
-### ¿Cómo funciona el bot de WhatsApp?
-El negocio sube documentos (PDF, Word, Excel o TXT) con su menú, precios, horarios, etc. El bot usa IA para responder preguntas de los clientes basándose en esa información. También puede tomar pedidos automáticamente.
-
-### ¿Qué necesito para usar IaRadio?
-Solo una cuenta de WhatsApp (la que ya usas) y conexión a internet. Nosotros te damos el número de Twilio para enviar mensajes.
-
-### ¿El cliente necesita instalar algo?
-No. Funciona directo en WhatsApp, igual que cualquier conversación.
-
-### ¿Cómo se integra con mi WhatsApp?
-Te asignamos un número virtual de Twilio. Tus clientes te escriben a ese número y el bot responde automáticamente. Tú recibes notificaciones de pedidos y ventas.
-
-### ¿Puedo probar antes de pagar?
-Sí. Ofrecemos 30 días de prueba gratis con 50 mensajes para que pruebes todas las funcionalidades.
-
-### ¿Soporta audio / voz?
-Sí. El bot puede recibir mensajes de voz y transcribirlos. También puedes generar comerciales de radio con IA.
-
-### ¿Ofrecen SMS / mensajes de texto / email marketing?
-No. IaRadio funciona únicamente por WhatsApp. No hay módulo de SMS, ni email, ni otros canales. Los recordatorios de citas, campañas masivas y notificaciones se envían por WhatsApp, que es donde tus clientes ya te leen.
-
-### ¿En qué idiomas funciona?
-Español, inglés y portugués.
-
-### ¿Hay contrato mensual o anual?
-Mensual sin penalización. También ofrecemos descuento en plan anual.
-
-## Proceso de Ventas
-
-1. El lead pregunta por el servicio
-2. Preguntar: "¿A qué se dedica tu negocio?"
-3. Escuchar su giro y recomendar el plan adecuado
-4. Si pide precio, mencionar que hay planes desde $499/mes
-5. Ofrecer agendar una videollamada de 15 min para mostrar la plataforma
-6. Si acepta, agendar en el calendario y confirmar cita
-7. Si duda, ofrecer prueba gratis de 30 días
-
-## Objeciones Comunes
-
-### "Es muy caro"
-- Comparar contra lo que cuesta un empleado de tiempo completo
-- Mencionar que atiende 24/7
-- Ofrecer plan Starter como entrada
-
-### "Ya tengo WhatsApp Business"
-- IaRadio automatiza respuestas que WhatsApp Business no puede
-- IA entiende contexto, no solo palabras clave
-- Toma pedidos, califica leads, genera campañas
-
-### "No sé subir documentos"
-- Es tan fácil como adjuntar un archivo
-- Acepta PDF, Word, Excel y TXT
-- Nosotros ayudamos en el onboarding
-
-## Contacto y Soporte
-- Email: soporte@iaradio.online
-- WhatsApp del equipo: el número del negocio registrado
-- Tiempo de respuesta: menos de 2 horas en horario laboral
+## Contacto
+Correo: soporte@iaradio.online

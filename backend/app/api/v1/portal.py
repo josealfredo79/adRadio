@@ -44,6 +44,7 @@ from app.models.order import Order
 from app.models.push_subscription import PushSubscription
 from app.models.user import User
 from app.services.availability_service import TZ
+from app.services.chat_quick_asks import chat_quick_asks
 from app.services.claude_service import personalize_message
 from app.services.loyalty_service import add_stamp, get_card
 from app.services.portal_service import read_portal_token
@@ -173,6 +174,7 @@ async def get_portal(request: Request, token: str, db: AsyncSession = Depends(ge
             "agent": advertiser.bot_name or "Asistente",
             "greeting": advertiser.widget_greeting or "",
             "whatsapp_number": _public_whatsapp_number(advertiser),
+            "quick_asks": chat_quick_asks(advertiser),
         },
         "customer": {"first_name": _first_name(contact.name) or ""},
         "account_available": settings.CUSTOMER_ACCOUNT_ENABLED,

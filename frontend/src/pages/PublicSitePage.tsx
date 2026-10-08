@@ -26,6 +26,7 @@ interface PublicSite {
   city: string
   agent: string
   greeting: string
+  quick_asks?: { icon: string; text: string }[] | null
   color: string
   tagline: string
   logo_url: string
@@ -526,6 +527,7 @@ export default function PublicSitePage() {
               agent: site.agent,
               color: site.color,
               greeting: site.greeting,
+              quick_asks: site.quick_asks,
             }}
             theme={theme}
             voiceBase={`/public/site/${site.slug || slug}`}

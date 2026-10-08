@@ -27,6 +27,7 @@ interface ProductDetail {
   advertiser_id: string
   agent: string
   greeting: string
+  quick_asks?: { icon: string; text: string }[] | null
   business_category: string
   account_available: boolean
 }
@@ -199,6 +200,7 @@ export default function ProductDetailPage() {
               agent: product.agent,
               color: product.color,
               greeting: product.greeting,
+              quick_asks: product.quick_asks,
             }}
             theme={theme}
             voiceBase={product.slug ? `/public/site/${product.slug}` : ''}

@@ -52,6 +52,7 @@ interface Business {
   city: string
   agent: string
   greeting: string
+  quick_asks?: { icon: string; text: string }[] | null
   whatsapp_number: string
 }
 
