@@ -679,20 +679,20 @@ export default function AgentChat({
           })}
           {knownToken && bookedAt >= historyCount && <ChatNotifyOffer token={knownToken} pal={pal} color={color} />}
           {historyLoaded && !sentHere && (
-            <div className="mx-auto mt-4 w-full max-w-lg text-center">
+            <div className="mx-auto mt-4 w-full max-w-2xl text-center">
               <p className="mx-auto w-fit rounded-lg px-3 py-1 text-xs shadow-sm" style={{ background: pal.incoming, color: pal.meta }}>
                 {micAvailable ? 'Escríbeme o toca el micrófono y háblame 🎙️' : 'Pregúntame precios, horarios, citas o pedidos'}
               </p>
-              {/* Grandes y en dos columnas: se tocan fácil en el celular y llenan el chat en la compu. */}
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              {/* En una fila, como accesos directos: ícono arriba y texto abajo (cabe en el celular). */}
+              <div className="mt-3 grid grid-cols-4 gap-2">
                 {QUICK_ASKS.map((q) => (
                   <button
                     key={q.text}
                     onClick={() => void send(q.text)}
-                    className="press flex min-h-[3.25rem] items-center gap-2.5 rounded-xl px-3.5 py-3 text-left text-[15px] font-semibold leading-snug shadow-sm"
+                    className="press flex flex-col items-center justify-start gap-1.5 rounded-xl px-1.5 py-3 text-center text-[13px] font-semibold leading-tight shadow-sm sm:text-[15px]"
                     style={{ background: pal.incoming, color: pal.accent }}
                   >
-                    <span className="text-xl" aria-hidden>{q.icon}</span>
+                    <span className="text-2xl" aria-hidden>{q.icon}</span>
                     <span>{q.text}</span>
                   </button>
                 ))}
