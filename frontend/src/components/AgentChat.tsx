@@ -8,6 +8,7 @@ import BubbleTail from '@/components/BubbleTail'
 import InlineJoin from '@/components/InlineJoin'
 import ChatNotifyOffer from '@/components/ChatNotifyOffer'
 import { parseChatOptions } from '@/lib/chatOptions'
+import { speakable } from '@/lib/speakable'
 import { chatPalette, dayLabel, hhmm, wallpaperPattern } from '@/lib/chatLook'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
@@ -348,7 +349,7 @@ export default function AgentChat({
         onEvent?.('confirmed')
       }
       else if (r.data.needs_contact) react('confused', 1800)
-      if (spoken) void speaker.speak(reply.replace(/https?:\/\/\S+/g, ''))
+      if (spoken) void speaker.speak(speakable(reply))
     } catch {
       react('confused', 1800)
       setTurns((t) => [...t, { role: 'assistant', content: 'Uy, no me llegó tu mensaje. ¿Lo intentas de nuevo?' }])

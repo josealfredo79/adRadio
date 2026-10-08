@@ -8,17 +8,27 @@ import { useMyBusinesses, type MyBusiness } from '@/lib/customerChats'
 // La app del cliente en computadora, como WhatsApp Web: la lista de chats a la
 // izquierda (todos sus negocios si entró con su número; si no, los que abrió en
 // este navegador) y el chat o la info a la derecha (children).
-export default function CustomerDesktopShell({ activePath, children }: { activePath?: string; children?: React.ReactNode }) {
+export default function CustomerDesktopShell({
+  activePath,
+  current,
+  children,
+}: {
+  activePath?: string
+  // El chat abierto: sale en la lista aunque sea la primera vez en este navegador.
+  current?: { name: string; logo_url: string; color: string }
+  children?: React.ReactNode
+}) {
   const navigate = useNavigate()
   const [token] = useState(readAccountToken)
   const [filter, setFilter] = useState('')
   const { data, isLoading, error } = useMyBusinesses(token)
-  const businesses: MyBusiness[] | undefined = token
-    ? data?.businesses
-    : readRecentChats().map((c) => ({
-        portal_path: c.portal_path, name: c.name, logo_url: c.logo_url, color: c.color, city: '',
-        loyalty: null, next_appointment: null, coupons: 0, last_message: null,
-      }))
+  const toItem = (c: { portal_path: string; name: string; logo_url: string; color: string }): MyBusiness => ({
+    portal_path: c.portal_path, name: c.name, logo_url: c.logo_url, color: c.color, city: '',
+    loyalty: null, next_appointment: null, coupons: 0, last_message: null,
+  })
+  let businesses: MyBusiness[] | undefined = token ? data?.businesses : readRecentChats().map(toItem)
+  if (businesses && current && activePath && !businesses.some((b) => b.portal_path === activePath))
+    businesses = [toItem({ ...current, portal_path: activePath }), ...businesses]
 
   return (
     <div className="fixed inset-0 flex bg-[#0b141a] text-white">

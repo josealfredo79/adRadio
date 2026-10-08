@@ -1,3 +1,4 @@
+import { speakable } from '@/lib/speakable'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '@/lib/api'
 
@@ -145,7 +146,8 @@ export function useSpeaker({ publicDemo = false, endpoint, robot = false }: { pu
       setSpeaking(false)
       return
     }
-    const u = new SpeechSynthesisUtterance(text)
+    // La voz del navegador también leería los emojis por su nombre.
+    const u = new SpeechSynthesisUtterance(speakable(text))
     u.lang = 'es-MX'
     const voice = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith('es'))
     if (voice) u.voice = voice

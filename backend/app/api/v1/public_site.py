@@ -276,7 +276,9 @@ async def site_speak(request: Request, slug: str, body: dict, db: AsyncSession =
     from app.services.radio.tts import _tts_edge
 
     await _site_owner(db, slug)
-    text = " ".join(str(body.get("text") or "").replace("*", "").split())[:SITE_SPEAK_MAX_CHARS]
+    from app.services.speech_text import speakable
+
+    text = speakable(str(body.get("text") or ""))[:SITE_SPEAK_MAX_CHARS]
     if not text:
         raise HTTPException(status_code=400, detail="Nada que decir")
     try:

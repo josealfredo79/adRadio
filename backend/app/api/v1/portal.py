@@ -614,7 +614,9 @@ async def portal_speak(request: Request, token: str, body: dict, db: AsyncSessio
     from app.services.radio.tts import _tts_edge
 
     await _resolve(db, token)
-    text = " ".join(str(body.get("text") or "").replace("*", "").split())[:PORTAL_SPEAK_MAX_CHARS]
+    from app.services.speech_text import speakable
+
+    text = speakable(str(body.get("text") or ""))[:PORTAL_SPEAK_MAX_CHARS]
     if not text:
         raise HTTPException(status_code=400, detail="Nada que decir")
     try:

@@ -270,7 +270,7 @@ export default function PortalPage() {
         <SEO title={data.business.name} noIndex />
         <style>{PUBLIC_SITE_STYLES}</style>
         {/* En computadora, como WhatsApp Web: la lista de chats a la izquierda. */}
-        {isDesktop ? <CustomerDesktopShell activePath={`/c/${token}`}>{chat}</CustomerDesktopShell> : chat}
+        {isDesktop ? <CustomerDesktopShell activePath={`/c/${token}`} current={data.business}>{chat}</CustomerDesktopShell> : chat}
       </>
     )
   }
@@ -321,7 +321,7 @@ export default function PortalPage() {
       {/* "Info. del negocio", como la info de un contacto en WhatsApp: mismos
           colores que el chat, y lo que se pide aquí lo atiende el bot en el chat. */}
       {isDesktop ? (
-        <CustomerDesktopShell activePath={`/c/${token}`}>
+        <CustomerDesktopShell activePath={`/c/${token}`} current={data.business}>
           <div className="absolute inset-0 overflow-y-auto">{info}</div>
         </CustomerDesktopShell>
       ) : (
