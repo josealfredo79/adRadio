@@ -177,6 +177,7 @@ export default function AgentChat({
   // "✨ Quiero probarlo gratis" (chat de ventas de IaRadio): el alta se hace
   // aquí mismo, sin mandarlo al bot (OnboardingFlow).
   const [onboarding, setOnboarding] = useState(false)
+  const [onbMood, setOnbMood] = useState<FaceMood | null>(null)
   const quickAsks = business.quick_asks?.length ? business.quick_asks : QUICK_ASKS
   const runQuickAsk = (q: { text: string; action?: string }) => {
     if (q.action === 'onboard') {
@@ -503,13 +504,13 @@ export default function AgentChat({
 
         {banner}
 
-        {voiceMode && (
+        {(voiceMode || (onboarding && onbMood)) && (
           <div
             className="flex shrink-0 flex-col items-center pt-1 pb-1"
             style={{ background: `color-mix(in srgb, ${color} 22%, #0a0f2e)` }}
           >
             <Suspense fallback={<div style={{ height: 150 }} />}>
-              <Mascot3D mood={mood} getLevel={speaker.level} size={130} color={color} />
+              <Mascot3D mood={onboarding && onbMood ? onbMood : mood} getLevel={speaker.level} size={130} color={color} />
             </Suspense>
           </div>
         )}
@@ -695,7 +696,7 @@ export default function AgentChat({
             )
           })}
           {onboarding && (
-            <OnboardingFlow pal={pal} brand={color} onBrand={pal.onBrand} onActivity={scrollToEnd} onExit={() => setOnboarding(false)} />
+            <OnboardingFlow pal={pal} brand={color} onBrand={pal.onBrand} onActivity={scrollToEnd} onExit={() => setOnboarding(false)} onVoiceMood={setOnbMood} />
           )}
           {knownToken && bookedAt >= historyCount && <ChatNotifyOffer token={knownToken} pal={pal} color={color} />}
           {historyLoaded && !sentHere && (

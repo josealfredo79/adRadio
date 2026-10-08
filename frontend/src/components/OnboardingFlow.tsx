@@ -11,6 +11,7 @@ import { EMPTY_DRAFT, giroLook, progressOf, type Draft } from '@/lib/onboardingD
 import { verifyError } from '@/lib/codeMessages'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 import type { ChatPalette } from '@/lib/chatLook'
+import type { FaceMood } from '@/components/BotFace'
 
 // Alta de un negocio dentro del chat de IaRadio ("✨ Quiero probarlo gratis").
 // El dueño le cuenta su negocio a radiecito por voz (todo de un jalón, solo
@@ -99,13 +100,16 @@ const FIELD_LABEL: Record<EditField, string> = {
 }
 
 export default function OnboardingFlow({
-  pal, brand, onBrand, onActivity, onExit,
+  pal, brand, onBrand, onActivity, onExit, onVoiceMood,
 }: {
   pal: ChatPalette
   brand: string
   onBrand: string
   onActivity: () => void
   onExit: () => void
+  // Alta por voz: radiecito 3D grande arriba del chat (como el modo voz) y su
+  // cara: escucha, piensa, "habla" mientras escribe. null = sin escenario.
+  onVoiceMood?: (mood: FaceMood | null) => void
 }) {
   const saved = useRef(load())
   const [msgs, setMsgs] = useState<Msg[]>([])
@@ -135,11 +139,20 @@ export default function OnboardingFlow({
   const [qr, setQr] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const mic = canRecordVoice()
+  const [voicePath, setVoicePath] = useState(false)
+  const [happyUntil, setHappyUntil] = useState(0)
   const look = giroLook(draft.business_category)
   const cardColor = color ?? (draft.business_category ? look.color : brand)
   const siteUrl = `${window.location.origin}/sitio/${published?.slug ?? (draft.business_name ? slugPreview(draft.business_name) : '…')}`
 
   useEffect(onActivity, [msgs, typing, stage, draft, trial, published, onActivity])
+
+  useEffect(() => {
+    if (!onVoiceMood) return
+    if (!voicePath) { onVoiceMood(null); return }
+    onVoiceMood(recording ? 'listening' : busy ? 'thinking' : typing ? 'speaking' : Date.now() < happyUntil ? 'happy' : 'idle')
+  }, [voicePath, recording, busy, typing, happyUntil, onVoiceMood])
+  useEffect(() => () => onVoiceMood?.(null), [onVoiceMood])
 
   const bot = async (...lines: string[]) => {
     for (const line of lines) {
@@ -244,6 +257,7 @@ export default function OnboardingFlow({
       }
       setEditing(null)
       update(next, 'hero')
+      setHappyUntil(Date.now() + 2500)
       await confirmChange(draft, next)
     } catch (err) {
       setError(getApiError(err, 'No te alcancé a entender. ¿Me lo repites?'))
@@ -423,6 +437,7 @@ export default function OnboardingFlow({
       case 'how':
         return <div className="grid gap-2">
           {mic && chip('Te lo digo por voz', pick('Te lo digo por voz', async () => {
+            setVoicePath(true)
             await bot('Toca el micrófono y cuéntame de corrido: cómo se llama, qué vendes, dónde estás, tu horario y tus 3 productos más vendidos con precio. Yo acomodo todo 🙌')
             setStage('record')
           }), '🎤', true)}
