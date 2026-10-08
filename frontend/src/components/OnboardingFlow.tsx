@@ -378,7 +378,7 @@ export default function OnboardingFlow({
             </button>
           )}
         </div>
-      case 'name': return textDock('Nombre de tu negocio', 'name')
+      case 'name': return textDock('Escribe aquí el nombre de tu negocio', 'name')
       case 'giro':
         return <div className="grid grid-cols-3 gap-2">
           {GIROS.map((g) => chip(g.label, pick(g.label, async () => {
@@ -389,7 +389,7 @@ export default function OnboardingFlow({
           {chip('Otro', pick('Otro', async () => { await bot('¿A qué te dedicas?'); setStage('giro-text') }), '✏️')}
         </div>
       case 'giro-text': return textDock('Ej. papelería, taller mecánico…', 'giro-text')
-      case 'where': return textDock('Ciudad, o calle y ciudad', 'where')
+      case 'where': return textDock('Escribe tu ciudad, o calle y ciudad', 'where')
       case 'hours':
         return <div className="grid grid-cols-2 gap-2">
           {HOURS.map((h) => chip(h.label, pick(h.label, async () => {
@@ -490,7 +490,7 @@ export default function OnboardingFlow({
       )}
 
       {published && (
-        <div className="anim-bubble mt-2 grid max-w-[94%] gap-2">
+        <div className="anim-bubble mt-2 grid max-w-[min(94%,26rem)] gap-2">
           <div className="grid gap-2 rounded-xl p-3 shadow-sm" style={{ background: pal.incoming, color: pal.text }}>
             <p className="text-sm font-semibold">Tu link</p>
             <div className="flex flex-wrap items-center gap-2">

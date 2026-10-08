@@ -29,7 +29,7 @@ export default function OnboardingCard({
 
   return (
     <div
-      className="anim-bubble mt-2 w-full max-w-[94%] overflow-hidden rounded-2xl shadow-md"
+      className="anim-bubble mt-2 w-full max-w-[min(94%,26rem)] overflow-hidden rounded-2xl shadow-md"
       style={{ background: pal.incoming, color: pal.text, ['--c' as string]: color }}
       aria-live="polite"
     >
