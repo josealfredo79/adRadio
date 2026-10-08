@@ -98,7 +98,7 @@ class TestAppointmentBookingViaWhatsApp:
             assert appt is not None
             assert appt.status == "confirmed"
             assert appt.customer_name == "Ana Torres"
-            assert appt.service == "quiero agendar una cita para corte de cabello"
+            assert appt.service == "Quiero agendar una cita para corte de cabello"
             assert appt.contact_id == contact_id
 
             # Same query GET /api/v1/appointments uses — confirms it would

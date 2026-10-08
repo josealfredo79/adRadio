@@ -149,6 +149,22 @@ async def _save_state(redis, key: str, state: dict) -> None:
         await redis.setex(key, BOOKING_REDIS_TTL, json.dumps(state))
 
 
+_GENERIC_WORDS = frozenset(
+    ["quiero", "quisiera", "me", "gustaria", "gustaría", "puedo", "podria", "podría", "agendar", "agenda", "apartar", "reservar", "sacar", "hacer", "una", "un", "la", "el", "de", "del", "para", "por", "favor", "cita", "citas", "visita", "visitar", "turno", "hora", "reservacion", "reservación", "programar", "pedir", "solicitar", "necesito", "hola", "buenas", "buenos", "dias", "días", "tardes", "noches", "si", "sí", "ok"]
+)
+
+
+def service_label(message: str) -> str:
+    """Qué se agenda, legible. "quiero agendar una cita para corte de cabello"
+    → se queda tal cual (dice el servicio); "quiero una cita" → "Cita" (antes
+    la confirmación decía "📌 quiero una cita")."""
+    text = " ".join((message or "").split())[:120]
+    words = [w.strip("¿?¡!.,;:") for w in text.lower().split()]
+    if not [w for w in words if w and w not in _GENERIC_WORDS]:
+        return "Cita"
+    return text[:1].upper() + text[1:]
+
+
 async def handle_appointment_booking(
     db: AsyncSession, advertiser: User, contact: Contact | None, message: str, redis,
     channel: str = "whatsapp",
@@ -172,7 +188,7 @@ async def handle_appointment_booking(
     if not contact:
         return NEEDS_CONTACT_REPLY
 
-    state = {"step": "collecting_date", "service": message.strip()}
+    state = {"step": "collecting_date", "service": service_label(message)}
     await _save_state(redis, key, state)
     return (
         "¡Con gusto! 📅 ¿Qué día te gustaría tu cita?\n"
@@ -312,7 +328,8 @@ async def _advance(
         f"📌 {appointment.service}\n"
         f"🕐 {fecha} a las {hora}\n\n"
         "¡Te esperamos! Si necesitas reagendar, escríbenos."
-        f"{portal_footer(contact.id)}"
+        # El link a su portal solo por WhatsApp: en el chat web ya está ahí.
+        f"{portal_footer(contact.id) if channel == 'whatsapp' else ''}"
     )
 
 

@@ -192,7 +192,7 @@ class TestHandleAppointmentBooking:
                 )
             assert appt.status == "confirmed"
             assert appt.customer_name == "Ana Torres"
-            assert appt.service == "quiero agendar una cita para corte de cabello"
+            assert appt.service == "Quiero agendar una cita para corte de cabello"
             assert appt.contact_id == contact_id
             # Redis state was cleared after completion
             assert fake_redis.store == {}
@@ -383,3 +383,35 @@ class TestHandleAppointmentBooking:
                 assert "página web" not in body
         finally:
             await _cleanup([user_id])
+
+
+@pytest.mark.asyncio
+async def test_portal_link_only_in_whatsapp_confirmation(fake_redis):
+    """En el chat web el cliente ya está en su chat: la confirmación no trae el
+    link a su portal (en WhatsApp sí, es lo que lo lleva a la web)."""
+    hours = {d: ["09:00", "11:00"] for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+    replies = {}
+    for channel in ("widget", "whatsapp"):
+        user_id = await _seed_user(business_hours=hours)
+        contact_id = await _seed_contact(user_id)
+        redis = _FakeRedis()
+        try:
+            with patch("app.core.email.send_new_appointment_email", new_callable=AsyncMock):
+                for msg in ["quiero una cita", "mañana", "1", "Ana"]:
+                    async with AsyncSessionLocal() as db:
+                        user = await db.get(User, user_id)
+                        contact = await db.get(Contact, contact_id)
+                        replies[channel] = await handle_appointment_booking(db, user, contact, msg, redis, channel=channel)
+        finally:
+            await _cleanup([user_id])
+    assert "confirmada" in replies["widget"].lower() and "/c/" not in replies["widget"]
+    assert "📌 Cita" in replies["widget"]
+    assert "/c/" in replies["whatsapp"]
+
+
+def test_service_label_is_readable():
+    from app.services.appointment_booking_service import service_label
+
+    assert service_label("quiero una cita") == "Cita"
+    assert service_label("¿Puedo agendar una visita por favor?") == "Cita"
+    assert service_label("quiero agendar una cita para corte de cabello") == "Quiero agendar una cita para corte de cabello"

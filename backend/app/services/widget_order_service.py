@@ -23,7 +23,6 @@ from app.models.user import User
 from app.services.catalog_service import get_active_products, match_products_in_text
 from app.services.claude_service import detect_order_intent
 from app.services.owner_question_service import owner_number as get_owner_number
-from app.services.portal_service import portal_footer
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +134,7 @@ async def _advance(
         f"📍 {order.delivery_address}\n"
         f"💳 {order.payment_method}\n\n"
         "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
-        f"{payment_lines(advertiser, order.payment_method)}{loyalty}{portal_footer(contact.id)}"
+        f"{payment_lines(advertiser, order.payment_method)}{loyalty}"
     )
 
 

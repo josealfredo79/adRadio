@@ -116,12 +116,14 @@ class TestLeadCapture:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
-    async def test_portal_session_still_gets_its_link(self):
+    async def test_portal_session_order_confirmation_has_no_link(self):
+        """Desde 2026-10-07 la confirmación en el chat web no trae el link del
+        portal a nadie: el cliente ya está en su chat (en WhatsApp sí va)."""
         user_id, victim_id = await _seed()
         r = Redis()
         try:
             r.store[f"{SESSION_CONTACT_REDIS_PREFIX}{user_id}:p1"] = str(victim_id)  # como /chat-session del portal
             reply = await _finish_order(user_id, victim_id, r, session="p1")
-            assert "/c/" in reply
+            assert reply and "/c/" not in reply
         finally:
             await _cleanup(user_id)
