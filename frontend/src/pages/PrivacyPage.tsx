@@ -54,6 +54,13 @@ export default function PrivacyPage() {
               <p>No compartimos tu información personal con terceros, excepto con proveedores de servicios necesarios para el funcionamiento de la plataforma (como Stripe para pagos, Cloudflare para almacenamiento, Meta (WhatsApp Cloud API) para mensajería, y servicios de IA como Anthropic, OpenAI, Voyage AI y Fish Audio para procesar textos y audios). Estos proveedores están sujetos a estrictas obligaciones de confidencialidad.</p>
             </section>
 
+            {/* Requisito de Google para verificar el permiso calendar.events (uso limitado). */}
+            <section id="google-calendar">
+              <h2 className="text-xl font-bold text-white mb-3">4.1 Google Calendar</h2>
+              <p>Si conectas tu cuenta de Google, IaRadio pide solo el permiso para administrar eventos de tu calendario (calendar.events). Lo usamos únicamente para crear, actualizar y borrar en tu Google Calendar las citas que tus clientes agendan, cambian o cancelan en IaRadio. No leemos tus otros eventos, no vendemos ni compartimos esos datos, no los usamos para publicidad ni para entrenar modelos de IA, y nadie de nuestro equipo los revisa salvo que tú lo pidas para darte soporte o lo exija la ley.</p>
+              <p className="mt-3">El uso y la transferencia de la información recibida de las API de Google se apegan a la <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer" className="underline">Política de datos de usuario de los servicios de API de Google</a>, incluidos los requisitos de Uso limitado. Puedes desconectar Google cuando quieras desde Citas en tu panel o desde <a href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer" className="underline">myaccount.google.com/permissions</a>; al hacerlo borramos el acceso guardado.</p>
+            </section>
+
             <section>
               <h2 className="text-xl font-bold text-white mb-3">5. Seguridad de los Datos</h2>
               <p>Implementamos medidas de seguridad estándar de la industria (como encriptación de contraseñas usando bcrypt y conexiones seguras HTTPS) para proteger tu información y la de tus clientes contra acceso no autorizado, alteración o destrucción.</p>
