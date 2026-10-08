@@ -32,7 +32,7 @@ export default function LandingSignup() {
       <div className="mx-auto mb-8 max-w-2xl text-center">
         <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-indigo-300">Gratis 15 días · sin tarjeta</p>
         <h2 className="text-3xl font-black leading-tight text-white sm:text-4xl" style={{ textWrap: 'balance' }}>
-          Platica con radiecito y arma tu página aquí mismo
+          Platica con IaRadio y arma tu página aquí mismo
         </h2>
         <p className="mt-3 text-gray-400">
           Pregúntale lo que quieras de IaRadio. Cuando quieras tu página, toca “Quiero probarlo gratis” y se construye mientras le cuentas de tu negocio.
@@ -57,7 +57,7 @@ export default function LandingSignup() {
             onClose={() => {}}
           />
         ) : (
-          <div className="flex h-full items-center justify-center bg-[#0b141a] text-sm text-gray-400">Cargando a radiecito…</div>
+          <div className="flex h-full items-center justify-center bg-[#0b141a] text-sm text-gray-400">Cargando a IaRadio…</div>
         )}
       </div>
 

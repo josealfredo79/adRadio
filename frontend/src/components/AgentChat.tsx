@@ -525,7 +525,11 @@ export default function AgentChat({
             className="mx-auto mb-3 max-w-[88%] rounded-lg px-3 py-1.5 text-center text-[12.5px] leading-snug shadow-sm"
             style={{ background: pal.notice, color: pal.noticeText }}
           >
-            📻 Chat de {business.name} con IaRadio: te contestan al instante y no gasta tus datos de WhatsApp.
+            {/* En el chat de ventas de IaRadio (el que trae el botón del alta) el aviso
+                dice lo que se puede hacer ahí, no "Chat de IaRadio con IaRadio". */}
+            {quickAsks.some((q) => q.action === 'onboard')
+              ? '📻 Pregúntame lo que quieras de IaRadio o arma tu página gratis aquí mismo, en 5 minutos.'
+              : `📻 Chat de ${business.name} con IaRadio: te contestan al instante y no gasta tus datos de WhatsApp.`}
           </p>
           {turns.map((t, i) => {
             const prev = turns[i - 1]
