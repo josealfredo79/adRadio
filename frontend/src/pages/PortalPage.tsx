@@ -29,6 +29,7 @@ import { waDigits } from '@/pages/publicSite/utils'
 import { MeshBackground, cardElevationStyle } from '@/pages/publicSite/components'
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
 import { referralLink } from '@/lib/referral'
+import { detectNotifyState, enablePush, type NotifyState } from '@/lib/webPushClient'
 
 // Portal del cliente (/c/:token) y página de una promo (/c/:token/promo/:promoId).
 // Abre directo en el chat a pantalla completa, como una conversación de
@@ -789,30 +790,6 @@ function AppointmentCard({ token, appt, theme, color }: { token: string; appt: P
   )
 }
 
-function urlBase64ToUint8Array(base64: string): Uint8Array {
-  const padded = (base64 + '='.repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/')
-  return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0))
-}
-
-type NotifyState = 'loading' | 'unsupported' | 'ios-install' | 'denied' | 'off' | 'on'
-
-function detectNotifyState(): NotifyState | Promise<NotifyState> {
-  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
-  const standalone =
-    window.matchMedia?.('(display-mode: standalone)').matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true
-  const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
-  // En iPhone, Safari solo ofrece push a la app ya agregada a la pantalla de inicio.
-  if (ios && !standalone) return 'ios-install'
-  if (!supported) return 'unsupported'
-  if (Notification.permission === 'denied') return 'denied'
-  return navigator.serviceWorker
-    .getRegistration('/c/')
-    .then((reg) => reg?.pushManager.getSubscription())
-    .then((sub): NotifyState => (sub ? 'on' : 'off'))
-    .catch((): NotifyState => 'off')
-}
-
 // "¿Te aviso?" — avisos gratis (Web Push) en vez de WhatsApp cobrado. El
 // mejor momento para pedirlo es con una cita en puerta: el recordatorio de
 // mañana es la razón concreta para aceptar.
@@ -848,23 +825,10 @@ function NotifyCard({
     setBusy(true)
     setError(null)
     try {
-      const permission = await Notification.requestPermission()
-      if (permission !== 'granted') {
-        setState(permission === 'denied' ? 'denied' : 'off')
-        return
-      }
-      await navigator.serviceWorker.register('/portal-sw.js', { scope: '/c/' })
-      const reg = await navigator.serviceWorker.ready
-      const sub =
-        (await reg.pushManager.getSubscription()) ??
-        (await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(push.public_key) as BufferSource,
-        }))
-      const { data } = await api.post(`/public/portal/${token}/push/subscribe`, sub.toJSON())
-      setState('on')
+      const out = await enablePush(token, push.public_key)
+      setState(out.state)
       // El sello de regalo por activar los avisos: que aparezca ya en la tarjeta.
-      if (data?.stamped) qc.invalidateQueries({ queryKey: ['portal', token] })
+      if (out.stamped) qc.invalidateQueries({ queryKey: ['portal', token] })
     } catch {
       setError('No se pudieron activar. Intenta de nuevo en un momento.')
     } finally {

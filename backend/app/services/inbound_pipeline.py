@@ -302,6 +302,16 @@ async def process_inbound_message(
                 pending_appt.status = "cancelled"
                 pending_appt.awaiting_confirmation = False
                 pending_appt.awaiting_reschedule = True
+                # Igual que al cancelar desde la web o el portal: fuera también del
+                # Google Calendar del dueño (antes se quedaba ahí la cita cancelada).
+                if pending_appt.google_event_id and advertiser.google_refresh_token:
+                    try:
+                        from app.services.calendar_service import delete_event
+
+                        delete_event(advertiser.google_refresh_token, pending_appt.google_event_id)
+                        pending_appt.google_event_id = None
+                    except Exception:
+                        logger.warning("[PIPELINE] Google Calendar delete failed", exc_info=True)
                 _tpl = await get_template(db, str(advertiser.id), "Cita", "appt_cancel")
                 _acl = {
                     "nombre": pending_appt.customer_name or "Cliente",

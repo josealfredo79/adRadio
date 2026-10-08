@@ -167,3 +167,30 @@ class TestSlotTakenWhileGivingName:
             assert [a.customer_name for a in appts] == ["Otro cliente"]
         finally:
             await _cleanup([user_id])
+
+
+class TestCancelFromReminderRemovesGoogleEvent:
+    @pytest.mark.asyncio
+    async def test_reply_2_to_the_reminder_also_deletes_the_google_event(self):
+        from datetime import datetime, timedelta, timezone
+
+        user_id, contact_id = await _seed_advertiser_and_contact(google_refresh_token="rt-x", google_calendar_connected=True)
+        try:
+            async with AsyncSessionLocal() as db:
+                appt = Appointment(advertiser_id=user_id, contact_id=contact_id, customer_name="Ana Torres",
+                                   customer_phone=PHONE, service="Corte",
+                                   scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
+                                   duration_min=30, status="confirmed", awaiting_confirmation=True,
+                                   google_event_id="gcal-123")
+                db.add(appt)
+                await db.commit()
+                appt_id = appt.id
+                advertiser = await db.get(User, user_id)
+            with patch("app.services.calendar_service.delete_event") as gdel:
+                await _send_message(advertiser, "2")
+            gdel.assert_called_once_with("rt-x", "gcal-123")
+            async with AsyncSessionLocal() as db:
+                appt = await db.get(Appointment, appt_id)
+            assert appt.status == "cancelled" and appt.google_event_id is None
+        finally:
+            await _cleanup([user_id])

@@ -6,6 +6,7 @@ import { ArrowLeft, CheckCheck, ClipboardList, Info, Mic, Send, ShoppingBag, Squ
 import { isDarkTheme, type SiteThemeDef } from '@/pages/publicSite/theme'
 import BubbleTail from '@/components/BubbleTail'
 import InlineJoin from '@/components/InlineJoin'
+import ChatNotifyOffer from '@/components/ChatNotifyOffer'
 import { parseChatOptions } from '@/lib/chatOptions'
 import { chatPalette, dayLabel, hhmm, wallpaperPattern } from '@/lib/chatLook'
 import { useSpeaker } from '@/lib/useSpeaker'
@@ -257,6 +258,13 @@ export default function AgentChat({
   const joinSlug = joinPath?.startsWith('/q/') ? joinPath.slice(3) : null
   const [joinedToken, setJoinedToken] = useState<string | null>(null)
   const lastNeedsContact = turns.reduce((acc, t, k) => (t.needsContact ? k : acc), -1)
+  // Cliente identificado (se registró en el chat o entró por su portal) y una
+  // cita recién confirmada: se le ofrecen los avisos ahí mismo.
+  const knownToken = joinedToken ?? portalToken ?? null
+  const bookedAt = turns.reduce(
+    (acc, t, k) => (t.role === 'assistant' && /^✅\s*\*?¡?Cita confirmada/i.test(t.content.trim()) ? k : acc),
+    -1
+  )
 
   const onJoined = (token: string, firstName: string) => {
     setJoinedToken(token)
@@ -638,6 +646,7 @@ export default function AgentChat({
               </div>
             )
           })}
+          {knownToken && bookedAt >= historyCount && <ChatNotifyOffer token={knownToken} pal={pal} color={color} />}
           {historyLoaded && !sentHere && (
             <div className="mx-auto mt-4 max-w-sm text-center">
               <p className="mx-auto w-fit rounded-lg px-3 py-1 text-xs shadow-sm" style={{ background: pal.incoming, color: pal.meta }}>
