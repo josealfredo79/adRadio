@@ -180,8 +180,18 @@ export default function OnboardingFlow({
       for (const [k, v] of Object.entries(p)) {
         if (v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)) next[k] = v
       }
-      update(next, 'hero')
       setText('')
+      const key = (d: Draft) => JSON.stringify([d.business_name, d.business_category, d.city, d.address, d.business_hours, d.services])
+      if (key(next) === key(draft)) {
+        // No dijo nada del negocio ("¿qué es la vida?"): no fingir que se acomodó algo.
+        await bot(
+          stage === 'record'
+            ? 'No te entendí bien 🙈 Cuéntame de tu negocio: cómo se llama, qué vendes y dónde estás. O, si prefieres, contesta con botones.'
+            : 'No te entendí bien 🙈 ¿Me lo dices de otra forma?',
+        )
+        return
+      }
+      update(next, 'hero')
       await askNext(next, missing(next) ? '¡Listo, ya lo acomodé! 👆 Solo me falta una cosa:' : undefined)
     } catch (err) {
       setError(getApiError(err, 'No te alcancé a entender. ¿Me lo repites?'))

@@ -455,7 +455,7 @@ export default function AgentChat({
                 En modo voz sale grande abajo, así que aquí se quita. */}
             {!voiceMode && (
               <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95">
-                <MascotSmart mood={mood} size={40} color={color} allow3d={mascot3d} />
+                <MascotSmart mood={mood} size={40} color={color} allow3d={mascot3d || onboarding} />
               </div>
             )}
             <button
