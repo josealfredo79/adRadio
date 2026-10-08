@@ -6,6 +6,7 @@ import { ArrowLeft, CheckCheck, ClipboardList, Info, Mic, Send, ShoppingBag, Squ
 import { isDarkTheme, type SiteThemeDef } from '@/pages/publicSite/theme'
 import BubbleTail from '@/components/BubbleTail'
 import InlineJoin from '@/components/InlineJoin'
+import { parseChatOptions } from '@/lib/chatOptions'
 import { chatPalette, dayLabel, hhmm, wallpaperPattern } from '@/lib/chatLook'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
@@ -283,13 +284,15 @@ export default function AgentChat({
 
   // echo=false: se manda sin volver a pintar la burbuja del cliente (al
   // retomar lo que pidió antes de registrarse).
-  const send = async (text?: string, spoken = voiceMode, echo = true) => {
+  // shown: lo que se ve en la burbuja del cliente si es distinto de lo que se manda
+  // (tocó el botón "9:30 am" → se manda "2", se ve "9:30 am").
+  const send = async (text?: string, spoken = voiceMode, echo = true, shown?: string) => {
     const message = (text ?? input).trim()
     if (!message || sending) return
     if (text === undefined) setInput('')
     setSentHere(true)
     onEvent?.('message')
-    if (echo) setTurns((t) => [...t, { role: 'user', content: message, at: new Date().toISOString() }])
+    if (echo) setTurns((t) => [...t, { role: 'user', content: shown ?? message, at: new Date().toISOString() }])
     setSending(true)
     try {
       const sessionId = await sessionRef.current
@@ -490,6 +493,10 @@ export default function AgentChat({
             const prevDay = prev?.at ? dayLabel(prev.at) : null
             const showDay = !!day && day !== prevDay
             const firstOfGroup = showDay || !prev || prev.role !== t.role || !!prev.note || prev.fromOwner !== t.fromOwner
+            // Opciones numeradas (horarios…): en la web nunca se ven las instrucciones de
+            // WhatsApp ("responde con el número"); los botones solo en el último mensaje.
+            const parsed = t.role === 'assistant' && !t.note ? parseChatOptions(t.content) : null
+            const choices = parsed && i === turns.length - 1 ? parsed : null
             const mine = t.role === 'user'
             return (
               <div key={i} className={i >= historyCount ? 'anim-bubble' : undefined}>
@@ -525,7 +532,9 @@ export default function AgentChat({
                             {business.name} en persona
                           </p>
                         )}
-                        <span className="whitespace-pre-line break-words">{renderChatText(t.content)}</span>
+                        <span className="whitespace-pre-line break-words">
+                          {renderChatText(parsed ? parsed.text || 'Elige una opción:' : t.content)}
+                        </span>
                         {/* Hora y palomitas abajo a la derecha, como en WhatsApp. */}
                         <span className="float-right ml-2 mt-1.5 flex translate-y-0.5 items-center gap-0.5 text-[11px] leading-none" style={{ color: pal.meta }}>
                           {t.at ? hhmm(t.at) : ''}
@@ -533,6 +542,34 @@ export default function AgentChat({
                         </span>
                       </div>
                     </div>
+                    {/* Opciones numeradas del bot (horarios…) como botones: solo en el último mensaje. */}
+                    {choices && (
+                      <div className="mt-1.5 flex max-w-[82%] flex-wrap gap-2">
+                        {choices.options.map((o) => (
+                          <button
+                            key={o.n}
+                            type="button"
+                            onClick={() => void send(o.n, false, true, o.label)}
+                            disabled={sending}
+                            className="press rounded-full px-3.5 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
+                            style={{ background: pal.incoming, color: pal.accent }}
+                          >
+                            {o.label}
+                          </button>
+                        ))}
+                        {choices.more && (
+                          <button
+                            type="button"
+                            onClick={() => void send('MAS', false, true, 'Ver más horarios')}
+                            disabled={sending}
+                            className="press rounded-full px-3.5 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
+                            style={{ background: color, color: pal.onBrand }}
+                          >
+                            Ver más horarios
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {t.confirm && i === turns.length - 1 && !sending && (
                       <div className="mt-1.5 flex gap-2">
                         <button
