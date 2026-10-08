@@ -88,7 +88,12 @@ function chatGreeting(business: ChatBusiness, customerName: string, returning: b
 }
 
 // Para arrancar con un toque (en el celular escribir cuesta más que en WhatsApp).
-const QUICK_ASKS = ['¿Qué productos tienen?', '¿Cuál es su horario?', 'Quiero agendar una cita', 'Quiero hacer un pedido']
+const QUICK_ASKS = [
+  { icon: '🛍️', text: '¿Qué productos tienen?' },
+  { icon: '🕒', text: '¿Cuál es su horario?' },
+  { icon: '📅', text: 'Quiero agendar una cita' },
+  { icon: '🛒', text: 'Quiero hacer un pedido' },
+]
 
 export default function AgentChat({
   business,
@@ -568,7 +573,7 @@ export default function AgentChat({
                             type="button"
                             onClick={() => void send(q.value, false, true, q.label)}
                             disabled={sending}
-                            className="press rounded-full px-3.5 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
+                            className="press min-w-[5.5rem] rounded-xl px-4 py-2.5 text-[15px] font-semibold shadow-sm disabled:opacity-50"
                             style={{ background: pal.incoming, color: pal.accent }}
                           >
                             {q.label}
@@ -585,7 +590,7 @@ export default function AgentChat({
                             type="button"
                             onClick={() => void send(o.n, false, true, o.label)}
                             disabled={sending}
-                            className="press rounded-full px-3.5 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
+                            className="press min-w-[5.5rem] rounded-xl px-4 py-2.5 text-[15px] font-semibold shadow-sm disabled:opacity-50"
                             style={{ background: pal.incoming, color: pal.accent }}
                           >
                             {o.label}
@@ -596,7 +601,7 @@ export default function AgentChat({
                             type="button"
                             onClick={() => void send('MAS', false, true, 'Ver más horarios')}
                             disabled={sending}
-                            className="press rounded-full px-3.5 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
+                            className="press min-w-[5.5rem] rounded-xl px-4 py-2.5 text-[15px] font-semibold shadow-sm disabled:opacity-50"
                             style={{ background: color, color: pal.onBrand }}
                           >
                             Ver más horarios
@@ -674,19 +679,21 @@ export default function AgentChat({
           })}
           {knownToken && bookedAt >= historyCount && <ChatNotifyOffer token={knownToken} pal={pal} color={color} />}
           {historyLoaded && !sentHere && (
-            <div className="mx-auto mt-4 max-w-sm text-center">
+            <div className="mx-auto mt-4 w-full max-w-lg text-center">
               <p className="mx-auto w-fit rounded-lg px-3 py-1 text-xs shadow-sm" style={{ background: pal.incoming, color: pal.meta }}>
                 {micAvailable ? 'Escríbeme o toca el micrófono y háblame 🎙️' : 'Pregúntame precios, horarios, citas o pedidos'}
               </p>
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {/* Grandes y en dos columnas: se tocan fácil en el celular y llenan el chat en la compu. */}
+              <div className="mt-3 grid grid-cols-2 gap-2">
                 {QUICK_ASKS.map((q) => (
                   <button
-                    key={q}
-                    onClick={() => void send(q)}
-                    className="press rounded-full px-3.5 py-2 text-sm font-medium shadow-sm"
+                    key={q.text}
+                    onClick={() => void send(q.text)}
+                    className="press flex min-h-[3.25rem] items-center gap-2.5 rounded-xl px-3.5 py-3 text-left text-[15px] font-semibold leading-snug shadow-sm"
                     style={{ background: pal.incoming, color: pal.accent }}
                   >
-                    {q}
+                    <span className="text-xl" aria-hidden>{q.icon}</span>
+                    <span>{q.text}</span>
                   </button>
                 ))}
               </div>
