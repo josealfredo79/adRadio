@@ -743,15 +743,18 @@ export default function AgentChat({
         {/* Después del primer mensaje los accesos directos siguen a la mano (si
             escribió en vez de tocar, o salió del alta, no se pierden). */}
         {!onboarding && sentHere && (
-          <div className="flex gap-2 overflow-x-auto px-2 pt-2 [scrollbar-width:none]" style={{ background: pal.bar }}>
+          // Bajan a otra línea si no caben: deslizar de lado no se nota en la computadora.
+          <div className="grid grid-cols-2 gap-1.5 px-2 pt-2 sm:flex sm:flex-wrap sm:justify-center" style={{ background: pal.bar }}>
             {quickAsks.map((q) => (
               <button
                 key={q.text}
                 type="button"
                 onClick={() => runQuickAsk(q)}
                 disabled={sending}
-                className="press flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold shadow-sm disabled:opacity-50"
-                style={q.action === 'onboard' ? { background: color, color: pal.onBrand } : { background: pal.incoming, color: pal.accent }}
+                className="press flex min-w-0 items-center justify-center gap-1 rounded-full border px-2.5 py-1.5 text-[12.5px] font-semibold leading-tight shadow-sm disabled:opacity-50"
+                style={q.action === 'onboard'
+                  ? { background: color, color: pal.onBrand, borderColor: color }
+                  : { background: pal.incoming, color: pal.accent, borderColor: `color-mix(in srgb, ${pal.accent} 45%, transparent)` }}
               >
                 <span aria-hidden>{q.icon}</span>
                 {q.text}
