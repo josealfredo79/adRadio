@@ -41,7 +41,11 @@ async def listen(
     audio: UploadFile | None = File(None),
     text: str | None = Form(None),
     draft: str | None = Form(None),
+    question: str | None = Form(None),
 ) -> dict:
+    """`question`: lo que radiecito le acaba de preguntar ("¿Cómo se llama tu
+    negocio?"), para que un "Tacos El Güero" suelto se entienda como nombre
+    y un "es de venta de celulares" como giro."""
     transcript = await read_transcript(audio, text, MAX_AUDIO_BYTES, MAX_TEXT, "1 minuto")
     current = None
     if draft:
@@ -50,7 +54,7 @@ async def listen(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Borrador inválido")
     try:
-        profile = await extract_profile(transcript, current)
+        profile = await extract_profile(transcript, current, question_text=(question or "")[:200] or None)
     except Exception:
         logger.exception("[ONBOARDING] extraction failed")
         raise HTTPException(status_code=502, detail="No pude ordenar lo que me contaste. Intenta de nuevo en un momento.")

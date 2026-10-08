@@ -9,8 +9,10 @@ function money(p: number | null) {
   return p == null ? 'Pregunta' : `$${Number.isInteger(p) ? p : p.toFixed(2)}`
 }
 
+export type EditField = 'name' | 'giro' | 'where' | 'hours' | 'services'
+
 export default function OnboardingCard({
-  draft, color, pal, flash, trial, published, link,
+  draft, color, pal, flash, trial, published, link, onEdit,
 }: {
   draft: Draft
   color: string
@@ -19,6 +21,8 @@ export default function OnboardingCard({
   trial: [string, string][]
   published: boolean
   link: string
+  // Tocar una parte = "me equivoqué": radiecito vuelve a preguntar solo eso.
+  onEdit?: (field: EditField) => void
 }) {
   const g = giroLook(draft.business_category)
   const pct = published ? 100 : progressOf(draft)
@@ -26,6 +30,13 @@ export default function OnboardingCard({
   const lines = hoursLines(draft.business_hours)
   const sk = (w: string) => <div className="onb-sk h-2.5 rounded-md" style={{ width: w }} />
   const just = (part: string) => (flash === part ? 'onb-flash' : '')
+  const editable = (field: EditField, label: string) => onEdit ? {
+    role: 'button', tabIndex: 0, 'aria-label': `Corregir ${label}`, title: `Corregir ${label}`,
+    onClick: () => onEdit(field),
+    onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit(field) } },
+    style: { cursor: 'pointer' },
+  } : {}
+  const pencil = onEdit ? <span aria-hidden className="float-right text-[11px] font-semibold normal-case tracking-normal opacity-70">✏️ Corregir</span> : null
 
   return (
     <div
@@ -46,6 +57,7 @@ export default function OnboardingCard({
       </div>
 
       <div
+        {...editable(draft.business_name ? 'name' : 'giro', 'el nombre')}
         className={`relative flex min-h-[112px] flex-col justify-end gap-1 overflow-hidden px-3.5 pb-3 pt-4 text-white ${just('hero')}`}
         style={{
           background: draft.business_name || draft.business_category
@@ -68,8 +80,8 @@ export default function OnboardingCard({
         )}
       </div>
 
-      <section className={`grid gap-2 border-t px-3.5 py-2.5 ${just('services')}`} style={{ borderColor: 'color-mix(in srgb, currentColor 10%, transparent)' }}>
-        <h4 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: pal.meta }}>Lo más pedido</h4>
+      <section {...editable('services', 'los productos')} className={`grid gap-2 border-t px-3.5 py-2.5 ${just('services')}`} style={{ ...(onEdit ? { cursor: 'pointer' } : {}), borderColor: 'color-mix(in srgb, currentColor 10%, transparent)' }}>
+        <h4 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: pal.meta }}>Lo más pedido{pencil}</h4>
         {draft.services.length
           ? draft.services.slice(0, 6).map((s, i) => (
               <div key={s.name + i} className="flex items-center gap-2.5">
@@ -86,13 +98,13 @@ export default function OnboardingCard({
             ))}
       </section>
 
-      <section className={`grid gap-1 border-t px-3.5 py-2.5 ${just('hours')}`} style={{ borderColor: 'color-mix(in srgb, currentColor 10%, transparent)' }}>
-        <h4 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: pal.meta }}>Horario</h4>
+      <section {...editable('hours', 'el horario')} className={`grid gap-1 border-t px-3.5 py-2.5 ${just('hours')}`} style={{ ...(onEdit ? { cursor: 'pointer' } : {}), borderColor: 'color-mix(in srgb, currentColor 10%, transparent)' }}>
+        <h4 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: pal.meta }}>Horario{pencil}</h4>
         {lines.length ? lines.map((l) => <p key={l} className="text-sm tabular-nums">{l}</p>) : sk('60%')}
       </section>
 
-      <section className={`grid gap-1 border-t px-3.5 py-2.5 ${just('where')}`} style={{ borderColor: 'color-mix(in srgb, currentColor 10%, transparent)' }}>
-        <h4 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: pal.meta }}>Dónde estamos</h4>
+      <section {...editable('where', 'dónde estás')} className={`grid gap-1 border-t px-3.5 py-2.5 ${just('where')}`} style={{ ...(onEdit ? { cursor: 'pointer' } : {}), borderColor: 'color-mix(in srgb, currentColor 10%, transparent)' }}>
+        <h4 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: pal.meta }}>Dónde estamos{pencil}</h4>
         {where ? <p className="text-sm">📍 {where}</p> : sk('80%')}
       </section>
 

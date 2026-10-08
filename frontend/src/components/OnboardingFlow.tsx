@@ -5,7 +5,8 @@ import api, { getApiError, setAccessToken } from '@/lib/api'
 import BubbleTail from '@/components/BubbleTail'
 import Honeypot from '@/components/Honeypot'
 import CodeWait from '@/components/CodeWait'
-import OnboardingCard from '@/components/OnboardingCard'
+import OnboardingCard, { type EditField } from '@/components/OnboardingCard'
+import { hoursLines } from '@/lib/onboardingDraft'
 import { EMPTY_DRAFT, giroLook, progressOf, type Draft } from '@/lib/onboardingDraft'
 import { verifyError } from '@/lib/codeMessages'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
@@ -21,7 +22,7 @@ import type { ChatPalette } from '@/lib/chatLook'
 type Msg = { who: 'bot' | 'me'; text: string }
 type Stage =
   | 'resume' | 'how' | 'record' | 'name' | 'giro' | 'giro-text' | 'where' | 'hours' | 'hours-text' | 'services'
-  | 'ready' | 'try' | 'change' | 'change-text' | 'phone' | 'code' | 'done'
+  | 'ready' | 'try' | 'change' | 'change-text' | 'fix' | 'confirm' | 'phone' | 'code' | 'done'
 
 const SAVE_KEY = 'iaradio-onboarding-draft'
 const GIROS = [
@@ -74,6 +75,29 @@ const ASK: Partial<Record<Stage, string>> = {
   services: 'Dime tus 3 productos o servicios más vendidos, con precio. Escríbelos o toca 🎤.',
 }
 
+const CLEAR: Record<EditField, Partial<Draft>> = {
+  name: { business_name: null }, giro: { business_category: null }, where: { city: null, address: null },
+  hours: { business_hours: null }, services: { services: [] },
+}
+// Para confirmar cada respuesta: qué partes cambiaron y cómo quedaron.
+const FIELDS: EditField[] = ['name', 'giro', 'where', 'hours', 'services']
+const fieldValue = (d: Draft, f: EditField) =>
+  ({ name: d.business_name, giro: d.business_category, where: [d.city, d.address], hours: d.business_hours, services: d.services })[f]
+const changedFields = (a: Draft, b: Draft) => FIELDS.filter((f) => JSON.stringify(fieldValue(a, f)) !== JSON.stringify(fieldValue(b, f)))
+function summaryOf(d: Draft, f: EditField): string {
+  switch (f) {
+    case 'name': return `• Nombre: ${d.business_name ?? '—'}`
+    case 'giro': return `• Giro: ${d.business_category ?? '—'}`
+    case 'where': return `• Dónde: ${[d.address, d.city].filter(Boolean).join(', ') || '—'}`
+    case 'hours': return `• Horario: ${hoursLines(d.business_hours).join('; ') || '—'}`
+    case 'services': return '• Productos:\n' + d.services.map((x) => `   ${x.name}${x.price != null ? ` — $${x.price}` : ''}`).join('\n')
+  }
+}
+
+const FIELD_LABEL: Record<EditField, string> = {
+  name: 'Nombre', giro: 'A qué me dedico', where: 'Dónde estoy', hours: 'Horario', services: 'Productos y precios',
+}
+
 export default function OnboardingFlow({
   pal, brand, onBrand, onActivity, onExit,
 }: {
@@ -96,6 +120,11 @@ export default function OnboardingFlow({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [recording, setRecording] = useState(false)
+  // Corrigiendo una parte ("me equivoqué"): esa parte se manda vacía para que
+  // la respuesta nueva la reemplace en vez de sumarse.
+  const [editing, setEditing] = useState<EditField | null>(null)
+  // Lo que se acaba de anotar y espera "¿Es correcto?".
+  const [confirming, setConfirming] = useState<EditField[]>([])
   const recorder = useRef<VoiceSession | null>(null)
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
@@ -132,15 +161,35 @@ export default function OnboardingFlow({
     setTimeout(() => setFlash(null), 1000)
   }
 
+  // Ya se llegó a "¡Quedó!": después, una corrección regresa a "¿Algo más?".
+  const reachedReady = useRef(false)
   const askNext = async (d: Draft, prefix?: string) => {
     const next = missing(d)
     if (!next) {
+      if (reachedReady.current) {
+        await bot('Listo 👍 ¿Algo más?')
+        setStage('ready')
+        return
+      }
+      reachedReady.current = true
       await bot('¡Quedó! 🎉 Ya tiene tus productos, tu horario y un asistente que contesta por ti.', 'Pruébala como si fueras tu cliente 👇')
       setStage('ready')
       return
     }
     await bot(...[prefix, ASK[next]!].filter(Boolean) as string[])
     setStage(next)
+  }
+
+  // Cada respuesta se confirma: "Anoté: … ¿Es correcto?" (✅ Sí / ✏️ No, corregir).
+  const confirmChange = async (prev: Draft, next: Draft) => {
+    const changed = changedFields(prev, next)
+    if (!changed.length) {
+      await askNext(next)
+      return
+    }
+    setConfirming(changed)
+    await bot(`Anoté:\n${changed.map((f) => summaryOf(next, f)).join('\n')}`, '¿Es correcto?')
+    setStage('confirm')
   }
 
   // Arranque: si dejó un alta a medias en este navegador, se retoma.
@@ -166,23 +215,25 @@ export default function OnboardingFlow({
   }, [])
 
   // Voz o texto libre → el backend ordena todo en el borrador.
-  const listen = async (form: FormData, shown: string) => {
+  const listen = async (form: FormData, shown: string, question?: string) => {
     setBusy(true)
     setError(null)
-    form.append('draft', JSON.stringify(draft))
+    const base: Draft = editing ? { ...draft, ...CLEAR[editing] } : draft
+    form.append('draft', JSON.stringify(base))
+    if (question) form.append('question', question)
     try {
       const { data } = await api.post('/public/onboarding/listen', form)
       if (shown) me(shown)
       else me(`🎤 “${String(data.transcript).slice(0, 220)}”`)
       // Lo que el servidor no trae (vacío) no borra lo que ya se contestó con botones.
       const p = data.profile as Draft
-      const next: Draft = { ...draft }
+      const next: Draft = { ...base }
       for (const [k, v] of Object.entries(p)) {
         if (v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)) next[k] = v
       }
       setText('')
       const key = (d: Draft) => JSON.stringify([d.business_name, d.business_category, d.city, d.address, d.business_hours, d.services])
-      if (key(next) === key(draft)) {
+      if (key(next) === key(base) && !editing) {
         // No dijo nada del negocio ("¿qué es la vida?"): no fingir que se acomodó algo.
         await bot(
           stage === 'record'
@@ -191,8 +242,9 @@ export default function OnboardingFlow({
         )
         return
       }
+      setEditing(null)
       update(next, 'hero')
-      await askNext(next, missing(next) ? '¡Listo, ya lo acomodé! 👆 Solo me falta una cosa:' : undefined)
+      await confirmChange(draft, next)
     } catch (err) {
       setError(getApiError(err, 'No te alcancé a entender. ¿Me lo repites?'))
     } finally {
@@ -225,21 +277,15 @@ export default function OnboardingFlow({
   const sendText = async (value: string, kind: Stage) => {
     const v = value.trim()
     if (!v) return
-    if (kind === 'name') {
-      me(v)
-      setText('')
-      const next = { ...draft, business_name: v }
-      update(next, 'hero')
-      await askNext(next, '¡Qué buen nombre!')
-      return
-    }
-    const hint: Partial<Record<Stage, string>> = {
-      'giro-text': 'Mi giro es: ', where: 'Mi negocio está en: ', 'hours-text': 'Mi horario es: ',
-      services: 'Mis productos más vendidos son: ', 'change-text': 'Cambia esto: ',
+    // Todo pasa por la IA con la pregunta que se hizo: así "Tacos El Güero" es
+    // el nombre y "es de venta de celulares" es el giro (no el nombre).
+    const question: Partial<Record<Stage, string>> = {
+      name: ASK.name, 'giro-text': ASK.giro, where: ASK.where, 'hours-text': ASK.hours, services: ASK.services,
+      'change-text': '¿Qué le cambio a tu página?',
     }
     const form = new FormData()
-    form.append('text', (hint[kind] ?? '') + v)
-    await listen(form, v)
+    form.append('text', v)
+    await listen(form, v, question[kind])
   }
 
   const tryAsk = async (q: string) => {
@@ -326,6 +372,17 @@ export default function OnboardingFlow({
 
   const pick = (label: string, then: () => void | Promise<void>) => () => { me(label); void then() }
 
+  // "Me equivoqué": vuelve a preguntar solo esa parte (desde la tarjeta o el botón).
+  const canEdit = !busy && !!stage && !['phone', 'code', 'done', 'how', 'resume', 'record'].includes(stage)
+  const editField = async (f: EditField) => {
+    if (!canEdit) return
+    me(`✏️ Corregir: ${FIELD_LABEL[f].toLowerCase()}`)
+    setEditing(f)
+    setText('')
+    await bot(ASK[f]!)
+    setStage(f)
+  }
+
   const field = 'min-w-0 flex-1 rounded-full px-4 py-3 text-base outline-none'
   const textDock = (placeholder: string, kind: Stage, multiline = false) => (
     <form
@@ -393,8 +450,9 @@ export default function OnboardingFlow({
         return <div className="grid grid-cols-3 gap-2">
           {GIROS.map((g) => chip(g.label, pick(g.label, async () => {
             const next = { ...draft, business_category: g.label }
+            setEditing(null)
             update(next, 'hero')
-            await askNext(next, 'Listo, ya le puse colores de tu giro 👆')
+            await confirmChange(draft, next)
           }), g.icon))}
           {chip('Otro', pick('Otro', async () => { await bot('¿A qué te dedicas?'); setStage('giro-text') }), '✏️')}
         </div>
@@ -404,8 +462,9 @@ export default function OnboardingFlow({
         return <div className="grid grid-cols-2 gap-2">
           {HOURS.map((h) => chip(h.label, pick(h.label, async () => {
             const next = { ...draft, business_hours: h.value }
+            setEditing(null)
             update(next, 'hours')
-            await askNext(next)
+            await confirmChange(draft, next)
           })))}
           {chip('Otro horario', pick('Otro horario', async () => { await bot('Dime tu horario, por ejemplo: martes a domingo de 2 a 11.'); setStage('hours-text') }), '✏️')}
         </div>
@@ -440,6 +499,29 @@ export default function OnboardingFlow({
           {chip('Así está perfecto', pick('Así está perfecto', async () => { await bot('¡Va! ¿Publicamos?'); setStage('ready') }), '✅', true)}
         </div>
       case 'change-text': return textDock('Ej. la quesadilla a 50', 'change-text')
+      case 'confirm':
+        return <div className="grid grid-cols-2 gap-2">
+          {chip('Sí, es correcto', pick('✅ Sí', async () => {
+            setConfirming([])
+            if (!missing(draft) && reachedReady.current) {
+              await bot('Listo 👍 ¿Algo más?')
+              setStage('ready')
+              return
+            }
+            await askNext(draft)
+          }), '✅')}
+          {chip('No, corregir', () => {
+            const f = confirming
+            setConfirming([])
+            if (f.length === 1) void editField(f[0])
+            else { me('✏️ No, corregir'); void bot('¿Qué corrijo?').then(() => setStage('fix')) }
+          }, '✏️')}
+        </div>
+      case 'fix':
+        return <div className="grid grid-cols-2 gap-2">
+          {(Object.keys(FIELD_LABEL) as EditField[]).map((f) => chip(FIELD_LABEL[f], () => void editField(f)))}
+          {chip('Nada, seguir', pick('Nada, seguir', () => askNext(draft)), '👍', true)}
+        </div>
       case 'phone':
         return <form className="flex items-end gap-1.5" onSubmit={(e) => { e.preventDefault(); void askCode() }}>
           <Honeypot value={trap} onChange={setTrap} />
@@ -495,7 +577,8 @@ export default function OnboardingFlow({
       {cardShown && (
         <div className="flex justify-start">
           <OnboardingCard draft={draft} color={cardColor} pal={pal} flash={flash} trial={trial}
-            published={!!published} link={siteUrl.replace(/^https?:\/\//, '')} />
+            published={!!published} link={siteUrl.replace(/^https?:\/\//, '')}
+            onEdit={canEdit ? (f) => void editField(f) : undefined} />
         </div>
       )}
 
@@ -549,8 +632,16 @@ export default function OnboardingFlow({
         <div className="sticky bottom-0 -mx-3 mt-3 grid gap-2 px-3 pb-1 pt-2" style={{ background: `linear-gradient(to bottom, transparent, ${pal.wallpaper} 18%)` }}>
           {error && <p className="rounded-lg px-3 py-1.5 text-xs text-rose-600 shadow-sm" style={{ background: pal.incoming }}>{error}</p>}
           {dock}
-          {stage !== 'done' && progressOf(draft) < 100 && stage !== 'how' && stage !== 'resume' && (
-            <button type="button" onClick={onExit} className="text-[11px] underline" style={{ color: pal.meta }}>Salir del alta</button>
+          {stage !== 'done' && stage !== 'phone' && stage !== 'code' && (
+            <div className="flex items-center justify-center gap-4 text-[12px]" style={{ color: pal.meta }}>
+              {canEdit && stage !== 'fix' && progressOf(draft) > 0 && (
+                <button type="button" className="underline" onClick={() => {
+                  me('✏️ Me equivoqué')
+                  void bot('Sin problema. ¿Qué corrijo? También puedes tocar esa parte en la tarjeta 👆').then(() => setStage('fix'))
+                }}>✏️ Me equivoqué</button>
+              )}
+              <button type="button" onClick={onExit} className="underline">Salir del alta</button>
+            </div>
           )}
         </div>
       )}

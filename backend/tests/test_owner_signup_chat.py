@@ -160,10 +160,13 @@ class TestOnboardingPublic:
     async def test_listen_returns_profile_with_name(self):
         from app.services.voice_setup import sanitize_profile
 
-        with patch("app.api.v1.onboarding.extract_profile", AsyncMock(return_value=sanitize_profile(PROFILE))):
+        extract = AsyncMock(return_value=sanitize_profile(PROFILE))
+        with patch("app.api.v1.onboarding.extract_profile", extract):
             out = await listen(request=_request("/api/v1/public/onboarding/listen"), audio=None,
-                               text="Soy Tacos El Güero, vendo tacos en Tlaxiaco", draft=None)
+                               text="Tacos El Güero", draft=None, question="¿Cómo se llama tu negocio?")
         assert out["profile"]["business_name"] == "Tacos El Güero"
+        # La pregunta va a la IA: un nombre suelto se entiende como nombre.
+        assert extract.await_args.kwargs["question_text"] == "¿Cómo se llama tu negocio?"
         assert out["profile"]["services"][0]["price"] == 85
 
     @pytest.mark.asyncio
