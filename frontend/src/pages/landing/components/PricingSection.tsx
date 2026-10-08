@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Zap, CheckCircle, Sparkles } from 'lucide-react'
 import { INCLUDED_IN_ALL, LANDING_PLANS, META_FEES_NOTE, PLANS_MAP, type PlanDefinition } from '@/lib/plans'
 
@@ -64,8 +63,8 @@ export default function PricingSection() {
                   </span>
                 </div>
 
-                <Link
-                  to="/register"
+                <a
+                  href="#pruebalo"
                   className={`block w-full rounded-xl py-3 text-center text-sm font-black transition-all hover:scale-105 mb-3 ${
                     plan.popular
                       ? 'bg-gradient-to-r from-[#674CC4] to-[#6366F1] text-white shadow-lg shadow-[#674CC4]/30 hover:shadow-[#674CC4]/50'
@@ -73,7 +72,7 @@ export default function PricingSection() {
                   }`}
                 >
                   Empezar con {plan.name} →
-                </Link>
+                </a>
 
                 {plan.popular && (
                   <div className="text-center text-[10px] font-bold text-[#674CC4] uppercase tracking-widest mb-5">

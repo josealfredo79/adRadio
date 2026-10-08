@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
 import { Zap, Clock, Shield, ArrowRight, Lock } from 'lucide-react'
 
 // Deadline: 72 hours from now (stored in sessionStorage so it persists on reload)
@@ -101,13 +100,13 @@ export default function CtaSection() {
 
         {/* CTA button */}
         <div className="mb-6">
-          <Link
-            to="/register"
+          <a
+            href="#pruebalo"
             className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-[#674CC4] to-[#6366F1] px-10 py-5 text-lg font-black text-white shadow-2xl shadow-indigo-500/40 hover:shadow-indigo-500/60 hover:scale-105 transition-all glow-purple"
           >
-            Crear mi cuenta gratis
+            Arma tu página gratis
             <ArrowRight className="h-5 w-5" />
-          </Link>
+          </a>
         </div>
 
         {/* Trust micro-text */}

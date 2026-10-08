@@ -1,7 +1,7 @@
 import SEO from '@/components/SEO'
 import LandingNav from './components/LandingNav'
 import HeroSection from './components/HeroSection'
-import VoiceDemoSection from './components/VoiceDemoSection'
+import LandingSignup from './components/LandingSignup'
 import ProblemSection from './components/ProblemSection'
 import HowItWorksSection from './components/HowItWorksSection'
 import FeaturesSection from './components/FeaturesSection'
@@ -12,7 +12,6 @@ import IntegrationsSection from './components/IntegrationsSection'
 import FaqSection from './components/FaqSection'
 import CtaSection from './components/CtaSection'
 import LandingFooter from './components/LandingFooter'
-import ChatWidget from './components/ChatWidget'
 
 export default function LandingPage() {
   return (
@@ -62,7 +61,7 @@ export default function LandingPage() {
 
         <LandingNav />
         <HeroSection />
-        <VoiceDemoSection />
+        <LandingSignup />
         <ProblemSection />
         <HowItWorksSection />
         <FeaturesSection />
@@ -73,7 +72,6 @@ export default function LandingPage() {
         <FaqSection />
         <CtaSection />
         <LandingFooter />
-        <ChatWidget />
       </div>
     </>
   )

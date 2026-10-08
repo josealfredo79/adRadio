@@ -100,7 +100,7 @@ const FIELD_LABEL: Record<EditField, string> = {
 }
 
 export default function OnboardingFlow({
-  pal, brand, onBrand, onActivity, onExit, onVoiceMood,
+  pal, brand, onBrand, onActivity, onExit, onVoiceMood, intro, exitLabel = 'Volver al chat',
 }: {
   pal: ChatPalette
   brand: string
@@ -110,6 +110,9 @@ export default function OnboardingFlow({
   // Alta por voz: radiecito 3D grande arriba del chat (como el modo voz) y su
   // cara: escucha, piensa, "habla" mientras escribe. null = sin escenario.
   onVoiceMood?: (mood: FaceMood | null) => void
+  // Primer mensaje (en la landing nadie tocó "Quiero probarlo gratis").
+  intro?: string
+  exitLabel?: string
 }) {
   const saved = useRef(load())
   const [msgs, setMsgs] = useState<Msg[]>([])
@@ -231,11 +234,13 @@ export default function OnboardingFlow({
         setStage('resume')
         return
       }
-      await bot('¡Va! Aquí abajo se va a construir tu página mientras me cuentas 👇')
+      await bot(intro ?? '¡Va! Aquí abajo se va a construir tu página mientras me cuentas 👇')
       setCardShown(true)
       await bot('¿Cómo prefieres contarme?')
       setStage('how')
     })()
+    // Una sola vez al montar (el candado `started` evita el doble arranque).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Voz o texto libre → el backend ordena todo en el borrador.
@@ -602,7 +607,7 @@ export default function OnboardingFlow({
             📊 Entrar a mi panel
           </a>
           <div className="flex items-center justify-center gap-4 text-xs" style={{ color: pal.meta }}>
-            <button type="button" onClick={onExit} className="underline">Volver al chat</button>
+            <button type="button" onClick={onExit} className="underline">{exitLabel}</button>
             <button type="button" className="underline" onClick={() => {
               try { localStorage.removeItem(SAVE_KEY) } catch { /* nada */ }
               onExit()

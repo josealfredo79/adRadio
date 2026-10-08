@@ -27,12 +27,12 @@ export default function LandingNav() {
           <Link to="/login" className="text-sm text-gray-400 hover:text-white transition-colors">
             Iniciar sesión
           </Link>
-          <Link
-            to="/register"
+          <a
+            href="#pruebalo"
             className="rounded-xl bg-gradient-to-r from-[#674CC4] to-[#6366F1] px-5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105 transition-all"
           >
             Prueba gratis →
-          </Link>
+          </a>
         </div>
       </div>
     </nav>

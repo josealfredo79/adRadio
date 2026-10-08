@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { CheckCircle, ArrowRight, Zap, Sparkles } from 'lucide-react'
 import WhatsAppMockup from './WhatsAppMockup'
 import BotFace from '@/components/BotFace'
@@ -49,18 +48,18 @@ export default function HeroSection() {
             </p>
 
             <div className="flex flex-wrap gap-3 mb-8">
-              <Link
-                to="/register"
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#674CC4] to-[#6366F1] px-7 py-3.5 text-base font-black text-white shadow-xl shadow-[#674CC4]/30 hover:shadow-[#674CC4]/50 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 glow-purple"
-              >
-                Empieza gratis
-                <ArrowRight className="h-4 w-4" />
-              </Link>
               <a
                 href="#pruebalo"
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#674CC4] to-[#6366F1] px-7 py-3.5 text-base font-black text-white shadow-xl shadow-[#674CC4]/30 hover:shadow-[#674CC4]/50 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 glow-purple"
+              >
+                Arma tu página gratis
+                <ArrowRight className="h-4 w-4" />
+              </a>
+              <a
+                href="#precios"
                 className="flex items-center gap-2 rounded-xl glass px-6 py-3.5 text-base font-semibold text-gray-300 hover:text-white hover:border-white/20 hover:scale-[1.03] active:scale-[0.98] transition-all duration-300"
               >
-                🎤 Pruébalo con tu voz
+                Ver precios
               </a>
             </div>
 
