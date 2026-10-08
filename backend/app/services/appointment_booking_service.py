@@ -240,6 +240,36 @@ async def _advance(
     customer_name = message.strip()
     chosen_slot = datetime.fromisoformat(state["chosen_slot"])
 
+    # Entre que eligió la hora y dio su nombre, otro cliente (por web o por
+    # WhatsApp) pudo apartarla. Se revisa otra vez, con un candado por negocio
+    # para que dos confirmaciones al mismo tiempo no se crucen (vale hasta el commit).
+    from sqlalchemy import text as _sql
+
+    from app.domain.appointment_actions import (
+        AppointmentConflictError,
+        check_no_conflict,
+    )
+
+    await db.execute(_sql("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"appointments:{advertiser.id}"})
+    try:
+        await check_no_conflict(db, advertiser, chosen_slot, 30)
+    except AppointmentConflictError:
+        day = chosen_slot.astimezone(TZ).date()
+        slots = await get_available_slots(db, advertiser, day)
+        if not slots:
+            if redis:
+                await redis.delete(key)
+            return "Uy, ese horario se acaba de ocupar 😕 y ya no quedan más ese día. ¿Quieres intentar con otra fecha?"
+        _, options, has_more = _format_slots_page(slots, 0)
+        state.update({"step": "collecting_time", "day": day.isoformat(), "offset": 0})
+        state.pop("chosen_slot", None)
+        await _save_state(redis, key, state)
+        more_hint = "\n\nEscribe *MAS* para ver más horarios." if has_more else ""
+        return (
+            f"Uy, ese horario se acaba de ocupar 😕 Estos siguen libres:\n{options}\n\n"
+            f"Responde con el número de la opción que prefieras.{more_hint}"
+        )
+
     appointment = Appointment(
         advertiser_id=advertiser.id,
         contact_id=contact.id,

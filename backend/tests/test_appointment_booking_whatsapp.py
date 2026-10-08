@@ -131,3 +131,39 @@ class TestAppointmentBookingViaWhatsApp:
             # confirms no exception and the pipeline completed normally.
         finally:
             await _cleanup([user_id])
+
+
+class TestSlotTakenWhileGivingName:
+    @pytest.mark.asyncio
+    async def test_slot_taken_meanwhile_is_not_double_booked(self):
+        """Eligió las 9:00 y, mientras escribía su nombre, otro cliente apartó
+        esa hora: no se dobla la cita, se le ofrecen las que siguen libres."""
+        from datetime import datetime, timedelta
+
+        from app.services.availability_service import TZ
+
+        user_id, _contact_id = await _seed_advertiser_and_contact()
+        try:
+            async with AsyncSessionLocal() as db:
+                advertiser = await db.get(User, user_id)
+            with patch("app.core.email.send_new_appointment_email", new_callable=AsyncMock):
+                await _send_message(advertiser, "quiero agendar una cita")
+                await _send_message(advertiser, "mañana")
+                await _send_message(advertiser, "1")  # la primera: mañana 9:00
+
+                tomorrow_9 = datetime.combine((datetime.now(TZ) + timedelta(days=1)).date(),
+                                              datetime.min.time(), tzinfo=TZ).replace(hour=9)
+                async with AsyncSessionLocal() as db:
+                    db.add(Appointment(advertiser_id=user_id, customer_name="Otro cliente", customer_phone="+525500000000",
+                                       service="corte", scheduled_at=tomorrow_9, duration_min=30, status="confirmed"))
+                    await db.commit()
+
+                _r, send4 = await _send_message(advertiser, "Ana Torres")
+                reply = send4.call_args.args[1]
+                assert "se acaba de ocupar" in reply and "1)" in reply
+
+            async with AsyncSessionLocal() as db:
+                appts = (await db.execute(select(Appointment).where(Appointment.advertiser_id == user_id))).scalars().all()
+            assert [a.customer_name for a in appts] == ["Otro cliente"]
+        finally:
+            await _cleanup([user_id])
