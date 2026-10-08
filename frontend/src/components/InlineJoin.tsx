@@ -4,6 +4,8 @@ import api, { getApiError } from '@/lib/api'
 import { saveAccountToken } from '@/lib/customerAccount'
 import { readRef } from '@/lib/referral'
 import Honeypot from '@/components/Honeypot'
+import CodeWait from '@/components/CodeWait'
+import { verifyError } from '@/lib/codeMessages'
 import type { ChatPalette } from '@/lib/chatLook'
 
 // Registro sin salir del chat: cuando el bot necesita sus datos para agendar o
@@ -31,6 +33,7 @@ export default function InlineJoin({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [triedCode, setTriedCode] = useState('')
+  const [sentAt, setSentAt] = useState(0)
   const codeRef = useRef<HTMLInputElement>(null)
 
   const askCode = async () => {
@@ -39,6 +42,7 @@ export default function InlineJoin({
     try {
       await api.post(`/public/join/${slug}/code`, { name, phone, website: trap })
       setStep('code')
+      setSentAt(Date.now())
       setTimeout(() => codeRef.current?.focus(), 50)
     } catch (err) {
       setError(getApiError(err, 'No se pudo mandar el código'))
@@ -56,7 +60,8 @@ export default function InlineJoin({
       const token = String(data.portal_path || '').replace(/^\/c\//, '')
       onVerified(token, name.trim().split(/\s+/)[0] || '')
     } catch (err) {
-      setError(getApiError(err, 'Código incorrecto'))
+      setError(verifyError(err))
+      setCode('')
       setBusy(false)
     }
   }
@@ -103,6 +108,7 @@ export default function InlineJoin({
           <input ref={codeRef} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
             placeholder="123456" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
             className={`${field} text-center text-xl tracking-[0.4em]`} style={fieldStyle} aria-label="Código" />
+          <CodeWait sentAt={sentAt} muted={pal.meta} accent={color} onResend={() => { setCode(''); void askCode() }} />
           <div className="flex items-center justify-between text-xs" style={{ color: pal.meta }}>
             <button type="button" className="underline" onClick={() => { setStep('form'); setCode(''); setError(null) }}>
               Cambiar número

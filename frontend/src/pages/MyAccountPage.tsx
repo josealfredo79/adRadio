@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Honeypot from '@/components/Honeypot'
+import CodeWait from '@/components/CodeWait'
+import { verifyError } from '@/lib/codeMessages'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 import { useNativeViewport } from '@/lib/useNativeViewport'
@@ -138,6 +140,7 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
   const [code, setCode] = useState('')
   const [trap, setTrap] = useState('')
   const [step, setStep] = useState<'phone' | 'code'>('phone')
+  const [sentAt, setSentAt] = useState(0)
   const [busy, setBusy] = useState(false)
   const [info, setInfo] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -149,6 +152,7 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
       const { data } = await api.post('/public/me/code', { phone, website: trap })
       setInfo(data.message)
       setStep('code')
+      setSentAt(Date.now())
     } catch (err) {
       setError(getApiError(err, 'No se pudo mandar el código'))
     } finally {
@@ -174,7 +178,8 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
       const { data } = await api.post('/public/me/verify', { phone, code })
       onToken(data.token)
     } catch (err) {
-      setError(getApiError(err, 'Código incorrecto'))
+      setError(verifyError(err))
+      setCode('')
     } finally {
       setBusy(false)
     }
@@ -223,6 +228,7 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
               autoFocus
               className={`${input} tracking-[0.4em]`}
             />
+            <CodeWait sentAt={sentAt} muted="rgba(255,255,255,.6)" accent={'#a5b4fc'} onResend={() => { setCode(''); void askCode() }} />
           </>
         )}
         {error && <p className="text-sm text-rose-400">{error}</p>}

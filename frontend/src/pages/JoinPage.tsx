@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { captureRef, readRef } from '@/lib/referral'
 import Honeypot from '@/components/Honeypot'
+import CodeWait from '@/components/CodeWait'
+import { verifyError } from '@/lib/codeMessages'
 import { useQuery } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
@@ -36,6 +38,7 @@ export default function JoinPage() {
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [step, setStep] = useState<'form' | 'code'>('form')
+  const [sentAt, setSentAt] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Con los 6 dígitos (pegados o tecleados) entra solo, sin buscar el botón.
@@ -69,6 +72,7 @@ export default function JoinPage() {
     try {
       await api.post(`/public/join/${slug}/code`, { name, phone, website: trap })
       setStep('code')
+      setSentAt(Date.now())
     } catch (err) {
       setError(getApiError(err, 'No se pudo mandar el código'))
     } finally {
@@ -84,7 +88,8 @@ export default function JoinPage() {
       saveAccountToken(out.account_token)
       navigate(out.portal_path, { replace: true })
     } catch (err) {
-      setError(getApiError(err, 'Código incorrecto'))
+      setError(verifyError(err))
+      setCode('')
       setBusy(false)
     }
   }
@@ -181,6 +186,7 @@ export default function JoinPage() {
                       autoFocus
                       className={`${input} tracking-[0.4em]`}
                     />
+                    <CodeWait sentAt={sentAt} muted="rgba(255,255,255,.6)" accent={color} onResend={() => { setCode(''); void askCode() }} />
                   </>
                 )}
                 {error && <p className="text-sm text-rose-400">{error}</p>}
