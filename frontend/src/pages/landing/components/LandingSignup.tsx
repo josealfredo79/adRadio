@@ -47,7 +47,7 @@ export default function LandingSignup() {
   const dark = isDarkTheme(theme)
 
   return (
-    <>
+    <div className="relative z-[100]">
       {!open && (
         <button
           type="button"
@@ -86,6 +86,6 @@ export default function LandingSignup() {
           onClose={() => setOpen(false)}
         />
       )}
-    </>
+    </div>
   )
 }
