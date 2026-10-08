@@ -132,6 +132,39 @@ def _format_slots_page(all_slots: list[datetime], offset: int) -> tuple[list[dat
     return page, options, has_more
 
 
+QUICK_DAYS = 6
+QUICK_DAYS_LOOKAHEAD = 14
+_SHORT_WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
+
+async def booking_quick_replies(db: AsyncSession, advertiser: User, contact: Contact | None, redis) -> list[dict]:
+    """Botones para el paso actual de la cita (chat web: tocar en vez de
+    escribir). Días: solo los que de verdad tienen horarios libres, con un
+    valor que parse_spanish_date entiende sin ambigüedad (DD/MM). Nombre: el
+    que ya conocemos. Los horarios ya salen como opciones numeradas."""
+    if contact is None:
+        return []
+    state = await _load_state(redis, f"{BOOKING_REDIS_PREFIX}{advertiser.id}:{contact.id}")
+    step = (state or {}).get("step")
+    if step == "collecting_date":
+        today = datetime.now(TZ).date()
+        out: list[dict] = []
+        for k in range(QUICK_DAYS_LOOKAHEAD):
+            day = today + timedelta(days=k)
+            if not await get_available_slots(db, advertiser, day):
+                continue
+            label = "Hoy" if k == 0 else "Mañana" if k == 1 else f"{_SHORT_WEEKDAYS[day.weekday()]} {day.day}"
+            out.append({"label": label, "value": f"{day.day}/{day.month}/{day.year}"})
+            if len(out) >= QUICK_DAYS:
+                break
+        return out
+    if step == "collecting_name":
+        name = (contact.name or "").strip()
+        if name and not name.lstrip("+").replace(" ", "").isdigit():
+            return [{"label": name, "value": name}]
+    return []
+
+
 async def _load_state(redis, key: str) -> dict | None:
     if not redis:
         return None
@@ -190,6 +223,9 @@ async def handle_appointment_booking(
 
     state = {"step": "collecting_date", "service": service_label(message)}
     await _save_state(redis, key, state)
+    if channel == "widget":
+        # En el chat web los días salen como botones (booking_quick_replies).
+        return "¡Con gusto! 📅 ¿Qué día te gustaría tu cita? Elige un día 👇 o escríbelo."
     return (
         "¡Con gusto! 📅 ¿Qué día te gustaría tu cita?\n"
         "Puedes escribir por ejemplo *hoy*, *mañana*, *el viernes*, o *15 de agosto*."

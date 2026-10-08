@@ -415,3 +415,35 @@ def test_service_label_is_readable():
     assert service_label("quiero una cita") == "Cita"
     assert service_label("¿Puedo agendar una visita por favor?") == "Cita"
     assert service_label("quiero agendar una cita para corte de cabello") == "Quiero agendar una cita para corte de cabello"
+
+
+@pytest.mark.asyncio
+async def test_quick_replies_let_the_customer_book_by_tapping(fake_redis):
+    """Chat web: días con lugar como botones (con un valor que el bot entiende),
+    luego los horarios (opciones numeradas) y al final su nombre como botón."""
+    from app.services.appointment_booking_service import (
+        booking_quick_replies,
+        parse_spanish_date,
+    )
+
+    hours = {d: ["09:00", "11:00"] for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+    user_id = await _seed_user(business_hours=hours)
+    contact_id = await _seed_contact(user_id)
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, user_id)
+            contact = await db.get(Contact, contact_id)
+            await handle_appointment_booking(db, user, contact, "quiero una cita", fake_redis, channel="widget")
+            days = await booking_quick_replies(db, user, contact, fake_redis)
+            assert 1 <= len(days) <= 6 and days[0]["label"] in ("Hoy", "Mañana")
+            assert all(parse_spanish_date(d["value"]) for d in days)
+
+            reply = await handle_appointment_booking(db, user, contact, days[-1]["value"], fake_redis, channel="widget")
+            assert "1)" in reply
+            assert await booking_quick_replies(db, user, contact, fake_redis) == []  # los horarios ya son opciones
+
+            await handle_appointment_booking(db, user, contact, "1", fake_redis, channel="widget")
+            names = await booking_quick_replies(db, user, contact, fake_redis)
+            assert names == [{"label": contact.name, "value": contact.name}]
+    finally:
+        await _cleanup([user_id])

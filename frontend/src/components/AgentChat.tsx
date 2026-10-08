@@ -55,6 +55,8 @@ interface ChatTurn {
   note?: boolean
   // Cuándo (ISO): la hora en la burbuja y las etiquetas "Hoy" / "Ayer".
   at?: string
+  // Botones del servidor para el paso actual (ej. qué día de la cita).
+  quickReplies?: { label: string; value: string }[]
 }
 
 interface HistoryMessage {
@@ -332,6 +334,7 @@ export default function AgentChat({
             content: reply,
             at: new Date().toISOString(),
             cards,
+            quickReplies: r.data.quick_replies ?? [],
             needsContact: !!r.data.needs_contact,
             confirm: !!r.data.confirm,
           },
@@ -550,6 +553,23 @@ export default function AgentChat({
                         </span>
                       </div>
                     </div>
+                    {/* Botones que manda el servidor (días de la cita, el nombre): solo en el último mensaje. */}
+                    {!choices && i === turns.length - 1 && !!t.quickReplies?.length && (
+                      <div className="mt-1.5 flex max-w-[82%] flex-wrap gap-2">
+                        {t.quickReplies.map((q) => (
+                          <button
+                            key={q.value}
+                            type="button"
+                            onClick={() => void send(q.value, false, true, q.label)}
+                            disabled={sending}
+                            className="press rounded-full px-3.5 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
+                            style={{ background: pal.incoming, color: pal.accent }}
+                          >
+                            {q.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {/* Opciones numeradas del bot (horarios…) como botones: solo en el último mensaje. */}
                     {choices && (
                       <div className="mt-1.5 flex max-w-[82%] flex-wrap gap-2">

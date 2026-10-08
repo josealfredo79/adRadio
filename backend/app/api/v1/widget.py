@@ -294,7 +294,18 @@ async def widget_chat(
         logger.warning("[WIDGET-CHAT] Failed to extract product cards", exc_info=True)
         cards = []
 
-    return {"reply": reply, "session_id": session_id, "cards": cards, "needs_contact": needs_contact, "confirm": confirm}
+    # Botones para el paso de la cita en curso (qué día, a qué nombre).
+    quick_replies: list[dict] = []
+    if contact is not None and not unverified:
+        try:
+            from app.services.appointment_booking_service import booking_quick_replies
+
+            quick_replies = await booking_quick_replies(db, user, contact, redis)
+        except Exception:
+            logger.warning("[WIDGET-CHAT] quick replies failed", exc_info=True)
+
+    return {"reply": reply, "session_id": session_id, "cards": cards, "needs_contact": needs_contact,
+            "confirm": confirm, "quick_replies": quick_replies}
 
 
 @router.post("/lead/{advertiser_id}")
