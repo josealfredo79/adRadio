@@ -7,7 +7,10 @@ import { verifyError } from '@/lib/codeMessages'
 import api, { getApiError } from '@/lib/api'
 import SEO from '@/components/SEO'
 import { useNativeViewport } from '@/lib/useNativeViewport'
-import { chatSeenAt, readAccountToken, saveAccountToken } from '@/lib/customerAccount'
+import { readAccountToken, readRecentChats, saveAccountToken } from '@/lib/customerAccount'
+import CustomerChatList from '@/components/CustomerChatList'
+import ChatAvatar from '@/components/ChatAvatar'
+import { useMyBusinesses, type MyBusiness } from '@/lib/customerChats'
 import { Gift, LogOut, MessageCircle, Search } from 'lucide-react'
 
 // /mi — la app del cliente: entra con su número + un código por WhatsApp
@@ -15,8 +18,6 @@ import { Gift, LogOut, MessageCircle, Search } from 'lucide-react'
 // dueño 2026-10-05): una lista de chats, uno por negocio, con el último
 // mensaje y globito de no leídos; al tocar uno se abre su chat a pantalla
 // completa (/c/:token). Abajo, Chats y Descubrir.
-
-const TZ = 'America/Mexico_City'
 
 interface DiscoverBusiness {
   slug: string
@@ -29,67 +30,9 @@ interface DiscoverBusiness {
   reward: string | null
 }
 
-interface MyBusiness {
-  portal_path: string
-  name: string
-  logo_url: string
-  color: string
-  city: string
-  loyalty: { stamps: number; required: number; reward: string; rewards_ready: number } | null
-  next_appointment: { service: string; scheduled_at: string } | null
-  coupons: number
-  agent?: string
-  last_message: { text: string; at: string | null; from_me: boolean } | null
-}
-
-const dayKey = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(d)
-
-// Como WhatsApp: hora si fue hoy, "ayer", el día de la semana o la fecha.
-function chatTime(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const now = new Date()
-  if (dayKey(d) === dayKey(now)) return new Intl.DateTimeFormat('es-MX', { hour: 'numeric', minute: '2-digit', timeZone: TZ }).format(d)
-  if (dayKey(d) === dayKey(new Date(now.getTime() - 86400000))) return 'ayer'
-  if (now.getTime() - d.getTime() < 6 * 86400000)
-    return new Intl.DateTimeFormat('es-MX', { weekday: 'short', timeZone: TZ }).format(d).replace('.', '')
-  return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', timeZone: TZ }).format(d).replace('.', '')
-}
-
-const portalToken = (path: string) => path.replace(/^\/c\//, '')
-
-function isUnread(b: MyBusiness): boolean {
-  const m = b.last_message
-  if (!m || m.from_me || !m.at) return false
-  const seen = chatSeenAt(portalToken(b.portal_path))
-  return !seen || new Date(m.at) > new Date(seen)
-}
-
-// Sin mensajes todavía: lo útil de ese negocio en una línea.
-function idlePreview(b: MyBusiness): string {
-  if (b.loyalty?.rewards_ready) return `🎁 ¡Tu premio está listo! ${b.loyalty.reward}`
-  if (b.next_appointment) return `📅 ${b.next_appointment.service}`
-  if (b.coupons) return `🎫 Tienes ${b.coupons} ${b.coupons === 1 ? 'cupón' : 'cupones'}`
-  if (b.loyalty) return `🎟️ ${b.loyalty.stamps} de ${b.loyalty.required} sellos`
-  return 'Toca para platicar'
-}
-
-function Avatar({ name, logo, color, size = 52 }: { name: string; logo: string; color: string; size?: number }) {
-  return logo ? (
-    <img src={logo} alt="" className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
-  ) : (
-    <div
-      className="flex shrink-0 items-center justify-center rounded-full text-lg font-bold text-white"
-      style={{ width: size, height: size, background: `linear-gradient(135deg, ${color}, ${color}99)` }}
-    >
-      {(name || '?')[0].toUpperCase()}
-    </div>
-  )
-}
-
 export default function MyAccountPage() {
   const [token, setToken] = useState<string | null>(readAccountToken)
-  useNativeViewport('#06060f')
+  useNativeViewport('#111b21')
   const { data: status } = useQuery<{ available: boolean }>({
     queryKey: ['account-status'],
     queryFn: () => api.get('/public/me/status').then((r) => r.data),
@@ -106,6 +49,11 @@ export default function MyAccountPage() {
     }
   }, [])
 
+  // Sin entrar con su número: los chats que ya abrió en este celular (llegó por
+  // el link de WhatsApp), como la lista de WhatsApp. "Entrar" muestra todos.
+  const [recent] = useState(readRecentChats)
+  const [showLogin, setShowLogin] = useState(false)
+
   const onToken = (t: string | null) => {
     saveAccountToken(t)
     setToken(t)
@@ -114,7 +62,7 @@ export default function MyAccountPage() {
   return (
     <>
       <SEO title="Mis negocios — IaRadio" noIndex />
-      <div className="min-h-screen bg-[#06060f] px-4 pb-16 text-white" style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 0px))' }}>
+      <div className="min-h-screen bg-[#111b21] px-4 pb-16 text-white" style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 0px))' }}>
         <div className="mx-auto max-w-lg">
           <p className="text-sm font-semibold tracking-wide text-indigo-300">IaRadio</p>
           {token ? (
@@ -126,6 +74,8 @@ export default function MyAccountPage() {
                 Aquí vas a ver todos los negocios donde eres cliente. Mientras, usa el link que te mandó cada negocio por WhatsApp.
               </p>
             </main>
+          ) : recent.length && !showLogin ? (
+            <RecentChats chats={recent} onLogin={() => setShowLogin(true)} />
           ) : (
             <Login onToken={onToken} />
           )}
@@ -267,19 +217,7 @@ function Login({ onToken }: { onToken: (t: string) => void }) {
 function Businesses({ token, onLogout }: { token: string; onLogout: () => void }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const { data, isLoading, error } = useQuery<{ businesses: MyBusiness[] }>({
-    queryKey: ['my-businesses', token],
-    queryFn: () => api.get('/public/me/businesses', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.data),
-    retry: false,
-    // Mensajes nuevos de los negocios mientras la lista está abierta.
-    refetchInterval: 30000,
-  })
-
-  // Sesión vencida o inválida: de vuelta a entrar con el número.
-  useEffect(() => {
-    const status = (error as { response?: { status?: number } } | null)?.response?.status
-    if (status === 401) onLogout()
-  }, [error, onLogout])
+  const { data, isLoading, error } = useMyBusinesses(token, onLogout)
 
   const logout = () => {
     qc.removeQueries({ queryKey: ['my-businesses'] })
@@ -300,8 +238,6 @@ function Businesses({ token, onLogout }: { token: string; onLogout: () => void }
         <Discover token={token} />
       ) : (
         <>
-          {isLoading && <p className="mt-8 text-white/50">Cargando…</p>}
-          {error && <p className="mt-8 text-rose-400">{getApiError(error, 'No se pudieron cargar tus chats')}</p>}
           {data && data.businesses.length === 0 && (
             <div className="mt-10 text-center text-white/60">
               <p>Todavía no tienes chats con ningún negocio.</p>
@@ -310,46 +246,15 @@ function Businesses({ token, onLogout }: { token: string; onLogout: () => void }
               </button>
             </div>
           )}
-          <ul className="mt-3 -mx-4">
-            {data?.businesses.map((b) => {
-              const unread = isUnread(b)
-              const m = b.last_message
-              return (
-                <li key={b.portal_path}>
-                  <button
-                    onClick={() => navigate(b.portal_path)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-white/[0.06] hover:bg-white/[0.04]"
-                  >
-                    <Avatar name={b.name} logo={b.logo_url} color={b.color} />
-                    <div className="min-w-0 flex-1 border-b border-white/[0.06] pb-3">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <p className="truncate font-semibold">{b.name}</p>
-                        <span className={`shrink-0 text-xs ${unread ? 'font-semibold text-emerald-400' : 'text-white/40'}`}>
-                          {chatTime(m?.at ?? null)}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 flex items-center justify-between gap-2">
-                        <p className={`truncate text-sm ${unread ? 'text-white' : 'text-white/55'}`}>
-                          {m ? `${m.from_me ? 'Tú: ' : ''}${m.text}` : idlePreview(b)}
-                        </p>
-                        {unread && (
-                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[11px] font-bold text-black">
-                            1
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+          <div className="mt-3 -mx-4">
+            <CustomerChatList businesses={data?.businesses} isLoading={isLoading} error={error} onOpen={(path) => navigate(path)} />
+          </div>
         </>
       )}
 
       {/* Abajo, como la barra de WhatsApp. */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#06060f]/95 backdrop-blur"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#111b21]/95 backdrop-blur"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <div className="mx-auto grid max-w-lg grid-cols-2">
@@ -429,7 +334,7 @@ function Discover({ token }: { token: string }) {
         {data?.businesses.map((b) => (
           <div key={b.slug} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
             <div className="flex items-center gap-3">
-              <Avatar name={b.name} logo={b.logo_url} color={b.color} size={48} />
+              <ChatAvatar name={b.name} logo={b.logo_url} color={b.color} size={48} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">{b.name}</p>
                 <p className="truncate text-xs text-white/50">{[b.city, b.tagline].filter(Boolean).join(' · ')}</p>
@@ -460,5 +365,28 @@ function Discover({ token }: { token: string }) {
         ))}
       </div>
     </div>
+  )
+}
+
+
+// Chats de este celular sin haber entrado con su número.
+function RecentChats({ chats, onLogin }: { chats: ReturnType<typeof readRecentChats>; onLogin: () => void }) {
+  const navigate = useNavigate()
+  const businesses: MyBusiness[] = chats.map((c) => ({
+    portal_path: c.portal_path, name: c.name, logo_url: c.logo_url, color: c.color, city: '',
+    loyalty: null, next_appointment: null, coupons: 0, last_message: null,
+  }))
+  return (
+    <main className="pb-16">
+      <h1 className="mt-2 text-2xl font-bold tracking-tight">Chats</h1>
+      <div className="mt-3 -mx-4">
+        <CustomerChatList businesses={businesses} onOpen={(path) => navigate(path)} />
+      </div>
+      <button onClick={onLogin} className="mt-6 w-full rounded-2xl border border-white/10 px-4 py-3.5 text-left text-sm text-white/70 hover:bg-white/[0.04]">
+        <span className="font-semibold text-white">¿Eres cliente de más negocios?</span>
+        <br />
+        Entra con tu número y ve todos tus chats en un solo lugar.
+      </button>
+    </main>
   )
 }

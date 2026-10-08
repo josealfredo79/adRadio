@@ -5,7 +5,7 @@ import api from '@/lib/api'
 import SEO from '@/components/SEO'
 import AgentChat from '@/components/AgentChat'
 import { useNativeViewport } from '@/lib/useNativeViewport'
-import { markChatSeen, readAccountToken } from '@/lib/customerAccount'
+import { markChatSeen, rememberChat } from '@/lib/customerAccount'
 import {
   ArrowLeft,
   Bell,
@@ -16,7 +16,6 @@ import {
   Copy,
   Gift,
   MessageCircle,
-  Mic,
   ShoppingBag,
   Sparkles,
   Stamp,
@@ -26,9 +25,10 @@ import {
 } from 'lucide-react'
 import { getSiteTheme, isDarkTheme, type SiteThemeDef } from '@/pages/publicSite/theme'
 import { waDigits } from '@/pages/publicSite/utils'
-import { MeshBackground, cardElevationStyle } from '@/pages/publicSite/components'
+import { cardElevationStyle } from '@/pages/publicSite/components'
 import { PUBLIC_SITE_STYLES } from '@/pages/publicSite/styles'
 import { referralLink } from '@/lib/referral'
+import { chatPalette } from '@/lib/chatLook'
 import { detectNotifyState, enablePush, type NotifyState } from '@/lib/webPushClient'
 
 // Portal del cliente (/c/:token) y página de una promo (/c/:token/promo/:promoId).
@@ -182,6 +182,12 @@ export default function PortalPage() {
   })
   useNativeViewport(data ? getSiteTheme(data.business.site_theme).bg : undefined)
 
+  // Para la lista de chats de /mi en este celular (aunque no haya entrado con su número).
+  useEffect(() => {
+    if (data && token)
+      rememberChat({ portal_path: `/c/${token}`, name: data.business.name, logo_url: data.business.logo_url, color: data.business.color })
+  }, [data, token])
+
   // El index.html trae el manifest del dashboard; aquí va uno por cliente para
   // que "Agregar a inicio" instale la app del negocio (requisito en iPhone
   // para recibir avisos). Se restaura al salir.
@@ -233,11 +239,14 @@ export default function PortalPage() {
   const theme = getSiteTheme(data.business.site_theme)
   const dark = isDarkTheme(theme)
   const color = data.business.color
+  // La info usa los colores del chat (lib/chatLook): fondo y paneles como WhatsApp.
+  const pal = chatPalette(color, dark)
+  const infoTheme: SiteThemeDef = { ...theme, bg: pal.bar, cardBg: pal.incoming, cardBorder: 'transparent', text: pal.text, muted: pal.meta }
 
   if (chatOpen) {
-    // Atrás: a la lista de chats si entró con su número (/mi); si llegó por el
-    // link de WhatsApp, a la info del negocio.
-    const back = () => (readAccountToken() ? navigate('/mi') : setView('info'))
+    // Atrás: a la lista de chats (/mi), como en WhatsApp — con su número, todos
+    // sus negocios; si llegó por el link de WhatsApp, los chats de este celular.
+    const back = () => navigate('/mi')
     return (
       <>
         <SEO title={data.business.name} noIndex />
@@ -263,21 +272,29 @@ export default function PortalPage() {
     <>
       <SEO title={`Tu espacio en ${data.business.name}`} noIndex />
       <style>{PUBLIC_SITE_STYLES}</style>
-      <div className="min-h-screen font-sans pb-12" style={{ background: theme.bg, color: theme.text }}>
-        <MeshBackground color={color} dark={dark} />
-        <div className="relative z-10 mx-auto max-w-lg px-4" style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top, 0px))' }}>
-          <button
-            onClick={() => setView('chat')}
-            className="press mb-4 inline-flex items-center gap-1.5 text-sm"
-            style={{ color: theme.muted }}
-          >
-            <ArrowLeft size={16} /> Volver al chat
+      {/* "Info. del negocio", como la info de un contacto en WhatsApp: mismos
+          colores que el chat, y lo que se pide aquí lo atiende el bot en el chat. */}
+      <div className="min-h-screen font-sans pb-12" style={{ background: infoTheme.bg, color: infoTheme.text }}>
+        <div
+          className="sticky top-0 z-20 flex items-center gap-3 px-2 py-2 shadow-sm"
+          style={{ background: color, color: pal.onBrand, paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))' }}
+        >
+          <button onClick={() => setView('chat')} aria-label="Volver al chat" className="press rounded-full p-2">
+            <ArrowLeft size={22} />
           </button>
-          <BusinessHeader business={data.business} theme={theme} />
+          <p className="text-[17px] font-semibold">{promoId ? 'Promoción' : 'Info. del negocio'}</p>
+        </div>
+        <div className="mx-auto max-w-lg px-3">
+          <InfoProfile
+            business={data.business}
+            theme={infoTheme}
+            onChat={openChat}
+            catalogHref={data.business.slug ? `/sitio/${data.business.slug}` : null}
+          />
           {promoId ? (
-            <PromoView token={token!} promoId={promoId} business={data.business} theme={theme} onWant={openChat} />
+            <PromoView token={token!} promoId={promoId} business={data.business} theme={infoTheme} onWant={openChat} />
           ) : (
-            <PortalHome token={token!} data={data} theme={theme} onChat={openChat} />
+            <PortalHome token={token!} data={data} theme={infoTheme} onChat={openChat} />
           )}
           <p className="mt-10 text-center text-xs" style={{ color: theme.muted }}>
             Hecho con <span className="font-semibold">IaRadio</span>
@@ -331,28 +348,58 @@ function ChatStrip({ data, theme, onOpen }: { data: PortalData; theme: SiteTheme
   )
 }
 
-function BusinessHeader({ business, theme }: { business: Business; theme: SiteThemeDef }) {
+// Arriba de la info: foto grande, nombre y acciones redondas (como WhatsApp).
+// Agendar y Pedir abren el chat: ahí lo atiende el bot.
+function InfoProfile({
+  business,
+  theme,
+  onChat,
+  catalogHref,
+}: {
+  business: Business
+  theme: SiteThemeDef
+  onChat: (prefill?: string) => void
+  catalogHref: string | null
+}) {
+  const color = business.color
+  const actions: { label: string; icon: React.ReactNode; onClick?: () => void; href?: string }[] = [
+    { label: 'Chat', icon: <MessageCircle size={22} />, onClick: () => onChat() },
+    { label: 'Agendar', icon: <CalendarDays size={22} />, onClick: () => onChat('Quiero agendar una cita') },
+    { label: 'Pedir', icon: <ShoppingBag size={22} />, onClick: () => onChat('Quiero hacer un pedido') },
+    ...(catalogHref ? [{ label: 'Página', icon: <Store size={22} />, href: catalogHref }] : []),
+  ]
   return (
-    <header className="flex items-center gap-3">
+    <section className="mt-3 rounded-xl px-4 pb-5 pt-6 text-center" style={{ background: theme.cardBg }}>
       {business.logo_url ? (
-        <img src={business.logo_url} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
+        <img src={business.logo_url} alt="" className="mx-auto h-24 w-24 rounded-full object-cover" />
       ) : (
         <div
-          className="h-11 w-11 shrink-0 rounded-xl flex items-center justify-center text-lg font-bold text-white"
-          style={{ background: `linear-gradient(135deg, ${business.color}, ${business.color}99)` }}
+          className="mx-auto flex h-24 w-24 items-center justify-center rounded-full text-4xl font-bold text-white"
+          style={{ background: `linear-gradient(135deg, ${color}, ${color}99)` }}
         >
           {(business.name || '?')[0].toUpperCase()}
         </div>
       )}
-      <div className="min-w-0">
-        <p className="font-semibold leading-tight truncate">{business.name}</p>
-        {business.city && (
-          <p className="text-xs" style={{ color: theme.muted }}>
-            {business.city}
-          </p>
-        )}
+      <h1 className="mt-3 text-2xl font-semibold">{business.name}</h1>
+      {business.city && <p className="mt-0.5 text-sm" style={{ color: theme.muted }}>{business.city}</p>}
+      <div className="mt-5 flex justify-center gap-3">
+        {actions.map((a) => {
+          const inner = (
+            <>
+              <span className="flex h-12 w-12 items-center justify-center rounded-full" style={{ color, border: `1px solid ${color}55` }}>
+                {a.icon}
+              </span>
+              <span className="mt-1 block text-xs font-medium" style={{ color }}>{a.label}</span>
+            </>
+          )
+          return a.href ? (
+            <Link key={a.label} to={a.href} className="press w-16">{inner}</Link>
+          ) : (
+            <button key={a.label} type="button" onClick={a.onClick} className="press w-16">{inner}</button>
+          )
+        })}
       </div>
-    </header>
+    </section>
   )
 }
 
@@ -393,14 +440,6 @@ function PortalHome({
 
   return (
     <main>
-      <section className="mt-8">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Hola{data.customer.first_name ? `, ${data.customer.first_name}` : ''} 👋
-        </h1>
-        <p className="mt-2 text-[15px] leading-relaxed" style={{ color: theme.muted }}>
-          Aquí tienes todo lo tuyo con {business.name}: citas, pedidos y promociones, sin esperar respuesta.
-        </p>
-      </section>
 
       {data.loyalty && (
         <LoyaltyCardView loyalty={data.loyalty} color={color} business={business.name} storageKey={`stamps-seen:${token}`} />
@@ -410,17 +449,6 @@ function PortalHome({
         <ReferralCard theme={theme} color={color} business={business.name} slug={business.slug} code={data.referral_code} />
       )}
 
-      <div className="mt-6 grid grid-cols-3 gap-2">
-        <QuickAction theme={theme} color={color} icon={<CalendarDays size={20} />} label="Agendar" onClick={() => onChat('Quiero agendar una cita')} />
-        {business.slug ? (
-          <QuickAction theme={theme} color={color} icon={<Store size={20} />} label="Catálogo" href={`/sitio/${business.slug}#catalogo`} />
-        ) : (
-          <QuickAction theme={theme} color={color} icon={<ShoppingBag size={20} />} label="Pedir" onClick={() => onChat('Quiero hacer un pedido')} />
-        )}
-        {/* Antes era "WhatsApp" (wa.me): mandaba al cliente de regreso al canal
-            que Meta cobra. El chat de aquí hace lo mismo, con voz, y es gratis. */}
-        <QuickAction theme={theme} color={color} icon={<Mic size={20} />} label="Preguntar" onClick={() => onChat()} />
-      </div>
 
       {data.push.available && (
         <NotifyCard
@@ -611,34 +639,6 @@ function ReferralCard({
       </button>
     </section>
   )
-}
-
-function QuickAction({
-  theme,
-  color,
-  icon,
-  label,
-  onClick,
-  href,
-  external,
-}: {
-  theme: SiteThemeDef
-  color: string
-  icon: React.ReactNode
-  label: string
-  onClick?: () => void
-  href?: string
-  external?: boolean
-}) {
-  const body = (
-    <Card theme={theme} className="flex flex-col items-center gap-1.5 py-4 transition-transform hover:scale-[1.03] active:scale-[0.98]">
-      <span style={{ color }}>{icon}</span>
-      <span className="text-xs font-semibold">{label}</span>
-    </Card>
-  )
-  if (href && external) return <a href={href} target="_blank" rel="noreferrer">{body}</a>
-  if (href) return <Link to={href}>{body}</Link>
-  return <button onClick={onClick} className="text-left">{body}</button>
 }
 
 function StatusChip({ label, tone }: { label: string; tone: 'good' | 'wait' | 'bad' }) {
