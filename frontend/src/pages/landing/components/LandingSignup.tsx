@@ -1,14 +1,16 @@
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import AgentChat from '@/components/AgentChat'
-import { getSiteTheme } from '@/pages/publicSite/theme'
+import MascotSmart from '@/components/MascotSmart'
+import { getSiteTheme, isDarkTheme } from '@/pages/publicSite/theme'
 
-// "Pruébalo" de la landing: el bot ORIGINAL de IaRadio (el de /sitio/iaradio),
-// incrustado aquí. Primero platica y resuelve dudas; el alta del negocio
-// empieza solo cuando la persona toca "✨ Quiero probarlo gratis" (y ahí
-// mismo se construye su página y la publica). Antes había una demo de voz
-// que mandaba a /register y aparte el chat de "Alex": mucha vuelta.
+// El bot ORIGINAL de IaRadio (el de /sitio/iaradio) flotando en la página
+// principal, igual que en la página pública de un negocio: la mascota abajo a
+// la derecha y, al tocarla, la hoja del chat. Todo enlace "#pruebalo" de la
+// landing lo abre. El alta empieza cuando la persona toca "✨ Quiero probarlo gratis".
 const SLUG = 'iaradio'
+const HASH = '#pruebalo'
 
 interface SiteForChat {
   advertiser_id: string
@@ -21,49 +23,69 @@ interface SiteForChat {
 }
 
 export default function LandingSignup() {
+  const [open, setOpen] = useState(false)
   const { data: site } = useQuery<SiteForChat>({
     queryKey: ['landing-chat', SLUG],
     queryFn: () => api.get(`/public/site/${SLUG}`).then((r) => r.data),
     staleTime: 10 * 60 * 1000,
   })
 
+  useEffect(() => {
+    if (window.location.hash === HASH) setOpen(true)
+    const onClick = (e: MouseEvent) => {
+      const link = (e.target as Element | null)?.closest?.(`a[href="${HASH}"]`)
+      if (!link) return
+      e.preventDefault()
+      setOpen(true)
+    }
+    document.addEventListener('click', onClick)
+    return () => document.removeEventListener('click', onClick)
+  }, [])
+
+  if (!site) return null
+  const theme = getSiteTheme(site.site_theme)
+  const dark = isDarkTheme(theme)
+
   return (
-    <section id="pruebalo" className="relative scroll-mt-20 px-4 py-16 sm:py-20">
-      <div className="mx-auto mb-8 max-w-2xl text-center">
-        <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-indigo-300">Gratis 15 días · sin tarjeta</p>
-        <h2 className="text-3xl font-black leading-tight text-white sm:text-4xl" style={{ textWrap: 'balance' }}>
-          Platica con IaRadio y arma tu página aquí mismo
-        </h2>
-        <p className="mt-3 text-gray-400">
-          Pregúntale lo que quieras de IaRadio. Cuando quieras tu página, toca “Quiero probarlo gratis” y se construye mientras le cuentas de tu negocio.
-        </p>
-      </div>
-
-      <div className="relative mx-auto h-[min(720px,calc(100dvh-7rem))] w-full max-w-md overflow-hidden rounded-3xl border border-white/10 shadow-2xl shadow-indigo-500/20">
-        {site ? (
-          <AgentChat
-            layout="pane"
-            business={{
-              advertiser_id: site.advertiser_id,
-              name: site.business_name,
-              agent: site.agent,
-              color: site.color,
-              greeting: site.greeting,
-              quick_asks: site.quick_asks,
-            }}
-            theme={getSiteTheme(site.site_theme)}
-            voiceBase={`/public/site/${SLUG}`}
-            prefill={null}
-            onClose={() => {}}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center bg-[#0b141a] text-sm text-gray-400">Cargando a IaRadio…</div>
-        )}
-      </div>
-
-      <p className="mx-auto mt-4 max-w-md text-center text-xs text-gray-500">
-        ¿Ya tienes cuenta? <a href="/login" className="underline hover:text-gray-300">Entra con tu WhatsApp</a>
-      </p>
-    </section>
+    <>
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={`Platicar con ${site.agent}`}
+          className="press fixed right-4 z-30 flex items-end gap-1"
+          style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <span
+            className="mb-6 max-w-[11rem] rounded-2xl rounded-br-sm px-3.5 py-2 text-left text-sm font-medium shadow-xl"
+            style={{ background: dark ? '#1b1f2e' : '#fff', color: theme.text, border: `1px solid ${theme.cardBorder}` }}
+          >
+            ¡Hola! Soy {site.agent.split(' ')[0]} 👋 ¿Te ayudo?
+          </span>
+          <span
+            className="flex h-[76px] w-[76px] items-center justify-center rounded-full bg-white shadow-2xl"
+            style={{ boxShadow: `0 0 0 3px ${site.color}, 0 12px 32px ${site.color}66` }}
+          >
+            <MascotSmart mood="happy" size={70} color={site.color} />
+          </span>
+        </button>
+      )}
+      {open && (
+        <AgentChat
+          business={{
+            advertiser_id: site.advertiser_id,
+            name: site.business_name,
+            agent: site.agent,
+            color: site.color,
+            greeting: site.greeting,
+            quick_asks: site.quick_asks,
+          }}
+          theme={theme}
+          voiceBase={`/public/site/${SLUG}`}
+          prefill={null}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   )
 }
