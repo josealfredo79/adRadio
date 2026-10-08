@@ -55,6 +55,8 @@ en un JSON. Reglas estrictas:
 - Escribe en español claro y breve, como lo diría el dueño. Nada de texto fuera del JSON.
 
 - business_name: solo si dijo cómo se llama su negocio ("soy Tacos El Güero", "mi estética se llama Bella").
+- business_category: el giro en 1–3 palabras. Si no lo dijo con esas palabras, dedúcelo de lo que vende o
+  hace ("vendo tacos" → "Taquería", "corto el pelo" → "Estética"); null solo si no hay forma de saberlo.
 
 Formato exacto:
 {"business_name": str|null, "business_category": str|null, "city": str|null, "address": str|null,
