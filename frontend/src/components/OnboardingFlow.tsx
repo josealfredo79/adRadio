@@ -23,7 +23,7 @@ import type { FaceMood } from '@/components/BotFace'
 type Msg = { who: 'bot' | 'me'; text: string }
 type Stage =
   | 'resume' | 'how' | 'record' | 'name' | 'giro' | 'giro-text' | 'where' | 'hours' | 'hours-text' | 'services'
-  | 'ready' | 'try' | 'change' | 'change-text' | 'fix' | 'confirm' | 'phone' | 'code' | 'done'
+  | 'ready' | 'try' | 'change' | 'change-text' | 'fix' | 'confirm' | 'phone' | 'code' | 'exists' | 'done'
 
 const SAVE_KEY = 'iaradio-onboarding-draft'
 const GIROS = [
@@ -136,6 +136,8 @@ export default function OnboardingFlow({
   const [sentAt, setSentAt] = useState(0)
   const [trap, setTrap] = useState('')
   const [published, setPublished] = useState<{ slug: string; created: boolean } | null>(null)
+  // Ese WhatsApp ya tenía un negocio: se pregunta qué hacer (no se enseña su link).
+  const [existing, setExisting] = useState<string | null>(null)
   const [qr, setQr] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const mic = canRecordVoice()
@@ -341,14 +343,20 @@ export default function OnboardingFlow({
         phone, code: value, name: draft.business_name, profile: draft, color: cardColor,
       })
       setAccessToken(data.access_token)
-      try { localStorage.removeItem(SAVE_KEY) } catch { /* nada */ }
-      setPublished({ slug: data.slug, created: data.created })
-      setStage('done')
-      if (data.created) {
-        await bot('¡Publicada! 🎉 Tienes 15 días gratis. Esto ya es tuyo:')
-      } else {
-        await bot(`Ese WhatsApp ya tenía un negocio en IaRadio (${data.business_name}). Te dejo entrar a tu panel 👇`)
+      if (!data.created) {
+        // Lo que contó se queda guardado por si quiere usar otro número.
+        setExisting(data.business_name || 'tu negocio')
+        setStage('exists')
+        await bot(
+          `Ese WhatsApp ya tiene un negocio en IaRadio: ${data.business_name || 'tu negocio'}.`,
+          '¿Qué quieres hacer? Si es un negocio nuevo, usa otro número y lo creo con lo que me contaste.',
+        )
+        return
       }
+      try { localStorage.removeItem(SAVE_KEY) } catch { /* nada */ }
+      setPublished({ slug: data.slug, created: true })
+      setStage('done')
+      await bot('¡Publicada! 🎉 Tienes 15 días gratis. Esto ya es tuyo:')
     } catch (err) {
       setError(verifyError(err))
       setCode('')
@@ -387,7 +395,7 @@ export default function OnboardingFlow({
   const pick = (label: string, then: () => void | Promise<void>) => () => { me(label); void then() }
 
   // "Me equivoqué": vuelve a preguntar solo esa parte (desde la tarjeta o el botón).
-  const canEdit = !busy && !!stage && !['phone', 'code', 'done', 'how', 'resume', 'record'].includes(stage)
+  const canEdit = !busy && !!stage && !['phone', 'code', 'exists', 'done', 'how', 'resume', 'record'].includes(stage)
   const editField = async (f: EditField) => {
     if (!canEdit) return
     me(`✏️ Corregir: ${FIELD_LABEL[f].toLowerCase()}`)
@@ -558,6 +566,26 @@ export default function OnboardingFlow({
             Cambiar número
           </button>
         </div>
+      case 'exists':
+        return <div className="grid gap-2">
+          <p className="rounded-lg px-3 py-2 text-center text-sm shadow-sm" style={{ background: pal.incoming, color: pal.text }}>
+            Ese WhatsApp ya tiene el negocio <b>{existing}</b>. ¿Entras a él o creas este con otro número?
+          </p>
+          <a href="/app" className="press flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-semibold shadow-sm" style={{ background: brand, color: onBrand }}>
+            📊 Entrar a {existing}
+          </a>
+          {chip('Usar otro número', pick('📱 Usar otro número', async () => {
+            // Se cierra la sesión de la otra cuenta: el negocio nuevo abrirá la suya.
+            await api.post('/auth/logout').catch(() => {})
+            setAccessToken(null)
+            setExisting(null)
+            setPhone('')
+            setCode('')
+            setTriedCode('')
+            await bot('Va. ¿Qué otro WhatsApp usamos para tu negocio nuevo?')
+            setStage('phone')
+          }), '📱')}
+        </div>
       case 'done':
         return <div className="grid gap-2">
           <a href="/app" className="press flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-semibold shadow-sm" style={{ background: brand, color: onBrand }}>
@@ -647,7 +675,7 @@ export default function OnboardingFlow({
         <div className="sticky bottom-0 -mx-3 mt-3 grid gap-2 px-3 pb-1 pt-2" style={{ background: `linear-gradient(to bottom, transparent, ${pal.wallpaper} 18%)` }}>
           {error && <p className="rounded-lg px-3 py-1.5 text-xs text-rose-600 shadow-sm" style={{ background: pal.incoming }}>{error}</p>}
           {dock}
-          {stage !== 'done' && stage !== 'phone' && stage !== 'code' && (
+          {stage !== 'done' && stage !== 'phone' && stage !== 'code' && stage !== 'exists' && (
             <div className="flex items-center justify-center gap-4 text-[12px]" style={{ color: pal.meta }}>
               {canEdit && stage !== 'fix' && progressOf(draft) > 0 && (
                 <button type="button" className="underline" onClick={() => {
