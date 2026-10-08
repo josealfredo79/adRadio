@@ -76,3 +76,28 @@ async def test_create_contact_does_not_500_with_active_webhook_subscribed():
     finally:
         if user_id:
             await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_phone_as_people_type_it_is_accepted_and_duplicates_are_caught():
+    """Antes, "953 123 4567" daba 422 sin explicación (solo pasaba +52…)."""
+    user_id = None
+    try:
+        user_id = await _seed_verified_user()
+        token = create_access_token(subject=str(user_id), role="advertiser")
+        headers = {"Authorization": f"Bearer {token}"}
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            ok = await client.post("/api/v1/contacts", json={"name": "Ana", "phone": "953 123 4567"}, headers=headers)
+            assert ok.status_code == 201, ok.text
+            assert ok.json()["phone"] == "+529531234567"
+
+            # El mismo número escrito de otra forma es el mismo contacto.
+            dup = await client.post("/api/v1/contacts", json={"name": "Ana", "phone": "+52 (953) 123-4567"}, headers=headers)
+            assert dup.status_code == 409
+
+            bad = await client.post("/api/v1/contacts", json={"name": "Ana", "phone": "12345"}, headers=headers)
+            assert bad.status_code == 422
+            assert "10 dígitos" in bad.json()["detail"][0]["msg"]
+    finally:
+        if user_id:
+            await _cleanup(user_id)

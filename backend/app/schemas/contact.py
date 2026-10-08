@@ -1,4 +1,3 @@
-import re
 import uuid
 from datetime import datetime
 
@@ -6,9 +5,15 @@ from pydantic import BaseModel, field_validator
 
 
 def validate_phone_e164(v: str) -> str:
-    if not re.match(r"^\+\d{7,15}$", v):
-        raise ValueError("El teléfono debe estar en formato E.164 (ej: +521234567890)")
-    return v
+    """Acepta el número como lo escribe la gente ("953 123 4567", "+52 953-123-4567",
+    "9531234567") y lo guarda como +52XXXXXXXXXX. Antes solo pasaba el formato
+    exacto +52… y todo lo demás era un 422 sin explicación."""
+    from app.services.customer_account import canonical_phone
+
+    digits = canonical_phone(v)
+    if digits is None:
+        raise ValueError("Escribe el WhatsApp a 10 dígitos, por ejemplo 953 123 4567")
+    return f"+{digits}"
 
 
 class ContactCreate(BaseModel):

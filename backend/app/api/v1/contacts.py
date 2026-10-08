@@ -115,14 +115,16 @@ async def create_contact(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ContactOut:
-    # Check for duplicate phone for this advertiser
+    # Duplicado aunque esté guardado distinto (+521…, a 10 dígitos por CSV…).
+    from app.services.customer_account import contact_phone_canonical
+
     existing = await db.execute(
-        select(Contact).where(
+        select(Contact.id).where(
             Contact.advertiser_id == current_user.id,
-            Contact.phone == body.phone,
-        )
+            contact_phone_canonical() == body.phone.lstrip("+"),
+        ).limit(1)
     )
-    if existing.scalar_one_or_none():
+    if existing.first():
         raise HTTPException(status_code=409, detail="Ya existe un contacto con ese número")
 
     contact = Contact(
