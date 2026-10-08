@@ -9,6 +9,8 @@ import SEO from '@/components/SEO'
 import { useNativeViewport } from '@/lib/useNativeViewport'
 import { readAccountToken, readRecentChats, saveAccountToken } from '@/lib/customerAccount'
 import CustomerChatList from '@/components/CustomerChatList'
+import CustomerDesktopShell from '@/components/CustomerDesktopShell'
+import { useIsDesktop } from '@/lib/useIsDesktop'
 import ChatAvatar from '@/components/ChatAvatar'
 import { useMyBusinesses, type MyBusiness } from '@/lib/customerChats'
 import { Gift, LogOut, MessageCircle, Search } from 'lucide-react'
@@ -53,10 +55,21 @@ export default function MyAccountPage() {
   // el link de WhatsApp), como la lista de WhatsApp. "Entrar" muestra todos.
   const [recent] = useState(readRecentChats)
   const [showLogin, setShowLogin] = useState(false)
+  const isDesktop = useIsDesktop()
 
   const onToken = (t: string | null) => {
     saveAccountToken(t)
     setToken(t)
+  }
+
+  // En computadora, como WhatsApp Web: lista de chats a la izquierda.
+  if (isDesktop && (token || recent.length) && !showLogin) {
+    return (
+      <>
+        <SEO title="Mis negocios — IaRadio" noIndex />
+        <CustomerDesktopShell />
+      </>
+    )
   }
 
   return (

@@ -129,11 +129,14 @@ export default function AgentChat({
   // cliente /mi y su tarjeta /c/...): flecha atrás, ⓘ para la info del negocio
   // y una franja fija arriba (sellos, cita, cupón). 'sheet': hoja encima de la
   // página pública del negocio.
-  layout?: 'sheet' | 'screen'
+  // 'pane': el lado derecho de la vista de computadora (como WhatsApp Web), a
+  // lo ancho de su panel; sin flecha atrás porque la lista de chats está a la izquierda.
+  layout?: 'sheet' | 'screen' | 'pane'
   onInfo?: () => void
   banner?: React.ReactNode
 }) {
-  const screen = layout === 'screen'
+  const pane = layout === 'pane'
+  const screen = layout === 'screen' || pane
   const color = business.color
   // La sesión se pide al abrir el chat, pero el primer mensaje puede salir
   // antes de que llegue (con texto precargado, el cliente toca Enviar al
@@ -399,7 +402,7 @@ export default function AgentChat({
 
   return (
     <div
-      className={screen ? 'fixed inset-0 z-30 flex justify-center' : 'fixed inset-0 z-30 flex items-end justify-center sm:items-center'}
+      className={pane ? 'absolute inset-0 flex' : screen ? 'fixed inset-0 z-30 flex justify-center' : 'fixed inset-0 z-30 flex items-end justify-center sm:items-center'}
       style={screen ? { background: pal.wallpaper } : undefined}
       onClick={screen ? undefined : onClose}
     >
@@ -408,7 +411,9 @@ export default function AgentChat({
       {!screen && <div className="anim-backdrop absolute inset-0 bg-black/50" aria-hidden />}
       <div
         className={
-          screen
+          pane
+            ? 'relative flex h-full w-full flex-col overflow-hidden'
+            : screen
             ? 'relative flex h-[100dvh] w-full max-w-lg flex-col overflow-hidden'
             : 'anim-sheet h-sheet relative flex w-full max-w-lg flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl'
         }
@@ -425,7 +430,7 @@ export default function AgentChat({
           }}
         >
           <div className="flex min-w-0 items-center gap-1.5">
-            {screen && (
+            {screen && !pane && (
               <button onClick={onClose} aria-label="Atrás" className="press shrink-0 rounded-full p-1.5">
                 <ArrowLeft size={22} />
               </button>

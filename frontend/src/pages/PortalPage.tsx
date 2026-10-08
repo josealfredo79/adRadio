@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import SEO from '@/components/SEO'
 import AgentChat from '@/components/AgentChat'
+import CustomerDesktopShell from '@/components/CustomerDesktopShell'
+import { useIsDesktop } from '@/lib/useIsDesktop'
 import { useNativeViewport } from '@/lib/useNativeViewport'
 import { markChatSeen, rememberChat } from '@/lib/customerAccount'
 import {
@@ -158,6 +160,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default function PortalPage() {
   const { token, promoId } = useParams<{ token: string; promoId?: string }>()
   const navigate = useNavigate()
+  const isDesktop = useIsDesktop()
   const [chatPrefill, setChatPrefill] = useState<string | null>(null)
   // Una promo abre su página; todo lo demás, el chat.
   const [view, setView] = useState<'chat' | 'info'>(promoId ? 'info' : 'chat')
@@ -247,26 +250,69 @@ export default function PortalPage() {
     // Atrás: a la lista de chats (/mi), como en WhatsApp — con su número, todos
     // sus negocios; si llegó por el link de WhatsApp, los chats de este celular.
     const back = () => navigate('/mi')
+    const chat = (
+      <AgentChat
+        layout={isDesktop ? 'pane' : 'screen'}
+        voiceBase={`/public/portal/${token}`}
+        portalToken={token!}
+        promoId={promoId}
+        business={data.business}
+        customerName={data.customer.first_name}
+        theme={theme}
+        prefill={chatPrefill}
+        onClose={back}
+        onInfo={() => setView('info')}
+        banner={<ChatStrip data={data} theme={theme} onOpen={() => setView('info')} />}
+      />
+    )
     return (
       <>
         <SEO title={data.business.name} noIndex />
         <style>{PUBLIC_SITE_STYLES}</style>
-        <AgentChat
-          layout="screen"
-          voiceBase={`/public/portal/${token}`}
-          portalToken={token!}
-          promoId={promoId}
-          business={data.business}
-          customerName={data.customer.first_name}
-          theme={theme}
-          prefill={chatPrefill}
-          onClose={back}
-          onInfo={() => setView('info')}
-          banner={<ChatStrip data={data} theme={theme} onOpen={() => setView('info')} />}
-        />
+        {/* En computadora, como WhatsApp Web: la lista de chats a la izquierda. */}
+        {isDesktop ? <CustomerDesktopShell activePath={`/c/${token}`}>{chat}</CustomerDesktopShell> : chat}
       </>
     )
   }
+
+  const info = (
+    <div className="min-h-screen font-sans pb-12" style={{ background: infoTheme.bg, color: infoTheme.text }}>
+      <div
+        className="sticky top-0 z-20 flex items-center gap-3 px-2 py-2 shadow-sm"
+        style={{ background: color, color: pal.onBrand, paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))' }}
+      >
+        <button onClick={() => setView('chat')} aria-label="Volver al chat" className="press rounded-full p-2">
+          <ArrowLeft size={22} />
+        </button>
+        <p className="text-[17px] font-semibold">{promoId ? 'Promoción' : 'Info. del negocio'}</p>
+      </div>
+      <div className="mx-auto max-w-lg px-3">
+        <InfoProfile
+          business={data.business}
+          theme={infoTheme}
+          onChat={openChat}
+          catalogHref={data.business.slug ? `/sitio/${data.business.slug}` : null}
+        />
+        {promoId ? (
+          <PromoView token={token!} promoId={promoId} business={data.business} theme={infoTheme} onWant={openChat} />
+        ) : (
+          <PortalHome token={token!} data={data} theme={infoTheme} onChat={openChat} />
+        )}
+        <p className="mt-10 text-center text-xs" style={{ color: theme.muted }}>
+          Hecho con <span className="font-semibold">IaRadio</span>
+          {data.account_available && (
+            <>
+              {' · '}
+              <Link to="/mi" className="underline">
+                Todos tus negocios en un lugar
+              </Link>
+            </>
+          )}
+        </p>
+      </div>
+
+    </div>
+  )
 
   return (
     <>
@@ -274,42 +320,13 @@ export default function PortalPage() {
       <style>{PUBLIC_SITE_STYLES}</style>
       {/* "Info. del negocio", como la info de un contacto en WhatsApp: mismos
           colores que el chat, y lo que se pide aquí lo atiende el bot en el chat. */}
-      <div className="min-h-screen font-sans pb-12" style={{ background: infoTheme.bg, color: infoTheme.text }}>
-        <div
-          className="sticky top-0 z-20 flex items-center gap-3 px-2 py-2 shadow-sm"
-          style={{ background: color, color: pal.onBrand, paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))' }}
-        >
-          <button onClick={() => setView('chat')} aria-label="Volver al chat" className="press rounded-full p-2">
-            <ArrowLeft size={22} />
-          </button>
-          <p className="text-[17px] font-semibold">{promoId ? 'Promoción' : 'Info. del negocio'}</p>
-        </div>
-        <div className="mx-auto max-w-lg px-3">
-          <InfoProfile
-            business={data.business}
-            theme={infoTheme}
-            onChat={openChat}
-            catalogHref={data.business.slug ? `/sitio/${data.business.slug}` : null}
-          />
-          {promoId ? (
-            <PromoView token={token!} promoId={promoId} business={data.business} theme={infoTheme} onWant={openChat} />
-          ) : (
-            <PortalHome token={token!} data={data} theme={infoTheme} onChat={openChat} />
-          )}
-          <p className="mt-10 text-center text-xs" style={{ color: theme.muted }}>
-            Hecho con <span className="font-semibold">IaRadio</span>
-            {data.account_available && (
-              <>
-                {' · '}
-                <Link to="/mi" className="underline">
-                  Todos tus negocios en un lugar
-                </Link>
-              </>
-            )}
-          </p>
-        </div>
-
-      </div>
+      {isDesktop ? (
+        <CustomerDesktopShell activePath={`/c/${token}`}>
+          <div className="absolute inset-0 overflow-y-auto">{info}</div>
+        </CustomerDesktopShell>
+      ) : (
+        info
+      )}
     </>
   )
 }
