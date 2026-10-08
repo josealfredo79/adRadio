@@ -177,6 +177,13 @@ export default function AgentChat({
   // "✨ Quiero probarlo gratis" (chat de ventas de IaRadio): el alta se hace
   // aquí mismo, sin mandarlo al bot (OnboardingFlow).
   const [onboarding, setOnboarding] = useState(false)
+  const quickAsks = business.quick_asks?.length ? business.quick_asks : QUICK_ASKS
+  const runQuickAsk = (q: { text: string; action?: string }) => {
+    if (q.action === 'onboard') {
+      setSentHere(true)
+      setOnboarding(true)
+    } else void send(q.text)
+  }
   const scrollToEnd = useCallback(() => {
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }))
   }, [])
@@ -698,15 +705,10 @@ export default function AgentChat({
               </p>
               {/* En una fila, como accesos directos: ícono arriba y texto abajo (cabe en el celular). */}
               <div className="mt-3 grid grid-cols-4 gap-2">
-                {(business.quick_asks?.length ? business.quick_asks : QUICK_ASKS).map((q) => (
+                {quickAsks.map((q) => (
                   <button
                     key={q.text}
-                    onClick={() => {
-                      if (q.action === 'onboard') {
-                        setSentHere(true)
-                        setOnboarding(true)
-                      } else void send(q.text)
-                    }}
+                    onClick={() => runQuickAsk(q)}
                     className="press flex flex-col items-center justify-start gap-1.5 rounded-xl px-1.5 py-3 text-center text-[13px] font-semibold leading-tight shadow-sm sm:text-[15px]"
                     style={{ background: pal.incoming, color: pal.accent }}
                   >
@@ -737,6 +739,25 @@ export default function AgentChat({
           )}
         </div>
 
+        {/* Después del primer mensaje los accesos directos siguen a la mano (si
+            escribió en vez de tocar, o salió del alta, no se pierden). */}
+        {!onboarding && sentHere && (
+          <div className="flex gap-2 overflow-x-auto px-2 pt-2 [scrollbar-width:none]" style={{ background: pal.bar }}>
+            {quickAsks.map((q) => (
+              <button
+                key={q.text}
+                type="button"
+                onClick={() => runQuickAsk(q)}
+                disabled={sending}
+                className="press flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold shadow-sm disabled:opacity-50"
+                style={q.action === 'onboard' ? { background: color, color: pal.onBrand } : { background: pal.incoming, color: pal.accent }}
+              >
+                <span aria-hidden>{q.icon}</span>
+                {q.text}
+              </button>
+            ))}
+          </div>
+        )}
         {!onboarding && <form
           onSubmit={(e) => {
             e.preventDefault()
