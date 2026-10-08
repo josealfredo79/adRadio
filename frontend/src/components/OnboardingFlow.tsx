@@ -43,7 +43,7 @@ const COLORS = [
 ]
 const TRY_QUESTIONS = ['¿Qué tienen?', '¿A qué hora abren?', '¿Dónde están?']
 
-function load(): { draft: Draft; color: string | null } | null {
+function load(): { draft: Draft; color: string | null; published?: { slug: string } } | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     return raw ? JSON.parse(raw) : null
@@ -52,9 +52,9 @@ function load(): { draft: Draft; color: string | null } | null {
   }
 }
 
-function save(draft: Draft, color: string | null) {
+function save(draft: Draft, color: string | null, published?: { slug: string }) {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ draft, color }))
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ draft, color, published }))
   } catch { /* sin almacenamiento: el alta sigue, solo no se recuerda */ }
 }
 
@@ -214,6 +214,15 @@ export default function OnboardingFlow({
     started.current = true
     void (async () => {
       const prev = saved.current
+      if (prev?.published?.slug && prev.draft?.business_name) {
+        setDraft(prev.draft)
+        setColor(prev.color)
+        setCardShown(true)
+        setPublished({ slug: prev.published.slug, created: true })
+        await bot(`Tu página de ${prev.draft.business_name} ya está publicada 🎉 Aquí tienes tu link y tu QR:`)
+        setStage('done')
+        return
+      }
       if (prev?.draft?.business_name) {
         setDraft(prev.draft)
         setColor(prev.color)
@@ -353,7 +362,8 @@ export default function OnboardingFlow({
         )
         return
       }
-      try { localStorage.removeItem(SAVE_KEY) } catch { /* nada */ }
+      // Se recuerda en este navegador: si recarga, vuelve a ver su link y su QR.
+      save(draft, color, { slug: data.slug })
       setPublished({ slug: data.slug, created: true })
       setStage('done')
       await bot('¡Publicada! 🎉 Tienes 15 días gratis. Esto ya es tuyo:')
@@ -591,7 +601,13 @@ export default function OnboardingFlow({
           <a href="/app" className="press flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-semibold shadow-sm" style={{ background: brand, color: onBrand }}>
             📊 Entrar a mi panel
           </a>
-          <button type="button" onClick={onExit} className="text-xs underline" style={{ color: pal.meta }}>Volver al chat</button>
+          <div className="flex items-center justify-center gap-4 text-xs" style={{ color: pal.meta }}>
+            <button type="button" onClick={onExit} className="underline">Volver al chat</button>
+            <button type="button" className="underline" onClick={() => {
+              try { localStorage.removeItem(SAVE_KEY) } catch { /* nada */ }
+              onExit()
+            }}>Dar de alta otro negocio</button>
+          </div>
         </div>
       default:
         return null
