@@ -34,7 +34,9 @@ from app.api.v1 import (
     knowledge_base,
     lab,
     meta_whatsapp,
+    onboarding,
     orders,
+    owner_whatsapp_auth,
     payments,
     portal,
     products,
@@ -246,6 +248,7 @@ app.add_middleware(WidgetCORSMiddleware)
 
 # Routers
 app.include_router(auth.router, prefix=settings.API_PREFIX)
+app.include_router(owner_whatsapp_auth.router, prefix=settings.API_PREFIX)
 app.include_router(profile.router, prefix=settings.API_PREFIX)
 app.include_router(meta_whatsapp.router, prefix=settings.API_PREFIX)
 app.include_router(lab.router, prefix=settings.API_PREFIX)
@@ -276,6 +279,7 @@ app.include_router(customer_account.router, prefix=settings.API_PREFIX)
 app.include_router(join.router, prefix=settings.API_PREFIX)
 app.include_router(voice_setup.router, prefix=settings.API_PREFIX)
 app.include_router(voice_demo.router, prefix=settings.API_PREFIX)
+app.include_router(onboarding.router, prefix=settings.API_PREFIX)
 app.include_router(chat_demo.router, prefix=settings.API_PREFIX)
 app.include_router(copilot.router, prefix=settings.API_PREFIX)
 

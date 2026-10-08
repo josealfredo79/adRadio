@@ -11,7 +11,9 @@ from app.models.user import User
 IARADIO_ACCOUNT_EMAIL = "tecnologicotlaxiaco@gmail.com"
 
 SALES_QUICK_ASKS = [
-    {"icon": "✨", "text": "Quiero probarlo gratis"},
+    # "onboard": el chat no se lo manda al bot, abre el alta ahí mismo
+    # (frontend: OnboardingFlow; backend: onboarding.py + owner_whatsapp_auth.py).
+    {"icon": "✨", "text": "Quiero probarlo gratis", "action": "onboard"},
     {"icon": "🤖", "text": "¿Qué hace IaRadio?"},
     {"icon": "🏪", "text": "¿Sirve para mi negocio?"},
     {"icon": "💲", "text": "¿Cuánto cuesta?"},

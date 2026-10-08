@@ -26,7 +26,7 @@ interface PublicSite {
   city: string
   agent: string
   greeting: string
-  quick_asks?: { icon: string; text: string }[] | null
+  quick_asks?: { icon: string; text: string; action?: string }[] | null
   color: string
   tagline: string
   logo_url: string

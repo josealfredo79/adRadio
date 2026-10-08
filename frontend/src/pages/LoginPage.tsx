@@ -5,6 +5,7 @@ import { getApiError } from '@/lib/api'
 import { Eye, EyeOff } from 'lucide-react'
 import SEO from '@/components/SEO'
 import BrandMark from '@/components/BrandMark'
+import WhatsAppLogin from '@/components/WhatsAppLogin'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -14,6 +15,8 @@ export default function LoginPage() {
   const [showPwd, setShowPwd] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // Los negocios que se dieron de alta en el chat no tienen contraseña: entran con WhatsApp.
+  const [mode, setMode] = useState<'whatsapp' | 'email'>('whatsapp')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,7 +45,19 @@ export default function LoginPage() {
         </div>
 
         <div className="rounded-2xl bg-white p-8 shadow-xl dark:bg-gray-950 dark:border dark:border-gray-800">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900 dark:text-gray-100">Iniciar sesión</h2>
+          <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">Iniciar sesión</h2>
+          <div className="mb-6 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 text-sm font-medium dark:bg-gray-900" role="tablist">
+            {(['whatsapp', 'email'] as const).map((m) => (
+              <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)}
+                className={`rounded-md py-2 transition-colors ${mode === m ? 'bg-white text-gray-900 shadow dark:bg-gray-800 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}`}>
+                {m === 'whatsapp' ? 'Con WhatsApp' : 'Con correo'}
+              </button>
+            ))}
+          </div>
+          {mode === 'whatsapp' ? (
+            // Recarga completa: la sesión se restaura con la cookie del refresh, igual que al volver.
+            <WhatsAppLogin onDone={() => { window.location.href = '/app/dashboard' }} />
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
@@ -93,6 +108,7 @@ export default function LoginPage() {
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
           </form>
+          )}
 
           <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
             ¿No tienes cuenta?{' '}

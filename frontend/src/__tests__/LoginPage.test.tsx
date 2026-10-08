@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import { describe, it, expect, vi } from 'vitest'
@@ -17,9 +17,16 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe('LoginPage', () => {
+  it('starts with WhatsApp (businesses created in the chat have no password)', () => {
+    render(<LoginPage />, { wrapper: Wrapper })
+    expect(screen.getByLabelText('Tu WhatsApp')).toBeDefined()
+    expect(screen.getByRole('button', { name: /mandarme el código/i })).toBeDefined()
+  })
+
   it('renders login form', () => {
     render(<LoginPage />, { wrapper: Wrapper })
     expect(screen.getByText('Iniciar sesión')).toBeDefined()
+    fireEvent.click(screen.getByRole('tab', { name: /con correo/i }))
     expect(screen.getByPlaceholderText('tu@negocio.com')).toBeDefined()
     expect(screen.getByPlaceholderText('••••••••')).toBeDefined()
     expect(screen.getByRole('button', { name: /entrar/i })).toBeDefined()

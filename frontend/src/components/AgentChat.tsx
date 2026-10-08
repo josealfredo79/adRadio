@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { FaceMood } from '@/components/BotFace'
 import MascotSmart from '@/components/MascotSmart'
 import api from '@/lib/api'
@@ -7,6 +7,7 @@ import { isDarkTheme, type SiteThemeDef } from '@/pages/publicSite/theme'
 import BubbleTail from '@/components/BubbleTail'
 import InlineJoin from '@/components/InlineJoin'
 import ChatNotifyOffer from '@/components/ChatNotifyOffer'
+import OnboardingFlow from '@/components/OnboardingFlow'
 import { parseChatOptions } from '@/lib/chatOptions'
 import { speakable } from '@/lib/speakable'
 import { chatPalette, dayLabel, hhmm, wallpaperPattern } from '@/lib/chatLook'
@@ -28,7 +29,7 @@ export interface ChatBusiness {
   greeting: string
   // Botones de arranque propios del negocio (ej. la cuenta de ventas de
   // IaRadio); si no vienen, van los de siempre (QUICK_ASKS).
-  quick_asks?: { icon: string; text: string }[] | null
+  quick_asks?: { icon: string; text: string; action?: string }[] | null
 }
 
 function renderChatText(text: string): React.ReactNode[] {
@@ -91,7 +92,7 @@ function chatGreeting(business: ChatBusiness, customerName: string, returning: b
 }
 
 // Para arrancar con un toque (en el celular escribir cuesta más que en WhatsApp).
-const QUICK_ASKS = [
+const QUICK_ASKS: { icon: string; text: string; action?: string }[] = [
   { icon: '🛍️', text: '¿Qué productos tienen?' },
   { icon: '🕒', text: '¿Cuál es su horario?' },
   { icon: '📅', text: 'Quiero agendar una cita' },
@@ -173,6 +174,12 @@ export default function AgentChat({
   const [historyCount, setHistoryCount] = useState(0)
   const [sentHere, setSentHere] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // "✨ Quiero probarlo gratis" (chat de ventas de IaRadio): el alta se hace
+  // aquí mismo, sin mandarlo al bot (OnboardingFlow).
+  const [onboarding, setOnboarding] = useState(false)
+  const scrollToEnd = useCallback(() => {
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }))
+  }, [])
   const inputRef = useRef<HTMLInputElement>(null)
   // Modo voz: el cliente habla en vez de escribir y el bot le contesta en voz
   // alta, con la mascota que mueve la boca (voz de robot). Se activa al tocar el micrófono.
@@ -680,6 +687,9 @@ export default function AgentChat({
               </div>
             )
           })}
+          {onboarding && (
+            <OnboardingFlow pal={pal} brand={color} onBrand={pal.onBrand} onActivity={scrollToEnd} onExit={() => setOnboarding(false)} />
+          )}
           {knownToken && bookedAt >= historyCount && <ChatNotifyOffer token={knownToken} pal={pal} color={color} />}
           {historyLoaded && !sentHere && (
             <div className="mx-auto mt-4 w-full max-w-2xl text-center">
@@ -691,7 +701,12 @@ export default function AgentChat({
                 {(business.quick_asks?.length ? business.quick_asks : QUICK_ASKS).map((q) => (
                   <button
                     key={q.text}
-                    onClick={() => void send(q.text)}
+                    onClick={() => {
+                      if (q.action === 'onboard') {
+                        setSentHere(true)
+                        setOnboarding(true)
+                      } else void send(q.text)
+                    }}
                     className="press flex flex-col items-center justify-start gap-1.5 rounded-xl px-1.5 py-3 text-center text-[13px] font-semibold leading-tight shadow-sm sm:text-[15px]"
                     style={{ background: pal.incoming, color: pal.accent }}
                   >
@@ -722,7 +737,7 @@ export default function AgentChat({
           )}
         </div>
 
-        <form
+        {!onboarding && <form
           onSubmit={(e) => {
             e.preventDefault()
             void send(undefined, false)
@@ -772,7 +787,7 @@ export default function AgentChat({
               <Send size={19} />
             </button>
           )}
-        </form>
+        </form>}
       </div>
     </div>
   )

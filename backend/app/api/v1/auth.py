@@ -165,6 +165,15 @@ async def login(
     if user.subscription_status == "suspended":
         raise HTTPException(status_code=403, detail="Cuenta suspendida. Contacta soporte.")
 
+    tokens = await issue_session(user, response, redis)
+    capture_event("user_login", user_id=user.id)
+    logger.info("User logged in: %s", user.email)
+    return tokens
+
+
+async def issue_session(user: User, response: Response, redis) -> TokenResponse:
+    """Sesión del panel: access token + refresh en cookie httpOnly. La usan
+    el login con correo y el de WhatsApp (owner_whatsapp_auth.py)."""
     access_token = create_access_token(str(user.id), user.role)
     refresh_token = create_refresh_token(str(user.id))
 
@@ -185,9 +194,6 @@ async def login(
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         path="/api/v1/auth",
     )
-
-    capture_event("user_login", user_id=user.id)
-    logger.info("User logged in: %s", user.email)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 

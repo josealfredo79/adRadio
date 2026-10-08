@@ -27,7 +27,7 @@ interface ProductDetail {
   advertiser_id: string
   agent: string
   greeting: string
-  quick_asks?: { icon: string; text: string }[] | null
+  quick_asks?: { icon: string; text: string; action?: string }[] | null
   business_category: string
   account_available: boolean
   paused?: boolean

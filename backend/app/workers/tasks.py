@@ -773,7 +773,7 @@ def send_trial_expiry_reminders():
         from sqlalchemy import select
 
         from app.config import settings
-        from app.core.email import send_trial_expiring_email
+        from app.core.email import NO_INBOX_DOMAIN, send_trial_expiring_email
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.models.user import User
         from app.services.meta_service import send_whatsapp
@@ -797,15 +797,30 @@ def send_trial_expiry_reminders():
                     except Exception as e:
                         logger.error("[TRIAL REMINDER] Email failed for %s: %s", user.email, e)
 
+                    msg = (
+                        f"⏰ Hola {biz_name}, tu prueba gratuita termina en {days_left} día{'s' if days_left != 1 else ''}. "
+                        f"👉 {settings.FRONTEND_PUBLIC_URL or 'https://app.iaradio.app'}/app/plans"
+                    )
                     if user.whatsapp_number:
                         try:
-                            msg = (
-                                f"⏰ Hola {biz_name}, tu prueba gratuita termina en {days_left} día{'s' if days_left != 1 else ''}. "
-                                f"👉 {settings.FRONTEND_PUBLIC_URL or 'https://app.iaradio.app'}/app/plans"
-                            )
                             await send_whatsapp(to=user.whatsapp_number, body=msg, advertiser=user)
                         except Exception as e:
                             logger.error("[TRIAL REMINDER] WhatsApp failed for %s: %s", user.email, e)
+                    elif user.email.endswith("@" + NO_INBOX_DOMAIN):
+                        # Alta en el chat con su WhatsApp, sin correo: el aviso le llega
+                        # por el número central de IaRadio (con plantilla si hace falta).
+                        from app.services.owner_question_service import owner_number
+                        from app.services.platform_whatsapp import (
+                            platform_enabled,
+                            send_platform_text,
+                        )
+
+                        to = owner_number(user)
+                        if to and platform_enabled():
+                            try:
+                                await send_platform_text(to, msg)
+                            except Exception as e:
+                                logger.error("[TRIAL REMINDER] central WhatsApp failed for %s: %s", user.id, e)
 
     run_async(_remind())
 

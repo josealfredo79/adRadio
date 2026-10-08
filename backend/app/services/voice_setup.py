@@ -31,6 +31,7 @@ MAX_ITEMS = 12
 MAX_INSTRUCTIONS = 2000  # mismo límite que el campo en Configuración
 
 EMPTY_PROFILE: dict = {
+    "business_name": None,
     "business_category": None,
     "city": None,
     "address": None,
@@ -53,8 +54,10 @@ en un JSON. Reglas estrictas:
   agrega lo nuevo, y conserva todo lo demás tal cual.
 - Escribe en español claro y breve, como lo diría el dueño. Nada de texto fuera del JSON.
 
+- business_name: solo si dijo cómo se llama su negocio ("soy Tacos El Güero", "mi estética se llama Bella").
+
 Formato exacto:
-{"business_category": str|null, "city": str|null, "address": str|null,
+{"business_name": str|null, "business_category": str|null, "city": str|null, "address": str|null,
  "business_hours": {"mon": ["09:00","18:00"]|null, ...}|null,
  "services": [{"name": str, "price": number|null, "description": str|null}],
  "payment_methods": [str], "policies": [str], "faqs": [{"q": str, "a": str}], "notes": [str]}"""
@@ -132,6 +135,7 @@ def sanitize_profile(data) -> dict:
         return [x for x in items if x]
 
     return {
+        "business_name": _clean_str(data.get("business_name"), 120),
         "business_category": _clean_str(data.get("business_category"), 100),
         "city": _clean_str(data.get("city"), 100),
         "address": _clean_str(data.get("address"), 300),

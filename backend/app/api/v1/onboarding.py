@@ -1,0 +1,84 @@
+"""Alta en el chat de IaRadio — /api/v1/public/onboarding
+
+Un dueño SIN cuenta le cuenta su negocio a radiecito dentro del chat de
+IaRadio y ve su página construirse en una tarjeta. Nada se guarda hasta que
+publica confirmando su WhatsApp (auth/whatsapp/signup): el borrador vive en
+su navegador.
+
+- POST /listen  nota de voz o texto (+ borrador) → perfil ordenado (nombre,
+                giro, ciudad, horario, productos con precio).
+- POST /try     una pregunta de "cliente" → lo que contestaría su asistente
+                con ese borrador, con el mismo modelo que el bot real.
+
+Públicos y cada uso cuesta (Whisper + IA): topes por IP como la demo de voz.
+"""
+import json
+import logging
+
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from pydantic import BaseModel, Field
+
+from app.api.v1.voice_setup import read_transcript
+from app.core.rate_limiter import limiter
+from app.services.voice_setup import (
+    extract_profile,
+    render_instructions,
+    sanitize_profile,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/public/onboarding", tags=["onboarding"])
+
+MAX_AUDIO_BYTES = 2 * 1024 * 1024  # ~1 min de voz
+MAX_TEXT = 1500
+
+
+@router.post("/listen")
+@limiter.limit("15/hour")
+async def listen(
+    request: Request,
+    audio: UploadFile | None = File(None),
+    text: str | None = Form(None),
+    draft: str | None = Form(None),
+) -> dict:
+    transcript = await read_transcript(audio, text, MAX_AUDIO_BYTES, MAX_TEXT, "1 minuto")
+    current = None
+    if draft:
+        try:
+            current = json.loads(draft)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Borrador inválido")
+    try:
+        profile = await extract_profile(transcript, current)
+    except Exception:
+        logger.exception("[ONBOARDING] extraction failed")
+        raise HTTPException(status_code=502, detail="No pude ordenar lo que me contaste. Intenta de nuevo en un momento.")
+    return {"transcript": transcript, "profile": profile}
+
+
+class TryBody(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    profile: dict
+    question: str = Field(min_length=1, max_length=300)
+
+
+@router.post("/try")
+@limiter.limit("20/hour")
+async def try_assistant(request: Request, body: TryBody) -> dict:
+    from app.services.claude_service import generate_bot_response
+
+    profile = sanitize_profile(body.profile)
+    try:
+        answer = await generate_bot_response(
+            advertiser_context="",
+            conversation_history=[],
+            user_message=body.question,
+            business_name=body.name,
+            bot_instructions=render_instructions(profile) or None,
+            economy=True,
+        )
+    except Exception:
+        logger.exception("[ONBOARDING] try failed")
+        raise HTTPException(status_code=502, detail="Tu asistente no pudo contestar ahorita. Intenta de nuevo.")
+    return {"answer": answer}

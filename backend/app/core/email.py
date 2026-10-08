@@ -8,10 +8,17 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 RESEND_API_URL = "https://api.resend.com/emails"
+# Correo interno de los negocios que se dieron de alta en el chat con su
+# WhatsApp (services/owner_signup.py): no existe ningún buzón, y mandarle
+# rebotaría y dañaría la reputación del remitente.
+NO_INBOX_DOMAIN = "wa.iaradio.online"
 
 
 async def send_email(to: str, subject: str, html_body: str, _retries: int = 3) -> bool:
     """Send email via Resend's HTTPS API (SMTP outbound is blocked on Railway's Hobby plan)."""
+    if to.lower().endswith("@" + NO_INBOX_DOMAIN):
+        logger.info("[EMAIL] Sin buzón (alta por WhatsApp), no se manda: %s", subject)
+        return False
     if not settings.RESEND_API_KEY:
         logger.debug("[EMAIL DEV] To: %s | Subject: %s", to, subject)
         return True
