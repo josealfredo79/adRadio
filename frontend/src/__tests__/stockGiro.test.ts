@@ -5,9 +5,9 @@ import { stockGiro } from '@/pages/publicSite/utils'
 // fotos de ROPA, así que solo le tocan a ropa/boutique (visto 2026-10-08: una
 // "Tienda de celulares" salió con fotos de ropa).
 describe('stockGiro', () => {
-  it('phone and electronics stores get technology photos', () => {
-    expect(stockGiro('Tienda de celulares')).toBe('tecnologia')
-    expect(stockGiro('Reparación de teléfonos')).toBe('tecnologia')
+  it('phone stores get phone-shop photos; electronics get technology', () => {
+    expect(stockGiro('Tienda de celulares')).toBe('celulares')
+    expect(stockGiro('Reparación de teléfonos')).toBe('celulares')
     expect(stockGiro('Electrónica')).toBe('tecnologia')
   })
 

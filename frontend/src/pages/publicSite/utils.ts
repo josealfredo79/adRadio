@@ -95,12 +95,13 @@ export function formatBusinessHours(hours: BusinessHours | null | undefined): { 
 // no suba las suyas. Viven en public/stock/{giro}/{n}.jpg.
 const STOCK_COUNT: Record<string, number> = {
   restaurante: 5, tienda: 5, belleza: 5, gimnasio: 5, farmacia: 5, ferreteria: 5, panaderia: 5,
-  corporativo: 5, inmobiliaria: 5, educacion: 5, automotriz: 5, tecnologia: 5, otro: 5,
+  corporativo: 5, inmobiliaria: 5, educacion: 5, automotriz: 5, tecnologia: 5, celulares: 5, otro: 5,
 }
 // En orden: lo específico antes que lo general ("Tienda de celulares" es
 // tecnología, no la carpeta "tienda", que son fotos de ROPA).
 const STOCK_KEYWORDS: [string, string][] = [
-  ['celular', 'tecnologia'], ['teléfono', 'tecnologia'], ['telefon', 'tecnologia'], ['electrón', 'tecnologia'], ['electron', 'tecnologia'],
+  ['celular', 'celulares'], ['teléfono', 'celulares'], ['telefon', 'celulares'], ['smartphone', 'celulares'],
+  ['electrón', 'tecnologia'], ['electron', 'tecnologia'],
   ['cómputo', 'tecnologia'], ['computo', 'tecnologia'], ['computador', 'tecnologia'], ['laptop', 'tecnologia'], ['gadget', 'tecnologia'],
   // "abarrotes" contiene "bar": antes que restaurante.
   ['abarrot', 'otro'], ['miscel', 'otro'],

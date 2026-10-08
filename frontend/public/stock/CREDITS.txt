@@ -66,3 +66,9 @@ otro/2.jpg  https://stocksnap.io/photo/IV7EK6TSJS  (960x631)
 otro/3.jpg  https://stocksnap.io/photo/E4J3BP6ZNJ  (960x639)
 otro/4.jpg  https://stocksnap.io/photo/I93PW8NE0F  (960x640)
 otro/5.jpg  https://stocksnap.io/photo/XPBFSRZRLM  (960x641)
+# Tiendas de celulares (2026-10-08): Unsplash, licencia Unsplash (uso comercial libre, sin atribución obligatoria). Recortadas a 960x640.
+celulares/1.jpg  https://unsplash.com/photos/ZvhZBzwmLic
+celulares/2.jpg  https://unsplash.com/photos/3rcvlwLoYtU
+celulares/3.jpg  https://unsplash.com/photos/2M7tV8lRbUY
+celulares/4.jpg  https://unsplash.com/photos/3vLh3fmAfqw
+celulares/5.jpg  https://unsplash.com/photos/CVz_9qcegkg
