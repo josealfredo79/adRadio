@@ -19,6 +19,10 @@ interface User {
   bot_instructions: string | null
   subscription_status: string
   current_plan: string
+  // Prueba gratis (backend: trial_lifecycle.py)
+  paused?: boolean
+  trial_days_left?: number | null
+  trial_extended_at?: string | null
   messages_remaining: number
   email_verified: boolean
   logo_url: string | null

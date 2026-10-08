@@ -31,6 +31,7 @@ from app.models.user import User
 from app.services.availability_service import DEFAULT_BUSINESS_HOURS
 from app.services.chat_quick_asks import chat_quick_asks
 from app.services.landing_sections import DEFAULT_LANDING_SECTIONS
+from app.services.trial_lifecycle import is_paused
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,8 @@ async def get_public_site(request: Request, slug: str, db: AsyncSession = Depend
         # Registro con código (/q/{slug}) encendido: el chat ofrece "Hazte cliente".
         "account_available": settings.CUSTOMER_ACCOUNT_ENABLED,
         "quick_asks": chat_quick_asks(user),
+        # Prueba vencida sin pagar: la página muestra solo lo básico.
+        "paused": is_paused(user),
     }
 
 
@@ -196,6 +199,7 @@ async def _get_product_detail(db: AsyncSession, user: User, product_id: uuid.UUI
     out["agent"] = user.bot_name or "Asistente"
     out["greeting"] = user.widget_greeting or ""
     out["quick_asks"] = chat_quick_asks(user)
+    out["paused"] = is_paused(user)
     out["business_category"] = user.business_category or ""
     out["account_available"] = settings.CUSTOMER_ACCOUNT_ENABLED
     return out

@@ -449,7 +449,10 @@ def schedule_campaign(self, campaign_id: str):
             # Solo por web no gasta mensajes de WhatsApp ni cuenta para el tope
             # de destinatarios de Meta: esas dos reglas no aplican.
             web_only = is_web_only(campaign)
-            if not advertiser or (advertiser.messages_remaining <= 0 and not web_only):
+            from app.services.trial_lifecycle import is_paused
+
+            # Prueba vencida sin pagar: tampoco salen campañas (ni web).
+            if not advertiser or is_paused(advertiser) or (advertiser.messages_remaining <= 0 and not web_only):
                 campaign.status = "paused"
                 log_send_block(
                     db, campaign.advertiser_id, REASON_NO_MESSAGES_REMAINING, campaign_id=campaign.id,
@@ -706,11 +709,26 @@ def cleanup_expired_data():
                 update(User).where(
                     User.plan_expires_at != None, User.plan_expires_at < now,
                     User.subscription_status == "active",
+                    User.billing_exempt.is_(False),
                 ).values(subscription_status="churned", messages_remaining=0)
             )
             await db.commit()
 
     run_async(_cleanup())
+
+
+@celery_app.task
+def extend_active_trials_task():
+    """Celery Beat: +5 días a las pruebas recién vencidas que se están usando
+    (ver trial_lifecycle.py); las demás quedan en pausa."""
+    async def _run():
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.services.trial_lifecycle import extend_active_trials
+
+        async with AsyncSessionLocal() as db:
+            await extend_active_trials(db)
+
+    run_async(_run())
 
 
 @celery_app.task

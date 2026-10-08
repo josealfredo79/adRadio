@@ -3,6 +3,7 @@ import { planDisplayName } from '@/lib/plans'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
+import TrialBanner from '@/components/TrialBanner'
 import { useTheme } from '@/contexts/ThemeContext'
 import { CopilotProvider, COPILOT_STORAGE_KEY } from '@/contexts/CopilotContext'
 import api from '@/lib/api'
@@ -248,6 +249,7 @@ export default function Layout() {
 
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+            <TrialBanner />
             <CopilotProvider>
               <Outlet />
             </CopilotProvider>

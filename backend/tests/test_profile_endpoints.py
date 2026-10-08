@@ -73,9 +73,13 @@ class TestGetProfile:
         try:
             async with AsyncSessionLocal() as db:
                 user = await db.get(User, user_id)
-                out = await get_profile(current_user=user)
+                out = await get_profile(current_user=user, db=db)
             assert out.id == user_id
             assert out.current_plan == "trial"
+            assert out.paused is False
+            async with AsyncSessionLocal() as db:
+                # Abrir el panel cuenta como uso de la prueba (trial_lifecycle.py).
+                assert (await db.get(User, user_id)).last_seen_at is not None
         finally:
             await _cleanup([user_id])
 

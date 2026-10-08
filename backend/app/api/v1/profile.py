@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
@@ -29,6 +30,7 @@ from app.schemas.auth import UserOut
 from app.schemas.profile import ProfileUpdate
 from app.services.meta_cost import web_savings_mxn
 from app.services.storage_service import upload_bytes
+from app.services.trial_lifecycle import is_paused, trial_days_left
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +53,26 @@ class WhiteLabelUpdate(BaseModel):
     favicon_url: str | None = None
 
 
+def _user_out(user: User) -> UserOut:
+    out = UserOut.model_validate(user)
+    out.paused = is_paused(user)
+    out.trial_days_left = trial_days_left(user)
+    return out
+
+
 @router.get("/me", response_model=UserOut)
-async def get_profile(current_user: User = Depends(get_current_user)):
-    return UserOut.model_validate(current_user)
+async def get_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Indicio de que usa su prueba (trial_lifecycle.py). Una escritura por
+    # hora como mucho: el panel pide /me en cada carga.
+    now = datetime.now(timezone.utc)
+    if current_user.last_seen_at is None or now - current_user.last_seen_at > timedelta(hours=1):
+        current_user.last_seen_at = now
+        await db.commit()
+        await db.refresh(current_user)
+    return _user_out(current_user)
 
 
 @router.get("/me/referral")
@@ -92,7 +111,7 @@ async def update_profile(
         await db.rollback()
         raise HTTPException(status_code=409, detail="Ese link ya está en uso, elige otro")
     await db.refresh(current_user)
-    return UserOut.model_validate(current_user)
+    return _user_out(current_user)
 
 
 @router.post("/me/agent-test-link")
@@ -198,7 +217,7 @@ async def upload_logo(
     current_user.logo_url = url
     await db.commit()
     await db.refresh(current_user)
-    return UserOut.model_validate(current_user)
+    return _user_out(current_user)
 
 
 @router.delete("/me/logo", response_model=UserOut)
@@ -210,7 +229,7 @@ async def delete_logo(
     current_user.logo_url = None
     await db.commit()
     await db.refresh(current_user)
-    return UserOut.model_validate(current_user)
+    return _user_out(current_user)
 
 
 MAX_HERO_IMAGE_SIZE = 8 * 1024 * 1024  # 8MB — foto de portada, más grande que el logo
@@ -240,7 +259,7 @@ async def upload_hero_image(
     current_user.hero_image_url = url
     await db.commit()
     await db.refresh(current_user)
-    return UserOut.model_validate(current_user)
+    return _user_out(current_user)
 
 
 MAX_SITE_PHOTOS = 8
@@ -300,7 +319,7 @@ async def upload_site_photo(
     current_user.hero_image_url = None  # ya va dentro de site_photos
     await db.commit()
     await db.refresh(current_user)
-    return UserOut.model_validate(current_user)
+    return _user_out(current_user)
 
 
 class SitePhotosOrder(BaseModel):
@@ -321,7 +340,7 @@ async def set_site_photos(
     current_user.hero_image_url = None  # ya va dentro de site_photos (o el dueño la quitó)
     await db.commit()
     await db.refresh(current_user)
-    return UserOut.model_validate(current_user)
+    return _user_out(current_user)
 
 
 class TaglineSuggestRequest(BaseModel):

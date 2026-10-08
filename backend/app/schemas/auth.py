@@ -1,5 +1,6 @@
 import re
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, field_validator
 
@@ -95,5 +96,9 @@ class UserOut(BaseModel):
     staff: list[dict] | None = None
     payment_link: str | None = None
     payment_transfer: str | None = None
+    # Prueba gratis (ver services/trial_lifecycle.py); los llena profile._user_out.
+    paused: bool = False
+    trial_days_left: int | None = None
+    trial_extended_at: datetime | None = None
 
     model_config = {"from_attributes": True}

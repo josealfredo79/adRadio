@@ -139,6 +139,11 @@ async def widget_chat(
         raise HTTPException(status_code=404, detail="Widget no encontrado")
 
     session_id = body.get("session_id") or str(uuid_module.uuid4())
+    from app.services.trial_lifecycle import is_paused, paused_reply
+
+    if is_paused(user):
+        # Prueba vencida sin pagar: sin IA (costo cero), solo un aviso fijo.
+        return {"reply": paused_reply(user), "session_id": session_id, "cards": []}
     redis_key = f"{CHAT_REDIS_PREFIX}{advertiser_id}:{session_id}"
     history: list[dict] = []
 

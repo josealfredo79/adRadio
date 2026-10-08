@@ -64,6 +64,7 @@ from app.services.claude_service import (
 )
 from app.services.imagen_service import generate_flyer
 from app.services.radio_service import generate_radio_ad, generate_radio_script
+from app.services.trial_lifecycle import is_paused
 from app.workers.tasks import generate_parrilla_task, schedule_campaign
 
 logger = logging.getLogger(__name__)
@@ -134,7 +135,7 @@ async def create_campaign(
     _: None = Depends(idempotent_post),
     redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> CampaignOut:
-    if current_user.subscription_status not in ("active", "trial"):
+    if current_user.subscription_status not in ("active", "trial") or is_paused(current_user):
         raise HTTPException(status_code=402, detail="Necesitas un plan activo para crear campañas")
 
     if not body.name or not body.name.strip():
@@ -868,7 +869,7 @@ async def generate_parrilla(
     resultado se pierde sin que nadie se entere si terminó o no. El progreso
     se consulta con GET /generate-parrilla/{job_id}.
     """
-    if current_user.subscription_status not in ("active", "trial"):
+    if current_user.subscription_status not in ("active", "trial") or is_paused(current_user):
         raise HTTPException(status_code=402, detail="Necesitas un plan activo")
 
     if redis is None:

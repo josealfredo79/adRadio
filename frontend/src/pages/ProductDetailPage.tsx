@@ -30,6 +30,7 @@ interface ProductDetail {
   quick_asks?: { icon: string; text: string }[] | null
   business_category: string
   account_available: boolean
+  paused?: boolean
 }
 
 export default function ProductDetailPage() {
@@ -154,6 +155,11 @@ export default function ProductDetailPage() {
               {product.description && <p className="leading-relaxed" style={{ color: theme.muted }}>{product.description}</p>}
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                {product.paused ? (
+                  <p className="flex-1 self-center text-sm" style={{ color: theme.muted }}>
+                    Pronto volvemos a atender en línea 🙌
+                  </p>
+                ) : (
                 <button
                   type="button"
                   onClick={() => setChatOpen(true)}
@@ -163,6 +169,7 @@ export default function ProductDetailPage() {
                   <MessageCircle size={18} />
                   Platicar sobre este producto
                 </button>
+                )}
                 <button
                   onClick={handleShare}
                   className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-colors hover:opacity-80"

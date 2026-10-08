@@ -155,6 +155,9 @@ def test_user():
     user.meta_messaging_tier = None
     user.meta_send_throttle_per_hour = 60
     user.meta_connected_at = None
+    user.billing_exempt = False
+    user.trial_extended_at = None
+    user.last_seen_at = None
     return user
 
 

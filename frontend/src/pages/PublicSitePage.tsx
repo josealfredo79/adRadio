@@ -39,6 +39,7 @@ interface PublicSite {
   landing_sections: LandingSectionId[] | null
   slug: string
   account_available: boolean
+  paused?: boolean
 }
 
 // El agente 3D (la mascota robot que habla) — se descarga aparte, solo aquí.
@@ -156,6 +157,46 @@ export default function PublicSitePage() {
   const heroPhotos = ownPhotos.length ? ownPhotos : stockPhotos(site.business_category)
   const aboutPhoto = ownPhotos[1] ?? ownPhotos[0] ?? heroPhotos[1] ?? heroPhotos[0]
   const status = openStatus(site.business_hours)
+
+  if (site.paused) {
+    // Prueba vencida sin pagar: solo lo básico, sin chat ni catálogo. Sin
+    // "cuenta vencida": que no quede mal ni el negocio ni IaRadio.
+    return (
+      <>
+        <SEO title={site.business_name} description={`${site.business_name}${site.city ? ` — ${site.city}` : ''}`} />
+        <style>{PUBLIC_SITE_STYLES}</style>
+        <div className="min-h-screen font-sans" style={{ background: theme.bg, color: theme.text }}>
+          <MeshBackground color={site.color} dark={dark} />
+          <main className="relative z-10 mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-5 px-4 py-12 text-center">
+            {logoUrl ? (
+              <img src={logoUrl} alt="" className="h-20 w-20 rounded-2xl object-cover" onError={() => markBroken(logoUrl)} />
+            ) : (
+              <span className="text-5xl" aria-hidden>{categoryEmoji(site.business_category)}</span>
+            )}
+            <div>
+              <h1 className="text-3xl font-bold">{site.business_name}</h1>
+              {site.city && <p className="mt-1 opacity-70">{site.city}</p>}
+            </div>
+            <p className="text-lg opacity-90">Pronto volvemos a atender en línea 🙌</p>
+            {site.whatsapp_number && (
+              <a
+                href={`tel:+${waDigits(site.whatsapp_number)}`}
+                className="press rounded-full px-6 py-3 font-semibold text-white"
+                style={{ background: site.color }}
+              >
+                Llamar
+              </a>
+            )}
+            {site.business_hours && (
+              <div className="w-full text-left">
+                <BusinessHoursCard hours={site.business_hours} color={site.color} theme={theme} />
+              </div>
+            )}
+          </main>
+        </div>
+      </>
+    )
+  }
 
   const sections: LandingSectionId[] = site.landing_sections?.length ? site.landing_sections : DEFAULT_LANDING_SECTIONS
 

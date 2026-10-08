@@ -221,6 +221,25 @@ async def process_inbound_message(
                 logger.warning("[STOP] Failed to send opt-out confirmation to %s", from_number, exc_info=True)
         return {"message": "ok"}
 
+    # Prueba vencida sin pagar (trial_lifecycle.py): el bot no usa IA ni corre
+    # flujos; contesta un aviso fijo, una vez al día por cliente (cada
+    # mensaje de WhatsApp le cuesta al negocio).
+    from app.services.trial_lifecycle import is_paused, paused_reply
+
+    if is_paused(advertiser):
+        redis = await get_redis_optional()
+        first_today = True
+        if redis:
+            first_today = bool(await redis.set(
+                f"paused_reply:{advertiser.id}:{from_number}", "1", ex=24 * 3600, nx=True
+            ))
+        if first_today:
+            try:
+                await send(from_number, paused_reply(advertiser))
+            except Exception:
+                logger.warning("[PAUSED] Failed to send paused reply to %s", from_number, exc_info=True)
+        return {"message": "ok"}
+
     # Appointment reschedule handler
     reschedule_result = await db.execute(
         select(Appointment).where(

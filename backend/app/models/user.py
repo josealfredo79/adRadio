@@ -128,6 +128,13 @@ class User(Base):
     messages_remaining: Mapped[int] = mapped_column(Integer, default=50)
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Nunca se pausa al vencer la prueba (cuenta de IaRadio, demos, admins).
+    # Ver services/trial_lifecycle.py.
+    billing_exempt: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Cuándo se le dieron los 5 días extra por estar usando la prueba (una vez).
+    trial_extended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Última vez que el dueño abrió su panel (indicio de uso de la prueba).
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_founder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # "monthly" (default) | "annual" — Stripe solo factura una vez al año en el
     # segundo caso, así que la recarga mensual de mensajes no puede depender

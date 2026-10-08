@@ -44,6 +44,7 @@ celery_app.conf.update(
         # that serves real-time bot replies.
         "app.workers.tasks.check_scheduled_campaigns": {"queue": "campaigns"},
         "app.workers.tasks.cleanup_expired_data": {"queue": "campaigns"},
+        "app.workers.tasks.extend_active_trials_task": {"queue": "campaigns"},
         "app.workers.tasks.replenish_annual_message_quota": {"queue": "campaigns"},
         "app.workers.tasks.send_appointment_reminders": {"queue": "campaigns"},
         "app.workers.tasks.send_closer_reminders_task": {"queue": "campaigns"},
@@ -63,6 +64,10 @@ celery_app.conf.beat_schedule = {
     "cleanup-expired-tokens": {
         "task": "app.workers.tasks.cleanup_expired_data",
         "schedule": 3600.0,  # every hour
+    },
+    "extend-active-trials": {
+        "task": "app.workers.tasks.extend_active_trials_task",
+        "schedule": 3600.0,  # every hour — decide +5 días o pausa al vencer la prueba
     },
     "replenish-annual-message-quota": {
         "task": "app.workers.tasks.replenish_annual_message_quota",
