@@ -97,14 +97,22 @@ const STOCK_COUNT: Record<string, number> = {
   restaurante: 5, tienda: 5, belleza: 5, gimnasio: 5, farmacia: 5, ferreteria: 5, panaderia: 5,
   corporativo: 5, inmobiliaria: 5, educacion: 5, automotriz: 5, tecnologia: 5, otro: 5,
 }
+// En orden: lo específico antes que lo general ("Tienda de celulares" es
+// tecnología, no la carpeta "tienda", que son fotos de ROPA).
 const STOCK_KEYWORDS: [string, string][] = [
+  ['celular', 'tecnologia'], ['teléfono', 'tecnologia'], ['telefon', 'tecnologia'], ['electrón', 'tecnologia'], ['electron', 'tecnologia'],
+  ['cómputo', 'tecnologia'], ['computo', 'tecnologia'], ['computador', 'tecnologia'], ['laptop', 'tecnologia'], ['gadget', 'tecnologia'],
+  // "abarrotes" contiene "bar": antes que restaurante.
+  ['abarrot', 'otro'], ['miscel', 'otro'],
   ['restaur', 'restaurante'], ['comida', 'restaurante'], ['taquer', 'restaurante'], ['cocina', 'restaurante'], ['bar', 'restaurante'],
   ['panader', 'panaderia'], ['pastel', 'panaderia'], ['cafe', 'panaderia'], ['café', 'panaderia'],
   ['belleza', 'belleza'], ['estetic', 'belleza'], ['estétic', 'belleza'], ['salon', 'belleza'], ['salón', 'belleza'], ['barber', 'belleza'], ['spa', 'belleza'], ['uñas', 'belleza'],
   ['gimnasio', 'gimnasio'], ['fitness', 'gimnasio'], ['deporte', 'gimnasio'],
   ['farmacia', 'farmacia'], ['salud', 'farmacia'], ['clinic', 'farmacia'], ['clínic', 'farmacia'], ['dental', 'farmacia'], ['medic', 'farmacia'], ['médic', 'farmacia'],
   ['ferreter', 'ferreteria'], ['construc', 'ferreteria'],
-  ['tienda', 'tienda'], ['ropa', 'tienda'], ['boutique', 'tienda'], ['moda', 'tienda'], ['comercio', 'tienda'],
+  ['ropa', 'tienda'], ['boutique', 'tienda'], ['moda', 'tienda'], ['zapat', 'tienda'],
+  // Cualquier otra tienda (abarrotes, papelería…): fotos de comercio en general.
+  ['tienda', 'otro'], ['comercio', 'otro'],
   ['inmobil', 'inmobiliaria'], ['bienes', 'inmobiliaria'], ['terreno', 'inmobiliaria'], ['casa', 'inmobiliaria'],
   ['educa', 'educacion'], ['escuela', 'educacion'], ['academia', 'educacion'], ['curso', 'educacion'],
   ['automotr', 'automotriz'], ['taller', 'automotriz'], ['auto', 'automotriz'], ['mecánic', 'automotriz'], ['mecanic', 'automotriz'],
@@ -114,7 +122,8 @@ const STOCK_KEYWORDS: [string, string][] = [
 
 export function stockGiro(category: string): string {
   const key = (category || '').toLowerCase().trim()
-  if (STOCK_COUNT[key]) return key
+  // "tienda" a secas no es ropa (la carpeta "tienda" sí lo es).
+  if (STOCK_COUNT[key] && key !== 'tienda') return key
   for (const [k, giro] of STOCK_KEYWORDS) if (key.includes(k)) return giro
   return 'otro'
 }
