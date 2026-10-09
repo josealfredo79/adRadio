@@ -4,8 +4,9 @@ import OnboardingFlow from '@/components/OnboardingFlow'
 import { chatPalette } from '@/lib/chatLook'
 
 const post = vi.fn()
+const get = vi.fn()
 vi.mock('@/lib/api', () => ({
-  default: { post: (...a: unknown[]) => post(...a) },
+  default: { post: (...a: unknown[]) => post(...a), get: (...a: unknown[]) => get(...a) },
   getApiError: (_e: unknown, fallback: string) => fallback,
   setAccessToken: vi.fn(),
 }))
@@ -59,6 +60,7 @@ describe('OnboardingFlow por voz', () => {
     localStorage.clear()
     onVolume = undefined
     clock = 1_000_000
+    get.mockRejectedValue(new Error('sin cuenta con datos'))
     vi.spyOn(Date, 'now').mockImplementation(() => clock)
     Object.defineProperty(navigator, 'mediaDevices', {
       value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [] }) },
@@ -109,5 +111,46 @@ describe('OnboardingFlow por voz', () => {
     fireEvent.click(await screen.findByText('Te lo digo por voz', {}, { timeout: 4000 }))
     await screen.findByLabelText('Hablar', {}, { timeout: 4000 })
     expect(startVoiceRecording).not.toHaveBeenCalled()
+  })
+
+  it('does not ask again what the business already has: goes straight to publish', async () => {
+    const voice = { speak: vi.fn(), unlock: vi.fn(), stop: vi.fn(), speaking: false, muted: false }
+    get.mockResolvedValue({
+      data: {
+        has_own_text: false,
+        profile: {
+          business_name: 'Barbería Don Pepe', business_category: 'Barbería', city: 'Tlaxiaco', address: null,
+          business_hours: { mon: ['10:00', '20:00'] }, services: [{ name: 'Corte', price: 150, description: null }],
+          payment_methods: ['Efectivo'], faqs: [{ q: '¿Atienden niños?', a: 'Sí' }], policies: [], notes: [],
+        },
+      },
+    })
+    renderFlow(voice)
+    await screen.findByText(/No te voy a volver a preguntar nada/, {}, { timeout: 4000 })
+    await screen.findByText('Publicar mi página')
+    expect(screen.queryByText('Te lo digo por voz')).toBeNull()
+    expect(startVoiceRecording).not.toHaveBeenCalled()
+  })
+
+  it('asks only for what the business is missing (payments), once', async () => {
+    const voice = { speak: vi.fn(), unlock: vi.fn(), stop: vi.fn(), speaking: false, muted: false }
+    get.mockResolvedValue({
+      data: {
+        has_own_text: false,
+        profile: {
+          business_name: 'Barbería Don Pepe', business_category: 'Barbería', city: 'Tlaxiaco', address: null,
+          business_hours: { mon: ['10:00', '20:00'] }, services: [{ name: 'Corte', price: 150, description: null }],
+          payment_methods: [], faqs: [{ q: '¿Atienden niños?', a: 'Sí' }], policies: [], notes: [],
+        },
+      },
+    })
+    renderFlow(voice)
+    await screen.findByText(/Solo te pregunto lo que falta/, {}, { timeout: 4000 })
+    fireEvent.click(await screen.findByText('Contestar con botones'))
+    await screen.findByText(/¿Cómo te pagan tus clientes\?/, {}, { timeout: 4000 })
+    fireEvent.click(await screen.findByText('Efectivo y tarjeta'))
+    // Ya tenía preguntas frecuentes: no pregunta "¿qué más debe saber tu bot?".
+    await screen.findByText('Publicar mi página', {}, { timeout: 4000 })
+    expect(screen.queryByText(/¿Qué más debe saber tu bot\?/)).toBeNull()
   })
 })

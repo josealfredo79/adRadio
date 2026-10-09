@@ -36,9 +36,10 @@ type Msg = { who: 'bot' | 'me'; text: string }
 type Stage =
   | 'resume' | 'how' | 'name' | 'giro' | 'giro-text' | 'where' | 'hours' | 'hours-text' | 'services'
   | 'ready' | 'try' | 'change' | 'change-text' | 'fix' | 'confirm' | 'phone' | 'code' | 'exists' | 'done'
+  | 'pay' | 'more'
 
 // Preguntas que se contestan con la voz (y que radiecito escucha solo).
-const VOICE_STAGES: Stage[] = ['name', 'giro', 'where', 'hours', 'services', 'confirm']
+const VOICE_STAGES: Stage[] = ['name', 'giro', 'where', 'hours', 'services', 'pay', 'more', 'confirm']
 const CONFIRM_Q = '¿Es correcto?'
 const QUIET_MS = 1800 // silencio después de hablar = ya terminó
 const NO_SPEECH_MS = 9000 // nunca habló: se deja de escuchar
@@ -90,12 +91,26 @@ function missingAll(d: Draft): Stage[] {
 }
 const missing = (d: Draft): Stage | null => missingAll(d)[0] ?? null
 
+// Lo que hace al bot "completo": pagos y lo que más le preguntan. Solo se
+// pregunta lo que el negocio todavía no tiene.
+const strList = (d: Draft, k: string) => (Array.isArray(d[k]) ? (d[k] as unknown[]) : [])
+const hasExtra = (d: Draft) => ['faqs', 'policies', 'notes'].some((k) => strList(d, k).length > 0)
+const PAYMENTS = [
+  { label: 'Efectivo', value: ['Efectivo'] },
+  { label: 'Efectivo y tarjeta', value: ['Efectivo', 'Tarjeta'] },
+  { label: 'Efectivo, tarjeta y transferencia', value: ['Efectivo', 'Tarjeta', 'Transferencia'] },
+]
+// "Nada", "ya", "eso es todo": no hay nada que agregar.
+const saidNothing = (t: string) => /^\W*(nada|ninguna?|no|ya|eso es todo|es todo|as[ií] est[aá] bien)\b/i.test(t.trim())
+
 const ASK: Partial<Record<Stage, string>> = {
   name: '¿Cómo se llama tu negocio?',
   giro: '¿A qué te dedicas?',
   where: '¿Dónde estás? Dime tu ciudad, o la calle si quieres.',
   hours: '¿A qué hora atiendes?',
   services: 'Dime tus 3 productos o servicios más vendidos, con precio. Escríbelos o toca 🎤.',
+  pay: '¿Cómo te pagan tus clientes? Efectivo, tarjeta, transferencia…',
+  more: '¿Qué más debe saber tu bot? Por ejemplo si haces envíos a domicilio, garantías, o lo que más te preguntan.',
 }
 // Hablado no hay dónde escribir ni qué tocar.
 const ASK_VOICE: Partial<Record<Stage, string>> = {
@@ -260,17 +275,34 @@ export default function OnboardingFlow({
 
   // Ya se llegó a "¡Quedó!": después, una corrección regresa a "¿Algo más?".
   const reachedReady = useRef(false)
+  // Pagos y "¿qué más?" se preguntan una sola vez, y solo si el bot aún no lo sabe.
+  const askedPay = useRef(false)
+  const askedMore = useRef(false)
+  // El negocio ya tenía texto propio en las instrucciones de su bot.
+  const ownText = useRef(false)
+  const nextExtra = (d: Draft): 'pay' | 'more' | null =>
+    !askedPay.current && !strList(d, 'payment_methods').length ? 'pay'
+      : !askedMore.current && !ownText.current && !hasExtra(d) ? 'more'
+        : null
   const askNext = async (d: Draft, prefix?: string) => {
     const left = missingAll(d)
     const next = left[0] ?? null
     if (!next) {
+      const extra = reachedReady.current ? null : nextExtra(d)
+      if (extra) {
+        if (extra === 'pay') askedPay.current = true
+        else askedMore.current = true
+        await bot(...[prefix, (voiceRef.current && ASK_VOICE[extra]) || ASK[extra]!].filter(Boolean) as string[])
+        setStage(extra)
+        return
+      }
       if (reachedReady.current) {
-        await bot('Listo 👍 ¿Algo más?')
+        await bot(...[prefix, 'Listo 👍 ¿Algo más?'].filter(Boolean) as string[])
         setStage('ready')
         return
       }
       reachedReady.current = true
-      await bot('¡Quedó! 🎉 Ya tiene tus productos, tu horario y un asistente que contesta por ti.', 'Pruébala como si fueras tu cliente 👇')
+      await bot(...[prefix, '¡Quedó! 🎉 Ya tiene tus productos, tu horario y un asistente que contesta por ti.', 'Pruébala como si fueras tu cliente 👇'].filter(Boolean) as string[])
       setStage('ready')
       return
     }
@@ -289,7 +321,14 @@ export default function OnboardingFlow({
   const confirmChange = async (prev: Draft, next: Draft) => {
     const changed = changedFields(prev, next)
     if (!changed.length) {
-      await askNext(next)
+      // Pagos y "qué más": se dice qué se anotó y se sigue (sin "¿Es correcto?").
+      const pays = strList(next, 'payment_methods') as string[]
+      const note = JSON.stringify(pays) !== JSON.stringify(strList(prev, 'payment_methods'))
+        ? `Anoté que te pagan con ${listed(pays.map((m) => m.toLowerCase()))} ✅`
+        : JSON.stringify([next.faqs, next.policies, next.notes]) !== JSON.stringify([prev.faqs, prev.policies, prev.notes])
+          ? 'Anotado, tu bot ya lo sabe ✅'
+          : null
+      await askNext(next, note ?? undefined)
       return
     }
     setConfirming(changed)
@@ -316,6 +355,30 @@ export default function OnboardingFlow({
         await bot(`Tu página de ${prev.draft.business_name} ya está publicada 🎉 Aquí tienes tu link y tu QR:`)
         setStage('done')
         return
+      }
+      // Dueño con cuenta: lo que su negocio YA tiene se carga y solo se pregunta lo que falta.
+      if (owner) {
+        const mine = await api.get('/public/onboarding/mine').then((r) => r.data as { profile: Draft; has_own_text: boolean }).catch(() => null)
+        if (mine?.profile?.business_name) {
+          const have: Draft = { ...EMPTY_DRAFT, ...mine.profile }
+          ownText.current = mine.has_own_text
+          setDraft(have)
+          keep(have, null)
+          setCardShown(true)
+          if (!missingAll(have).length && !nextExtra(have)) {
+            reachedReady.current = true
+            await bot(
+              `Ya tengo guardado todo lo de ${have.business_name} 👆 No te voy a volver a preguntar nada.`,
+              'Si algo cambió, tócalo en la tarjeta y lo corriges. Si no, publica tu página.',
+            )
+            setStage('ready')
+            return
+          }
+          await bot(`Ya tengo guardado lo de ${have.business_name} 👆 Solo te pregunto lo que falta.`)
+          await bot('¿Cómo prefieres contarme?')
+          setStage('how')
+          return
+        }
       }
       if (prev?.draft?.business_name) {
         setDraft(prev.draft)
@@ -361,8 +424,14 @@ export default function OnboardingFlow({
         if (v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)) next[k] = v
       }
       setText('')
-      const key = (d: Draft) => JSON.stringify([d.business_name, d.business_category, d.city, d.address, d.business_hours, d.services])
+      const key = (d: Draft) => JSON.stringify([d.business_name, d.business_category, d.city, d.address, d.business_hours, d.services, d.payment_methods, d.faqs, d.policies, d.notes])
       if (key(next) === key(base) && !editing) {
+        // "Nada más": en pagos o "qu\u00e9 m\u00e1s" es una respuesta v\u00e1lida, no un malentendido.
+        if ((stage === 'pay' || stage === 'more') && saidNothing(String(data.transcript))) {
+          misses.current = 0
+          await askNext(draft)
+          return
+        }
         // No dijo nada del negocio ("¿qué es la vida?"): no fingir que se acomodó algo.
         misses.current += 1
         await bot('No te entendí bien 🙈 ¿Me lo dices de otra forma?')
@@ -442,6 +511,7 @@ export default function OnboardingFlow({
     // el nombre y "es de venta de celulares" es el giro (no el nombre).
     const question: Partial<Record<Stage, string>> = {
       name: ASK.name, 'giro-text': ASK.giro, where: ASK.where, 'hours-text': ASK.hours, services: ASK.services,
+      pay: ASK.pay, more: ASK.more,
       'change-text': '¿Qué le cambio a tu página?',
     }
     const form = new FormData()
@@ -716,6 +786,22 @@ export default function OnboardingFlow({
         </div>
       case 'hours-text': return textDock('Ej. Mar a Dom de 2 a 11', 'hours-text')
       case 'services': return textDock('Ej. Orden de pastor 85, quesadilla 45…', 'services', true)
+      case 'pay':
+        return <div className="grid gap-2">
+          {PAYMENTS.map((p) => chip(p.label, pick(p.label, async () => {
+            const next = { ...draft, payment_methods: p.value }
+            setEditing(null)
+            update(next, 'hero')
+            await confirmChange(draft, next)
+          }), '💵'))}
+          {textDock('O escríbelo: transferencia y tarjeta…', 'pay')}
+          {chip('Saltar', pick('Saltar', () => askNext(draft)), '⏭️')}
+        </div>
+      case 'more':
+        return <div className="grid gap-2">
+          {textDock('Ej. hacemos envíos a domicilio, 3 meses de garantía…', 'more', true)}
+          {chip('Nada más', pick('Nada más', () => askNext(draft)), '👍')}
+        </div>
       case 'ready':
         return <div className="grid grid-cols-2 gap-2">
           {chip('Probar como cliente', pick('Probar como cliente', async () => {

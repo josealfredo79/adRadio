@@ -187,31 +187,95 @@ def render_hours(hours: dict | None) -> str | None:
     )
 
 
-def render_instructions(profile: dict) -> str:
-    """Texto para bot_instructions, determinista (sin IA) y dentro del límite
-    del campo. Es lo que el bot usa como contexto en cada respuesta."""
+def render_blocks(profile: dict) -> dict[str, str]:
+    """Un párrafo por tema, con su encabezado como llave (en orden)."""
     p = sanitize_profile(profile)
-    blocks: list[str] = []
+    blocks: dict[str, str] = {}
     if p["address"] or p["city"]:
-        blocks.append("Ubicación: " + ", ".join(x for x in (p["address"], p["city"]) if x))
+        blocks["Ubicación"] = "Ubicación: " + ", ".join(x for x in (p["address"], p["city"]) if x)
     if hours := render_hours(p["business_hours"]):
-        blocks.append(f"Horario: {hours}")
+        blocks["Horario"] = f"Horario: {hours}"
     if p["services"]:
         lines = [f"- {s['name']}{_money(s['price'])}" + (f" ({s['description']})" if s["description"] else "")
                  for s in p["services"]]
-        blocks.append("Servicios y precios:\n" + "\n".join(lines))
+        blocks["Servicios y precios"] = "Servicios y precios:\n" + "\n".join(lines)
     if p["payment_methods"]:
-        blocks.append("Formas de pago: " + ", ".join(p["payment_methods"]))
+        blocks["Formas de pago"] = "Formas de pago: " + ", ".join(p["payment_methods"])
     if p["policies"]:
-        blocks.append("Políticas:\n" + "\n".join(f"- {x}" for x in p["policies"]))
+        blocks["Políticas"] = "Políticas:\n" + "\n".join(f"- {x}" for x in p["policies"])
     if p["faqs"]:
-        blocks.append("Preguntas frecuentes:\n" + "\n".join(f"P: {f['q']}\nR: {f['a']}" for f in p["faqs"]))
+        blocks["Preguntas frecuentes"] = "Preguntas frecuentes:\n" + "\n".join(f"P: {f['q']}\nR: {f['a']}" for f in p["faqs"])
     if p["notes"]:
-        blocks.append("Otros datos:\n" + "\n".join(f"- {x}" for x in p["notes"]))
-    text = "\n\n".join(blocks)
+        blocks["Otros datos"] = "Otros datos:\n" + "\n".join(f"- {x}" for x in p["notes"])
+    return blocks
+
+
+def _fit(text: str) -> str:
     if len(text) > MAX_INSTRUCTIONS:
         text = text[:MAX_INSTRUCTIONS - 1].rsplit("\n", 1)[0] + "…"
     return text
+
+
+def render_instructions(profile: dict) -> str:
+    """Texto para bot_instructions, determinista (sin IA) y dentro del límite
+    del campo. Es lo que el bot usa como contexto en cada respuesta."""
+    return _fit("\n\n".join(render_blocks(profile).values()))
+
+
+def _header_of(paragraph: str) -> str | None:
+    head = paragraph.split(":", 1)[0].strip()
+    return head if ":" in paragraph and head in _HEADERS else None
+
+
+_HEADERS = ("Ubicación", "Horario", "Servicios y precios", "Formas de pago", "Políticas", "Preguntas frecuentes", "Otros datos")
+
+
+def merge_instructions(existing: str | None, profile: dict) -> str:
+    """Instrucciones que ya tiene el negocio + lo que trae el perfil: cada tema
+    del perfil reemplaza SOLO su párrafo; lo que el dueño ya tenía de otros
+    temas (pagos, preguntas frecuentes, texto propio) se queda como está."""
+    new = render_blocks(profile)
+    if not (existing or "").strip():
+        return _fit("\n\n".join(new.values()))
+    out: list[str] = []
+    used: set[str] = set()
+    for para in re.split(r"\n\s*\n", existing.strip()):
+        head = _header_of(para)
+        if head is None or head not in new:
+            out.append(para.strip())
+        elif head not in used:
+            used.add(head)
+            out.append(new[head])
+    out.extend(text for head, text in new.items() if head not in used)
+    return _fit("\n\n".join(out))
+
+
+def parse_instructions(text: str | None) -> tuple[dict, bool]:
+    """Lo contrario de render_instructions: de los párrafos que escribe esta
+    misma app saca pagos, políticas, preguntas frecuentes y otros datos. El 2º
+    valor dice si hay texto propio que no es de ningún tema conocido."""
+    out: dict = {"address": None, "payment_methods": [], "policies": [], "faqs": [], "notes": []}
+    free = False
+    for para in re.split(r"\n\s*\n", (text or "").strip()):
+        if not para.strip():
+            continue
+        head = _header_of(para)
+        body = para.split(":", 1)[1].strip() if head else ""
+        if head == "Ubicación":
+            out["address"] = body
+        elif head == "Formas de pago":
+            out["payment_methods"] = [x.strip() for x in body.split(",") if x.strip()]
+        elif head in ("Políticas", "Otros datos"):
+            items = [ln.lstrip("- ").strip() for ln in body.splitlines() if ln.strip()]
+            out["policies" if head == "Políticas" else "notes"] = items
+        elif head == "Preguntas frecuentes":
+            lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+            for q, a in zip(lines[::2], lines[1::2]):
+                if q.startswith("P:") and a.startswith("R:"):
+                    out["faqs"].append({"q": q[2:].strip(), "a": a[2:].strip()})
+        elif head is None:
+            free = True
+    return out, free
 
 
 # ─── La carita que platica (paso 2 del rediseño de voz) ─────────────────────

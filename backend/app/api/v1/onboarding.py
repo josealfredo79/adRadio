@@ -103,6 +103,23 @@ async def try_assistant(request: Request, body: TryBody) -> dict:
     return {"answer": answer}
 
 
+@router.get("/mine")
+@limiter.limit("60/hour")
+async def my_profile(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Lo que el negocio ya tiene (nombre, giro, horario, productos, pagos,
+    preguntas frecuentes…) para que el armador pregunte solo lo que falta."""
+    from app.services.owner_signup import owner_profile
+
+    if current_user.role != "advertiser":
+        raise HTTPException(status_code=403, detail="Solo los negocios pueden armar su página.")
+    profile, has_own_text = await owner_profile(db, current_user)
+    return {"profile": profile, "has_own_text": has_own_text}
+
+
 class ApplyBody(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     profile: dict

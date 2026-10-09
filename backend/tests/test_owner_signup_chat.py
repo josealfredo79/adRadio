@@ -275,6 +275,40 @@ class TestApplyToOwner:
             await self._drop(email)
 
     @pytest.mark.asyncio
+    async def test_existing_bot_is_prefilled_and_not_overwritten(self):
+        from app.api.v1.onboarding import my_profile
+
+        existing = ("Ubicación: Calle Hidalgo 12, Tlaxiaco\n\nFormas de pago: efectivo, transferencia\n\n"
+                    "Preguntas frecuentes:\nP: ¿Hacen envíos?\nR: Sí, gratis arriba de $300")
+        email = await self._make_user(city="Tlaxiaco", business_category="Taquería", bot_instructions=existing,
+                                      business_hours=PROFILE["business_hours"])
+        try:
+            async with AsyncSessionLocal() as db:
+                user = (await db.execute(select(User).where(User.email == email))).scalar_one()
+                db.add(Product(advertiser_id=user.id, name="Quesadilla", price=45, active=True))
+                await db.commit()
+                mine = await my_profile(request=_request("/api/v1/public/onboarding/mine"), db=db, current_user=user)
+            p = mine["profile"]
+            assert p["business_name"] == "Mi Taquería" and p["address"] == "Calle Hidalgo 12" and p["city"] == "Tlaxiaco"
+            assert p["services"] == [{"name": "Quesadilla", "price": 45.0, "description": None}]
+            assert p["payment_methods"] == ["efectivo", "transferencia"] and p["faqs"][0]["q"] == "¿Hacen envíos?"
+            assert mine["has_own_text"] is False
+
+            # Armar la página solo con lo esencial NO borra pagos ni preguntas frecuentes.
+            async with AsyncSessionLocal() as db:
+                user = (await db.execute(select(User).where(User.email == email))).scalar_one()
+                await apply_for_owner(request=_request("/api/v1/public/onboarding/apply"),
+                                      body=ApplyBody(name="Mi Taquería", profile={"city": "Tlaxiaco", "address": p["address"], "services": [{"name": "Torta", "price": 60}]}),
+                                      db=db, current_user=user)
+            async with AsyncSessionLocal() as db:
+                user = (await db.execute(select(User).where(User.email == email))).scalar_one()
+                text = user.bot_instructions or ""
+                assert "Formas de pago: efectivo, transferencia" in text and "¿Hacen envíos?" in text
+                assert "Torta" in text and "Calle Hidalgo 12" in text
+        finally:
+            await self._drop(email)
+
+    @pytest.mark.asyncio
     async def test_admin_cannot_use_it(self):
         email = await self._make_user(role="admin")
         try:

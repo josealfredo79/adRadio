@@ -26,7 +26,13 @@ from app.core.plans import TRIAL_DAYS
 from app.core.security import generate_referral_code, hash_password
 from app.models.product import Product
 from app.models.user import User
-from app.services.voice_setup import render_instructions, sanitize_profile
+from app.services.voice_setup import (
+    MAX_SERVICES,
+    merge_instructions,
+    parse_instructions,
+    render_instructions,
+    sanitize_profile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +111,33 @@ async def create_owner(db: AsyncSession, *, phone: str, name: str, profile: dict
     return user
 
 
+async def owner_profile(db: AsyncSession, user: User) -> tuple[dict, bool]:
+    """Lo que el negocio YA tiene, en forma de borrador, para que el armador
+    solo pregunte lo que falta. El 2º valor: tiene texto propio en sus
+    instrucciones (no se le pregunta "¿qué más debe saber tu bot?")."""
+    parsed, free_text = parse_instructions(user.bot_instructions)
+    address = parsed["address"]
+    if address and user.city and address.lower().endswith(user.city.lower()):
+        address = address[: -len(user.city)].rstrip(", ") or None
+    products = (await db.execute(
+        select(Product).where(Product.advertiser_id == user.id, Product.active.is_(True))
+        .order_by(Product.created_at).limit(MAX_SERVICES)
+    )).scalars().all()
+    profile = sanitize_profile({
+        **parsed,
+        "business_name": user.business_name,
+        "business_category": user.business_category,
+        "city": user.city,
+        "address": address,
+        "business_hours": user.business_hours,
+        "services": [
+            {"name": p.name, "price": float(p.price) if p.price is not None else None, "description": p.description}
+            for p in products
+        ],
+    })
+    return profile, free_text
+
+
 async def apply_to_owner(db: AsyncSession, user: User, *, name: str, profile: dict, color: str | None = None) -> User:
     """Lo mismo, para un dueño que YA tiene cuenta (se registró con correo y
     arma su página desde el panel): actualiza su negocio, agrega los productos
@@ -115,7 +148,7 @@ async def apply_to_owner(db: AsyncSession, user: User, *, name: str, profile: di
     for field in ("business_category", "city", "business_hours"):
         if p[field]:
             setattr(user, field, p[field])
-    instructions = render_instructions(p)
+    instructions = merge_instructions(user.bot_instructions, p)
     if instructions:
         user.bot_instructions = instructions
     if color and _HEX.match(color):

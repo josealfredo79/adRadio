@@ -104,6 +104,49 @@ class TestRender:
         assert vs.render_instructions({}) == ""
 
 
+class TestMergeInstructions:
+    """Armar la página de un negocio que ya tiene bot: se edita, no se rehace."""
+
+    def test_keeps_payments_faqs_and_own_text_it_was_not_told_about(self):
+        existing = vs.render_instructions(MODEL_JSON) + "\n\nNunca des descuentos por WhatsApp."
+        out = vs.merge_instructions(existing, {"city": "Oaxaca", "address": "Calle Juárez 3"})
+        assert "Ubicación: Calle Juárez 3, Oaxaca" in out and "Calle Hidalgo" not in out
+        assert "Formas de pago: efectivo, transferencia" in out
+        assert "P: ¿Atienden niños?" in out and "Nunca des descuentos" in out
+        assert "- Corte — $150" in out
+
+    def test_only_adds_the_topics_that_were_missing(self):
+        out = vs.merge_instructions("Horario: de lunes a viernes", {"payment_methods": ["efectivo"]})
+        assert out == "Horario: de lunes a viernes\n\nFormas de pago: efectivo"
+
+    def test_empty_account_gets_the_full_text(self):
+        assert vs.merge_instructions(None, MODEL_JSON) == vs.render_instructions(MODEL_JSON)
+
+    def test_same_profile_twice_changes_nothing(self):
+        once = vs.merge_instructions(None, MODEL_JSON)
+        assert vs.merge_instructions(once, MODEL_JSON) == once
+
+    def test_respects_the_field_limit(self):
+        big = {"services": [{"name": f"Servicio {i} " + "x" * 150, "price": i} for i in range(40)]}
+        assert len(vs.merge_instructions("Horario: abierto", big)) <= vs.MAX_INSTRUCTIONS
+
+
+class TestParseInstructions:
+    def test_reads_back_what_render_wrote(self):
+        parsed, free = vs.parse_instructions(vs.render_instructions(MODEL_JSON))
+        assert parsed["payment_methods"] == ["efectivo", "transferencia"]
+        assert parsed["policies"] == ["Si llegas 15 minutos tarde se reagenda"]
+        assert parsed["faqs"] == [{"q": "¿Atienden niños?", "a": "Sí, desde los 3 años"}]
+        assert parsed["address"] == "Calle Hidalgo 12, centro, Tlaxiaco" and free is False
+
+    def test_own_text_is_flagged_not_parsed(self):
+        parsed, free = vs.parse_instructions("Somos una barbería familiar, siempre sonríe.")
+        assert free is True and parsed["faqs"] == [] and parsed["payment_methods"] == []
+
+    def test_nothing_is_nothing(self):
+        assert vs.parse_instructions(None)[1] is False
+
+
 class TestExtract:
     @pytest.mark.asyncio
     async def test_correction_sends_the_current_draft(self):
