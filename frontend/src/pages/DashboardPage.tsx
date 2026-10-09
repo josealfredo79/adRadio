@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { lazy, Suspense, useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { useCopilot } from '@/contexts/CopilotContext'
 import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic, Globe, Gift } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
@@ -54,12 +55,13 @@ const DAYS_ES: Record<string, string> = {
   Mon: 'Lun', Tue: 'Mar', Wed: 'Mié', Thu: 'Jue', Fri: 'Vie', Sat: 'Sáb', Sun: 'Dom',
 }
 
-// La misma mascota de /app/hablar (verde IaRadio, como allá). Lazy: three.js
+// La misma mascota del chat del asistente (verde IaRadio). Lazy: three.js
 // no entra al bundle del dashboard hasta que se pinta la tarjeta.
 const Mascot3D = lazy(() => import('@/components/Mascot3D'))
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const { setAssistantOpen } = useCopilot()
   const [talkHover, setTalkHover] = useState(false)
   const [hasDemoDraft] = useState(() => loadDemoDraft() !== null)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -172,15 +174,16 @@ export default function DashboardPage() {
         </Link>
       )}
 
-      {/* Habla con IaRadio: trabajar con la voz, sin buscar en el menú. */}
+      {/* Habla con IaRadio: abre el chat flotante, donde se trabaja con la voz. */}
       {user?.bot_instructions && (
-        <Link
-          to="/app/hablar"
+        <button
+          type="button"
+          onClick={() => setAssistantOpen(true)}
           onMouseEnter={() => setTalkHover(true)}
           onMouseLeave={() => setTalkHover(false)}
-          className="flex items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50 p-3 pr-5 transition-shadow hover:shadow-md dark:border-brand-900 dark:bg-brand-950/30"
+          className="flex w-full items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50 p-3 pr-5 text-left transition-shadow hover:shadow-md dark:border-brand-900 dark:bg-brand-950/30"
         >
-          {/* Al pasar el mouse "pone atención", como cuando escucha en /app/hablar. */}
+          {/* Al pasar el mouse "pone atención", como cuando escucha. */}
           <span className="relative shrink-0">
             <Suspense
               fallback={
@@ -203,7 +206,7 @@ export default function DashboardPage() {
               Pídele lo que necesites con tu voz: “¿qué citas tengo hoy?”, “crea un cupón”, “lanza una promoción”.
             </span>
           </span>
-        </Link>
+        </button>
       )}
 
       {/* Payment success banner — visible even while loading */}

@@ -37,6 +37,8 @@ interface CopilotContextValue {
   pendingConfirmation: PendingConfirmation | null
   setPendingConfirmation: (p: PendingConfirmation | null) => void
   resetConversation: () => void
+  assistantOpen: boolean
+  setAssistantOpen: (open: boolean) => void
 }
 
 export const COPILOT_STORAGE_KEY = 'iaradio_copilot_chat'
@@ -67,6 +69,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(
     () => loadStored().pendingConfirmation
   )
+  const [assistantOpen, setAssistantOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -92,7 +95,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <CopilotContext.Provider value={{ messages, setMessages, pendingConfirmation, setPendingConfirmation, resetConversation }}>
+    <CopilotContext.Provider value={{ messages, setMessages, pendingConfirmation, setPendingConfirmation, resetConversation, assistantOpen, setAssistantOpen }}>
       {children}
     </CopilotContext.Provider>
   )

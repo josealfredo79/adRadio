@@ -102,6 +102,12 @@ def test_voice_prompt_asks_for_speakable_answers():
     assert "en voz alta" not in _build_system_prompt(_user())
 
 
+def test_panel_prompt_asks_for_plain_text():
+    prompt = _build_system_prompt(_user(), "panel")
+    assert "chat flotante" in prompt and "markdown" in prompt
+    assert "chat flotante" not in _build_system_prompt(_user(), "voz")
+
+
 @pytest.mark.asyncio
 async def test_own_photo_goes_with_the_message_and_foreign_ones_do_not():
     chat = AsyncMock(return_value=REPLY)

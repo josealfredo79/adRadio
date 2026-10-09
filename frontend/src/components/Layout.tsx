@@ -34,7 +34,6 @@ import {
   Kanban,
   Package,
   Sparkles,
-  Mic,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import BrandMark from '@/components/BrandMark'
@@ -42,7 +41,6 @@ import OwnerAssistant from '@/components/OwnerAssistant'
 
 const navItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/app/hablar', icon: Mic, label: 'Habla con IaRadio' },
   { to: '/app/copilot', icon: Sparkles, label: 'Copiloto' },
   { to: '/app/campaigns', icon: Megaphone, label: 'Campañas', badge: 'voces_stories_pending' as const },
   { to: '/app/automations', icon: Bot, label: 'Automatizaciones' },

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckCheck, Send, X } from 'lucide-react'
+import { Camera, CheckCheck, Mic, Send, Square, Volume2, VolumeX, X } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCopilot, type CopilotAction, type PendingConfirmation } from '@/contexts/CopilotContext'
 import MascotSmart from '@/components/MascotSmart'
 import BubbleTail from '@/components/BubbleTail'
 import { chatPalette, wallpaperPattern } from '@/lib/chatLook'
+import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
+import { useSpeaker } from '@/lib/useSpeaker'
 
 // El asistente del dueño flotando en todo el panel, con la cara del chat de
 // /sitio/iaradio pero conectado al Copiloto: lee Y escribe datos (productos,
@@ -17,7 +19,8 @@ const GREEN = '#25D366'
 const PAL = chatPalette(GREEN, true)
 const BG = '#0b0d16'
 const BORDER = 'rgba(255,255,255,0.09)'
-const HIDDEN_ON = ['/app/hablar', '/app/copilot']
+const HIDDEN_ON = ['/app/copilot']
+const MAX_SECONDS = 120
 
 const QUICK_ASKS = [
   { icon: '✨', label: '¿Mi bot ya está listo?', text: '¿Mi bot ya está listo? ¿Qué le falta?' },
@@ -30,16 +33,31 @@ interface ChatResponse {
   reply: string
   actions: CopilotAction[]
   pending_confirmation: PendingConfirmation | null
+  transcript?: string
+}
+
+/** Lo que se dice en voz alta: sin marcas de formato y no muy largo. */
+function speakable(text: string): string {
+  return text.replace(/[*_#`>]/g, '').replace(/^\s*[-•]\s*/gm, '').replace(/\s+/g, ' ').trim().slice(0, 600)
 }
 
 export default function OwnerAssistant() {
   const { pathname } = useLocation()
   const { user, setUser } = useAuth()
   const qc = useQueryClient()
-  const { messages, setMessages, pendingConfirmation, setPendingConfirmation } = useCopilot()
-  const [open, setOpen] = useState(false)
+  const { messages, setMessages, pendingConfirmation, setPendingConfirmation, assistantOpen: open, setAssistantOpen: setOpen } = useCopilot()
   const [input, setInput] = useState('')
+  const [recording, setRecording] = useState(false)
+  const [seconds, setSeconds] = useState(0)
+  // Foto de un producto (botón de cámara): viaja con lo siguiente que diga el dueño.
+  const [photo, setPhoto] = useState<{ url: string; preview: string } | null>(null)
+  const [uploading, setUploading] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
+  const photoInput = useRef<HTMLInputElement>(null)
+  const session = useRef<VoiceSession | null>(null)
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const speaker = useSpeaker({ robot: true })
+  const micAvailable = canRecordVoice()
 
   const chat = useMutation({
     mutationFn: (payload: { message: string; history: { role: string; content: string }[] }) =>
@@ -49,14 +67,28 @@ export default function OwnerAssistant() {
     mutationFn: (payload: { confirmation_id: string; approve: boolean }) =>
       api.post<ChatResponse>('/copilot/confirm', payload).then((r) => r.data),
   })
-  const busy = chat.isPending || confirm.isPending
+  const voice = useMutation({
+    mutationFn: (form: FormData) => api.post<ChatResponse>('/copilot/voice', form, { timeout: 60000 }).then((r) => r.data),
+  })
+  const busy = chat.isPending || confirm.isPending || voice.isPending || uploading
 
   useEffect(() => {
     const box = endRef.current?.closest('.overflow-y-auto')
     if (box) box.scrollTop = box.scrollHeight
   }, [messages, pendingConfirmation, busy, open])
 
-  if (user?.role !== 'advertiser' || HIDDEN_ON.some((p) => pathname.startsWith(p))) return null
+  useEffect(() => () => {
+    session.current?.cancel()
+    if (timer.current) clearInterval(timer.current)
+  }, [])
+
+  // Tope de 2 minutos: se corta solo y se manda lo grabado.
+  useEffect(() => {
+    if (recording && seconds >= MAX_SECONDS) void stopRecording()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording, seconds])
+
+  if (HIDDEN_ON.some((p) => pathname.startsWith(p))) return null
 
   const addAssistant = (content: string, extra: { actions?: CopilotAction[]; isError?: boolean } = {}) =>
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content, ...extra }])
@@ -71,16 +103,99 @@ export default function OwnerAssistant() {
     }
   }
 
+  const historyNow = () => messages.filter((m) => m.content).map(({ role, content }) => ({ role, content }))
+
+  const clearPhoto = () => {
+    if (photo) URL.revokeObjectURL(photo.preview)
+    setPhoto(null)
+  }
+
+  // Por el camino de voz van: lo grabado, y lo escrito cuando trae foto.
+  const sendVoice = (form: FormData, opts: { userText?: string; speak: boolean }) => {
+    const history = historyNow()
+    if (history.length) form.append('history', JSON.stringify(history))
+    if (pendingConfirmation) form.append('confirmation_id', pendingConfirmation.confirmation_id)
+    if (photo) form.append('photo_url', photo.url)
+    if (opts.userText) setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', content: opts.userText! }])
+    voice.mutate(form, {
+      onSuccess: (data) => {
+        if (!opts.userText && data.transcript) {
+          setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', content: data.transcript! }])
+        }
+        onReply(data)
+        clearPhoto()
+        if (opts.speak) void speaker.speak(speakable(data.reply))
+      },
+      onError: (err) => addAssistant(getApiError(err, 'No te entendí bien. ¿Me lo repites?'), { isError: true }),
+    })
+  }
+
   const send = (text?: string) => {
     const value = (text ?? input).trim()
     if (!value || busy || pendingConfirmation) return
-    const history = messages.filter((m) => m.content).map(({ role, content }) => ({ role, content }))
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', content: value }])
+    speaker.unlock()
     setInput('')
+    if (photo) {
+      const form = new FormData()
+      form.append('text', value)
+      sendVoice(form, { userText: value, speak: false })
+      return
+    }
+    const history = historyNow()
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', content: value }])
     chat.mutate(
       { message: value, history },
       { onSuccess: onReply, onError: (err) => addAssistant(getApiError(err, 'No se pudo procesar tu mensaje. Intenta de nuevo.'), { isError: true }) },
     )
+  }
+
+  const startRecording = async () => {
+    if (busy || recording) return
+    speaker.unlock() // dentro del toque: iPhone deja hablar a la mascota después
+    speaker.stop()
+    try {
+      session.current = await startVoiceRecording()
+    } catch (err) {
+      addAssistant(micErrorMessage(err), { isError: true })
+      return
+    }
+    setSeconds(0)
+    setRecording(true)
+    timer.current = setInterval(() => setSeconds((s) => s + 1), 1000)
+  }
+
+  async function stopRecording() {
+    if (timer.current) clearInterval(timer.current)
+    setRecording(false)
+    const s = session.current
+    session.current = null
+    if (!s) return
+    const rec = await s.stop()
+    if (rec.seconds < 1) {
+      addAssistant('No alcancé a oírte. Toca el micrófono y dime qué necesitas.', { isError: true })
+      return
+    }
+    const form = new FormData()
+    const ext = rec.mimeType.includes('mp4') ? 'mp4' : rec.mimeType.includes('ogg') ? 'ogg' : 'webm'
+    form.append('audio', rec.blob, `orden.${ext}`)
+    sendVoice(form, { speak: true })
+  }
+
+  const pickPhoto = async (file: File | undefined) => {
+    if (!file) return
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const { data } = await api.post<{ url: string }>('/copilot/photo', form)
+      clearPhoto()
+      setPhoto({ url: data.url, preview: URL.createObjectURL(file) })
+    } catch (err) {
+      addAssistant(getApiError(err, 'No se pudo subir la foto. Intenta de nuevo.'), { isError: true })
+    } finally {
+      setUploading(false)
+      if (photoInput.current) photoInput.current.value = ''
+    }
   }
 
   const decide = (approve: boolean) => {
@@ -102,7 +217,7 @@ export default function OwnerAssistant() {
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => { speaker.stop(); setOpen(false) }}>
           <div className="anim-backdrop absolute inset-0 bg-black/50" aria-hidden />
           <div
             className="anim-sheet relative flex h-[min(40rem,85dvh)] w-full max-w-md flex-col overflow-hidden rounded-3xl shadow-2xl"
@@ -115,16 +230,29 @@ export default function OwnerAssistant() {
           <div className="flex items-center justify-between px-3 py-2 shadow-sm" style={{ background: GREEN, color: PAL.onBrand }}>
             <div className="flex min-w-0 items-center gap-2">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95">
-                <MascotSmart mood={busy ? 'thinking' : 'idle'} size={40} color={GREEN} />
+                <MascotSmart mood={recording ? 'listening' : busy ? 'thinking' : speaker.speaking ? 'speaking' : 'idle'} size={40} color={GREEN} />
               </div>
               <div className="min-w-0">
                 <p className="truncate text-[16px] font-semibold leading-tight">IaRadio</p>
-                <p className="truncate text-xs leading-tight opacity-80">{busy ? 'escribiendo…' : 'tu asistente · en línea'}</p>
+                <p className="truncate text-xs leading-tight opacity-80">
+                  {recording ? 'te escucho…' : busy ? 'escribiendo…' : 'tu asistente · en línea'}
+                </p>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Cerrar asistente" className="rounded-full p-2 opacity-90">
-              <X size={20} />
-            </button>
+            <div className="flex items-center">
+              {micAvailable && (
+                <button
+                  onClick={() => speaker.setMuted(!speaker.muted)}
+                  aria-label={speaker.muted ? 'Activar la voz' : 'Silenciar la voz'}
+                  className="rounded-full p-2 opacity-90"
+                >
+                  {speaker.muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                </button>
+              )}
+              <button onClick={() => { speaker.stop(); setOpen(false) }} aria-label="Cerrar asistente" className="rounded-full p-2 opacity-90">
+                <X size={20} />
+              </button>
+            </div>
           </div>
 
           <div
@@ -231,6 +359,16 @@ export default function OwnerAssistant() {
             <div ref={endRef} />
           </div>
 
+          {photo && (
+            <div className="flex items-center gap-3 px-3 py-2" style={{ background: PAL.bar }}>
+              <img src={photo.preview} alt="Foto del producto" className="h-12 w-12 rounded-lg object-cover" />
+              <p className="flex-1 text-sm" style={{ color: PAL.text }}>Foto lista: dime qué producto es.</p>
+              <button type="button" onClick={clearPhoto} aria-label="Quitar la foto" className="rounded-full p-1.5 opacity-80">
+                <X size={16} />
+              </button>
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault()
@@ -239,26 +377,72 @@ export default function OwnerAssistant() {
             className="flex items-center gap-1.5 px-2 py-2"
             style={{ background: PAL.bar }}
           >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={pendingConfirmation ? 'Responde con los botones de arriba' : 'Mensaje'}
-              disabled={busy || !!pendingConfirmation}
-              aria-label="Escribe lo que necesitas"
-              enterKeyHint="send"
-              className="min-w-0 flex-1 rounded-full px-4 py-3 text-base outline-none placeholder:text-white/40 disabled:opacity-50"
-              style={{ background: PAL.field, color: PAL.text }}
-            />
             <button
-              type="submit"
-              disabled={busy || !!pendingConfirmation || !input.trim()}
-              aria-label="Enviar"
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-sm transition-transform active:scale-95 disabled:opacity-50"
-              style={{ background: GREEN, color: PAL.onBrand }}
+              type="button"
+              onClick={() => photoInput.current?.click()}
+              disabled={busy || recording}
+              aria-label="Foto de un producto"
+              className="flex h-12 w-10 shrink-0 items-center justify-center rounded-full opacity-80 disabled:opacity-40"
+              style={{ color: PAL.text }}
             >
-              <Send size={19} />
+              <Camera size={21} />
             </button>
+            <input
+              ref={photoInput}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => void pickPhoto(e.target.files?.[0])}
+            />
+            {recording ? (
+              <p className="min-w-0 flex-1 px-3 text-base" style={{ color: PAL.text }} aria-live="polite">
+                🔴 {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')} · toca el cuadro al terminar
+              </p>
+            ) : (
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={pendingConfirmation ? 'Responde con los botones o con la voz' : 'Mensaje'}
+                disabled={busy || !!pendingConfirmation}
+                aria-label="Escribe lo que necesitas"
+                enterKeyHint="send"
+                className="min-w-0 flex-1 rounded-full px-4 py-3 text-base outline-none placeholder:text-white/40 disabled:opacity-50"
+                style={{ background: PAL.field, color: PAL.text }}
+              />
+            )}
+            {recording ? (
+              <button
+                type="button"
+                onClick={() => void stopRecording()}
+                aria-label="Terminar de hablar"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-rose-500 text-white shadow-sm active:scale-95"
+              >
+                <Square size={18} fill="currentColor" />
+              </button>
+            ) : micAvailable && !input.trim() ? (
+              <button
+                type="button"
+                onClick={() => void startRecording()}
+                disabled={busy}
+                aria-label={pendingConfirmation ? 'Responder con la voz' : 'Tocar y hablar'}
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+                style={{ background: GREEN, color: PAL.onBrand }}
+              >
+                <Mic size={20} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={busy || !!pendingConfirmation || !input.trim()}
+                aria-label="Enviar"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+                style={{ background: GREEN, color: PAL.onBrand }}
+              >
+                <Send size={19} />
+              </button>
+            )}
           </form>
           </div>
         </div>

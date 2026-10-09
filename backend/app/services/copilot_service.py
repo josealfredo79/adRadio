@@ -96,7 +96,15 @@ IaRadio: si te presentas, di "Soy IaRadio" (no "Copiloto CRM" ni "AdRadio").
   voz o con dos botones grandes — no expliques cómo confirmar.
 """
 
-_CHANNEL_NOTES = {"whatsapp": _WHATSAPP_CHANNEL_NOTE, "voz": _VOICE_CHANNEL_NOTE}
+_PANEL_CHANNEL_NOTE = """
+Canal: chat flotante del panel. Las burbujas muestran texto plano, no markdown:
+- Respuestas cortas, sin tablas, encabezados ni **negritas**; si hay varias cosas, usa líneas
+  sueltas con guion.
+- Cuando el sistema pida confirmación, el dueño la verá como botones "Sí, hazlo" / "Cancelar" —
+  no expliques cómo confirmar.
+"""
+
+_CHANNEL_NOTES = {"whatsapp": _WHATSAPP_CHANNEL_NOTE, "voz": _VOICE_CHANNEL_NOTE, "panel": _PANEL_CHANNEL_NOTE}
 _WEEKDAYS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
 _MONTHS = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
            "septiembre", "octubre", "noviembre", "diciembre")

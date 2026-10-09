@@ -46,17 +46,41 @@ describe('OwnerAssistant (bot flotante del panel)', () => {
     get.mockResolvedValue({ data: { role: 'advertiser', slug: 'barberia' } })
   })
 
-  it('is hidden for admins and on the voice/copilot pages', () => {
+  it('shows for every role except on the Copilot page', () => {
     currentUser = { role: 'admin' }
     const { unmount } = renderAt('/app/dashboard')
-    expect(screen.queryByLabelText('Abrir asistente IaRadio')).toBeNull()
+    expect(screen.getByLabelText('Abrir asistente IaRadio')).toBeDefined()
     unmount()
     currentUser = { role: 'advertiser' }
-    const second = renderAt('/app/hablar')
+    const second = renderAt('/app/copilot')
     expect(screen.queryByLabelText('Abrir asistente IaRadio')).toBeNull()
     second.unmount()
     renderAt('/app/dashboard')
     expect(screen.getByLabelText('Abrir asistente IaRadio')).toBeDefined()
+  })
+
+  it('a product photo is uploaded and goes with the next request', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+    post.mockImplementation((url: string) => {
+      if (url === '/copilot/photo') return Promise.resolve({ data: { url: 'https://x/api/v1/radio/audio/products/u1/a.jpg' } })
+      if (url === '/copilot/voice') return Promise.resolve({ data: PENDING })
+      return Promise.resolve({ data: {} })
+    })
+    const { container } = renderAt('/app/dashboard')
+    fireEvent.click(screen.getByLabelText('Abrir asistente IaRadio'))
+    const input = container.querySelector('input[type=file]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [new File(['jpg'], 'tinte.jpg', { type: 'image/jpeg' })] } })
+    await screen.findByText('Foto lista: dime qué producto es.')
+
+    fireEvent.change(screen.getByLabelText('Escribe lo que necesitas'), { target: { value: 'agrega este producto, tinte a 450' } })
+    fireEvent.click(screen.getByLabelText('Enviar'))
+    await screen.findByText('¿Lo hago?')
+    const form = post.mock.calls.find(([u]) => u === '/copilot/voice')?.[1] as FormData
+    expect(form.get('text')).toBe('agrega este producto, tinte a 450')
+    expect(form.get('photo_url')).toBe('https://x/api/v1/radio/audio/products/u1/a.jpg')
+    expect(post).not.toHaveBeenCalledWith('/copilot/chat', expect.anything(), expect.anything())
+    expect(screen.queryByText('Foto lista: dime qué producto es.')).toBeNull()
   })
 
   it('writes data only after the owner says "Sí, hazlo"', async () => {
