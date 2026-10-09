@@ -86,6 +86,8 @@ describe('OnboardingFlow por voz', () => {
     await waitFor(() => expect(voice.speak).toHaveBeenCalledWith(expect.stringContaining('Me faltan 4 cosas')), { timeout: 4000 })
     expect(voice.speak).toHaveBeenCalledWith(expect.stringContaining('\u00bfA qu\u00e9 te dedicas?'))
     await waitFor(() => expect(startVoiceRecording).toHaveBeenCalledTimes(1), { timeout: 4000 })
+    // Mientras graba corre el cron\u00f3metro.
+    await screen.findByText(/0:0\d \u00b7 te escucho/)
 
     await speakAndGoQuiet()
     // Lo que entendi\u00f3 se lo dice y pregunta si est\u00e1 bien.

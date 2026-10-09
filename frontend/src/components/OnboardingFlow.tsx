@@ -174,6 +174,9 @@ export default function OnboardingFlow({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [recording, setRecording] = useState(false)
+  const [seconds, setSeconds] = useState(0)
+  // Si usó el micrófono (aunque contestara con botones) también sale la mascota 3D.
+  const [usedMic, setUsedMic] = useState(false)
   // Corrigiendo una parte ("me equivoqué"): esa parte se manda vacía para que
   // la respuesta nueva la reemplace en vez de sumarse.
   const [editing, setEditing] = useState<EditField | null>(null)
@@ -208,9 +211,9 @@ export default function OnboardingFlow({
 
   useEffect(() => {
     if (!onVoiceMood) return
-    if (!voicePath) { onVoiceMood(null); return }
+    if (!voicePath && !usedMic) { onVoiceMood(null); return }
     onVoiceMood(recording ? 'listening' : busy ? 'thinking' : typing || voice?.speaking ? 'speaking' : Date.now() < happyUntil ? 'happy' : 'idle')
-  }, [voicePath, recording, busy, typing, voice?.speaking, happyUntil, onVoiceMood])
+  }, [voicePath, usedMic, recording, busy, typing, voice?.speaking, happyUntil, onVoiceMood])
   useEffect(() => () => onVoiceMood?.(null), [onVoiceMood])
   useEffect(() => () => { recorder.current?.cancel() }, [])
 
@@ -411,6 +414,7 @@ export default function OnboardingFlow({
       : undefined
     try {
       recorder.current = await startVoiceRecording(onVolume)
+      setUsedMic(true)
       setRecording(true)
     } catch {
       setError('No pude usar el micrófono. Revisa el permiso o escríbelo.')
@@ -596,7 +600,20 @@ export default function OnboardingFlow({
   }, [stage, again, voiceStage, recording, busy, typing, voice?.speaking, voice?.muted])
 
   const field = 'min-w-0 flex-1 rounded-full px-4 py-3 text-base outline-none'
+  const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+  useEffect(() => {
+    if (!recording) return
+    setSeconds(0)
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [recording])
   const textDock = (placeholder: string, kind: Stage, multiline = false) => (
+    <div className="grid gap-1.5">
+    {recording && (
+      <p className="text-center text-xs" style={{ color: pal.meta }} aria-live="polite">
+        🔴 {clock} · te escucho, toca el cuadro rojo al terminar
+      </p>
+    )}
     <form
       className="flex items-end gap-1.5"
       onSubmit={(e) => { e.preventDefault(); void sendText(text, kind) }}
@@ -623,12 +640,13 @@ export default function OnboardingFlow({
         </button>
       )}
     </form>
+    </div>
   )
 
   const voiceStatus = (
     <p className="text-center text-xs" style={{ color: pal.meta }} aria-live="polite">
       {busy ? 'Acomodando lo que me dijiste…'
-        : recording ? '🔴 Te escucho… me callo cuando termines'
+        : recording ? `🔴 ${clock} · te escucho, me callo cuando termines`
           : voice?.speaking ? 'Hablando…'
             : 'Toca el micrófono para contestar'}
     </p>
