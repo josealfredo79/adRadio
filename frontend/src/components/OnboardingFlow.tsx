@@ -10,6 +10,7 @@ import { hoursLines } from '@/lib/onboardingDraft'
 import { EMPTY_DRAFT, giroLook, progressOf, type Draft } from '@/lib/onboardingDraft'
 import { verifyError } from '@/lib/codeMessages'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
+import { useRecordingClock } from '@/lib/useRecordingClock'
 import { speakable } from '@/lib/speakable'
 import type { ChatPalette } from '@/lib/chatLook'
 import type { FaceMood } from '@/components/BotFace'
@@ -174,7 +175,7 @@ export default function OnboardingFlow({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [recording, setRecording] = useState(false)
-  const [seconds, setSeconds] = useState(0)
+  const clock = useRecordingClock(recording)
   // Si usó el micrófono (aunque contestara con botones) también sale la mascota 3D.
   const [usedMic, setUsedMic] = useState(false)
   // Corrigiendo una parte ("me equivoqué"): esa parte se manda vacía para que
@@ -600,13 +601,6 @@ export default function OnboardingFlow({
   }, [stage, again, voiceStage, recording, busy, typing, voice?.speaking, voice?.muted])
 
   const field = 'min-w-0 flex-1 rounded-full px-4 py-3 text-base outline-none'
-  const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
-  useEffect(() => {
-    if (!recording) return
-    setSeconds(0)
-    const t = setInterval(() => setSeconds((s) => s + 1), 1000)
-    return () => clearInterval(t)
-  }, [recording])
   const textDock = (placeholder: string, kind: Stage, multiline = false) => (
     <div className="grid gap-1.5">
     {recording && (

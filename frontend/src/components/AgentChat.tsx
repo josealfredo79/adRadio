@@ -13,6 +13,7 @@ import { speakable } from '@/lib/speakable'
 import { chatPalette, dayLabel, hhmm, wallpaperPattern } from '@/lib/chatLook'
 import { useSpeaker } from '@/lib/useSpeaker'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
+import { useRecordingClock } from '@/lib/useRecordingClock'
 
 // El chat con el agente (texto o voz, con la mascota 3D que habla). Lo usan
 // el portal del cliente (/c/:token, con su historial) y la página pública del
@@ -197,6 +198,7 @@ export default function AgentChat({
   // alta, con la mascota que mueve la boca (voz de robot). Se activa al tocar el micrófono.
   const [voiceMode, setVoiceMode] = useState(false)
   const [recording, setRecording] = useState(false)
+  const clock = useRecordingClock(recording)
   const recorder = useRef<VoiceSession | null>(null)
   const speaker = useSpeaker({ endpoint: `${voiceBase}/speak`, robot: true })
   const micAvailable = canRecordVoice()
@@ -794,7 +796,7 @@ export default function AgentChat({
         >
           {recording ? (
             <p className="flex-1 rounded-full px-4 py-3 text-[15px]" style={{ background: pal.field, color: pal.meta }}>
-              🔴 Te escucho… toca el cuadro al terminar
+              🔴 {clock} · te escucho, toca el cuadro al terminar
             </p>
           ) : (
             <input
