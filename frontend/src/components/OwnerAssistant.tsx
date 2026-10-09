@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Camera, CheckCheck, Mic, Send, Square, Volume2, VolumeX, X } from 'lucide-react'
@@ -10,6 +10,9 @@ import BubbleTail from '@/components/BubbleTail'
 import { chatPalette, wallpaperPattern } from '@/lib/chatLook'
 import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
 import { useSpeaker } from '@/lib/useSpeaker'
+
+// three.js solo se baja cuando el dueño usa la voz.
+const Mascot3D = lazy(() => import('@/components/Mascot3D'))
 
 // El asistente del dueño flotando en todo el panel, con la cara del chat de
 // /sitio/iaradio pero conectado al Copiloto: lee Y escribe datos (productos,
@@ -58,6 +61,8 @@ export default function OwnerAssistant() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const speaker = useSpeaker({ robot: true })
   const micAvailable = canRecordVoice()
+  // Al usar el micrófono sale la mascota 3D grande (como en el chat de voz) hasta cerrar.
+  const [voiceMode, setVoiceMode] = useState(false)
 
   const chat = useMutation({
     mutationFn: (payload: { message: string; history: { role: string; content: string }[] }) =>
@@ -71,6 +76,7 @@ export default function OwnerAssistant() {
     mutationFn: (form: FormData) => api.post<ChatResponse>('/copilot/voice', form, { timeout: 60000 }).then((r) => r.data),
   })
   const busy = chat.isPending || confirm.isPending || voice.isPending || uploading
+  const mood = recording ? 'listening' : busy ? 'thinking' : speaker.speaking ? 'speaking' : 'idle'
 
   useEffect(() => {
     const box = endRef.current?.closest('.overflow-y-auto')
@@ -160,6 +166,7 @@ export default function OwnerAssistant() {
       return
     }
     setSeconds(0)
+    setVoiceMode(true)
     setRecording(true)
     timer.current = setInterval(() => setSeconds((s) => s + 1), 1000)
   }
@@ -217,7 +224,7 @@ export default function OwnerAssistant() {
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => { speaker.stop(); setOpen(false) }}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => { speaker.stop(); setVoiceMode(false); setOpen(false) }}>
           <div className="anim-backdrop absolute inset-0 bg-black/50" aria-hidden />
           <div
             className="anim-sheet relative flex h-[min(40rem,85dvh)] w-full max-w-md flex-col overflow-hidden rounded-3xl shadow-2xl"
@@ -230,7 +237,7 @@ export default function OwnerAssistant() {
           <div className="flex items-center justify-between px-3 py-2 shadow-sm" style={{ background: GREEN, color: PAL.onBrand }}>
             <div className="flex min-w-0 items-center gap-2">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95">
-                <MascotSmart mood={recording ? 'listening' : busy ? 'thinking' : speaker.speaking ? 'speaking' : 'idle'} size={40} color={GREEN} />
+                <MascotSmart mood={mood} size={40} color={GREEN} />
               </div>
               <div className="min-w-0">
                 <p className="truncate text-[16px] font-semibold leading-tight">IaRadio</p>
@@ -249,11 +256,22 @@ export default function OwnerAssistant() {
                   {speaker.muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
                 </button>
               )}
-              <button onClick={() => { speaker.stop(); setOpen(false) }} aria-label="Cerrar asistente" className="rounded-full p-2 opacity-90">
+              <button onClick={() => { speaker.stop(); setVoiceMode(false); setOpen(false) }} aria-label="Cerrar asistente" className="rounded-full p-2 opacity-90">
                 <X size={20} />
               </button>
             </div>
           </div>
+
+          {voiceMode && (
+            <div
+              className="flex shrink-0 flex-col items-center pb-1 pt-1"
+              style={{ background: `color-mix(in srgb, ${GREEN} 22%, #0a0f2e)` }}
+            >
+              <Suspense fallback={<div style={{ height: 150 }} />}>
+                <Mascot3D mood={mood} getLevel={speaker.level} size={130} color={GREEN} />
+              </Suspense>
+            </div>
+          )}
 
           <div
             className="custom-scrollbar flex-1 overflow-y-auto overscroll-contain px-3 py-3"
