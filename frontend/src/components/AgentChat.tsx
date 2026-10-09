@@ -711,6 +711,7 @@ export default function AgentChat({
               onActivity={scrollToEnd}
               onExit={ownerOnboarding ? onClose : () => setOnboarding(false)}
               onVoiceMood={setOnbMood}
+              voice={{ speak: (t) => void speaker.speak(t), unlock: speaker.unlock, stop: speaker.stop, speaking: speaker.speaking, muted: speaker.muted }}
               owner={ownerOnboarding}
               intro={ownerOnboarding ? '¡Va! Armemos tu página aquí abajo mientras me cuentas de tu negocio 👇' : undefined}
             />

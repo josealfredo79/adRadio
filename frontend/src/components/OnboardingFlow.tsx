@@ -10,20 +10,39 @@ import { hoursLines } from '@/lib/onboardingDraft'
 import { EMPTY_DRAFT, giroLook, progressOf, type Draft } from '@/lib/onboardingDraft'
 import { verifyError } from '@/lib/codeMessages'
 import { canRecordVoice, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
+import { speakable } from '@/lib/speakable'
 import type { ChatPalette } from '@/lib/chatLook'
 import type { FaceMood } from '@/components/BotFace'
 
 // Alta de un negocio dentro del chat de IaRadio ("✨ Quiero probarlo gratis").
-// El dueño le cuenta su negocio a radiecito por voz (todo de un jalón, solo
-// se pregunta lo que faltó) o con botones; su página se construye en una
-// tarjeta dentro de la plática; la prueba como cliente; y la publica con su
-// WhatsApp y un código — sin correo ni contraseña. Backend:
-// /public/onboarding (voz y prueba) y /auth/whatsapp (código y alta).
+// El dueño le cuenta su negocio a radiecito por voz (le va preguntando una
+// cosa a la vez, le dice lo que falta y lo escucha solo, sin tocar nada) o con
+// botones; su página se construye en una tarjeta dentro de la plática; la
+// prueba como cliente; y la publica con su WhatsApp y un código — sin correo
+// ni contraseña. Backend: /public/onboarding (voz y prueba) y /auth/whatsapp
+// (código y alta).
+
+// La voz de radiecito (la del chat que lo contiene).
+export interface OnboardingVoice {
+  speak: (text: string) => void
+  unlock: () => void
+  stop: () => void
+  speaking: boolean
+  muted: boolean
+}
 
 type Msg = { who: 'bot' | 'me'; text: string }
 type Stage =
-  | 'resume' | 'how' | 'record' | 'name' | 'giro' | 'giro-text' | 'where' | 'hours' | 'hours-text' | 'services'
+  | 'resume' | 'how' | 'name' | 'giro' | 'giro-text' | 'where' | 'hours' | 'hours-text' | 'services'
   | 'ready' | 'try' | 'change' | 'change-text' | 'fix' | 'confirm' | 'phone' | 'code' | 'exists' | 'done'
+
+// Preguntas que se contestan con la voz (y que radiecito escucha solo).
+const VOICE_STAGES: Stage[] = ['name', 'giro', 'where', 'hours', 'services', 'confirm']
+const CONFIRM_Q = '¿Es correcto?'
+const QUIET_MS = 1800 // silencio después de hablar = ya terminó
+const NO_SPEECH_MS = 9000 // nunca habló: se deja de escuchar
+const SPEECH_LEVEL = 0.15
+const MAX_REC_MS = 55000 // el servidor acepta ~1 minuto
 
 const SAVE_KEY = 'iaradio-onboarding-draft'
 const GIROS = [
@@ -59,14 +78,16 @@ function save(draft: Draft, color: string | null, published?: { slug: string }, 
 }
 
 // Lo que todavía falta, en el orden en que se pregunta.
-function missing(d: Draft): Stage | null {
-  if (!d.business_name) return 'name'
-  if (!d.business_category) return 'giro'
-  if (!(d.city || d.address)) return 'where'
-  if (!d.business_hours) return 'hours'
-  if (!d.services.length) return 'services'
-  return null
+function missingAll(d: Draft): Stage[] {
+  const out: Stage[] = []
+  if (!d.business_name) out.push('name')
+  if (!d.business_category) out.push('giro')
+  if (!(d.city || d.address)) out.push('where')
+  if (!d.business_hours) out.push('hours')
+  if (!d.services.length) out.push('services')
+  return out
 }
+const missing = (d: Draft): Stage | null => missingAll(d)[0] ?? null
 
 const ASK: Partial<Record<Stage, string>> = {
   name: '¿Cómo se llama tu negocio?',
@@ -75,6 +96,14 @@ const ASK: Partial<Record<Stage, string>> = {
   hours: '¿A qué hora atiendes?',
   services: 'Dime tus 3 productos o servicios más vendidos, con precio. Escríbelos o toca 🎤.',
 }
+// Hablado no hay dónde escribir ni qué tocar.
+const ASK_VOICE: Partial<Record<Stage, string>> = {
+  services: 'Dime tus 3 productos o servicios más vendidos, cada uno con su precio.',
+}
+const MISSING_LABEL: Partial<Record<Stage, string>> = {
+  name: 'el nombre', giro: 'a qué te dedicas', where: 'dónde estás', hours: 'tu horario', services: 'tus productos con precio',
+}
+const listed = (items: string[]) => (items.length > 1 ? `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}` : items[0])
 
 const CLEAR: Record<EditField, Partial<Draft>> = {
   name: { business_name: null }, giro: { business_category: null }, where: { city: null, address: null },
@@ -95,12 +124,23 @@ function summaryOf(d: Draft, f: EditField): string {
   }
 }
 
+// Lo mismo, dicho en voz alta.
+function spokenOf(d: Draft, f: EditField): string {
+  switch (f) {
+    case 'name': return `Tu negocio se llama ${d.business_name}`
+    case 'giro': return `Te dedicas a ${d.business_category}`
+    case 'where': return `Estás en ${[d.address, d.city].filter(Boolean).join(', ')}`
+    case 'hours': return `Abres ${hoursLines(d.business_hours).join('; ').replace(/ · Cerrado/g, ' cerrado').replace(/ · /g, ' de ').replace(/ – /g, ' a ').replace(/–/g, ' a ')}`
+    case 'services': return 'Tus productos son ' + d.services.map((x) => `${x.name}${x.price != null ? ` a ${x.price} pesos` : ''}`).join(', ')
+  }
+}
+
 const FIELD_LABEL: Record<EditField, string> = {
   name: 'Nombre', giro: 'A qué me dedico', where: 'Dónde estoy', hours: 'Horario', services: 'Productos y precios',
 }
 
 export default function OnboardingFlow({
-  pal, brand, onBrand, onActivity, onExit, onVoiceMood, intro, exitLabel = 'Volver al chat', owner,
+  pal, brand, onBrand, onActivity, onExit, onVoiceMood, voice, intro, exitLabel = 'Volver al chat', owner,
 }: {
   pal: ChatPalette
   brand: string
@@ -110,6 +150,8 @@ export default function OnboardingFlow({
   // Alta por voz: radiecito 3D grande arriba del chat (como el modo voz) y su
   // cara: escucha, piensa, "habla" mientras escribe. null = sin escenario.
   onVoiceMood?: (mood: FaceMood | null) => void
+  // Su voz: en el alta por voz, lo que dice radiecito también se oye.
+  voice?: OnboardingVoice
   // Primer mensaje (en la landing nadie tocó "Quiero probarlo gratis").
   intro?: string
   exitLabel?: string
@@ -150,6 +192,13 @@ export default function OnboardingFlow({
   const [copied, setCopied] = useState(false)
   const mic = canRecordVoice()
   const [voicePath, setVoicePath] = useState(false)
+  // Por voz pero prefirió escribir o usar botones en esta pregunta.
+  const [manual, setManual] = useState(false)
+  // Sube cada vez que hay que volver a preguntar lo mismo ("no te entendí").
+  const [again, setAgain] = useState(0)
+  const voiceRef = useRef(false)
+  const wantListen = useRef(false)
+  const misses = useRef(0)
   const [happyUntil, setHappyUntil] = useState(0)
   const look = giroLook(draft.business_category)
   const cardColor = color ?? (draft.business_category ? look.color : brand)
@@ -160,17 +209,38 @@ export default function OnboardingFlow({
   useEffect(() => {
     if (!onVoiceMood) return
     if (!voicePath) { onVoiceMood(null); return }
-    onVoiceMood(recording ? 'listening' : busy ? 'thinking' : typing ? 'speaking' : Date.now() < happyUntil ? 'happy' : 'idle')
-  }, [voicePath, recording, busy, typing, happyUntil, onVoiceMood])
+    onVoiceMood(recording ? 'listening' : busy ? 'thinking' : typing || voice?.speaking ? 'speaking' : Date.now() < happyUntil ? 'happy' : 'idle')
+  }, [voicePath, recording, busy, typing, voice?.speaking, happyUntil, onVoiceMood])
   useEffect(() => () => onVoiceMood?.(null), [onVoiceMood])
+  useEffect(() => () => { recorder.current?.cancel() }, [])
 
-  const bot = async (...lines: string[]) => {
+  const leave = () => {
+    voice?.stop()
+    recorder.current?.cancel()
+    recorder.current = null
+    onExit()
+  }
+
+  // En el alta por voz radiecito dice lo mismo que escribe.
+  const say = (spoken: string) => {
+    if (voiceRef.current && voice) voice.speak(speakable(spoken))
+  }
+  const show = async (lines: string[]) => {
     for (const line of lines) {
       setTyping(true)
       await new Promise((r) => setTimeout(r, 550))
       setTyping(false)
       setMsgs((m) => [...m, { who: 'bot', text: line }])
     }
+  }
+  const bot = async (...lines: string[]) => {
+    say(lines.join(' '))
+    await show(lines)
+  }
+  // Lo que se escribe y lo que se dice no siempre es igual ("• Nombre: X" / "Tu negocio se llama X").
+  const botSaying = async (spoken: string, ...lines: string[]) => {
+    say(spoken)
+    await show(lines)
   }
   const me = (t: string) => setMsgs((m) => [...m, { who: 'me', text: t }])
 
@@ -187,7 +257,8 @@ export default function OnboardingFlow({
   // Ya se llegó a "¡Quedó!": después, una corrección regresa a "¿Algo más?".
   const reachedReady = useRef(false)
   const askNext = async (d: Draft, prefix?: string) => {
-    const next = missing(d)
+    const left = missingAll(d)
+    const next = left[0] ?? null
     if (!next) {
       if (reachedReady.current) {
         await bot('Listo 👍 ¿Algo más?')
@@ -199,7 +270,14 @@ export default function OnboardingFlow({
       setStage('ready')
       return
     }
-    await bot(...[prefix, ASK[next]!].filter(Boolean) as string[])
+    const question = (voiceRef.current && ASK_VOICE[next]) || ASK[next]!
+    // Por voz: lo que falta, antes de cada pregunta (menos al empezar, que falta todo).
+    const todo = voiceRef.current && left.length < 5
+      ? left.length === 1
+        ? `Solo me falta ${MISSING_LABEL[next]}.`
+        : `Me faltan ${left.length} cosas: ${listed(left.map((s) => MISSING_LABEL[s]!))}.`
+      : null
+    await bot(...[prefix, todo, question].filter(Boolean) as string[])
     setStage(next)
   }
 
@@ -211,7 +289,11 @@ export default function OnboardingFlow({
       return
     }
     setConfirming(changed)
-    await bot(`Anoté:\n${changed.map((f) => summaryOf(next, f)).join('\n')}`, '¿Es correcto?')
+    await botSaying(
+      `Anoté. ${changed.map((f) => spokenOf(next, f)).join('. ')}. ${CONFIRM_Q}`,
+      `Anoté:\n${changed.map((f) => summaryOf(next, f)).join('\n')}`,
+      CONFIRM_Q,
+    )
     setStage('confirm')
   }
 
@@ -249,16 +331,25 @@ export default function OnboardingFlow({
   }, [])
 
   // Voz o texto libre → el backend ordena todo en el borrador.
-  const listen = async (form: FormData, shown: string, question?: string) => {
+  const listen = async (form: FormData, shown: string, question?: string, yesNo = false) => {
     setBusy(true)
     setError(null)
     const base: Draft = editing ? { ...draft, ...CLEAR[editing] } : draft
     form.append('draft', JSON.stringify(base))
     if (question) form.append('question', question)
+    if (yesNo) form.append('yes_no', 'true')
     try {
       const { data } = await api.post('/public/onboarding/listen', form)
       if (shown) me(shown)
       else me(`🎤 “${String(data.transcript).slice(0, 220)}”`)
+      misses.current = 0
+      // ¿Es correcto? contestado con la voz: sí sigue, no corrige.
+      if (data.answer) {
+        setBusy(false)
+        if (data.answer === 'yes') await confirmYes()
+        else await confirmNo()
+        return
+      }
       // Lo que el servidor no trae (vacío) no borra lo que ya se contestó con botones.
       const p = data.profile as Draft
       const next: Draft = { ...base }
@@ -269,11 +360,10 @@ export default function OnboardingFlow({
       const key = (d: Draft) => JSON.stringify([d.business_name, d.business_category, d.city, d.address, d.business_hours, d.services])
       if (key(next) === key(base) && !editing) {
         // No dijo nada del negocio ("¿qué es la vida?"): no fingir que se acomodó algo.
-        await bot(
-          stage === 'record'
-            ? 'No te entendí bien 🙈 Cuéntame de tu negocio: cómo se llama, qué vendes y dónde estás. O, si prefieres, contesta con botones.'
-            : 'No te entendí bien 🙈 ¿Me lo dices de otra forma?',
-        )
+        misses.current += 1
+        await bot('No te entendí bien 🙈 ¿Me lo dices de otra forma?')
+        // Por voz se vuelve a escuchar solo, pero no más de dos veces seguidas.
+        if (misses.current < 3) setAgain((n) => n + 1)
         return
       }
       setEditing(null)
@@ -287,10 +377,40 @@ export default function OnboardingFlow({
     }
   }
 
-  const startRec = async () => {
+  // Quita lo que se estaba grabando sin mandarlo.
+  const dropRec = () => {
+    recorder.current?.cancel()
+    recorder.current = null
+    setRecording(false)
+  }
+
+  // `auto`: la escucha arranca sola después de la pregunta y se corta sola
+  // cuando el dueño se queda callado; así no tiene que tocar nada.
+  const startRec = async (auto = false) => {
     setError(null)
+    wantListen.current = false
+    voice?.stop()
+    const began = Date.now()
+    let spoke = false
+    let quietSince = 0
+    const onVolume = auto
+      ? (level: number) => {
+          const now = Date.now()
+          if (level > SPEECH_LEVEL) {
+            spoke = true
+            quietSince = 0
+          } else if (spoke) {
+            if (!quietSince) quietSince = now
+            else if (now - quietSince > QUIET_MS) void stopRec()
+          } else if (now - began > NO_SPEECH_MS && recorder.current) {
+            dropRec()
+            setError('No te escuché. Toca el micrófono cuando quieras hablar.')
+          }
+          if (now - began > MAX_REC_MS) void stopRec()
+        }
+      : undefined
     try {
-      recorder.current = await startVoiceRecording()
+      recorder.current = await startVoiceRecording(onVolume)
       setRecording(true)
     } catch {
       setError('No pude usar el micrófono. Revisa el permiso o escríbelo.')
@@ -306,7 +426,8 @@ export default function OnboardingFlow({
     const form = new FormData()
     const ext = rec.mimeType.includes('mp4') ? 'mp4' : rec.mimeType.includes('ogg') ? 'ogg' : 'webm'
     form.append('audio', rec.blob, `voz.${ext}`)
-    await listen(form, '')
+    const asking = stage === 'confirm' ? CONFIRM_Q : stage ? ASK[stage] : undefined
+    await listen(form, '', asking, stage === 'confirm')
   }
 
   const sendText = async (value: string, kind: Stage) => {
@@ -432,15 +553,47 @@ export default function OnboardingFlow({
   const pick = (label: string, then: () => void | Promise<void>) => () => { me(label); void then() }
 
   // "Me equivoqué": vuelve a preguntar solo esa parte (desde la tarjeta o el botón).
-  const canEdit = !busy && !!stage && !['phone', 'code', 'exists', 'done', 'how', 'resume', 'record'].includes(stage)
-  const editField = async (f: EditField) => {
-    if (!canEdit) return
+  const canEdit = !busy && !!stage && !['phone', 'code', 'exists', 'done', 'how', 'resume'].includes(stage)
+  const editField = async (f: EditField, force = false) => {
+    if (!force && !canEdit) return
     me(`✏️ Corregir: ${FIELD_LABEL[f].toLowerCase()}`)
     setEditing(f)
     setText('')
-    await bot(ASK[f]!)
+    await bot((voiceRef.current && ASK_VOICE[f]) || ASK[f]!)
     setStage(f)
   }
+
+  // "¿Es correcto?": con el botón o con la voz.
+  const confirmYes = async () => {
+    setConfirming([])
+    if (!missing(draft) && reachedReady.current) {
+      await bot('Listo 👍 ¿Algo más?')
+      setStage('ready')
+      return
+    }
+    await askNext(draft)
+  }
+  const confirmNo = async () => {
+    const f = confirming
+    setConfirming([])
+    if (f.length === 1) {
+      await editField(f[0], true)
+      return
+    }
+    me('✏️ No, corregir')
+    await bot('¿Qué corrijo?')
+    setStage('fix')
+  }
+
+  // Por voz, después de cada pregunta (cuando termina de hablar) se escucha solo.
+  const voiceStage = voicePath && !manual && !!stage && VOICE_STAGES.includes(stage)
+  useEffect(() => { wantListen.current = true }, [stage, again])
+  useEffect(() => {
+    if (!wantListen.current || !voiceStage || !mic || recording || busy || typing || voice?.speaking || voice?.muted) return
+    wantListen.current = false
+    void startRec(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, again, voiceStage, recording, busy, typing, voice?.speaking, voice?.muted])
 
   const field = 'min-w-0 flex-1 rounded-full px-4 py-3 text-base outline-none'
   const textDock = (placeholder: string, kind: Stage, multiline = false) => (
@@ -472,7 +625,33 @@ export default function OnboardingFlow({
     </form>
   )
 
+  const voiceStatus = (
+    <p className="text-center text-xs" style={{ color: pal.meta }} aria-live="polite">
+      {busy ? 'Acomodando lo que me dijiste…'
+        : recording ? '🔴 Te escucho… me callo cuando termines'
+          : voice?.speaking ? 'Hablando…'
+            : 'Toca el micrófono para contestar'}
+    </p>
+  )
+
   const dock = (() => {
+    // Por voz: una pregunta a la vez; la respuesta se escucha sola.
+    if (voiceStage && stage !== 'confirm') {
+      return <div className="flex flex-col items-center gap-2 py-1">
+        <button type="button" onClick={() => void (recording ? stopRec() : startRec())} disabled={busy}
+          aria-label={recording ? 'Terminar de hablar' : 'Hablar'}
+          className="press flex h-16 w-16 items-center justify-center rounded-full text-white shadow-lg disabled:opacity-50"
+          style={{ background: recording ? '#f43f5e' : brand }}>
+          {busy ? <Loader2 className="animate-spin" /> : recording ? <Square size={20} fill="currentColor" /> : <Mic size={26} />}
+        </button>
+        {voiceStatus}
+        {!recording && !busy && (
+          <button type="button" className="text-xs underline" style={{ color: pal.meta }} onClick={() => { voice?.stop(); setManual(true) }}>
+            Mejor escribir o con botones
+          </button>
+        )}
+      </div>
+    }
     switch (stage) {
       case 'resume':
         return <div className="grid grid-cols-2 gap-2">
@@ -482,28 +661,23 @@ export default function OnboardingFlow({
       case 'how':
         return <div className="grid gap-2">
           {mic && chip('Te lo digo por voz', pick('Te lo digo por voz', async () => {
+            voice?.unlock() // dentro del toque: iPhone deja hablar a radiecito después
+            // El permiso se pide aquí, no a media plática.
+            const allowed = await navigator.mediaDevices.getUserMedia({ audio: true })
+              .then((s) => { s.getTracks().forEach((t) => t.stop()); return true })
+              .catch(() => false)
+            if (!allowed) {
+              await bot('No pude usar el micrófono 🙈 Revisa el permiso del navegador. Mientras, vamos con botones.')
+              await askNext(draft)
+              return
+            }
+            voiceRef.current = true
             setVoicePath(true)
-            await bot('Toca el micrófono y cuéntame de corrido: cómo se llama, qué vendes, dónde estás, tu horario y tus 3 productos más vendidos con precio. Yo acomodo todo 🙌')
-            setStage('record')
+            setManual(false)
+            await bot('Va. Te voy preguntando una cosa a la vez y tú me contestas con tu voz; yo te escucho solo. Si quieres decirme varias cosas juntas, adelante.')
+            await askNext(draft)
           }), '🎤', true)}
           {chip('Contestar con botones', pick('Contestar con botones', () => askNext(draft)), '👆', true)}
-        </div>
-      case 'record':
-        return <div className="flex flex-col items-center gap-2 py-1">
-          <button type="button" onClick={() => void (recording ? stopRec() : startRec())} disabled={busy}
-            aria-label={recording ? 'Terminar de hablar' : 'Hablar'}
-            className="press flex h-16 w-16 items-center justify-center rounded-full text-white shadow-lg disabled:opacity-50"
-            style={{ background: recording ? '#f43f5e' : brand }}>
-            {busy ? <Loader2 className="animate-spin" /> : recording ? <Square size={20} fill="currentColor" /> : <Mic size={26} />}
-          </button>
-          <p className="text-xs" style={{ color: pal.meta }}>
-            {busy ? 'Acomodando lo que me dijiste…' : recording ? '🔴 Te escucho… toca otra vez al terminar' : 'Toca para hablar'}
-          </p>
-          {!recording && !busy && (
-            <button type="button" className="text-xs underline" style={{ color: pal.meta }} onClick={() => void askNext(draft, 'Va, mejor con botones.')}>
-              Prefiero contestar con botones
-            </button>
-          )}
         </div>
       case 'name': return textDock('Escribe aquí el nombre de tu negocio', 'name')
       case 'giro':
@@ -564,22 +738,12 @@ export default function OnboardingFlow({
         </div>
       case 'change-text': return textDock('Ej. la quesadilla a 50', 'change-text')
       case 'confirm':
-        return <div className="grid grid-cols-2 gap-2">
-          {chip('Sí, es correcto', pick('✅ Sí', async () => {
-            setConfirming([])
-            if (!missing(draft) && reachedReady.current) {
-              await bot('Listo 👍 ¿Algo más?')
-              setStage('ready')
-              return
-            }
-            await askNext(draft)
-          }), '✅')}
-          {chip('No, corregir', () => {
-            const f = confirming
-            setConfirming([])
-            if (f.length === 1) void editField(f[0])
-            else { me('✏️ No, corregir'); void bot('¿Qué corrijo?').then(() => setStage('fix')) }
-          }, '✏️')}
+        return <div className="grid gap-2">
+          {voiceStage && mic && (recording || busy || voice?.speaking) && voiceStatus}
+          <div className="grid grid-cols-2 gap-2">
+            {chip('Sí, es correcto', pick('✅ Sí', () => { dropRec(); return confirmYes() }), '✅')}
+            {chip('No, corregir', () => { dropRec(); return void confirmNo() }, '✏️')}
+          </div>
         </div>
       case 'fix':
         return <div className="grid grid-cols-2 gap-2">
@@ -629,7 +793,7 @@ export default function OnboardingFlow({
         </div>
       case 'done':
         if (owner) {
-          return <button type="button" onClick={onExit} className="press flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-semibold shadow-sm" style={{ background: brand, color: onBrand }}>
+          return <button type="button" onClick={leave} className="press flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-semibold shadow-sm" style={{ background: brand, color: onBrand }}>
             ✅ Listo, volver a mi panel
           </button>
         }
@@ -638,10 +802,10 @@ export default function OnboardingFlow({
             📊 Entrar a mi panel
           </a>
           <div className="flex items-center justify-center gap-4 text-xs" style={{ color: pal.meta }}>
-            <button type="button" onClick={onExit} className="underline">{exitLabel}</button>
+            <button type="button" onClick={leave} className="underline">{exitLabel}</button>
             <button type="button" className="underline" onClick={() => {
               try { localStorage.removeItem(storeKey) } catch { /* nada */ }
-              onExit()
+              leave()
             }}>Dar de alta otro negocio</button>
           </div>
         </div>
@@ -731,11 +895,15 @@ export default function OnboardingFlow({
             <div className="flex items-center justify-center gap-4 text-[12px]" style={{ color: pal.meta }}>
               {canEdit && stage !== 'fix' && progressOf(draft) > 0 && (
                 <button type="button" className="underline" onClick={() => {
+                  dropRec()
                   me('✏️ Me equivoqué')
                   void bot('Sin problema. ¿Qué corrijo? También puedes tocar esa parte en la tarjeta 👆').then(() => setStage('fix'))
                 }}>✏️ Me equivoqué</button>
               )}
-              <button type="button" onClick={onExit} className="underline">Salir del alta</button>
+              {voicePath && manual && mic && (
+                <button type="button" className="underline" onClick={() => { wantListen.current = true; setManual(false) }}>🎤 Mejor con voz</button>
+              )}
+              <button type="button" onClick={leave} className="underline">Salir del alta</button>
             </div>
           )}
         </div>

@@ -24,6 +24,7 @@ from app.api.v1.voice_setup import read_transcript
 from app.core.rate_limiter import limiter
 from app.database import get_db
 from app.models.user import User
+from app.services.copilot_service import parse_spoken_yes_no
 from app.services.voice_setup import (
     extract_profile,
     render_instructions,
@@ -39,18 +40,28 @@ MAX_TEXT = 1500
 
 
 @router.post("/listen")
-@limiter.limit("15/hour")
+@limiter.limit("40/hour")
 async def listen(
     request: Request,
     audio: UploadFile | None = File(None),
     text: str | None = Form(None),
     draft: str | None = Form(None),
     question: str | None = Form(None),
+    yes_no: bool = Form(False),
 ) -> dict:
     """`question`: lo que radiecito le acaba de preguntar ("¿Cómo se llama tu
     negocio?"), para que un "Tacos El Güero" suelto se entienda como nombre
-    y un "es de venta de celulares" como giro."""
+    y un "es de venta de celulares" como giro.
+
+    `yes_no`: lo que preguntó es "¿Es correcto?". Un sí o un no corto se
+    contesta como `answer` sin ordenar nada; "no, es Tacos Pepe" es una
+    corrección y se ordena como cualquier respuesta."""
     transcript = await read_transcript(audio, text, MAX_AUDIO_BYTES, MAX_TEXT, "1 minuto")
+    if yes_no:
+        said = parse_spoken_yes_no(transcript)
+        if said is True or (said is False and len(transcript.split()) <= 2):
+            return {"transcript": transcript, "answer": "yes" if said else "no", "profile": {}}
+        question = None
     current = None
     if draft:
         try:
