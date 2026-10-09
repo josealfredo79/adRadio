@@ -43,18 +43,18 @@ const COLORS = [
 ]
 const TRY_QUESTIONS = ['¿Qué tienen?', '¿A qué hora abren?', '¿Dónde están?']
 
-function load(): { draft: Draft; color: string | null; published?: { slug: string } } | null {
+function load(key = SAVE_KEY): { draft: Draft; color: string | null; published?: { slug: string } } | null {
   try {
-    const raw = localStorage.getItem(SAVE_KEY)
+    const raw = localStorage.getItem(key)
     return raw ? JSON.parse(raw) : null
   } catch {
     return null
   }
 }
 
-function save(draft: Draft, color: string | null, published?: { slug: string }) {
+function save(draft: Draft, color: string | null, published?: { slug: string }, key = SAVE_KEY) {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ draft, color, published }))
+    localStorage.setItem(key, JSON.stringify({ draft, color, published }))
   } catch { /* sin almacenamiento: el alta sigue, solo no se recuerda */ }
 }
 
@@ -100,7 +100,7 @@ const FIELD_LABEL: Record<EditField, string> = {
 }
 
 export default function OnboardingFlow({
-  pal, brand, onBrand, onActivity, onExit, onVoiceMood, intro, exitLabel = 'Volver al chat',
+  pal, brand, onBrand, onActivity, onExit, onVoiceMood, intro, exitLabel = 'Volver al chat', owner,
 }: {
   pal: ChatPalette
   brand: string
@@ -113,12 +113,17 @@ export default function OnboardingFlow({
   // Primer mensaje (en la landing nadie tocó "Quiero probarlo gratis").
   intro?: string
   exitLabel?: string
+  // Dueño que ya inició sesión (desde su panel): no se pregunta el nombre que
+  // ya dio, y "Publicar" guarda en su cuenta sin WhatsApp ni código.
+  owner?: { name: string | null }
 }) {
-  const saved = useRef(load())
+  const storeKey = owner ? `${SAVE_KEY}-owner` : SAVE_KEY
+  const keep = (d: Draft, c: string | null, pub?: { slug: string }) => save(d, c, pub, storeKey)
+  const saved = useRef(load(storeKey))
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [typing, setTyping] = useState(false)
   const [stage, setStage] = useState<Stage | null>(null)
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
+  const [draft, setDraft] = useState<Draft>(() => owner?.name ? { ...EMPTY_DRAFT, business_name: owner.name } : EMPTY_DRAFT)
   const [color, setColor] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const [trial, setTrial] = useState<[string, string][]>([])
@@ -172,7 +177,7 @@ export default function OnboardingFlow({
   const update = (patch: Partial<Draft>, part: string, newColor = color) => {
     setDraft((d) => {
       const next = { ...d, ...patch }
-      save(next, newColor)
+      keep(next, newColor)
       return next
     })
     setFlash(part)
@@ -368,13 +373,30 @@ export default function OnboardingFlow({
         return
       }
       // Se recuerda en este navegador: si recarga, vuelve a ver su link y su QR.
-      save(draft, color, { slug: data.slug })
+      keep(draft, color, { slug: data.slug })
       setPublished({ slug: data.slug, created: true })
       setStage('done')
       await bot('¡Publicada! 🎉 Tienes 15 días gratis. Esto ya es tuyo:')
     } catch (err) {
       setError(verifyError(err))
       setCode('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Desde el panel: ya inició sesión, se guarda directo en su cuenta.
+  const publishOwner = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const { data } = await api.post('/public/onboarding/apply', { name: draft.business_name, profile: draft, color: cardColor })
+      keep(draft, color, { slug: data.slug })
+      setPublished({ slug: data.slug, created: true })
+      setStage('done')
+      await bot('¡Publicada! 🎉 Tu bot ya sabe de tu negocio y esta es tu página:')
+    } catch (err) {
+      setError(getApiError(err, 'No se pudo publicar. Intenta de nuevo.'))
     } finally {
       setBusy(false)
     }
@@ -455,7 +477,7 @@ export default function OnboardingFlow({
       case 'resume':
         return <div className="grid grid-cols-2 gap-2">
           {chip('Sí, seguir', pick('Sí, seguir', () => askNext(draft)), '👍')}
-          {chip('Empezar de nuevo', pick('Empezar de nuevo', async () => { setDraft(EMPTY_DRAFT); setColor(null); save(EMPTY_DRAFT, null); await bot('¿Cómo prefieres contarme?'); setStage('how') }), '🔄')}
+          {chip('Empezar de nuevo', pick('Empezar de nuevo', async () => { setDraft(EMPTY_DRAFT); setColor(null); keep(EMPTY_DRAFT, null); await bot('¿Cómo prefieres contarme?'); setStage('how') }), '🔄')}
         </div>
       case 'how':
         return <div className="grid gap-2">
@@ -516,6 +538,10 @@ export default function OnboardingFlow({
           }), '🧪')}
           {chip('Cambiar algo', pick('Cambiar algo', async () => { await bot('¿Qué le cambio? También me lo puedes decir con tu voz.'); setStage('change') }), '🎨')}
           {chip('Publicar mi página', pick('Publicar mi página', async () => {
+            if (owner) {
+              await publishOwner()
+              return
+            }
             await bot('Para que no se pierda y te avise cuando un cliente te escriba, ¿cuál es tu WhatsApp?', 'Te mando un código. Nada de contraseñas.')
             setStage('phone')
           }), '🚀', true)}
@@ -602,6 +628,11 @@ export default function OnboardingFlow({
           }), '📱')}
         </div>
       case 'done':
+        if (owner) {
+          return <button type="button" onClick={onExit} className="press flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-semibold shadow-sm" style={{ background: brand, color: onBrand }}>
+            ✅ Listo, volver a mi panel
+          </button>
+        }
         return <div className="grid gap-2">
           <a href="/app" className="press flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-semibold shadow-sm" style={{ background: brand, color: onBrand }}>
             📊 Entrar a mi panel
@@ -609,7 +640,7 @@ export default function OnboardingFlow({
           <div className="flex items-center justify-center gap-4 text-xs" style={{ color: pal.meta }}>
             <button type="button" onClick={onExit} className="underline">{exitLabel}</button>
             <button type="button" className="underline" onClick={() => {
-              try { localStorage.removeItem(SAVE_KEY) } catch { /* nada */ }
+              try { localStorage.removeItem(storeKey) } catch { /* nada */ }
               onExit()
             }}>Dar de alta otro negocio</button>
           </div>

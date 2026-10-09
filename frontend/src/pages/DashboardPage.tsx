@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic, Globe, Gift } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
+import PageBuilderCard from '@/components/PageBuilderCard'
 import { loadDemoDraft } from '@/lib/demoDraft'
 import SEO from '@/components/SEO'
 import { LOYALTY_ANCHOR, loyaltyNeedsReward } from '@/lib/loyalty'
@@ -145,9 +146,12 @@ export default function DashboardPage() {
       <SEO title="Dashboard" description="Panel de control de IaRadio." noIndex />
       <div className="space-y-8">
 
+      {/* Sin página todavía: el bot la arma aquí mismo (reemplaza a la tarjeta de voz). */}
+      <PageBuilderCard />
+
       {/* Configurar el bot por voz: lo primero que necesita un negocio nuevo.
           Sin instrucciones el bot solo saluda — esto lo deja listo en 2 minutos. */}
-      {user && !user.bot_instructions && (
+      {user && (user.slug || user.role !== 'advertiser') && !user.bot_instructions && (
         <Link
           to="/app/voice-setup"
           className="flex items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50 p-5 transition-shadow hover:shadow-md dark:border-brand-900 dark:bg-brand-950/30"

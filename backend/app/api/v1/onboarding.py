@@ -15,11 +15,15 @@ Públicos y cada uso cuesta (Whisper + IA): topes por IP como la demo de voz.
 import json
 import logging
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.api.v1.voice_setup import read_transcript
 from app.core.rate_limiter import limiter
+from app.database import get_db
+from app.models.user import User
 from app.services.voice_setup import (
     extract_profile,
     render_instructions,
@@ -86,3 +90,27 @@ async def try_assistant(request: Request, body: TryBody) -> dict:
         logger.exception("[ONBOARDING] try failed")
         raise HTTPException(status_code=502, detail="Tu asistente no pudo contestar ahorita. Intenta de nuevo.")
     return {"answer": answer}
+
+
+class ApplyBody(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    profile: dict
+    color: str | None = None
+
+
+@router.post("/apply")
+@limiter.limit("30/hour")
+async def apply_for_owner(
+    request: Request,
+    body: ApplyBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """El mismo alta, desde el panel de un dueño que ya inició sesión (se
+    registró con correo): sin WhatsApp ni código, se guarda en su cuenta."""
+    from app.services.owner_signup import apply_to_owner
+
+    if current_user.role != "advertiser":
+        raise HTTPException(status_code=403, detail="Solo los negocios pueden armar su página.")
+    user = await apply_to_owner(db, current_user, name=" ".join(body.name.split()), profile=body.profile, color=body.color)
+    return {"slug": user.slug or "", "business_name": user.business_name or ""}

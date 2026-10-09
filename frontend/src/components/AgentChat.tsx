@@ -115,6 +115,7 @@ export default function AgentChat({
   layout = 'sheet',
   onInfo,
   banner,
+  ownerOnboarding,
 }: {
   business: ChatBusiness
   theme: SiteThemeDef
@@ -144,6 +145,9 @@ export default function AgentChat({
   layout?: 'sheet' | 'screen' | 'pane'
   onInfo?: () => void
   banner?: React.ReactNode
+  // Dueño con sesión (panel): abre directo el armado de su página y lo guarda
+  // en su cuenta; al terminar cierra el chat.
+  ownerOnboarding?: { name: string | null }
 }) {
   const pane = layout === 'pane'
   const screen = layout === 'screen' || pane
@@ -172,11 +176,11 @@ export default function AgentChat({
   }, [])
   // Lo que ya estaba (historial) aparece de una vez; lo nuevo entra con animación.
   const [historyCount, setHistoryCount] = useState(0)
-  const [sentHere, setSentHere] = useState(false)
+  const [sentHere, setSentHere] = useState(!!ownerOnboarding)
   const scrollRef = useRef<HTMLDivElement>(null)
   // "✨ Quiero probarlo gratis" (chat de ventas de IaRadio): el alta se hace
   // aquí mismo, sin mandarlo al bot (OnboardingFlow).
-  const [onboarding, setOnboarding] = useState(false)
+  const [onboarding, setOnboarding] = useState(!!ownerOnboarding)
   const [onbMood, setOnbMood] = useState<FaceMood | null>(null)
   const quickAsks = business.quick_asks?.length ? business.quick_asks : QUICK_ASKS
   const runQuickAsk = (q: { text: string; action?: string }) => {
@@ -700,7 +704,16 @@ export default function AgentChat({
             )
           })}
           {onboarding && (
-            <OnboardingFlow pal={pal} brand={color} onBrand={pal.onBrand} onActivity={scrollToEnd} onExit={() => setOnboarding(false)} onVoiceMood={setOnbMood} />
+            <OnboardingFlow
+              pal={pal}
+              brand={color}
+              onBrand={pal.onBrand}
+              onActivity={scrollToEnd}
+              onExit={ownerOnboarding ? onClose : () => setOnboarding(false)}
+              onVoiceMood={setOnbMood}
+              owner={ownerOnboarding}
+              intro={ownerOnboarding ? '¡Va! Armemos tu página aquí abajo mientras me cuentas de tu negocio 👇' : undefined}
+            />
           )}
           {knownToken && bookedAt >= historyCount && <ChatNotifyOffer token={knownToken} pal={pal} color={color} />}
           {historyLoaded && !sentHere && (

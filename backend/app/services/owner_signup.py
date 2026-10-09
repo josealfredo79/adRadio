@@ -103,3 +103,37 @@ async def create_owner(db: AsyncSession, *, phone: str, name: str, profile: dict
     await db.refresh(user)
     logger.info("[SIGNUP-CHAT] cuenta creada %s slug=%s productos=%s", user.id, user.slug, len(p["services"]))
     return user
+
+
+async def apply_to_owner(db: AsyncSession, user: User, *, name: str, profile: dict, color: str | None = None) -> User:
+    """Lo mismo, para un dueño que YA tiene cuenta (se registró con correo y
+    arma su página desde el panel): actualiza su negocio, agrega los productos
+    que no tenía (o les pone el precio nuevo) y, si no tenía página, le da su
+    link /sitio/{slug}. No toca plan, acceso ni nada más de la cuenta."""
+    p = sanitize_profile(profile)
+    user.business_name = name or user.business_name
+    for field in ("business_category", "city", "business_hours"):
+        if p[field]:
+            setattr(user, field, p[field])
+    instructions = render_instructions(p)
+    if instructions:
+        user.bot_instructions = instructions
+    if color and _HEX.match(color):
+        user.widget_color = color
+    if not user.slug:
+        user.slug = await unique_slug(db, user.business_name or "mi-negocio")
+    existing = {
+        prod.name.strip().lower(): prod
+        for prod in (await db.execute(select(Product).where(Product.advertiser_id == user.id))).scalars().all()
+    }
+    for s in p["services"]:
+        price = Decimal(str(s["price"])) if s["price"] is not None else None
+        prod = existing.get(s["name"].lower())
+        if prod is None:
+            db.add(Product(advertiser_id=user.id, name=s["name"], price=price, description=s["description"], active=True))
+        elif price is not None:
+            prod.price = price
+    await db.commit()
+    await db.refresh(user)
+    logger.info("[SIGNUP-CHAT] página armada desde el panel %s slug=%s", user.id, user.slug)
+    return user
