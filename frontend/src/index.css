@@ -129,6 +129,13 @@
 .press {
   transition: transform 160ms var(--ease-out);
 }
+/* El bot del panel cuelga de un hilo y se mece como péndulo. */
+.swing-hang { transform-origin: top center; animation: swing-hang 4.5s ease-in-out infinite; }
+.swing-hang:hover { animation-play-state: paused; }
+@keyframes swing-hang {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(5deg); }
+}
 .press:active {
   transform: scale(0.97);
 }
@@ -136,6 +143,7 @@
   /* Menos movimiento, no cero: se queda el desvanecido, se va el desplazamiento. */
   .anim-sheet, .anim-bubble, .anim-stamp { animation: fade-in 150ms ease-out both; }
   .typing-dot { animation: none; opacity: .7; }
+  .swing-hang { animation: none; }
   .onb-sk, .onb-flash { animation: none; }
   .press:active { transform: none; }
 }

@@ -100,14 +100,18 @@ export default function OwnerAssistant() {
   const shown = messages.filter((m) => m.content)
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end sm:bottom-5 sm:right-6">
+    <>
       {open && (
-        <div
-          className="mb-3 flex h-[75dvh] max-h-[36rem] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-3xl shadow-2xl sm:w-[26rem]"
-          style={{ background: BG, color: '#fff', border: `1px solid ${BORDER}` }}
-          role="dialog"
-          aria-label="Asistente IaRadio"
-        >
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          <div className="anim-backdrop absolute inset-0 bg-black/50" aria-hidden />
+          <div
+            className="anim-sheet relative flex h-[min(40rem,85dvh)] w-full max-w-md flex-col overflow-hidden rounded-3xl shadow-2xl"
+            style={{ background: BG, color: '#fff', border: `1px solid ${BORDER}` }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Asistente IaRadio"
+            onClick={(e) => e.stopPropagation()}
+          >
           <div className="flex items-center justify-between px-3 py-2 shadow-sm" style={{ background: GREEN, color: PAL.onBrand }}>
             <div className="flex min-w-0 items-center gap-2">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/95">
@@ -256,20 +260,27 @@ export default function OwnerAssistant() {
               <Send size={19} />
             </button>
           </form>
+          </div>
         </div>
       )}
 
+      {/* Cuelga de un hilo arriba a la derecha y se mece; al pasar el mouse se detiene. */}
       {!open && (
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Abrir asistente IaRadio"
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-xl transition-transform hover:scale-105 active:scale-95"
-          style={{ boxShadow: `0 0 0 3px ${GREEN}, 0 12px 32px ${GREEN}66` }}
+          className="swing-hang fixed right-6 top-0 z-40 flex flex-col items-center"
         >
-          <MascotSmart mood="happy" size={56} color={GREEN} />
+          <span className="h-6 w-px bg-white/40" aria-hidden />
+          <span
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-xl"
+            style={{ boxShadow: `0 0 0 3px ${GREEN}, 0 12px 32px ${GREEN}66` }}
+          >
+            <MascotSmart mood="happy" size={56} color={GREEN} />
+          </span>
         </button>
       )}
-    </div>
+    </>
   )
 }
