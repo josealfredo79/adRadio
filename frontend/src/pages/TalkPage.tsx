@@ -43,6 +43,8 @@ type Step = 'idle' | 'recording' | 'processing'
 const MAX_SECONDS = 120
 const MAX_HISTORY = 20
 const SUGGESTIONS = [
+  '¿Mi bot ya está listo?',
+  'Prueba mi bot: ¿qué horario tienen?',
   '¿Qué citas tengo hoy?',
   '¿Llegaron pedidos hoy?',
   '¿Cuánto tengo mis productos?',
@@ -59,7 +61,7 @@ export default function TalkPage() {
   const { user } = useAuth()
   const greeting =
     `¡Hola${user?.business_name ? `, ${user.business_name}` : ''}! Soy IaRadio. Dime qué necesitas: ` +
-    'puedo ver tus citas, pedidos y clientes, cambiar precios u horario, agregar un producto con foto, ' +
+    'puedo ver tus citas, pedidos y clientes, revisar y probar tu bot, cambiar precios u horario, agregar un producto con foto, ' +
     'crear cupones o lanzar una promoción.'
   const [step, setStep] = useState<Step>('idle')
   const [bubble, setBubble] = useState(greeting)

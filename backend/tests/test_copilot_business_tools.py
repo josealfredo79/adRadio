@@ -216,3 +216,65 @@ async def test_loyalty_reward_is_asked_then_saved_only_after_confirmation():
             assert "set_loyalty_reward" not in _build_system_prompt(user)
     finally:
         await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_bot_status_lists_what_is_missing_and_clears_when_ready():
+    from app.models.knowledge_base import KnowledgeBase
+
+    user_id = await _seed_user(slug=f"bot-{uuid.uuid4().hex[:8]}")
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await _user(db, user_id)
+            out = await _execute_immediate_tool(db, user, "get_bot_status", {})
+            assert out["has_instructions"] is False and out["products"] == 0 and out["hours"] is None
+            assert out["page_url"].endswith(f"/sitio/{user.slug}")
+            assert any("instrucciones" in m for m in out["missing"])
+            assert any("WhatsApp" in m for m in out["missing"])
+            assert not any("página" in m for m in out["missing"])
+
+            user.bot_instructions = INSTRUCTIONS
+            user.business_hours = WEEK
+            user.meta_connection_status = "connected"
+            db.add_all([
+                Product(advertiser_id=user_id, name="Corte", price=Decimal(150), active=True),
+                Product(advertiser_id=user_id, name="Tinte", price=None, active=True),
+                Product(advertiser_id=user_id, name="Oculto", price=None, active=False),
+                KnowledgeBase(advertiser_id=user_id, filename="menu.pdf", file_type="pdf", processing_status="done"),
+                KnowledgeBase(advertiser_id=user_id, filename="roto.pdf", file_type="pdf", processing_status="error"),
+            ])
+            await db.commit()
+            out = await _execute_immediate_tool(db, user, "get_bot_status", {})
+            assert out["products"] == 2 and out["products_without_price"] == 1 and out["documents"] == 1
+            assert out["whatsapp_connected"] is True and "Lunes" in out["hours"]
+            assert out["missing"] == ["precio en 1 producto(s)"]
+    finally:
+        await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_test_bot_asks_the_real_pipeline_without_counting_a_conversation():
+    from unittest.mock import AsyncMock, patch
+
+    user_id = await _seed_user(business_name="Barbería Pepe", bot_name="Pepito")
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await _user(db, user_id)
+            rag = AsyncMock(return_value="El corte cuesta $150 😊")
+            with patch("app.services.rag_service.answer_with_rag", rag):
+                out = await _execute_immediate_tool(db, user, "test_bot", {"question": "  ¿Cuánto   el corte? "})
+                empty = await _execute_immediate_tool(db, user, "test_bot", {"question": "  "})
+            assert out == {"question": "¿Cuánto el corte?", "answer": "El corte cuesta $150 😊"}
+            kwargs = rag.await_args.kwargs
+            assert kwargs["advertiser_id"] == str(user_id) and kwargs["bot_name"] == "Pepito"
+            assert "conversation_key" not in kwargs
+            assert "error" in empty and rag.await_count == 1
+    finally:
+        await _cleanup(user_id)
+
+
+def test_bot_tools_are_registered_and_need_no_confirmation():
+    names = {t["name"] for t in TOOLS}
+    assert {"get_bot_status", "test_bot"} <= names
+    assert not {"get_bot_status", "test_bot"} & CONFIRM_TOOLS
+    assert biz.summarize("get_bot_status", {"missing": ["a", "b"]}) == "Revisé tu bot: le falta 2 cosa(s)."

@@ -16,10 +16,12 @@ import uuid
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.appointment import Appointment
+from app.models.knowledge_base import KnowledgeBase
 from app.models.order import Order
 from app.models.product import Product
 from app.models.user import User
@@ -36,7 +38,7 @@ _MAX_LIST = 25
 # quedan en products/{user_id}/; solo esas se aceptan para un producto.
 PHOTO_KEY_PREFIX = "products/{user_id}/"
 
-READ_TOOLS = {"list_appointments", "list_orders", "list_products"}
+READ_TOOLS = {"list_appointments", "list_orders", "list_products", "get_bot_status", "test_bot"}
 CHANGE_TOOLS = {"create_product", "update_product", "update_business_hours", "set_loyalty_reward"}
 
 TOOLS = [
@@ -85,6 +87,30 @@ TOOLS = [
                 "query": {"type": "string", "description": "Texto a buscar en el nombre (opcional)."},
                 "include_hidden": {"type": "boolean", "description": "Incluir los ocultos. Por defecto false."},
             },
+        },
+    },
+    {
+        "name": "get_bot_status",
+        "description": (
+            "Revisa qué sabe el bot del cliente y qué le falta: instrucciones, productos con precio, "
+            "horario, documentos, página publicada, WhatsApp y premio de lealtad. Úsalo para '¿mi bot está "
+            "listo?', '¿qué le falta a mi bot?', '¿ya tengo página?'."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "test_bot",
+        "description": (
+            "Le hace una pregunta al bot del cliente, como si fuera un cliente, y devuelve lo que "
+            "contestaría (con su catálogo, horario, instrucciones y documentos reales). Úsalo para "
+            "'pruébame mi bot', 'qué contesta si preguntan el precio del corte'. No envía nada a nadie."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "description": "Lo que preguntaría el cliente."},
+            },
+            "required": ["question"],
         },
     },
     {
@@ -319,11 +345,79 @@ async def list_products(db: AsyncSession, user: User, args: dict) -> dict:
     return {"count": len(items), "items": items}
 
 
+async def get_bot_status(db: AsyncSession, user: User, args: dict) -> dict:
+    n_products, n_priced = (await db.execute(
+        select(func.count(Product.id), func.count(Product.price))
+        .where(Product.advertiser_id == user.id, Product.active.is_(True))
+    )).one()
+    docs = (await db.execute(
+        select(func.count(KnowledgeBase.id)).where(
+            KnowledgeBase.advertiser_id == user.id,
+            KnowledgeBase.is_active.is_(True),
+            KnowledgeBase.processing_status == "done",
+        )
+    )).scalar_one()
+    hours = render_hours(_clean_hours(user.business_hours)) if user.business_hours else None
+    page_url = f"{(settings.FRONTEND_URL or '').rstrip('/')}/sitio/{user.slug}" if user.slug else None
+    missing = []
+    if not user.bot_instructions:
+        missing.append("instrucciones del bot (qué vende, políticas, formas de pago)")
+    if not n_products:
+        missing.append("productos o servicios en el catálogo")
+    elif n_products > n_priced:
+        missing.append(f"precio en {n_products - n_priced} producto(s)")
+    if not hours:
+        missing.append("horario de atención")
+    if not docs:
+        missing.append("documentos de conocimiento (opcional)")
+    if not user.slug:
+        missing.append("página publicada")
+    if user.meta_connection_status != "connected":
+        missing.append("WhatsApp conectado (el bot aún no atiende por WhatsApp)")
+    return {
+        "business_name": user.business_name,
+        "bot_name": user.bot_name,
+        "has_instructions": bool(user.bot_instructions),
+        "products": n_products,
+        "products_without_price": n_products - n_priced,
+        "hours": hours,
+        "documents": docs,
+        "page_url": page_url,
+        "whatsapp_connected": user.meta_connection_status == "connected",
+        "web_agent_enabled": bool(user.customer_agent_enabled),
+        "loyalty_reward": (user.loyalty_config or {}).get("reward") or None,
+        "missing": missing,
+    }
+
+
+async def ask_bot(db: AsyncSession, user: User, args: dict) -> dict:
+    question = _clean_text(args.get("question"), 300)
+    if not question:
+        return {"error": "Dime qué le pregunto al bot."}
+    # Mismo camino que un cliente real; sin conversation_key no cuenta como conversación del plan.
+    from app.services.rag_service import answer_with_rag
+
+    answer = await answer_with_rag(
+        advertiser_id=str(user.id),
+        query=question,
+        conversation_history=[],
+        db=db,
+        business_name=user.business_name or "el negocio",
+        bot_name=user.bot_name or "Asistente",
+        bot_personality=user.bot_personality or "amigable y profesional",
+    )
+    return {"question": question, "answer": answer}
+
+
 async def run_read_tool(db: AsyncSession, user: User, tool_name: str, args: dict) -> dict:
     if tool_name == "list_appointments":
         return await list_appointments(db, user, args)
     if tool_name == "list_orders":
         return await list_orders(db, user, args)
+    if tool_name == "get_bot_status":
+        return await get_bot_status(db, user, args)
+    if tool_name == "test_bot":
+        return await ask_bot(db, user, args)
     return await list_products(db, user, args)
 
 
@@ -523,6 +617,10 @@ def summarize(tool_name: str, data: dict) -> str:
         return f"Encontré {data.get('count', 0)} pedido(s)."
     if tool_name == "list_products":
         return f"Encontré {data.get('count', 0)} producto(s)."
+    if tool_name == "get_bot_status":
+        return f"Revisé tu bot: le falta {len(data.get('missing', []))} cosa(s)."
+    if tool_name == "test_bot":
+        return "Probé tu bot con esa pregunta."
     if tool_name == "create_product":
         return f"Producto \"{data.get('name', '')}\" agregado al catálogo ({_money(data.get('price'))})."
     if tool_name == "update_product":

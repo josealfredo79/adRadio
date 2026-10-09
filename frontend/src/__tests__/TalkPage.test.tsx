@@ -30,6 +30,20 @@ describe('TalkPage (Habla con IaRadio)', () => {
     expect(screen.getByText(/Hola, Barbería Don Pepe/)).toBeDefined()
   })
 
+  it('offers to check and test the owner\'s bot', async () => {
+    post.mockImplementation((url: string) =>
+      url === '/copilot/voice'
+        ? Promise.resolve({ data: { reply: 'Tu bot ya sabe tus precios.', actions: [], pending_confirmation: null } })
+        : Promise.resolve({ data: new Blob() }),
+    )
+    render(<TalkPage />)
+    expect(screen.getByText(/revisar y probar tu bot/)).toBeDefined()
+    fireEvent.click(screen.getByText('¿Mi bot ya está listo?'))
+    const form = post.mock.calls.find(([url]) => url === '/copilot/voice')?.[1] as FormData
+    expect(form.get('text')).toBe('¿Mi bot ya está listo?')
+    await screen.findByText('Tu bot ya sabe tus precios.')
+  })
+
   it('asks before acting and confirms with the big "Sí" button', async () => {
     post.mockImplementation((url: string) => {
       if (url === '/copilot/voice') return Promise.resolve({ data: PENDING })
