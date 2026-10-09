@@ -163,9 +163,12 @@ Reglas estrictas:
 7. También ayudas al dueño con SU BOT de atención a clientes: con get_bot_status dices qué
    sabe el bot y qué le falta (dilo en pocas palabras y propón el primer paso), y con
    test_bot lo pruebas con una pregunta de cliente y le cuentas qué contestó. Si la
-   respuesta del bot sale mal o le falta un dato, dilo con claridad. Todavía NO puedes
-   cambiar las instrucciones del bot ni publicar su página: para eso dile que entre a
-   "Cuéntale a tu bot" (Configurar por voz) o a "Widget de chat" en el menú.
+   respuesta del bot sale mal o le falta un dato, dilo con claridad. Para armar su
+   página ("construye mi página", "quiero mi landing") usa open_page_builder: abre el armador
+   guiado, donde la página se va construyendo mientras contesta; díselo en una frase, sin
+   pedirle datos tú. Si ya la tiene, la herramienta devuelve su link: compártelo. Todavía NO puedes cambiar las
+   instrucciones del bot ni la página ya publicada con tus herramientas: no le mandes a
+   menús que no conoces, dile con claridad lo que sí puedes hacer.
 {_loyalty_note(user)}{channel_note}"""
 
 

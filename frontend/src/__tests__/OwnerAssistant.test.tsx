@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import OwnerAssistant from '@/components/OwnerAssistant'
-import { CopilotProvider } from '@/contexts/CopilotContext'
+import { CopilotProvider, useCopilot } from '@/contexts/CopilotContext'
 
 const post = vi.fn()
 const get = vi.fn()
@@ -25,6 +25,10 @@ const PENDING = {
   pending_confirmation: { confirmation_id: 'tok-1', tool: 'create_product', summary: 'Agregar "Tinte" al catálogo a $450.' },
 }
 
+function BuilderProbe() {
+  return <span>{useCopilot().pageBuilderOpen ? 'armador abierto' : 'armador cerrado'}</span>
+}
+
 function renderAt(path: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -32,6 +36,7 @@ function renderAt(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <CopilotProvider>
           <OwnerAssistant />
+          <BuilderProbe />
         </CopilotProvider>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -57,6 +62,22 @@ describe('OwnerAssistant (bot flotante del panel)', () => {
     second.unmount()
     renderAt('/app/dashboard')
     expect(screen.getByLabelText('Abrir asistente IaRadio')).toBeDefined()
+  })
+
+  it('asking for the page opens the page builder and steps aside', async () => {
+    post.mockResolvedValue({
+      data: {
+        reply: 'Va, armemos tu página.',
+        actions: [{ tool: 'open_page_builder', summary: 'Abrí el armador de tu página.', data: { has_page: false } }],
+        pending_confirmation: null,
+      },
+    })
+    renderAt('/app/dashboard')
+    fireEvent.click(screen.getByLabelText('Abrir asistente IaRadio'))
+    fireEvent.change(screen.getByLabelText('Escribe lo que necesitas'), { target: { value: 'construye mi página web' } })
+    fireEvent.click(screen.getByLabelText('Enviar'))
+    await screen.findByText('armador abierto')
+    expect(screen.queryByLabelText('Asistente IaRadio')).toBeNull()
   })
 
   it('a product photo is uploaded and goes with the next request', async () => {

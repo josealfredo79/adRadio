@@ -38,7 +38,7 @@ _MAX_LIST = 25
 # quedan en products/{user_id}/; solo esas se aceptan para un producto.
 PHOTO_KEY_PREFIX = "products/{user_id}/"
 
-READ_TOOLS = {"list_appointments", "list_orders", "list_products", "get_bot_status", "test_bot"}
+READ_TOOLS = {"list_appointments", "list_orders", "list_products", "get_bot_status", "test_bot", "open_page_builder"}
 CHANGE_TOOLS = {"create_product", "update_product", "update_business_hours", "set_loyalty_reward"}
 
 TOOLS = [
@@ -112,6 +112,16 @@ TOOLS = [
             },
             "required": ["question"],
         },
+    },
+    {
+        "name": "open_page_builder",
+        "description": (
+            "Abre el armador guiado de la página del negocio (la tarjeta se va armando mientras el dueño "
+            "contesta por voz o con botones; al final la publica). Úsalo cuando pida 'construir mi página', "
+            "'quiero mi página web', 'haz mi landing'. Si ya tiene página publicada, devuelve su link en "
+            "vez de abrir nada. No guarda nada por sí sola: el dueño publica dentro del armador."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "create_product",
@@ -409,7 +419,17 @@ async def ask_bot(db: AsyncSession, user: User, args: dict) -> dict:
     return {"question": question, "answer": answer}
 
 
+async def open_page_builder(db: AsyncSession, user: User, args: dict) -> dict:
+    if user.role != "advertiser":
+        return {"error": "Solo los negocios pueden armar su página."}
+    if user.slug:
+        return {"has_page": True, "page_url": f"{(settings.FRONTEND_URL or '').rstrip('/')}/sitio/{user.slug}"}
+    return {"has_page": False}
+
+
 async def run_read_tool(db: AsyncSession, user: User, tool_name: str, args: dict) -> dict:
+    if tool_name == "open_page_builder":
+        return await open_page_builder(db, user, args)
     if tool_name == "list_appointments":
         return await list_appointments(db, user, args)
     if tool_name == "list_orders":
@@ -621,6 +641,8 @@ def summarize(tool_name: str, data: dict) -> str:
         return f"Revisé tu bot: le falta {len(data.get('missing', []))} cosa(s)."
     if tool_name == "test_bot":
         return "Probé tu bot con esa pregunta."
+    if tool_name == "open_page_builder":
+        return "Tu página ya está publicada." if data.get("has_page") else "Abrí el armador de tu página."
     if tool_name == "create_product":
         return f"Producto \"{data.get('name', '')}\" agregado al catálogo ({_money(data.get('price'))})."
     if tool_name == "update_product":

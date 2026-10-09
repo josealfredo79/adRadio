@@ -48,7 +48,7 @@ export default function OwnerAssistant() {
   const { pathname } = useLocation()
   const { user, setUser } = useAuth()
   const qc = useQueryClient()
-  const { messages, setMessages, pendingConfirmation, setPendingConfirmation, assistantOpen: open, setAssistantOpen: setOpen } = useCopilot()
+  const { messages, setMessages, pendingConfirmation, setPendingConfirmation, assistantOpen: open, setAssistantOpen: setOpen, setPageBuilderOpen } = useCopilot()
   const [input, setInput] = useState('')
   const [recording, setRecording] = useState(false)
   const [seconds, setSeconds] = useState(0)
@@ -102,6 +102,13 @@ export default function OwnerAssistant() {
   const onReply = (data: ChatResponse) => {
     addAssistant(data.reply, { actions: data.actions })
     setPendingConfirmation(data.pending_confirmation ?? null)
+    // "Arma mi página": se abre el armador guiado (el mismo del panel) y el chat se aparta.
+    if (data.actions?.some((a) => a.tool === 'open_page_builder' && !(a.data as { has_page?: boolean } | undefined)?.has_page)) {
+      speaker.stop()
+      setVoiceMode(false)
+      setOpen(false)
+      setPageBuilderOpen(true)
+    }
     // Si algo se guardó, que lo que ya está en pantalla (catálogo, horario…) se actualice.
     if (data.actions?.length) {
       void qc.invalidateQueries()

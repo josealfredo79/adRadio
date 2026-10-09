@@ -278,3 +278,17 @@ def test_bot_tools_are_registered_and_need_no_confirmation():
     assert {"get_bot_status", "test_bot"} <= names
     assert not {"get_bot_status", "test_bot"} & CONFIRM_TOOLS
     assert biz.summarize("get_bot_status", {"missing": ["a", "b"]}) == "Revisé tu bot: le falta 2 cosa(s)."
+
+
+@pytest.mark.asyncio
+async def test_open_page_builder_opens_only_when_there_is_no_page():
+    assert "open_page_builder" in {t["name"] for t in TOOLS}
+    assert "open_page_builder" not in CONFIRM_TOOLS
+    mk = lambda **kw: User(id=uuid.uuid4(), email="a@b.c", password_hash="x", **kw)  # noqa: E731
+    out = await _execute_immediate_tool(None, mk(role="advertiser", slug=None), "open_page_builder", {})
+    assert out == {"has_page": False}
+    out = await _execute_immediate_tool(None, mk(role="advertiser", slug="pepe"), "open_page_builder", {})
+    assert out["has_page"] is True and out["page_url"].endswith("/sitio/pepe")
+    out = await _execute_immediate_tool(None, mk(role="admin", slug=None), "open_page_builder", {})
+    assert "error" in out
+    assert biz.summarize("open_page_builder", {"has_page": False}) == "Abrí el armador de tu página."

@@ -39,6 +39,8 @@ interface CopilotContextValue {
   resetConversation: () => void
   assistantOpen: boolean
   setAssistantOpen: (open: boolean) => void
+  pageBuilderOpen: boolean
+  setPageBuilderOpen: (open: boolean) => void
 }
 
 export const COPILOT_STORAGE_KEY = 'iaradio_copilot_chat'
@@ -70,6 +72,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
     () => loadStored().pendingConfirmation
   )
   const [assistantOpen, setAssistantOpen] = useState(false)
+  const [pageBuilderOpen, setPageBuilderOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -95,7 +98,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <CopilotContext.Provider value={{ messages, setMessages, pendingConfirmation, setPendingConfirmation, resetConversation, assistantOpen, setAssistantOpen }}>
+    <CopilotContext.Provider value={{ messages, setMessages, pendingConfirmation, setPendingConfirmation, resetConversation, assistantOpen, setAssistantOpen, pageBuilderOpen, setPageBuilderOpen }}>
       {children}
     </CopilotContext.Provider>
   )

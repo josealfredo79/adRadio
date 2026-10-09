@@ -38,6 +38,7 @@ import {
 import { cn } from '@/lib/utils'
 import BrandMark from '@/components/BrandMark'
 import OwnerAssistant from '@/components/OwnerAssistant'
+import PageBuilderHost from '@/components/PageBuilderHost'
 
 const navItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -252,6 +253,7 @@ export default function Layout() {
             <CopilotProvider>
               <Outlet />
               <OwnerAssistant />
+              <PageBuilderHost />
             </CopilotProvider>
           </div>
         </div>
