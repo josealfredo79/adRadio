@@ -38,6 +38,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import BrandMark from '@/components/BrandMark'
+import OwnerAssistant from '@/components/OwnerAssistant'
 
 const navItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -252,6 +253,7 @@ export default function Layout() {
             <TrialBanner />
             <CopilotProvider>
               <Outlet />
+              <OwnerAssistant />
             </CopilotProvider>
           </div>
         </div>
