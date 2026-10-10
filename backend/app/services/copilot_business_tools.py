@@ -27,7 +27,7 @@ from app.models.product import Product
 from app.models.user import User
 from app.services.availability_service import TZ
 from app.services.loyalty_service import LOYALTY_DEFAULTS
-from app.services.voice_setup import DAY_LABELS, DAYS, _clean_hours, render_hours
+from app.services.voice_setup import DAY_LABELS, DAYS, _clean_hours, merge_instructions, render_hours
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,8 @@ _MAX_LIST = 25
 PHOTO_KEY_PREFIX = "products/{user_id}/"
 
 READ_TOOLS = {"list_appointments", "list_orders", "list_products", "get_bot_status", "test_bot", "open_page_builder"}
-CHANGE_TOOLS = {"create_product", "update_product", "update_business_hours", "set_loyalty_reward"}
+CHANGE_TOOLS = {"create_product", "update_product", "update_business_hours", "set_loyalty_reward", "update_bot_info",
+                "update_page_style"}
 
 TOOLS = [
     {
@@ -119,9 +120,16 @@ TOOLS = [
             "Abre el armador guiado de la página del negocio (la tarjeta se va armando mientras el dueño "
             "contesta por voz o con botones; al final la publica). Úsalo cuando pida 'construir mi página', "
             "'quiero mi página web', 'haz mi landing'. Si ya tiene página publicada, devuelve su link en "
-            "vez de abrir nada. No guarda nada por sí sola: el dueño publica dentro del armador."
+            "vez de abrir nada, salvo que quiera cambiarla: entonces pasa edit=true y se abre el mismo "
+            "armador ya con lo que tiene (solo pregunta lo que falta). No guarda nada por sí sola: el dueño "
+            "publica dentro del armador."
         ),
-        "input_schema": {"type": "object", "properties": {}},
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "edit": {"type": "boolean", "description": "true = el dueño quiere cambiar o rehacer su página ya publicada."},
+            },
+        },
     },
     {
         "name": "create_product",
@@ -192,6 +200,50 @@ TOOLS = [
                 "stamps_required": {"type": "integer", "description": "Sellos para ganarlo (3 a 20)."},
             },
             "required": ["reward"],
+        },
+    },
+    {
+        "name": "update_bot_info",
+        "description": (
+            "Cambia lo que el bot sabe del negocio, sin tocar lo demás: dirección o ciudad, formas de "
+            "pago, preguntas frecuentes, políticas (garantías, devoluciones, envíos a domicilio) y otros "
+            "datos. Pasa SOLO lo que cambia. Para precios y horario usa update_product y "
+            "update_business_hours. SIEMPRE requiere confirmación."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "address": {"type": "string", "description": "Calle o referencia nueva."},
+                "city": {"type": "string", "description": "Ciudad nueva."},
+                "payment_methods": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "Lista COMPLETA de formas de pago (reemplaza la anterior).",
+                },
+                "add_faqs": {
+                    "type": "array",
+                    "items": {"type": "object", "properties": {"q": {"type": "string"}, "a": {"type": "string"}}},
+                    "description": "Preguntas frecuentes nuevas con su respuesta.",
+                },
+                "remove_faqs": {"type": "array", "items": {"type": "string"}, "description": "Texto de la pregunta a quitar."},
+                "add_policies": {"type": "array", "items": {"type": "string"}, "description": "Políticas nuevas, una por línea."},
+                "add_notes": {"type": "array", "items": {"type": "string"}, "description": "Otros datos que el bot debe saber."},
+            },
+        },
+    },
+    {
+        "name": "update_page_style",
+        "description": (
+            "Cambia el color de la página del negocio (botones, acentos, su chat) y/o el tema de fondo. "
+            "Color: en palabras del dueño (verde, azul, morado, rojo, naranja, rosa, amarillo, turquesa, "
+            "café) o en hex #RRGGBB. Tema de fondo: medianoche, pizarra, esmeralda (oscuros), claro o crema. "
+            "Pasa solo lo que cambia. SIEMPRE requiere confirmación."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "color": {"type": "string", "description": "Color de acento: nombre en español o #RRGGBB."},
+                "theme": {"type": "string", "description": "medianoche, pizarra, esmeralda, claro o crema."},
+            },
         },
     },
 ]
@@ -423,7 +475,9 @@ async def open_page_builder(db: AsyncSession, user: User, args: dict) -> dict:
     if user.role != "advertiser":
         return {"error": "Solo los negocios pueden armar su página."}
     if user.slug:
-        return {"has_page": True, "page_url": f"{(settings.FRONTEND_URL or '').rstrip('/')}/sitio/{user.slug}"}
+        out = {"has_page": True, "page_url": f"{(settings.FRONTEND_URL or '').rstrip('/')}/sitio/{user.slug}"}
+        # Quiere cambiarla: el armador se abre con lo que ya tiene (ver /public/onboarding/mine).
+        return {**out, "edit": True} if args.get("edit") is True else out
     return {"has_page": False}
 
 
@@ -442,6 +496,84 @@ async def run_read_tool(db: AsyncSession, user: User, tool_name: str, args: dict
 
 
 # ─── Cambios: vista previa (lo que el dueño confirma) y ejecución ─────────────
+
+_INFO_HEADERS = {"faqs": "Preguntas frecuentes", "policies": "Políticas", "notes": "Otros datos"}
+
+# Mismos colores que ofrece el armador de la página, más algunos comunes.
+_COLORS = {
+    "verde": "#2f9e44", "azul": "#1c7ed6", "morado": "#7048e8", "rojo": "#e03131", "naranja": "#e8590c",
+    "rosa": "#d6336c", "amarillo": "#f59f00", "turquesa": "#0c8599", "cafe": "#8a5a2b",
+}
+_THEMES = ("medianoche", "pizarra", "esmeralda", "claro", "crema")
+_HEX_RE = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def _resolve_color(value) -> str | None:
+    text = (_clean_text(value, 30) or "").lower()
+    text = text.translate(str.maketrans("áéíóú", "aeiou")).removeprefix("color ").strip()
+    if text in _COLORS:
+        return _COLORS[text]
+    if _HEX_RE.match(text):
+        if len(text) == 4:
+            text = "#" + "".join(c * 2 for c in text[1:])
+        return text.lower()
+    return None
+
+
+def _clean_info_ops(args: dict) -> dict:
+    ops: dict = {}
+    for key, limit in (("address", 300), ("city", 100)):
+        if value := _clean_text(args.get(key), limit):
+            ops[key] = value
+    for key, field, limit in (("payment_methods", "payment_methods", 100), ("add_policies", "add_policies", 200),
+                              ("add_notes", "add_notes", 200), ("remove_faqs", "remove_faqs", 200)):
+        raw = args.get(key)
+        items = [t for x in (raw if isinstance(raw, list) else [])[:12] if (t := _clean_text(x, limit))]
+        if items:
+            ops[field] = items
+    faqs = []
+    for f in (args.get("add_faqs") if isinstance(args.get("add_faqs"), list) else [])[:6]:
+        if isinstance(f, dict) and (q := _clean_text(f.get("q"), 200)) and (a := _clean_text(f.get("a"), 400)):
+            faqs.append({"q": q, "a": a})
+    if faqs:
+        ops["add_faqs"] = faqs
+    return ops
+
+
+def _apply_info_ops(current: dict, ops: dict) -> tuple[dict, list[str]]:
+    """Solo los temas que cambian (para fusionarlos) y cómo decirlos."""
+    changed: dict = {}
+    parts: list[str] = []
+    if "address" in ops or "city" in ops:
+        address, city = ops.get("address", current["address"]), ops.get("city", current["city"])
+        if (address, city) != (current["address"], current["city"]):
+            changed["address"], changed["city"] = address, city
+            parts.append("ubicación a " + ", ".join(x for x in (address, city) if x))
+    if ops.get("payment_methods") and ops["payment_methods"] != current["payment_methods"]:
+        changed["payment_methods"] = ops["payment_methods"]
+        parts.append("formas de pago: " + ", ".join(ops["payment_methods"]))
+    faqs = [f for f in current["faqs"]
+            if not any(r.lower() in f["q"].lower() for r in ops.get("remove_faqs", []))]
+    known = {f["q"].lower() for f in faqs}
+    faqs += [f for f in ops.get("add_faqs", []) if f["q"].lower() not in known]
+    if faqs != current["faqs"]:
+        changed["faqs"] = faqs
+        gone = len([f for f in current["faqs"] if f not in faqs])
+        new = len([f for f in faqs if f not in current["faqs"]])
+        parts.append("preguntas frecuentes" + (f" (+{new})" if new else "") + (f" (−{gone})" if gone else ""))
+    for key, op, label in (("policies", "add_policies", "políticas"), ("notes", "add_notes", "otros datos")):
+        merged = current[key] + [x for x in ops.get(op, []) if x.lower() not in {y.lower() for y in current[key]}]
+        if merged != current[key]:
+            changed[key] = merged
+            parts.append(f"{label} (+{len(merged) - len(current[key])})")
+    return changed, parts
+
+
+def _current_info(user: User) -> dict:
+    from app.services.owner_signup import instructions_info
+
+    parsed, _ = instructions_info(user)
+    return parsed
 
 def _sync_instructions_product(user: User, old_name: str, new_name: str, price: Decimal | None) -> None:
     """Si las instrucciones del bot listan este producto ("- Corte — $150"),
@@ -552,6 +684,36 @@ async def preview_change(db: AsyncSession, user: User, tool_name: str, args: dic
             None,
         )
 
+    if tool_name == "update_bot_info":
+        ops = _clean_info_ops(args)
+        if not ops:
+            return None, None, "Dime qué cambio: dirección, formas de pago, preguntas frecuentes, políticas u otros datos."
+        changed, parts = _apply_info_ops(_current_info(user), ops)
+        if not changed:
+            return None, None, "Tu bot ya sabe eso; no hay nada que cambiar."
+        return "Cambiar lo que sabe tu bot: " + "; ".join(parts) + ".", {"ops": ops}, None
+
+    if tool_name == "update_page_style":
+        changes: dict = {}
+        parts: list[str] = []
+        if args.get("color"):
+            color = _resolve_color(args["color"])
+            if not color:
+                return None, None, f"No reconozco el color \"{args['color']}\". Dime uno como verde, azul, morado, rojo, naranja o rosa."
+            if color != (user.widget_color or "").lower():
+                changes["color"] = color
+                parts.append(f"color a {args['color'].strip()}")
+        if args.get("theme"):
+            theme = (_clean_text(args["theme"], 30) or "").lower()
+            if theme not in _THEMES:
+                return None, None, "El fondo puede ser medianoche, pizarra, esmeralda, claro o crema."
+            if theme != (user.site_theme or "medianoche"):
+                changes["theme"] = theme
+                parts.append(f"fondo a {theme}")
+        if not changes:
+            return None, None, "Tu página ya está así; dime qué color o fondo quieres."
+        return "Cambiar tu página: " + ", ".join(parts) + ".", changes, None
+
     return None, None, "No reconozco esa acción."
 
 
@@ -627,6 +789,35 @@ async def execute_change(db: AsyncSession, user: User, tool_name: str, args: dic
         logger.info("[COPILOT] loyalty reward set by %s", user.id)
         return {"reward": reward, "stamps_required": stamps}, None
 
+    if tool_name == "update_bot_info":
+        # Se vuelve a leer lo que hay al confirmar: si cambió mientras tanto, no se pisa.
+        ops = _clean_info_ops(args.get("ops") or {})
+        changed, parts = _apply_info_ops(_current_info(user), ops)
+        if not changed:
+            return None, "Tu bot ya sabe eso; no hay nada que cambiar."
+        if changed.get("city"):
+            user.city = changed["city"]
+        drop = {_INFO_HEADERS[k] for k in _INFO_HEADERS if k in changed and not changed[k]}
+        user.bot_instructions = merge_instructions(user.bot_instructions, changed, drop)
+        db.add(user)
+        await db.commit()
+        logger.info("[COPILOT] bot info updated by %s: %s", user.id, sorted(changed))
+        return {"changed": parts}, None
+
+    if tool_name == "update_page_style":
+        color = _resolve_color(args.get("color")) if args.get("color") else None
+        theme = args.get("theme") if args.get("theme") in _THEMES else None
+        if not color and not theme:
+            return None, "Ese cambio no es válido."
+        if color:
+            user.widget_color = color
+        if theme:
+            user.site_theme = theme
+        db.add(user)
+        await db.commit()
+        logger.info("[COPILOT] page style updated by %s", user.id)
+        return {"color": color, "theme": theme}, None
+
     return None, "No reconozco esa acción."
 
 
@@ -642,7 +833,13 @@ def summarize(tool_name: str, data: dict) -> str:
     if tool_name == "test_bot":
         return "Probé tu bot con esa pregunta."
     if tool_name == "open_page_builder":
+        if data.get("edit"):
+            return "Abrí el armador con lo que ya tiene tu página."
         return "Tu página ya está publicada." if data.get("has_page") else "Abrí el armador de tu página."
+    if tool_name == "update_page_style":
+        return "Tu página ya tiene el nuevo " + ("color" if data.get("color") else "fondo") + "."
+    if tool_name == "update_bot_info":
+        return "Tu bot ya sabe lo nuevo: " + "; ".join(data.get("changed", [])) + "."
     if tool_name == "create_product":
         return f"Producto \"{data.get('name', '')}\" agregado al catálogo ({_money(data.get('price'))})."
     if tool_name == "update_product":

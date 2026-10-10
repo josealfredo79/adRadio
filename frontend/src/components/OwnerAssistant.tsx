@@ -103,7 +103,10 @@ export default function OwnerAssistant() {
     addAssistant(data.reply, { actions: data.actions })
     setPendingConfirmation(data.pending_confirmation ?? null)
     // "Arma mi página": se abre el armador guiado (el mismo del panel) y el chat se aparta.
-    if (data.actions?.some((a) => a.tool === 'open_page_builder' && !(a.data as { has_page?: boolean } | undefined)?.has_page)) {
+    if (data.actions?.some((a) => {
+      const d = a.data as { has_page?: boolean; edit?: boolean } | undefined
+      return a.tool === 'open_page_builder' && (!d?.has_page || d.edit)
+    })) {
       speaker.stop()
       setVoiceMode(false)
       setOpen(false)

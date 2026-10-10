@@ -230,10 +230,11 @@ def _header_of(paragraph: str) -> str | None:
 _HEADERS = ("Ubicación", "Horario", "Servicios y precios", "Formas de pago", "Políticas", "Preguntas frecuentes", "Otros datos")
 
 
-def merge_instructions(existing: str | None, profile: dict) -> str:
+def merge_instructions(existing: str | None, profile: dict, drop: frozenset[str] | set[str] = frozenset()) -> str:
     """Instrucciones que ya tiene el negocio + lo que trae el perfil: cada tema
     del perfil reemplaza SOLO su párrafo; lo que el dueño ya tenía de otros
-    temas (pagos, preguntas frecuentes, texto propio) se queda como está."""
+    temas (pagos, preguntas frecuentes, texto propio) se queda como está.
+    `drop`: encabezados de temas que se quitan por completo."""
     new = render_blocks(profile)
     if not (existing or "").strip():
         return _fit("\n\n".join(new.values()))
@@ -241,6 +242,8 @@ def merge_instructions(existing: str | None, profile: dict) -> str:
     used: set[str] = set()
     for para in re.split(r"\n\s*\n", existing.strip()):
         head = _header_of(para)
+        if head in drop:
+            continue
         if head is None or head not in new:
             out.append(para.strip())
         elif head not in used:

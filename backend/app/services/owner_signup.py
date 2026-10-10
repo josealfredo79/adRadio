@@ -111,14 +111,24 @@ async def create_owner(db: AsyncSession, *, phone: str, name: str, profile: dict
     return user
 
 
-async def owner_profile(db: AsyncSession, user: User) -> tuple[dict, bool]:
-    """Lo que el negocio YA tiene, en forma de borrador, para que el armador
-    solo pregunte lo que falta. El 2º valor: tiene texto propio en sus
-    instrucciones (no se le pregunta "¿qué más debe saber tu bot?")."""
+def instructions_info(user: User) -> tuple[dict, bool]:
+    """Lo que dicen las instrucciones del bot (ubicación, pagos, políticas,
+    preguntas frecuentes, otros datos) como perfil; el 2º valor: hay texto
+    propio que no es de ningún tema conocido."""
     parsed, free_text = parse_instructions(user.bot_instructions)
     address = parsed["address"]
     if address and user.city and address.lower().endswith(user.city.lower()):
         address = address[: -len(user.city)].rstrip(", ") or None
+    parsed["address"] = address
+    parsed["city"] = user.city
+    return parsed, free_text
+
+
+async def owner_profile(db: AsyncSession, user: User) -> tuple[dict, bool]:
+    """Lo que el negocio YA tiene, en forma de borrador, para que el armador
+    solo pregunte lo que falta. El 2º valor: tiene texto propio en sus
+    instrucciones (no se le pregunta "¿qué más debe saber tu bot?")."""
+    parsed, free_text = instructions_info(user)
     products = (await db.execute(
         select(Product).where(Product.advertiser_id == user.id, Product.active.is_(True))
         .order_by(Product.created_at).limit(MAX_SERVICES)
@@ -127,8 +137,6 @@ async def owner_profile(db: AsyncSession, user: User) -> tuple[dict, bool]:
         **parsed,
         "business_name": user.business_name,
         "business_category": user.business_category,
-        "city": user.city,
-        "address": address,
         "business_hours": user.business_hours,
         "services": [
             {"name": p.name, "price": float(p.price) if p.price is not None else None, "description": p.description}

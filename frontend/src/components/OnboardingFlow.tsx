@@ -347,7 +347,8 @@ export default function OnboardingFlow({
     started.current = true
     void (async () => {
       const prev = saved.current
-      if (prev?.published?.slug && prev.draft?.business_name) {
+      // Un dueño que vuelve a editar parte de lo que su cuenta ya tiene, no de un link guardado.
+      if (!owner && prev?.published?.slug && prev.draft?.business_name) {
         setDraft(prev.draft)
         setColor(prev.color)
         setCardShown(true)

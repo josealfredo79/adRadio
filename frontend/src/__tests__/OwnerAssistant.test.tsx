@@ -80,6 +80,27 @@ describe('OwnerAssistant (bot flotante del panel)', () => {
     expect(screen.queryByLabelText('Asistente IaRadio')).toBeNull()
   })
 
+  it('a published page only reopens the builder when the owner wants to edit it', async () => {
+    const reply = (data: object) => post.mockResolvedValue({
+      data: { reply: 'ok', actions: [{ tool: 'open_page_builder', summary: 's', data }], pending_confirmation: null },
+    })
+    reply({ has_page: true, page_url: 'https://x/sitio/pepe' })
+    const { unmount } = renderAt('/app/dashboard')
+    fireEvent.click(screen.getByLabelText('Abrir asistente IaRadio'))
+    fireEvent.change(screen.getByLabelText('Escribe lo que necesitas'), { target: { value: 'dame mi link' } })
+    fireEvent.click(screen.getByLabelText('Enviar'))
+    await screen.findByText('ok')
+    expect(screen.getByText('armador cerrado')).toBeDefined()
+    unmount()
+
+    reply({ has_page: true, page_url: 'https://x/sitio/pepe', edit: true })
+    renderAt('/app/dashboard')
+    fireEvent.click(screen.getByLabelText('Abrir asistente IaRadio'))
+    fireEvent.change(screen.getByLabelText('Escribe lo que necesitas'), { target: { value: 'quiero cambiar mi página' } })
+    fireEvent.click(screen.getByLabelText('Enviar'))
+    await screen.findByText('armador abierto')
+  })
+
   it('a product photo is uploaded and goes with the next request', async () => {
     URL.createObjectURL = vi.fn(() => 'blob:preview')
     URL.revokeObjectURL = vi.fn()
