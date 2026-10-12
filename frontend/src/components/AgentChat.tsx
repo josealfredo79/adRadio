@@ -6,6 +6,7 @@ import { ArrowLeft, CheckCheck, ClipboardList, Info, Mic, Send, ShoppingBag, Squ
 import { isDarkTheme, type SiteThemeDef } from '@/pages/publicSite/theme'
 import BubbleTail from '@/components/BubbleTail'
 import InlineJoin from '@/components/InlineJoin'
+import { renderChatText } from '@/lib/chatText'
 import ChatNotifyOffer from '@/components/ChatNotifyOffer'
 import OnboardingFlow from '@/components/OnboardingFlow'
 import { parseChatOptions } from '@/lib/chatOptions'
@@ -31,13 +32,6 @@ export interface ChatBusiness {
   // Botones de arranque propios del negocio (ej. la cuenta de ventas de
   // IaRadio); si no vienen, van los de siempre (QUICK_ASKS).
   quick_asks?: { icon: string; text: string; action?: string }[] | null
-}
-
-function renderChatText(text: string): React.ReactNode[] {
-  return text.split(/(\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g).map((part, i) => {
-    const bold = part.match(/^\*\*([^*\n]+)\*\*$/) ?? part.match(/^\*([^*\n]+)\*$/)
-    return bold ? <strong key={i}>{bold[1]}</strong> : part
-  })
 }
 
 interface ProductCard {

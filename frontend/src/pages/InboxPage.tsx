@@ -6,6 +6,7 @@ import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import SEO from '@/components/SEO'
 import LearnCard from '@/components/LearnCard'
+import { renderChatText } from '@/lib/chatText'
 
 // Detect and render WhatsApp media stored as [media:type]url
 function isSafeUrl(url: string): boolean {
@@ -19,7 +20,7 @@ function isSafeUrl(url: string): boolean {
 
 function MediaMessage({ content }: { content: string }) {
   const match = content.match(/^\[media:([^\]]+)\](.+)$/)
-  if (!match) return <span>{content}</span>
+  if (!match) return <span className="whitespace-pre-wrap">{renderChatText(content)}</span>
 
   const [, mimeType, url] = match
   if (!isSafeUrl(url)) {
