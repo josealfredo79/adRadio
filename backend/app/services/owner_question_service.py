@@ -153,7 +153,7 @@ async def _compose_customer_reply(advertiser: User, question: str, owner_answer:
         return owner_answer
 
 
-async def _learn(db: AsyncSession, advertiser_id, question: str, answer: str) -> None:
+async def learn_answer(db: AsyncSession, advertiser_id, question: str, answer: str) -> None:
     chunk = f"Pregunta: {question}\nRespuesta: {answer}"
     try:
         embedding = await get_embedding(chunk)
@@ -307,7 +307,7 @@ async def handle_owner_message(
                 sent_at=now if wamid else None,
             )
         )
-    await _learn(db, advertiser.id, oq.question, answer)
+    await learn_answer(db, advertiser.id, oq.question, answer)
     await db.commit()
     if oq.contact_id:
         await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(oq.contact_id)})

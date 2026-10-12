@@ -383,3 +383,63 @@ async def reply_to_conversation(
     out = {"message": "ok", "msg_id": str(msg.id), "channel": channel}
     await store_idempotency_response(request, redis, out)
     return out
+
+
+# ─── El bot aprende de lo que el dueño contesta (inbox_learning.py) ─────────
+
+class LearnSuggestionBody(BaseModel):
+    msg_id: uuid.UUID
+
+
+class LearnBody(BaseModel):
+    question: str
+    answer: str
+    replace_ids: list[uuid.UUID] = []
+
+
+async def _own_conversation(db: AsyncSession, conversation_id: uuid.UUID, user: User) -> Conversation:
+    conv = (await db.execute(
+        select(Conversation).where(Conversation.id == conversation_id, Conversation.advertiser_id == user.id)
+    )).scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversación no encontrada")
+    return conv
+
+
+@router.post("/{conversation_id}/learn-suggestion")
+async def learn_suggestion(
+    conversation_id: uuid.UUID,
+    body: LearnSuggestionBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Después de contestar desde el Inbox: ¿eso le sirve al bot? La tarjeta
+    "¿Guardo esto para que el bot lo sepa?" sale solo si hay sugerencia."""
+    conv = await _own_conversation(db, conversation_id, current_user)
+    msg = await db.get(Message, body.msg_id)
+    if (msg is None or msg.advertiser_id != current_user.id or msg.contact_id != conv.contact_id
+            or msg.sender != "owner"):
+        raise HTTPException(status_code=404, detail="Mensaje no encontrado")
+    from app.services.inbox_learning import suggest
+
+    return {"suggestion": await suggest(db, msg)}
+
+
+@router.post("/{conversation_id}/learn")
+async def learn_from_reply(
+    conversation_id: uuid.UUID,
+    body: LearnBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """El dueño tocó Guardar: se guarda lo que dejó escrito en la tarjeta."""
+    from app.services.inbox_learning import MAX_FIELD, save
+
+    await _own_conversation(db, conversation_id, current_user)
+    question, answer = body.question.strip(), body.answer.strip()
+    if not question or not answer:
+        raise HTTPException(status_code=400, detail="Falta la pregunta o la respuesta")
+    if len(question) > MAX_FIELD * 2 or len(answer) > MAX_FIELD * 2:
+        raise HTTPException(status_code=400, detail="Texto demasiado largo")
+    replaced = await save(db, current_user.id, question, answer, body.replace_ids[:10])
+    return {"saved": True, "replaced": replaced}

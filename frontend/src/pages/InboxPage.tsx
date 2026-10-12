@@ -5,6 +5,7 @@ import { MessageSquare, User, Clock, Flame, Thermometer, Snowflake, CheckCircle,
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import SEO from '@/components/SEO'
+import LearnCard from '@/components/LearnCard'
 
 // Detect and render WhatsApp media stored as [media:type]url
 function isSafeUrl(url: string): boolean {
@@ -174,12 +175,20 @@ export default function InboxPage() {
 
   // Por dónde salió tu última respuesta: por la web es gratis; por WhatsApp la cobra Meta.
   const [sentVia, setSentVia] = useState<'web' | 'whatsapp' | null>(null)
-  useEffect(() => setSentVia(null), [selectedId])
+  // Tu última respuesta: si le sirve al bot, sale la tarjeta para que la aprenda.
+  const [learnFrom, setLearnFrom] = useState<{ conversationId: string; msgId: string } | null>(null)
+  useEffect(() => {
+    setSentVia(null)
+    setLearnFrom(null)
+  }, [selectedId])
   const replyMutation = useMutation({
     mutationFn: (text: string) =>
-      api.post(`/conversations/${selectedId}/reply`, { text }).then((r) => r.data as { channel?: 'web' | 'whatsapp' }),
+      api
+        .post(`/conversations/${selectedId}/reply`, { text })
+        .then((r) => r.data as { channel?: 'web' | 'whatsapp'; msg_id?: string }),
     onSuccess: (out) => {
       setSentVia(out.channel ?? 'whatsapp')
+      if (out.msg_id && selectedId) setLearnFrom({ conversationId: selectedId, msgId: out.msg_id })
       setReplyText('')
       qc.invalidateQueries({ queryKey: ['conversation', selectedId] })
       qc.invalidateQueries({ queryKey: ['conversations', statusFilter] })
@@ -464,6 +473,10 @@ export default function InboxPage() {
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            {learnFrom && learnFrom.conversationId === selectedId && (
+              <LearnCard key={learnFrom.msgId} conversationId={learnFrom.conversationId} msgId={learnFrom.msgId} />
+            )}
 
             {/* Reply input */}
             {detail.status !== 'closed' && (
