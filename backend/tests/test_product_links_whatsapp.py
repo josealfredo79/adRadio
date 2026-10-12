@@ -90,6 +90,37 @@ async def test_mentioned_product_only_when_it_is_one():
 
 
 @pytest.mark.asyncio
+async def test_mentioned_product_needs_whole_words():
+    # 2026-10-12: "probarlo" nombraba al "Plan Pro" y salía su tarjeta en una
+    # respuesta sobre el plan Negocio.
+    await engine.dispose()
+    async with AsyncSessionLocal() as db:
+        user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x")
+        db.add(user)
+        await db.flush()
+        for name in ("Plan Pro", "Pizza Hawaiana"):
+            db.add(Product(advertiser_id=user.id, name=name, price=1, active=True))
+        await db.commit()
+        uid = user.id
+    try:
+        async with AsyncSessionLocal() as db:
+            assert await mentioned_product(
+                db, uid, "¿Qué precio tiene el plan Negocio?",
+                "El plan Negocio cuesta $899/mes y puedes probarlo 15 días gratis.") is None
+            p = await mentioned_product(db, uid, "¿cuánto el plan pro?", "Cuesta $2,499.")
+            assert p is not None and p.name == "Plan Pro"
+            # Plural sigue contando.
+            p = await mentioned_product(db, uid, "quiero 2 pizzas hawaianas", "¡Claro!")
+            assert p is not None and p.name == "Pizza Hawaiana"
+    finally:
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(Product).where(Product.advertiser_id == uid))
+            await db.execute(delete(User).where(User.id == uid))
+            await db.commit()
+
+
+@pytest.mark.asyncio
 async def test_site_page_preview_for_whatsapp_has_the_cover_photo():
     from app.main import _render_site_og_html
 

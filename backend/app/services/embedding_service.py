@@ -16,7 +16,14 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def get_embedding(text: str) -> list[float]:
+# Con alguien esperando respuesta (el bot buscando en la base de conocimiento):
+# un solo intento y tope de tiempo. Con el plan gratis de Voyage (3 por minuto)
+# los reintentos de 22 s+ dejaban el chat colgado 40 s y el cliente veía
+# "no me llegó tu mensaje"; mejor contestar sin buscar.
+LIVE_TIMEOUT_S = 6.0
+
+
+async def get_embedding(text: str, *, live: bool = False) -> list[float]:
     """
     Genera embedding del texto.
     - Usa OpenAI text-embedding-3-small solo si USE_OPENAI_EMBEDDINGS=true (opt-in explícito).
@@ -28,8 +35,14 @@ async def get_embedding(text: str) -> list[float]:
     text = text.replace("\n", " ").strip()
 
     if settings.USE_OPENAI_EMBEDDINGS and settings.OPENAI_API_KEY:
-        return await _embed_openai(text)
-    return await _embed_voyage(text)
+        embed = _embed_openai(text)
+    else:
+        embed = _embed_voyage(text, _retries=1 if live else 5)
+    if live:
+        import asyncio
+
+        return await asyncio.wait_for(embed, timeout=LIVE_TIMEOUT_S)
+    return await embed
 
 
 async def _embed_openai(text: str) -> list[float]:

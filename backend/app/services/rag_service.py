@@ -28,7 +28,7 @@ async def search_knowledge(db: AsyncSession, advertiser_id: str, query: str) -> 
     *query* (pgvector), unidos en un texto. "" si no hay nada o falla. Lo usa
     el bot de siempre y el agente del cliente (customer_agent.py) como herramienta."""
     try:
-        query_embedding = await get_embedding(query)
+        query_embedding = await get_embedding(query, live=True)
     except Exception as e:
         logger.warning("[RAG] Embedding failed: %s", e)
         query_embedding = None

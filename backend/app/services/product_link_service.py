@@ -14,13 +14,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.product import Product
-from app.services.catalog_service import get_active_products, match_products_in_text
+from app.services.catalog_service import _significant_words, get_active_products
 
 _URL_RE = re.compile(r"https?://\S+")
 
 
 def product_url(product: Product) -> str:
     return f"{settings.BASE_URL}/p/{product.advertiser_id}/{product.id}"
+
+
+def _names(product: Product, text: str) -> bool:
+    """¿El texto nombra este producto? Palabras completas (con plural): con
+    pedazos de palabra, "probarlo" nombraba al "Plan Pro" y salía su tarjeta
+    en una respuesta sobre el plan Negocio."""
+    words = _significant_words(product.name)
+    lowered = text.lower()
+    return bool(words) and all(re.search(rf"\b{re.escape(w)}(s|es)?\b", lowered) for w in words)
 
 
 async def mentioned_product(db: AsyncSession, advertiser_id, customer_text: str, reply: str) -> Product | None:
@@ -31,7 +40,7 @@ async def mentioned_product(db: AsyncSession, advertiser_id, customer_text: str,
     if not products:
         return None
     for text in (customer_text or "", reply or ""):
-        found = {p.id: p for p, _qty in match_products_in_text(products, text)}
+        found = {p.id: p for p in products if _names(p, text)}
         if len(found) == 1:
             return next(iter(found.values()))
         if len(found) > 1:

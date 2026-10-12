@@ -107,7 +107,7 @@ async def _customer_question(db: AsyncSession, owner_msg: Message) -> str:
 
 
 async def _similar(db: AsyncSession, advertiser_id: uuid.UUID, query: str) -> list[dict]:
-    embedding = await get_embedding(query)
+    embedding = await get_embedding(query, live=True)
     rows = (await db.execute(
         text("""
             SELECT id, filename, chunk_text, 1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
