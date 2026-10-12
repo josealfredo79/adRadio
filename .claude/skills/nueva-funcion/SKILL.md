@@ -49,12 +49,16 @@ No escribas código de la función antes de esta aprobación.
 - Lo riesgoso (cobra, manda WhatsApp masivo, cambia cómo contesta el bot a todos) arranca detrás de una bandera apagada, salvo que el usuario haya elegido otra cosa.
 - Nunca corras scripts contra producción desde local: `backend/.env` apunta a producción. Si necesitas datos de producción, escribe un script de solo lectura en el scratchpad y dale al usuario la línea con `!` para correrlo.
 
+## 5b. Prueba con la IA de verdad (si la función usa prompts)
+
+Las pruebas simulan la IA, así que no dicen si tus textos funcionan con un modelo real. Arma 5 a 10 casos realistas (incluye los difíciles: datos personales, respuestas ambiguas) y córrelos con `scripts/probar_ia.py` (instrucciones dentro; nunca toca la base de producción). Si falla alguno, ajusta el prompt antes de entregar y anota el resultado en la especificación.
+
 ## 6. Cierra contra la especificación
 
 Marca en la especificación cada caso con ✅ y el nombre de su prueba (o ❌ y por qué). Reporta al usuario:
 - qué casos quedaron cubiertos y con qué prueba,
 - resultado real de las pruebas (números, no "todo bien"),
-- la **prueba real** que le toca a él (pasos concretos con su teléfono),
+- la **prueba real** que le toca a él, escrita siguiendo `references/prueba-real.md` (qué cuenta, qué pestaña, quién es en cada una, y las reglas que confunden: su número es dueño, ventana de 24 h, Laboratorio no es un chat),
 - y pregunta si despliega: si dice que sí, usa la skill `deploy`.
 
 Si algo de la especificación resultó imposible o mala idea al construir, dilo y pregunta; no lo cambies en silencio.
