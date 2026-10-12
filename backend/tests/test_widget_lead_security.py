@@ -87,6 +87,28 @@ async def _finish_order(user_id, contact_id, redis, session="s1"):
 
 class TestLeadCapture:
     @pytest.mark.asyncio
+    async def test_chat_before_leaving_data_is_saved_as_web(self):
+        # Antes salía como plática de WhatsApp y contaba como respuesta de WhatsApp del mes.
+        user_id, _ = await _seed()
+        r = Redis()
+        try:
+            import json
+
+            from app.api.v1.widget import CHAT_REDIS_PREFIX
+
+            r.store[f"{CHAT_REDIS_PREFIX}{user_id}:s1"] = json.dumps(
+                [{"role": "user", "content": "¿tienen tacos?"}, {"role": "assistant", "content": "Sí"}])
+            out = await _lead(user_id, "+525587650000", r)
+            cid = uuid.UUID(out["contact_id"])
+            async with AsyncSessionLocal() as db:
+                rows = (await db.execute(select(Message).where(Message.contact_id == cid))).scalars().all()
+                conv = (await db.execute(select(Conversation).where(Conversation.contact_id == cid))).scalar_one()
+            assert sorted(m.channel for m in rows) == ["web", "web"]
+            assert all(t["channel"] == "web" for t in conv.messages)
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
     async def test_someone_elses_number_is_not_linked(self):
         user_id, victim_id = await _seed()
         r = Redis()

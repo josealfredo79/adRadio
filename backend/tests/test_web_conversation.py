@@ -224,6 +224,60 @@ class TestWebChatInTheInbox:
             await _cleanup(user_id)
 
 
+async def _web_chat_expired_session(user_id, text, portal_token):
+    """La pestaña se quedó abierta más de 30 min: la sesión ya no está en Redis."""
+    rag = AsyncMock(return_value="Abrimos de 9 a 9.")
+    with patch("app.services.rag_service.answer_with_rag", rag), \
+            patch("app.services.realtime.publish_conversation_event", AsyncMock()):
+        async with AsyncSessionLocal() as db:
+            out = await widget_chat(request=_request(), advertiser_id=user_id,
+                                    body={"message": text, "session_id": str(uuid.uuid4()),
+                                          "portal_token": portal_token},
+                                    db=db, redis=FakeRedis())
+    return out, rag
+
+
+class TestLongOpenTab:
+    @pytest.mark.asyncio
+    async def test_portal_token_keeps_saving_after_the_session_expired(self):
+        user_id, cid, conv_id = await _seed()
+        try:
+            _, rag = await _web_chat_expired_session(user_id, "¿siguen abiertos?", make_portal_token(cid))
+            # El bot sigue sabiendo quién es y lo que platicó por WhatsApp.
+            assert [h["content"] for h in rag.await_args.kwargs["conversation_history"]] == ["hola por WhatsApp"]
+            assert rag.await_args.kwargs["contact_id"] == cid
+            async with AsyncSessionLocal() as db:
+                conv = await db.get(Conversation, conv_id)
+                assert conv.messages[-2]["content"] == "¿siguen abiertos?"
+                rows = (await db.execute(select(Message).where(Message.contact_id == cid))).scalars().all()
+                assert sorted((m.direction, m.channel) for m in rows) == [("inbound", "web"), ("outbound", "web")]
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_token_of_another_business_is_ignored(self):
+        user_id, cid, _ = await _seed()
+        other_id, _, _ = await _seed()
+        try:
+            _, rag = await _web_chat_expired_session(other_id, "hola", make_portal_token(cid))
+            assert rag.await_args.kwargs["contact_id"] is None
+            async with AsyncSessionLocal() as db:
+                rows = (await db.execute(select(Message).where(Message.contact_id == cid))).scalars().all()
+                assert rows == []
+        finally:
+            await _cleanup(user_id)
+            await _cleanup(other_id)
+
+    @pytest.mark.asyncio
+    async def test_forged_token_is_anonymous(self):
+        user_id, cid, _ = await _seed()
+        try:
+            _, rag = await _web_chat_expired_session(user_id, "hola", make_portal_token(cid)[:-3] + "AAA")
+            assert rag.await_args.kwargs["contact_id"] is None
+        finally:
+            await _cleanup(user_id)
+
+
 class TestPortalHistory:
     @pytest.mark.asyncio
     async def test_question_always_shows_before_its_answer(self):

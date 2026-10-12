@@ -113,6 +113,21 @@ async def _anon_chat_counts(redis, advertiser_id, session_id: str, *, new_sessio
     return sent > ANON_SESSION_MAX_MESSAGES
 
 
+async def _contact_from_portal_token(db: AsyncSession, advertiser_id: UUID, token) -> Contact | None:
+    """El cliente del link firmado, solo si es de este negocio y no está bloqueado."""
+    if not token or not isinstance(token, str):
+        return None
+    from app.services.portal_service import read_portal_token
+
+    contact_id = read_portal_token(token)
+    if contact_id is None:
+        return None
+    contact = await db.get(Contact, contact_id)
+    if contact is None or contact.advertiser_id != advertiser_id or contact.status == "blocked":
+        return None
+    return contact
+
+
 @router.post("/chat/{advertiser_id}")
 @limiter.limit("15/minute")
 async def widget_chat(
@@ -147,13 +162,24 @@ async def widget_chat(
     redis_key = f"{CHAT_REDIS_PREFIX}{advertiser_id}:{session_id}"
     history: list[dict] = []
 
-    contact: Contact | None = None
-    if redis:
-        contact_id_raw = await redis.get(f"{SESSION_CONTACT_REDIS_PREFIX}{advertiser_id}:{session_id}")
+    # Cliente con su link (/c/{token}): el chat manda el token en cada mensaje.
+    # La sesión en Redis vence a los 30 min y, sin esto, una pestaña que se
+    # quedó abierta volvía al cliente anónimo: sus mensajes ya no se guardaban
+    # y el bot olvidaba lo platicado por WhatsApp.
+    contact = await _contact_from_portal_token(db, advertiser_id, body.get("portal_token"))
+    unverified = False
+    session_contact_key = f"{SESSION_CONTACT_REDIS_PREFIX}{advertiser_id}:{session_id}"
+    unverified_key = f"{UNVERIFIED_SESSION_PREFIX}{advertiser_id}:{session_id}"
+    if contact is None and redis:
+        contact_id_raw = await redis.get(session_contact_key)
         if contact_id_raw:
             contact_id_str = contact_id_raw.decode() if isinstance(contact_id_raw, bytes) else contact_id_raw
             contact = await db.get(Contact, UUID(contact_id_str))
-    unverified = bool(contact and redis and await redis.get(f"{UNVERIFIED_SESSION_PREFIX}{advertiser_id}:{session_id}"))
+            unverified = bool(contact and await redis.get(unverified_key))
+            # Mientras siga platicando, la sesión no vence.
+            await redis.expire(session_contact_key, CHAT_REDIS_TTL)
+            if unverified:
+                await redis.expire(unverified_key, CHAT_REDIS_TTL)
 
     if contact is None and redis:
         # Visitante anónimo: su única memoria es la sesión del navegador.
@@ -402,6 +428,9 @@ async def widget_capture_lead(
                 transcript = json.loads(raw)
             except json.JSONDecodeError:
                 transcript = []
+            # Se platicó en la web: sin la marca "web" salía como WhatsApp en el
+            # chat del cliente y contaba como respuesta de WhatsApp del mes.
+            transcript = [{**turn, "channel": "web"} for turn in transcript]
             existing = list(conv.messages or [])
             conv.messages = existing + transcript
             for turn in transcript:
@@ -409,6 +438,7 @@ async def widget_capture_lead(
                 db.add(Message(
                     advertiser_id=advertiser_id, contact_id=contact.id,
                     direction=direction, content=turn.get("content", ""), status="delivered",
+                    channel="web",
                 ))
 
     conv.last_activity = datetime.now(timezone.utc)

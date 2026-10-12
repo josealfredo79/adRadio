@@ -341,7 +341,13 @@ export default function AgentChat({
       const sessionId = await sessionRef.current
       // El agente puede pensar varias vueltas (tope de 25 s en el servidor): los 10 s
       // de siempre cortaban la respuesta y salía "no me llegó tu mensaje".
-      const r = await api.post(`/widget/chat/${business.advertiser_id}`, { message, session_id: sessionId }, { timeout: 45000 })
+      // Con su token, el servidor lo reconoce aunque la sesión ya haya vencido
+      // (pestaña abierta mucho rato): su plática se sigue guardando.
+      const r = await api.post(
+        `/widget/chat/${business.advertiser_id}`,
+        { message, session_id: sessionId, portal_token: knownToken ?? undefined },
+        { timeout: 45000 }
+      )
       sessionRef.current = Promise.resolve(r.data.session_id)
       if (r.data.handoff) {
         // El dueño está atendiendo en persona: el bot no contesta, le avisa.
