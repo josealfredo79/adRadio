@@ -83,7 +83,7 @@ class TestCampaignReach:
             camp_id = await _campaign(user_id, mode="radio", type_="voces")
             async with AsyncSessionLocal() as db:
                 reach = await campaign_reach(db, await db.get(Campaign, camp_id))
-            assert reach == {"total": 2, "web": 0, "whatsapp": 2,
+            assert reach == {"total": 2, "web": 0, "web_silent": 0, "whatsapp": 2,
                              "whatsapp_cost_mxn": round(2 * META_MARKETING_USD_MX * USD_TO_MXN, 2),
                              "web_supported": False}
         finally:

@@ -93,16 +93,18 @@ async def preflight_campaign_send(
 ) -> str | None:
     """Return a human sentence if dispatching this campaign right now would
     be blocked wholesale, else None. `web_only` (sent only as free web push)
-    skips the WhatsApp-only gates: message balance and Meta's recipient cap."""
-    if not web_only and advertiser.messages_remaining is not None and advertiser.messages_remaining <= 0:
+    skips the WhatsApp-only gates: message balance, the 7-day segment cooldown
+    and Meta's recipient cap — they exist so Meta doesn't ban the number, and
+    the web has no number to ban (the web limit is one notification a day per
+    customer, campaign_reach.rang_today)."""
+    if web_only:
+        return None
+    if advertiser.messages_remaining is not None and advertiser.messages_remaining <= 0:
         return _human("no_messages_remaining")
 
     until = await _segment_cooldown_until(db, campaign.advertiser_id, campaign.segment or {})
     if until:
         return _human("segment_cooldown", retry_after=until)
-
-    if web_only:
-        return None
     cap = await get_recipient_cap_state(db, advertiser)
     if cap.limit is not None and cap.count >= cap.limit:
         return _human("recipient_cap", detail=f"{cap.count}/{cap.limit}")

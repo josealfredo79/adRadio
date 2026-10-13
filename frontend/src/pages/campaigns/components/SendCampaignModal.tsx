@@ -10,6 +10,8 @@ import { Campaign } from '../types'
 interface Reach {
   total: number
   web: number
+  // De los de web, a cuántos ya les sonó una promo hoy: les llega sin notificación.
+  web_silent?: number
   whatsapp: number
   whatsapp_cost_mxn: number
   web_supported: boolean
@@ -55,6 +57,11 @@ export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCa
               <Globe className="h-5 w-5 shrink-0 text-emerald-600" />
               <p className="text-sm text-foreground">
                 <strong>{clientes(reach.web)}</strong> por notificación web — <strong className="text-emerald-700 dark:text-emerald-400">gratis</strong>
+                {!!reach.web_silent && (
+                  <span className="block text-xs text-muted-foreground">
+                    {reach.web_silent === reach.web ? 'Todos' : reach.web_silent} sin sonar: ya tuvieron un aviso hoy. Les llega a su chat.
+                  </span>
+                )}
               </p>
             </div>
             <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
@@ -79,7 +86,7 @@ export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCa
         )}
 
         <div className="mt-6 flex flex-col gap-2">
-          {reach?.web_supported && reach.web > 0 && reach.whatsapp > 0 && (
+          {reach?.web_supported && reach.web > 0 && (
             <button
               onClick={() => onSend(true)}
               disabled={sending}
@@ -88,6 +95,8 @@ export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCa
               <Globe className="h-4 w-4" /> Solo por web — gratis ({clientes(reach.web)})
             </button>
           )}
+          {/* Nadie por WhatsApp: "a todos" sería lo mismo que solo por web, pero con las reglas de WhatsApp. */}
+          {!(reach?.web_supported && reach.web > 0 && reach.whatsapp === 0) && (
           <button
             onClick={() => onSend(false)}
             disabled={sending || reach?.total === 0}
@@ -100,6 +109,7 @@ export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCa
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             {reach ? `Enviar a todos (${clientes(reach.total)})` : 'Enviar'}
           </button>
+          )}
         </div>
       </div>
     </div>

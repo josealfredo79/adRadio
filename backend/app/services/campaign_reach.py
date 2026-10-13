@@ -7,12 +7,15 @@ WhatsApp, que Meta cobra. El dueño ve el reparto y lo que costaría antes de
 apretar "Enviar", y puede elegir mandarla solo por web.
 """
 import uuid
+from datetime import datetime, time
 
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.campaign import Campaign
 from app.models.contact import Contact
+from app.models.message import Message
+from app.services.availability_service import TZ
 from app.services.web_push import contacts_with_push
 
 # Lo que Meta cobra por mensaje de marketing entregado en México desde el
@@ -25,6 +28,28 @@ USD_TO_MXN = 18.5
 # abre la promo en la tarjeta del cliente, que trae el audio para escucharlo
 # ahí (2026-10-05). Las Voces del Barrio siguen solo por WhatsApp.
 WEB_MODES = ("regular", "banner", "radio", "comunitaria")
+
+
+async def rang_today(db: AsyncSession, contact_ids) -> set[uuid.UUID]:
+    """Clientes a los que ya les sonó una promo hoy (hora de México). En la web
+    no hay riesgo de baneo, así que la promo siempre llega a su chat; lo que se
+    limita es la notificación: máximo una al día, para que no las apaguen.
+    Solo cuentan las campañas ("[PUSH]"): recordatorios y respuestas del dueño
+    siempre suenan."""
+    ids = list(contact_ids)
+    if not ids:
+        return set()
+    start = datetime.combine(datetime.now(TZ).date(), time.min, tzinfo=TZ)
+    rows = await db.execute(
+        select(Message.contact_id).where(
+            Message.contact_id.in_(ids),
+            Message.campaign_id.is_not(None),
+            Message.direction == "outbound",
+            Message.content.like("[PUSH]%"),
+            Message.created_at >= start,
+        )
+    )
+    return set(rows.scalars().all())
 
 
 def recipients_query(campaign: Campaign) -> Select:
@@ -53,20 +78,23 @@ def is_web_only(campaign: Campaign) -> bool:
 
 
 async def campaign_reach(db: AsyncSession, campaign: Campaign) -> dict:
-    """Cuántos la recibirían gratis por web y cuántos por WhatsApp. Los que
-    hoy no se pueden contactar (sin actividad, en pausa de 48 h…) no cuentan
-    en ninguno de los dos, igual que al enviar."""
+    """Cuántos la recibirían gratis por web y cuántos por WhatsApp, igual que
+    al enviar. Las reglas anti-baneo (pausa de 48 h, sin actividad…) son de
+    WhatsApp: a quien tiene avisos web le llega aunque le hayan mandado algo
+    hace poco; `web_silent` son los que la reciben sin sonar (ya les sonó una
+    promo hoy)."""
     from app.workers.task_helpers.campaign_ops import _is_contact_active
 
     contacts = (await db.execute(recipients_query(campaign))).scalars().all()
-    reachable = [c for c in contacts if _is_contact_active(c)[0]]
     web_ok = supports_web(campaign)
-    with_push = await contacts_with_push(db, [c.id for c in reachable]) if web_ok else set()
-    web = sum(1 for c in reachable if c.id in with_push)
-    whatsapp = len(reachable) - web
+    with_push = await contacts_with_push(db, [c.id for c in contacts]) if web_ok else set()
+    web = sum(1 for c in contacts if c.id in with_push)
+    whatsapp = sum(1 for c in contacts if c.id not in with_push and _is_contact_active(c)[0])
+    web_silent = len(await rang_today(db, with_push)) if with_push else 0
     return {
-        "total": len(reachable),
+        "total": web + whatsapp,
         "web": web,
+        "web_silent": web_silent,
         "whatsapp": whatsapp,
         "whatsapp_cost_mxn": round(whatsapp * META_MARKETING_USD_MX * USD_TO_MXN, 2),
         "web_supported": web_ok,

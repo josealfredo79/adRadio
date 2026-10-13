@@ -18,7 +18,7 @@ from app.models.send_block_log import (
     REASON_NO_UTILITY_TEMPLATE,
     REASON_RECIPIENT_CAP,
 )
-from app.services.campaign_reach import is_web_only
+from app.services.campaign_reach import is_web_only, rang_today
 from app.services.portal_service import promo_footer
 from app.services.send_block_log_service import log_send_block
 from app.services.web_push import contacts_with_push
@@ -368,18 +368,21 @@ async def _preload_conversations(db, advertiser_id: uuid.UUID, contacts) -> dict
     return {str(c.contact_id): c for c in convs}
 
 
-async def _push_campaign(db, campaign, advertiser, contact, ab) -> bool:
-    """La campaña como notificación web, para el cliente que las activó en su
+async def _push_campaign(db, campaign, advertiser, contact, ab, ring: bool = True) -> bool:
+    """La campaña por la web, para el cliente que activó los avisos en su
     portal: gratis — sin plantilla de reapertura, sin descontar mensajes del
-    plan, sin generar audio ni banner. True si algún navegador la aceptó; si
-    no, el que llama sigue con WhatsApp como siempre.
+    plan, sin generar audio ni banner, y sin las reglas anti-baneo de WhatsApp
+    (pausa de 48 h): en la web no hay número que Meta pueda bloquear.
 
-    El Message "[PUSH]" cuenta como enviado en las estadísticas, y pasa a
+    Con `ring`, suena como notificación ("[PUSH]"): True si algún navegador la
+    aceptó; si no, el que llama sigue con WhatsApp como siempre. Sin `ring`
+    (ya le sonó una promo hoy, ver campaign_reach.rang_today) llega en
+    silencio ("[WEB]"): aparece en su chat y en Promociones, sin notificación.
+
+    El Message cuenta como enviado en las estadísticas; el "[PUSH]" pasa a
     "read" cuando el cliente toca la notificación (portal.py:/opened)."""
-    from app.models.coupon import Coupon
     from app.models.message import Message
     from app.services.claude_service import personalize_message
-    from app.services.coupon_service import default_expiry, generate_coupon_code
     from app.services.portal_service import portal_url
     from app.services.web_push import push_to_contact
 
@@ -394,10 +397,13 @@ async def _push_campaign(db, campaign, advertiser, contact, ab) -> bool:
     now = datetime.now(timezone.utc)
     msg = Message(
         campaign_id=campaign.id, contact_id=contact.id, advertiser_id=campaign.advertiser_id,
-        direction="outbound", content=f"[PUSH] {campaign.name}", status="sent", sent_at=now,
+        direction="outbound", content=f"[{'PUSH' if ring else 'WEB'}] {campaign.name}", status="sent", sent_at=now,
     )
     db.add(msg)
     await db.flush()
+    if not ring:
+        _web_coupon(db, campaign, contact, ab)
+        return True
 
     try:
         accepted = await push_to_contact(
@@ -417,14 +423,21 @@ async def _push_campaign(db, campaign, advertiser, contact, ab) -> bool:
         await db.flush()
         return False
 
+    _web_coupon(db, campaign, contact, ab)
+    # Sin contact.last_campaign_sent_at: esa pausa de 48 h es de WhatsApp.
+    return True
+
+
+def _web_coupon(db, campaign, contact, ab) -> None:
+    from app.models.coupon import Coupon
+    from app.services.coupon_service import default_expiry, generate_coupon_code
+
     if ab.get("has_coupon"):
         db.add(Coupon(
             advertiser_id=campaign.advertiser_id, campaign_id=campaign.id, contact_id=contact.id,
             code=generate_coupon_code(), description=ab.get("coupon_description") or None,
             expires_at=default_expiry(hours=ab.get("coupon_hours", 72)),
         ))
-    contact.last_campaign_sent_at = now
-    return True
 
 
 async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay):
@@ -467,14 +480,14 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
     # later fails to send won't have decremented, so at worst we stop early.
     charged = 0
     push_contacts = await contacts_with_push(db, [c.id for c in contacts])
+    rang = await rang_today(db, push_contacts)
     pushed_count = 0
     web_only = is_web_only(campaign)
 
     for idx_b, contact in enumerate(contacts):
         if (
             contact.id in push_contacts
-            and _is_contact_active(contact)[0]
-            and await _push_campaign(db, campaign, advertiser, contact, ab)
+            and await _push_campaign(db, campaign, advertiser, contact, ab, ring=contact.id not in rang)
         ):
             pushed_count += 1
             continue
@@ -617,14 +630,14 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
     # Quien activó los avisos en su tarjeta la escucha ahí, gratis: no se le
     # manda por WhatsApp (mismo trato que send_banner_messages).
     push_contacts = await contacts_with_push(db, [c.id for c in contacts])
+    rang = await rang_today(db, push_contacts)
     pushed_count = 0
     web_only = is_web_only(campaign)
 
     for idx_r, contact in enumerate(contacts):
         if (
             contact.id in push_contacts
-            and _is_contact_active(contact)[0]
-            and await _push_campaign(db, campaign, advertiser, contact, ab)
+            and await _push_campaign(db, campaign, advertiser, contact, ab, ring=contact.id not in rang)
         ):
             pushed_count += 1
             continue
@@ -751,14 +764,14 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
     # _offer_or_queue (not counted here). This only gates the loop.
     charged = 0
     push_contacts = await contacts_with_push(db, [c.id for c in contacts])
+    rang = await rang_today(db, push_contacts)
     pushed_count = 0
     web_only = is_web_only(campaign)
 
     for i, contact in enumerate(contacts):
         if (
             contact.id in push_contacts
-            and _is_contact_active(contact)[0]
-            and await _push_campaign(db, campaign, advertiser, contact, ab)
+            and await _push_campaign(db, campaign, advertiser, contact, ab, ring=contact.id not in rang)
         ):
             pushed_count += 1
             continue

@@ -460,8 +460,10 @@ def schedule_campaign(self, campaign_id: str):
                 await db.commit()
                 return
 
+            # La pausa de 7 días por grupo es de WhatsApp (que Meta no bloquee el
+            # número): "Solo por web" ni la revisa ni la arranca.
             fingerprint = segment_fingerprint(campaign.segment or {})
-            if await is_segment_on_cooldown(db, campaign.advertiser_id, fingerprint):
+            if not web_only and await is_segment_on_cooldown(db, campaign.advertiser_id, fingerprint):
                 campaign.status = "paused"
                 log_send_block(
                     db, campaign.advertiser_id, REASON_SEGMENT_COOLDOWN, campaign_id=campaign.id,
@@ -495,7 +497,8 @@ def schedule_campaign(self, campaign_id: str):
             contacts = contacts_result.scalars().all()
 
             campaign.status = "running"
-            await record_segment_send(db, campaign.advertiser_id, fingerprint)
+            if not web_only:
+                await record_segment_send(db, campaign.advertiser_id, fingerprint)
             await db.commit()
 
             if mode == "banner":
