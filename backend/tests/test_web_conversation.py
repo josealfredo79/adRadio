@@ -305,7 +305,7 @@ class TestPortalHistory:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
-    async def test_one_thread_without_campaigns_or_internal_markers(self):
+    async def test_one_thread_with_promos_as_bubbles_and_no_internal_markers(self):
         user_id, cid, _ = await _seed()
         other_id, other_cid, _ = await _seed()
         try:
@@ -332,11 +332,13 @@ class TestPortalHistory:
                 await db.commit()
             async with AsyncSessionLocal() as db:
                 out = await get_messages(request=_request(), token=make_portal_token(cid), db=db)
-            assert [(x["content"], x["channel"], x["from_owner"]) for x in out["messages"]] == [
-                ("hola por WhatsApp", "whatsapp", False),
-                ("¡Hola! ¿En qué te ayudo?", "whatsapp", False),
-                ("¿precio?", "web", False),
-                ("Te lo confirmo yo", "web", True),
+            # El mensaje crudo de la campaña no sale; la promo sí, como burbuja (kind="promo").
+            assert [(x["content"], x["channel"], x["from_owner"], x.get("kind")) for x in out["messages"]] == [
+                ("hola por WhatsApp", "whatsapp", False, None),
+                ("¡Hola! ¿En qué te ayudo?", "whatsapp", False, None),
+                ("x", "web", False, "promo"),
+                ("¿precio?", "web", False, None),
+                ("Te lo confirmo yo", "web", True, None),
             ]
             after = (now - timedelta(minutes=5)).isoformat()
             async with AsyncSessionLocal() as db:

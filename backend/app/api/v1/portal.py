@@ -319,6 +319,7 @@ async def get_messages(
         Message.contact_id == contact.id,
         Message.campaign_id.is_(None),
     )
+    since = None
     if after:
         try:
             since = datetime.fromisoformat(after.replace("Z", "+00:00"))
@@ -330,19 +331,41 @@ async def get_messages(
     rows = (await db.execute(
         q.order_by(Message.created_at.desc(), (Message.direction == "outbound").desc()).limit(CHAT_HISTORY_LIMIT)
     )).scalars().all()
+    messages = [
+        {
+            "id": str(m.id),
+            "role": "user" if m.direction == "inbound" else "assistant",
+            "content": m.content,
+            "channel": m.channel or "whatsapp",
+            "from_owner": m.sender == "owner",
+            "at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in reversed(rows)
+        if m.content and not _INTERNAL_MESSAGE.match(m.content)
+    ]
+    # Las promos que le llegaron (por web o por WhatsApp) van en la plática como
+    # burbuja del negocio, una por campaña, a la hora en que le llegó.
+    promos = await _received_promos(db, contact, advertiser, datetime.now(timezone.utc))
+    messages += [_promo_message(p) for p in promos if since is None or (p["at"] and p["at"] > since)]
+    messages.sort(key=lambda m: m["at"] or "")
+    return {"messages": messages}
+
+
+def _promo_message(p: dict) -> dict:
     return {
-        "messages": [
-            {
-                "id": str(m.id),
-                "role": "user" if m.direction == "inbound" else "assistant",
-                "content": m.content,
-                "channel": m.channel or "whatsapp",
-                "from_owner": m.sender == "owner",
-                "at": m.created_at.isoformat() if m.created_at else None,
-            }
-            for m in reversed(rows)
-            if m.content and not _INTERNAL_MESSAGE.match(m.content)
-        ],
+        "id": f"promo-{p['campaign'].id}",
+        "kind": "promo",
+        "role": "assistant",
+        "content": p["text"],
+        "channel": "web",
+        "from_owner": False,
+        "at": p["at"].isoformat() if p["at"] else None,
+        "promo": {
+            "id": str(p["campaign"].id),
+            "title": p["campaign"].name,
+            "image_url": p["image_url"] or "",
+            "coupon": _coupon_out(p["coupon"]),
+        },
     }
 
 
@@ -366,7 +389,7 @@ async def _received_promos(
     """Campañas que este contacto SÍ recibió (hay un Message suyo ligado a la
     campaña) — el portal nunca muestra promos dirigidas a otro segmento."""
     q = (
-        select(Campaign, Message.content)
+        select(Campaign, Message.content, Message.created_at)
         .join(Message, Message.campaign_id == Campaign.id)
         .where(
             Campaign.advertiser_id == advertiser.id,
@@ -382,9 +405,11 @@ async def _received_promos(
     rows = (await db.execute(q)).all()
 
     seen: dict[uuid.UUID, dict] = {}
-    for campaign, content in rows:
-        entry = seen.setdefault(campaign.id, {"campaign": campaign, "image_url": None})
+    for campaign, content, created_at in rows:
+        entry = seen.setdefault(campaign.id, {"campaign": campaign, "image_url": None, "at": created_at})
         entry["image_url"] = entry["image_url"] or _banner_from_message(content or "")
+        # Filas de la más nueva a la más vieja: queda la hora en que le llegó primero.
+        entry["at"] = created_at or entry["at"]
     promos = list(seen.values())[:5]
 
     if promos:

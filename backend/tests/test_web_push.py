@@ -338,7 +338,7 @@ class TestCampaignRouting:
             push_kw = calls[0][1]
             assert push_kw["title"] == "Barbería Don Pepe"
             assert "Hola Cliente, 2x1 este viernes" in push_kw["body"]
-            assert f"/promo/{camp_id}?n=" in push_kw["url"]
+            assert "?chat=1&n=" in push_kw["url"]
             # Solo el que no tiene push salió por WhatsApp.
             assert whatsapp.call_count == 1
             assert whatsapp.call_args.kwargs["args"][1] != ""

@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { FaceMood } from '@/components/BotFace'
 import MascotSmart from '@/components/MascotSmart'
 import api from '@/lib/api'
-import { ArrowLeft, CheckCheck, ClipboardList, Info, Mic, Send, ShoppingBag, Square, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowLeft, CheckCheck, ClipboardList, Copy, Info, Mic, Send, ShoppingBag, Square, Volume2, VolumeX, X } from 'lucide-react'
 import { isDarkTheme, type SiteThemeDef } from '@/pages/publicSite/theme'
 import BubbleTail from '@/components/BubbleTail'
 import InlineJoin from '@/components/InlineJoin'
@@ -41,9 +41,18 @@ interface ProductCard {
   photo_url: string
 }
 
+// Promo que le mandó el negocio (por web o WhatsApp): burbuja con su cupón y "¡La quiero!".
+interface ChatPromo {
+  id: string
+  title: string
+  image_url: string
+  coupon: { code: string; description: string; expires_at: string } | null
+}
+
 interface ChatTurn {
   role: 'user' | 'assistant'
   content: string
+  promo?: ChatPromo
   cards?: ProductCard[]
   // El bot pidió sus datos para pedir/agendar: debajo va el botón para registrarse.
   needsContact?: boolean
@@ -66,7 +75,20 @@ interface HistoryMessage {
   channel: string
   from_owner: boolean
   at: string | null
+  kind?: 'promo'
+  promo?: ChatPromo
 }
+
+const historyTurn = (m: HistoryMessage): ChatTurn => ({
+  role: m.role,
+  content: m.content,
+  fromOwner: m.from_owner,
+  at: m.at ?? undefined,
+  promo: m.promo,
+})
+
+const couponDay = (iso: string) =>
+  new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', timeZone: 'America/Mexico_City' }).format(new Date(iso))
 
 // Cada cuánto el chat abierto revisa si el dueño ya contestó.
 const OWNER_REPLY_POLL_MS = 8000
@@ -152,6 +174,9 @@ export default function AgentChat({
   // instante) — y sin esperarla, el mensaje caía en otra sesión sin el
   // contexto de la promo ni el vínculo con el cliente.
   const sessionRef = useRef<Promise<string | null> | null>(null)
+  // La promo de la que habla el siguiente mensaje: se manda una vez con él y el
+  // servidor le da al bot la promo y el cupón (si no, no sabe de cuál "la quiero").
+  const promoRef = useRef<string | null>(promoId ?? null)
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [input, setInput] = useState(prefill ?? '')
   const [sending, setSending] = useState(false)
@@ -245,7 +270,7 @@ export default function AgentChat({
           ? [{ role: 'assistant', content: chatGreeting(business, customerName, msgs.length > 0), at: new Date().toISOString() }]
           : []
         setTurns((t) => [
-          ...msgs.map((m) => ({ role: m.role, content: m.content, fromOwner: m.from_owner, at: m.at ?? undefined })),
+          ...msgs.map(historyTurn),
           ...greeting,
           ...t,
         ])
@@ -264,10 +289,14 @@ export default function AgentChat({
           if (!alive) return
           const msgs: HistoryMessage[] = r.data.messages ?? []
           track(msgs)
-          // Lo demás (lo que escribió el cliente y lo que contestó el bot) ya está en pantalla.
-          const owner = msgs.filter((m) => m.from_owner)
-          if (owner.length)
-            setTurns((t) => [...t, ...owner.map((m) => ({ role: 'assistant' as const, content: m.content, fromOwner: true, at: m.at ?? undefined }))])
+          // Lo demás (lo que escribió el cliente y lo que contestó el bot) ya está en
+          // pantalla; lo nuevo es lo del dueño y una promo que acaba de llegar.
+          const fresh = msgs.filter((m) => m.from_owner || m.kind === 'promo')
+          if (fresh.length)
+            setTurns((t) => [
+              ...t,
+              ...fresh.filter((m) => !m.promo || !t.some((x) => x.promo?.id === m.promo?.id)).map(historyTurn),
+            ])
         })
         .catch(() => {})
     }, OWNER_REPLY_POLL_MS)
@@ -339,10 +368,11 @@ export default function AgentChat({
       // (pestaña abierta mucho rato): su plática se sigue guardando.
       const r = await api.post(
         `/widget/chat/${business.advertiser_id}`,
-        { message, session_id: sessionId, portal_token: knownToken ?? undefined },
+        { message, session_id: sessionId, portal_token: knownToken ?? undefined, promo_id: promoRef.current ?? undefined },
         { timeout: 45000 }
       )
       sessionRef.current = Promise.resolve(r.data.session_id)
+      promoRef.current = null
       if (r.data.handoff) {
         // El dueño está atendiendo en persona: el bot no contesta, le avisa.
         setTurns((t) =>
@@ -545,7 +575,7 @@ export default function AgentChat({
             const firstOfGroup = showDay || !prev || prev.role !== t.role || !!prev.note || prev.fromOwner !== t.fromOwner
             // Opciones numeradas (horarios…): en la web nunca se ven las instrucciones de
             // WhatsApp ("responde con el número"); los botones solo en el último mensaje.
-            const parsed = t.role === 'assistant' && !t.note ? parseChatOptions(t.content) : null
+            const parsed = t.role === 'assistant' && !t.note && !t.promo ? parseChatOptions(t.content) : null
             const choices = parsed && i === turns.length - 1 ? parsed : null
             const mine = t.role === 'user'
             return (
@@ -582,9 +612,11 @@ export default function AgentChat({
                             {business.name} en persona
                           </p>
                         )}
+                        {t.promo && <PromoHeader promo={t.promo} pal={pal} />}
                         <span className="whitespace-pre-line break-words">
                           {renderChatText(parsed ? parsed.text || 'Elige una opción:' : t.content)}
                         </span>
+                        {t.promo?.coupon && <PromoCoupon coupon={t.promo.coupon} color={color} onBrand={pal.onBrand} pal={pal} />}
                         {/* Hora y palomitas abajo a la derecha, como en WhatsApp. */}
                         <span className="float-right ml-2 mt-1.5 flex translate-y-0.5 items-center gap-0.5 text-[11px] leading-none" style={{ color: pal.meta }}>
                           {t.at ? hhmm(t.at) : ''}
@@ -592,6 +624,19 @@ export default function AgentChat({
                         </span>
                       </div>
                     </div>
+                    {t.promo && (
+                      <button
+                        onClick={() => {
+                          promoRef.current = t.promo!.id
+                          void send(`¡La quiero! — ${t.promo!.title}`)
+                        }}
+                        disabled={sending}
+                        className="press mt-1.5 rounded-full px-4 py-2 text-sm font-semibold shadow-sm disabled:opacity-50"
+                        style={{ background: color, color: pal.onBrand }}
+                      >
+                        ¡La quiero!
+                      </button>
+                    )}
                     {/* Botones que manda el servidor (días de la cita, el nombre): solo en el último mensaje. */}
                     {!choices && i === turns.length - 1 && !!t.quickReplies?.length && (
                       <div className="mt-1.5 flex max-w-[82%] flex-wrap gap-2">
@@ -834,6 +879,63 @@ export default function AgentChat({
           )}
         </form>}
       </div>
+    </div>
+  )
+}
+
+type ChatPal = ReturnType<typeof chatPalette>
+
+function PromoHeader({ promo, pal }: { promo: ChatPromo; pal: ChatPal }) {
+  return (
+    <>
+      {promo.image_url && (
+        <img src={promo.image_url} alt={promo.title} className="-mx-1 mb-1.5 max-h-56 w-[calc(100%+0.5rem)] rounded-md object-cover" loading="lazy" />
+      )}
+      <p className="mb-0.5 text-[13px] font-semibold" style={{ color: pal.accent }}>
+        🎁 {promo.title}
+      </p>
+    </>
+  )
+}
+
+function PromoCoupon({
+  coupon,
+  color,
+  onBrand,
+  pal,
+}: {
+  coupon: NonNullable<ChatPromo['coupon']>
+  color: string
+  onBrand: string
+  pal: ChatPal
+}) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(coupon.code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // portapapeles bloqueado: el código sigue a la vista para copiarlo a mano
+    }
+  }
+  return (
+    <div className="mt-2 flex items-center justify-between gap-3 rounded-md border border-dashed px-2.5 py-2" style={{ borderColor: pal.meta }}>
+      <div className="min-w-0">
+        {coupon.description && <p className="truncate text-sm font-semibold">{coupon.description}</p>}
+        <p className="text-xs" style={{ color: pal.meta }}>
+          Vence el {couponDay(coupon.expires_at)}
+        </p>
+      </div>
+      <button
+        onClick={() => void copy()}
+        className="press flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-sm font-bold"
+        style={{ background: color, color: onBrand }}
+        aria-label={`Copiar cupón ${coupon.code}`}
+      >
+        {copied ? '¡Copiado!' : coupon.code}
+        {!copied && <Copy size={14} />}
+      </button>
     </div>
   )
 }

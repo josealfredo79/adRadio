@@ -168,8 +168,9 @@ def test_web_only_campaign_end_to_end(vapid):
         assert note["title"] == "CityCell"
         assert "2x1 en fundas" in note["body"] and "Alfredo" in note["body"]
         token = make_portal_token(ana_id)
-        assert note["url"].startswith(f"https://www.iaradio.online/c/{token}/promo/{campaign_id}?n=")
-        message_id = note["url"].split("?n=")[1]
+        # El aviso abre el chat, donde la promo ya está como burbuja.
+        assert note["url"].startswith(f"https://www.iaradio.online/c/{token}?chat=1&n=")
+        message_id = note["url"].split("&n=")[1]
 
         async def after_send():
             await engine.dispose()

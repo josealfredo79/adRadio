@@ -203,6 +203,16 @@ async def widget_chat(
         # igual que en WhatsApp. Si no, el bot no sabía lo que ya contestó por
         # WhatsApp y lo repetía en la web.
         history = list(conv.messages or [])[-CHAT_MAX_HISTORY:]
+        # "¡La quiero!" de una promo (burbuja del chat o página de la promo): el
+        # bot solo conoce la base de conocimiento, no las campañas. Sin esto
+        # contestaba "¿en qué te ayudo?" a quien acababa de decir "la quiero".
+        # Solo para el bot; lo que queda en la plática es el mensaje del cliente.
+        if body.get("promo_id") and not unverified:
+            from app.api.v1.portal import _promo_context
+
+            promo_context = await _promo_context(db, contact, user, body.get("promo_id"))
+            if promo_context:
+                history = [*history, {"role": "assistant", "content": promo_context}]
         # El dueño pausó el bot para atender en persona: en la web tampoco
         # contesta el bot — el mensaje le llega al dueño al Inbox, igual que
         # en WhatsApp, y él responde desde ahí (ver web_conversation.py).

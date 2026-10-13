@@ -380,7 +380,7 @@ async def _push_campaign(db, campaign, advertiser, contact, ab) -> bool:
     from app.models.message import Message
     from app.services.claude_service import personalize_message
     from app.services.coupon_service import default_expiry, generate_coupon_code
-    from app.services.portal_service import promo_url
+    from app.services.portal_service import portal_url
     from app.services.web_push import push_to_contact
 
     text = personalize_message(
@@ -404,7 +404,8 @@ async def _push_campaign(db, campaign, advertiser, contact, ab) -> bool:
             db, contact.id,
             title=advertiser.business_name or campaign.name,
             body=f"{campaign.name} — {text}" if campaign.name else text,
-            url=f"{promo_url(contact.id, campaign.id)}?n={msg.id}",
+            # Abre el chat, donde la promo ya está como burbuja con "¡La quiero!".
+            url=f"{portal_url(contact.id)}?chat=1&n={msg.id}",
             image=campaign.image_url,
             tag=f"campaign-{campaign.id}",
         )
