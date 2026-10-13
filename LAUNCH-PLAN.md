@@ -1,144 +1,98 @@
 # Plan de Lanzamiento — IaRadio
 
-## Estado actual (17 sep 2026)
+## Estado actual (12 oct 2026)
 
-La plataforma **ya está en producción** en `www.iaradio.online` (Railway), no es un
-lanzamiento desde cero — este documento es el plan para el primer lote de
-clientes reales con WhatsApp conectado manualmente.
+Producción viva en `www.iaradio.online` (Railway: web, worker, beat, Redis), último
+commit verificado `2fc0ade`. **Decisión:** lanzamiento **suave** con 5–10 negocios
+de Tlaxiaco, no lanzamiento abierto. La web es el camino principal (avisos gratis,
+sin baneo); WhatsApp es el anzuelo.
 
-### Verificado en esta auditoría
-- Producción viva: `web`, `worker`, `beat` y Redis — los 4 servicios de Railway
-  `RUNNING` en el commit `2aa1b65` (el HEAD actual de `master`). `GET /health` → 200.
-- Sistema anti-baneo de WhatsApp en capa **17** (consentimiento, quality rating
-  en tiempo real + polling, throttle adaptativo, cooldown de segmento, warm-up,
-  opt-out, auto-pausa por error codes, opt-in de ventana cerrada en las 4 rutas
-  de envío).
-- Twilio fue retirado por completo — el único canal es **Meta Cloud API directa**,
-  cada anunciante con su propio WABA (nada de número compartido ni pool).
-- Stripe en modo live, Sentry configurado, backup diario de BD (pg_dump →
-  GitHub Actions) corriendo sin fallas.
-- `META_APP_ID`, `META_APP_SECRET` y `META_EMBEDDED_SIGNUP_CONFIG_ID` ya están
-  cargados en Railway (en agosto `META_APP_SECRET` seguía vacío — ya no).
+### Listo
+- Producto: bot con IA (cadena gratis → Claude), página del negocio, tarjeta del
+  cliente (/c/), avisos web, citas, pedidos, lealtad, campañas, Inbox (aprende de
+  las respuestas del dueño), Copiloto, configuración por voz.
+- Meta: App Review **aprobada** (11-oct) y app **publicada**. "Conectar con Meta"
+  en v4, encendido solo para admins + cuentas de prueba (`META_EMBEDDED_SIGNUP_TEST_EMAILS`).
+  Coexistencia (mismo número de la app WhatsApp Business) construida.
+- Cobro: Stripe **en vivo**, cuenta MX lista para cobrar y depositar, webhook activo,
+  **cobra en pesos** el precio anunciado (desde `d90e7a8`).
+- Voz: si Microsoft bloquea edge-tts (pasa desde ~10-oct), cae sola a Google.
+- Calidad: 1,596 pruebas con BD y Redis reales; monitoreo cada 10 min
+  (`/health/ready`, abre issue "caída"); respaldo diario de la BD; Sentry en el servidor.
+- Legales: /terms, /privacy y /data-deletion en línea.
+- Variables de Railway revisadas (12-oct): no falta ninguna crítica.
 
-### ⚠️ Hallazgo importante: Embedded Signup sigue apagado
-El botón "Conectar con Meta" (OAuth de un clic) **no se muestra en producción**
-todavía: además de las tres variables de arriba, requiere el interruptor
-explícito `META_EMBEDDED_SIGNUP_ENABLED=true` en Railway, y hoy **no está
-seteado** (default `False` en `app/config.py`). Está así a propósito hasta que
-Meta apruebe la verificación de negocio y el App Review de acceso avanzado —
-ver el comentario en `WhatsappWizard.tsx`.
+## 🔴 Bloqueadores (antes del primer negocio que paga)
 
-**Consecuencia práctica: la única vía real para conectar un WABA hoy es el
-formulario manual.** El plan de abajo asume eso — no depende de que Meta
-apruebe nada para arrancar con los primeros clientes.
+| # | Qué | Quién | Tiempo |
+|---|-----|-------|--------|
+| 1 | Prueba real de **cobro**: CityCell compra Arranque → Stripe debe decir **$449.00 MXN** → plan activo solo → cancelar y reembolsar | Dueño | 15 min |
+| 2 | Prueba real de **campañas por web** (pasos abajo) | Dueño + Claude | 15 min |
+| 3 | **Neon**: confirmar plan. En sep-2026 el plan Free agotó sus horas y tumbó el login; con clientes reales la BD casi no duerme | Dueño | 5 min (~US$19/mes) |
+| 4 | **Voyage**: poner tarjeta (hoy 3 búsquedas/min en total; los 200M tokens gratis siguen) | Dueño | 2 min |
 
-### Gaps de calidad detectados en esta auditoría (no bloquean producción, pero hay que cerrarlos pronto)
-- **CI de backend lleva roto ~50 pushes seguidos** (desde el 10 de agosto):
-  el step de `ruff` corre antes que `pytest` y aborta el job — la suite real
-  de tests **no se ha ejecutado en CI en más de un mes**. `master` no tiene
-  branch protection, por eso nunca bloqueó nada. Hay 881 errores de lint
-  acumulados (389 auto-arreglables con `ruff check --fix`).
-- Corriendo la suite localmente contra Postgres+Redis reales (1003 tests) se
-  encontró al menos 1 falla real: `tests/test_api.py::test_customer_stories_public`
-  (pendiente de diagnosticar — ver seguimiento).
-- Sigue sin haber monitoreo de uptime externo (Better Uptime o equivalente) —
-  pendiente desde julio.
+### Prueba de campañas por web
+Chrome normal (no incógnito). Pestaña A = panel CityCell (dueño), B = tarjeta de cliente.
+1. A: Configuración → "Agente inteligente" → **Probar como cliente** (abre B).
+2. B: **Activar avisos**.
+3. A: Campañas → promoción `Hola {{nombre}}, 2x1 en fundas esta semana en {{negocio}} 📱`,
+   etiqueta **prueba**, enviar **Solo por web**.
+4. Llega la notificación → abre la promo → "¡La quiero!" abre el chat con esa promo.
+5. A: la campaña marca 1 enviada y 1 leída. (Ya probado de punta a punta en local:
+   `tests/test_campaign_web_e2e.py`.)
 
----
+## 🟡 Variables para el lanzamiento
 
-## Plan de conexión manual del WABA (la vía real hoy)
+| Variable | Para qué | Cuándo |
+|---|---|---|
+| `POSTHOG_API_KEY` (web y worker) | Medir registros, prueba→pago, checkouts sin pagar — hoy no se mide nada | **Antes del piloto** |
+| `VITE_SENTRY_DSN` | Errores del navegador del cliente | Primeras semanas |
+| `META_EMBEDDED_SIGNUP_ADMINS_ONLY=false` | Abrir "Conectar con Meta" a todos | Tras la prueba real con un número |
 
-Esto es lo que cada anunciante hace en `Configuración → WhatsApp` (componente
-`WhatsappWizard.tsx`, ya en producción). Documentado aquí para poder guiar a
-un cliente por teléfono/presencial sin improvisar:
+Las llaves se pasan con `!` en la terminal, nunca pegadas en el chat.
 
-1. **Cuenta de negocio + WABA**: el cliente entra a
-   [business.facebook.com](https://business.facebook.com) con su cuenta
-   personal → crea/entra a su Business Manager → barra lateral → **WhatsApp**
-   → **Empezar a usar**. Esto crea su WhatsApp Business Account (WABA) gratis.
-   El WABA ID se ve directo en `business.facebook.com/settings/whatsapp-business-accounts`.
-2. **Número de teléfono**: dentro de la WABA → **Configuración de números de
-   teléfono** → **Agregar número**. Debe ser un número **libre de WhatsApp**
-   (otro chip, no el personal). Se verifica con el código SMS/llamada que le
-   llega a ese número.
-3. **App en Meta for Developers**: en developers.facebook.com/apps → **Crear
-   app** (tipo "Negocio") → agregar producto **WhatsApp**. Ahí aparecen
-   **WABA ID** y **Phone Number ID** (sección "API Setup"), y **App ID** /
-   **App Secret** en "Configuración de la app → Básico".
-4. **Token permanente**: `business.facebook.com/settings/system-users` →
-   crear usuario del sistema con esa app → permisos
-   `whatsapp_business_messaging` + `whatsapp_business_management` → **Generar
-   token** (sin expiración). Ese token de larga duración es el que se pega en
-   el formulario.
-5. **Pegar y probar**: WABA ID + Phone Number ID + token en el wizard →
-   "Probar conexión" (valida contra Graph API sin guardar nada) → "Guardar".
-   Si además pega su propio App ID + App Secret, el backend
-   (`meta_connect_service.subscribe_app_to_waba` + `configure_app_webhook`)
-   deja el webhook de esa app apuntando a
-   `https://www.iaradio.online/api/v1/webhooks/meta` automáticamente — sin
-   eso, el cliente no recibe las respuestas entrantes de sus contactos.
-6. **Plantillas aprobadas**: pegar el nombre de al menos una plantilla ya
-   aprobada en WhatsApp Manager (cualquier categoría) para reapertura de
-   ventana de 24h y recordatorios de citas — sin esto esos mensajes degradan
-   a texto plano fuera de ventana.
+## 🟡 Importante, no frena el piloto
+- CI de GitHub en rojo desde el 9-oct por reglas de estilo de `ruff` (no por fallas);
+  hay un cambio local sin subir en `ci.yml` del dueño. Luego: branch protection.
+- "Conexión a la BD cerrada" (12 en 3 h el 12-oct): revisar junto con el plan de Neon.
+- Rotar la contraseña de `iaradio@iaradio.online` (salió en una captura).
+- Migrar `railway.json` (Config as Code) antes del **1-dic-2026**.
+- Prueba real de coexistencia: suscribir en Meta `history`, `smb_app_state_sync`,
+  `smb_message_echoes`, `account_update` y conectar un número con la app WhatsApp Business.
+- Catálogo de la cuenta IaRadio: quitar los planes viejos (Starter/Growth/Pro/Business).
+- Turnstile (captcha invisible) no está construido; por ahora trampas y topes.
 
-**Checklist operativo para onboarding presencial/telefónico (10-15 min):**
-- [ ] Confirmar que el cliente tiene un chip libre de WhatsApp a la mano
-- [ ] Acompañarlo en los pasos 1-4 por videollamada o presencial
-- [ ] Verificar juntos que "Probar conexión" da ✓ antes de guardar
-- [ ] Confirmar `webhook_configured: true` en el estado de la conexión
-      (si pegó su propia App ID/Secret) — si no, revisar App Secret
-- [ ] Pedirle al menos 1 plantilla aprobada o ayudarlo a crear una en
-      WhatsApp Manager
-- [ ] Enviar un mensaje de prueba real y confirmar que el bot responde
+## Plan del lanzamiento suave
+1. **Día 1:** cerrar los 4 bloqueadores y poner PostHog.
+2. **Días 2–3:** dar de alta en persona 5–10 negocios de Tlaxiaco (CSV de 104
+   negocios); gancho: precio **Fundadores** ($319 / $629, cupo limitado).
+3. **Semanas 1–2:** `/salud-bot` y `/revisar-prod` a diario; recoger lo que dicen los dueños.
+4. **Con 3+ negocios pagando y contentos:** abrir "Conectar con Meta" a todos y
+   arrancar el piloto de **Promotores** (25% recurrente 12 meses; consultar contador antes).
 
----
+### Métricas del piloto
+- Altas por semana, % prueba → pago, % que sigue pagando al 2º mes.
+- % de clientes de cada negocio que activan avisos web (que "estén ahí").
 
-## Semana 1: Dogfooding y primeros WABAs reales (días 1-3)
+## IaRadio que se arregla solo
+Ya se recupera solo de:
+- Un modelo de IA caído → pasa al siguiente de la cadena.
+- Voz de Microsoft bloqueada → Google, y reintenta a los 10 min.
+- Búsqueda (Voyage) saturada → contesta sin buscar en vez de colgarse.
+- Aviso de Meta perdido en el navegador → el servidor revisa `is_on_biz_app`.
+- Sitio caído → el monitoreo abre un issue en GitHub.
 
-- [ ] Conectar el WABA propio de IaRadio (si no está ya) siguiendo el flujo
-      manual de arriba, de punta a punta, para detectar fricción real
-- [ ] Subir base de conocimiento (FAQ) y probar el bot con preguntas reales
-- [ ] Crear una campaña y enviarla a un contacto de prueba, confirmar
-      cooldown/consentimiento/opt-out funcionando (capas anti-baneo)
-- [ ] Verificar panel admin con datos reales de esa cuenta
+Siguiente paso (idea, no construida): un chequeo diario automático (`salud-bot`
+programado) que lea los registros de producción, detecte lo conocido (modelos que
+dejan de existir, 429 de Voyage, conexiones de BD cerradas, errores nuevos) y
+**abra el arreglo** o avise al dueño antes de que lo note un cliente.
 
-## Semana 2: Primeros clientes (días 4-10)
-
-- [ ] Retomar la base de negocios de Tlaxiaco (CSV con 104 negocios,
-      `contactos_tlaxiaco.csv`) — confirmar que sigue vigente el consentimiento
-      (capa 6: contactos CSV entran como `unconfirmed` hasta que respondan)
-- [ ] Onboarding presencial: acompañar la conexión manual del WABA
-      (checklist de arriba), primer mes gratis → recurrente
-- [ ] Seguimiento a leads sin responder, feedback de los primeros usuarios
-
----
-
-## Antes de escalar más allá del primer lote (bloqueadores de proceso, no de producto)
-- [ ] Arreglar el gate de CI: correr `ruff check --fix` para los 389 fixables,
-      revisar a mano el resto, y volver a poner `pytest` a correr en cada push
-- [ ] Diagnosticar y arreglar `test_customer_stories_public`
-- [ ] Activar branch protection en `master` exigiendo CI verde antes de merge
-- [ ] Contratar monitoreo de uptime externo (Better Uptime o equivalente)
-- [ ] Cuando Meta apruebe verificación de negocio: activar
-      `META_EMBEDDED_SIGNUP_ENABLED=true` para ofrecer el OAuth de un clic
-      junto al formulario manual (no en reemplazo — dejar ambos)
-
----
-
-## Costos estimados (mensual, régimen actual)
-
+## Costos mensuales aproximados
 | Servicio | Costo |
-|----------|-------|
-| Meta Cloud API (mensajes) | Gratis hasta cierto volumen / plantillas de pago según categoría |
-| Stripe fee | 2.9% + $0.30 USD por transacción |
-| Railway (web + worker + beat + Redis) | ~$15-20 USD/mes según uso |
-| Neon Postgres | Free tier / escalable |
-| **Total aprox. primer mes** | **~$20-30 USD** |
-
----
-
-## Estrategia futura
-- Nicho Oaxaca (venta directa a negocios locales)
-- Agencias de marketing (white-label)
-- Trueque con radios comunitarias
+|---|---|
+| Railway (web, worker, beat, Redis) | ~US$15–20 |
+| Neon Postgres (plan de pago recomendado) | ~US$19 |
+| Stripe | ~3.6% + comisión fija por cobro (tarifa México) |
+| Google TTS (respaldo de voz) | 1M caracteres gratis/mes |
+| Voyage (búsqueda) | 200M tokens gratis, luego por uso |
+| Meta (WhatsApp) | Lo paga cada negocio en su cuenta |
