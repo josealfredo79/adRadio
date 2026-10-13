@@ -19,8 +19,9 @@ Los cargos de Meta por WhatsApp NO están incluidos: Meta los cobra directo
 en la cuenta de WhatsApp de cada negocio.
 """
 
-# price_usd es lo que se cobra en Stripe (moneda USD); price_mxn es el precio
-# de lista que se muestra. -1 = sin límite.
+# price_mxn es lo que se muestra Y lo que se cobra en Stripe (en pesos, desde
+# 2026-10-12); price_usd queda solo como referencia (≈ en la página de inicio,
+# MRR aproximado del panel admin). -1 = sin límite.
 PLANS: dict[str, dict] = {
     "starter": {
         "name": "Arranque", "price_mxn": 449, "price_usd": 26,

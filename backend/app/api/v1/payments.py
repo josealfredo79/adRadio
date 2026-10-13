@@ -107,7 +107,9 @@ async def create_checkout_session(
 
         plan = PLANS[plan_key]
         interval = "month"
-        price_usd = plan["price_usd"]
+        # En pesos: los mismos precios que se anuncian (la cuenta de Stripe es
+        # de México). En dólares el cliente pagaba más por el tipo de cambio.
+        price_mxn = plan["price_mxn"]
 
         if body.founder:
             if plan_key not in FOUNDER_PRICES:
@@ -116,10 +118,10 @@ async def create_checkout_session(
             # (ver except InvalidRequestError abajo) — ya se reclamó en el intento original.
             if not _founder_slot_claimed and not await _claim_founder_slot(db):
                 raise HTTPException(status_code=409, detail="Ya no quedan lugares del programa Fundadores")
-            price_usd = FOUNDER_PRICES[plan_key]["price_usd"]
+            price_mxn = FOUNDER_PRICES[plan_key]["price_mxn"]
         elif body.billing_cycle == "annual":
             interval = "year"
-            price_usd = plan["price_usd"] * 10  # 12 meses al precio de 10 — 2 meses gratis
+            price_mxn = plan["price_mxn"] * 10  # 12 meses al precio de 10 — 2 meses gratis
 
         customer_id = await _resolve_stripe_customer(current_user, db)
         session = stripe_lib.checkout.Session.create(
@@ -128,9 +130,9 @@ async def create_checkout_session(
             line_items=[
                 {
                     "price_data": {
-                        "currency": "usd",
+                        "currency": "mxn",
                         "product_data": {"name": f"IaRadio {plan['name']}"},
-                        "unit_amount": price_usd * 100,
+                        "unit_amount": price_mxn * 100,
                         "recurring": {"interval": interval},
                     },
                     "quantity": 1,
@@ -221,9 +223,9 @@ async def create_addon_checkout(
             payment_method_types=["card"],
             line_items=[{
                 "price_data": {
-                    "currency": "usd",
+                    "currency": "mxn",
                     "product_data": {"name": f"IaRadio {addon['name']}"},
-                    "unit_amount": addon["price_usd"] * 100,
+                    "unit_amount": addon["price_mxn"] * 100,
                 },
                 "quantity": 1,
             }],

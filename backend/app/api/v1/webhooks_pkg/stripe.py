@@ -28,7 +28,7 @@ async def _lookup_user(customer_id: str | None, db: AsyncSession) -> User | None
     return result.scalar_one_or_none()
 
 
-async def _reward_referral(db: AsyncSession, referred_user: User, amount_total_cents: int) -> None:
+async def _reward_referral(db: AsyncSession, referred_user: User, amount_total_cents: int, currency: str = "mxn") -> None:
     """1 mes gratis para quien refirió y para quien llegó referido — se acredita
     como balance de Stripe (se descuenta de la siguiente factura de cada uno,
     no reembolsa el cargo que se acaba de hacer). Solo se aplica una vez por
@@ -52,7 +52,9 @@ async def _reward_referral(db: AsyncSession, referred_user: User, amount_total_c
             stripe_lib.Customer.create_balance_transaction(
                 target.stripe_customer_id,
                 amount=-amount_total_cents,
-                currency="usd",
+                # La moneda del pago: el saldo de un cliente de Stripe es de una
+                # sola moneda y rechaza abonos en otra.
+                currency=currency.lower(),
                 description="Recompensa por referido — 1 mes gratis (IARadio)",
             )
         except stripe_lib.error.StripeError as e:
@@ -130,7 +132,7 @@ async def stripe_webhook(
         metadata = data.get("metadata", {})
         plan = metadata.get("plan")
         amount_total = data.get("amount_total", 0)
-        currency = data.get("currency", "usd")
+        currency = data.get("currency", "mxn")
         payment_intent = data.get("payment_intent") or data.get("id")
         if not payment_intent:
             logger.warning("[WEBHOOK] checkout.session.completed missing payment_intent")
@@ -182,7 +184,7 @@ async def stripe_webhook(
             logger.info("[WEBHOOK] Checkout completed for user %s, plan %s", user.id, plan)
             capture_event("subscription_started", user_id=user.id, properties={"plan": plan, "amount": amount_total / 100})
 
-            await _reward_referral(db, user, amount_total)
+            await _reward_referral(db, user, amount_total, currency)
 
     elif event_type == "invoice.payment_succeeded":
 
@@ -217,7 +219,7 @@ async def stripe_webhook(
                 advertiser_id=user.id,
                 stripe_payment_id=payment_intent,
                 amount=data.get("amount_paid", 0) / 100,
-                currency=data.get("currency", "usd").upper(),
+                currency=data.get("currency", "mxn").upper(),
                 plan=user.current_plan,
                 invoice_pdf_url=data.get("invoice_pdf"),
                 status="succeeded",
@@ -243,7 +245,7 @@ async def stripe_webhook(
                 return {"received": True}
 
             amount = data.get("amount_due", 0) / 100
-            currency = data.get("currency", "usd").upper()
+            currency = data.get("currency", "mxn").upper()
 
             txn = Transaction(
                 advertiser_id=user.id,

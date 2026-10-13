@@ -252,7 +252,7 @@ class TestFounderProgram:
                     )
             assert out == {"checkout_url": "https://checkout.stripe.com/fake"}
             call_kwargs = mock_create.call_args.kwargs
-            assert call_kwargs["line_items"][0]["price_data"]["unit_amount"] == FOUNDER_PRICES["starter"]["price_usd"] * 100
+            assert call_kwargs["line_items"][0]["price_data"]["unit_amount"] == FOUNDER_PRICES["starter"]["price_mxn"] * 100
             assert call_kwargs["metadata"]["founder"] == "true"
 
             async with AsyncSessionLocal() as db:
@@ -275,7 +275,7 @@ class TestFounderProgram:
                     "customer": "cus_founder_test",
                     "metadata": {"plan": "starter", "user_id": str(user_id), "founder": "true", "billing_cycle": "monthly"},
                     "amount_total": 34900,
-                    "currency": "usd",
+                    "currency": "mxn",
                     "payment_intent": f"pi_founder_{uuid.uuid4()}",
                 }},
             }
@@ -319,7 +319,7 @@ class TestAnnualBilling:
                     )
             call_kwargs = mock_create.call_args.kwargs
             price_data = call_kwargs["line_items"][0]["price_data"]
-            assert price_data["unit_amount"] == PLANS["growth"]["price_usd"] * 10 * 100
+            assert price_data["unit_amount"] == PLANS["growth"]["price_mxn"] * 10 * 100
             assert price_data["recurring"]["interval"] == "year"
             assert call_kwargs["metadata"]["billing_cycle"] == "annual"
         finally:
@@ -338,7 +338,7 @@ class TestAnnualBilling:
                     "customer": "cus_annual_test",
                     "metadata": {"plan": "growth", "user_id": str(user_id), "founder": "false", "billing_cycle": "annual"},
                     "amount_total": 59000 * 10,
-                    "currency": "usd",
+                    "currency": "mxn",
                     "payment_intent": f"pi_annual_{uuid.uuid4()}",
                 }},
             }
@@ -514,7 +514,7 @@ class TestReferrals:
             assert credited_customers == {"cus_referrer", "cus_referred"}
             for call in mock_credit.call_args_list:
                 assert call.kwargs["amount"] == -34900
-                assert call.kwargs["currency"] == "usd"
+                assert call.kwargs["currency"] == "mxn"
 
             async with AsyncSessionLocal() as db:
                 reloaded = await db.get(User, referred_id)
@@ -565,7 +565,7 @@ class TestReferrals:
                 with patch("stripe.Customer.create_balance_transaction") as mock_credit:
                     await _reward_referral(db, referred, amount_total_cents=34900)
             mock_credit.assert_called_once_with(
-                "cus_referred", amount=-34900, currency="usd",
+                "cus_referred", amount=-34900, currency="mxn",
                 description="Recompensa por referido — 1 mes gratis (IARadio)",
             )
             async with AsyncSessionLocal() as db:
@@ -590,3 +590,80 @@ class TestReferrals:
             assert out == {"code": "STATS1", "referred_count": 2, "paying_referrals": 1}
         finally:
             await _cleanup([referrer_id] + referred_ids)
+
+
+# docs/specs/2026-10-12-cobro-en-pesos.md — se cobra exactamente lo anunciado, en pesos.
+class TestChargedInPesos:
+    async def _checkout(self, plan, cycle="monthly", founder=False):
+        user_id = await _seed_user()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with patch("app.api.v1.payments._resolve_stripe_customer", new=AsyncMock(return_value="cus_fake")), \
+                     patch("app.api.v1.payments._claim_founder_slot", new=AsyncMock(return_value=True)), \
+                     patch("app.api.v1.payments.stripe_lib.checkout.Session.create",
+                           return_value=MagicMock(url="https://checkout.stripe.com/x")) as create, \
+                     patch("app.api.v1.payments.settings") as s, \
+                     patch("app.api.v1.payments.store_idempotency_response", new=AsyncMock()):
+                    s.STRIPE_SECRET_KEY = "sk_test_fake"
+                    s.FRONTEND_URL = "https://iaradio.online"
+                    await create_checkout_session(
+                        request=_fake_request(),
+                        body=CheckoutSessionBody(plan=plan, billing_cycle=cycle, founder=founder),
+                        current_user=user, db=db, _=None, redis=None,
+                    )
+            return create.call_args.kwargs["line_items"][0]["price_data"]
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("plan,pesos", [("starter", 449), ("growth", 899), ("pro", 1799), ("enterprise", 4999)])
+    async def test_caso1_monthly_plan_is_the_advertised_price_in_pesos(self, plan, pesos):
+        price = await self._checkout(plan)
+        assert (price["currency"], price["unit_amount"]) == ("mxn", pesos * 100)
+        assert price["recurring"]["interval"] == "month"
+
+    @pytest.mark.asyncio
+    async def test_caso2_annual_is_ten_months_in_pesos(self):
+        price = await self._checkout("starter", cycle="annual")
+        assert (price["currency"], price["unit_amount"]) == ("mxn", 4490 * 100)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("plan,pesos", [("starter", 319), ("growth", 629)])
+    async def test_caso3_founder_price_in_pesos(self, plan, pesos):
+        price = await self._checkout(plan, founder=True)
+        assert (price["currency"], price["unit_amount"]) == ("mxn", pesos * 100)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("addon,pesos", [("conversations_500", 149), ("messages_500", 99)])
+    async def test_caso4_addons_in_pesos(self, addon, pesos):
+        from app.api.v1.payments import AddonCheckoutBody, create_addon_checkout
+
+        user_id = await _seed_user(current_plan="growth")
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                with patch("app.api.v1.payments._resolve_stripe_customer", new=AsyncMock(return_value="cus_fake")), \
+                     patch("app.api.v1.payments.stripe_lib.checkout.Session.create",
+                           return_value=MagicMock(url="https://checkout.stripe.com/x")) as create, \
+                     patch("app.api.v1.payments.settings") as s:
+                    s.STRIPE_SECRET_KEY = "sk_test_fake"
+                    s.FRONTEND_URL = "https://iaradio.online"
+                    await create_addon_checkout(body=AddonCheckoutBody(addon=addon), current_user=user, db=db)
+            price = create.call_args.kwargs["line_items"][0]["price_data"]
+            assert (price["currency"], price["unit_amount"]) == ("mxn", pesos * 100)
+        finally:
+            await _cleanup([user_id])
+
+    @pytest.mark.asyncio
+    async def test_caso5_referral_credit_uses_the_payment_currency(self):
+        from app.api.v1.webhooks_pkg.stripe import _reward_referral
+
+        referred = MagicMock(referred_by_id=uuid.uuid4(), referral_rewarded=False, stripe_customer_id="cus_b")
+        referrer = MagicMock(stripe_customer_id="cus_a")
+        db = AsyncMock()
+        db.get = AsyncMock(return_value=referrer)
+        with patch("stripe.Customer.create_balance_transaction") as credit:
+            await _reward_referral(db, referred, amount_total_cents=44900, currency="MXN")
+        assert {c.kwargs["currency"] for c in credit.call_args_list} == {"mxn"}
+        assert {c.kwargs["amount"] for c in credit.call_args_list} == {-44900}
