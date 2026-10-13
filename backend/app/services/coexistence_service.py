@@ -19,7 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.contact import Contact
 from app.models.message import Message
 from app.models.user import User
-from app.services.web_conversation import MAX_CONV_MESSAGES, log_turns, open_conversation
+from app.services.web_conversation import (
+    MAX_CONV_MESSAGES,
+    log_turns,
+    open_conversation,
+)
 
 logger = logging.getLogger(__name__)
 

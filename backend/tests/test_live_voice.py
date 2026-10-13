@@ -68,6 +68,6 @@ async def test_no_voice_at_all_raises_so_the_browser_uses_its_own(monkeypatch):
     from app.config import settings
 
     monkeypatch.setattr(settings, "GOOGLE_SERVICE_ACCOUNT_JSON", "")
-    with patch.object(tts, "_tts_edge", AsyncMock(side_effect=RuntimeError("403"))):
-        with pytest.raises(RuntimeError):
-            await tts.speak_voice("hola")
+    with patch.object(tts, "_tts_edge", AsyncMock(side_effect=RuntimeError("403"))), \
+            pytest.raises(RuntimeError):
+        await tts.speak_voice("hola")

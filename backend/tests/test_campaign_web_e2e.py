@@ -187,7 +187,12 @@ def test_web_only_campaign_end_to_end(vapid):
 
         # ── 3. El cliente abre su tarjeta: ve la promo y su cupón ──────────────
         async def customer_opens():
-            from app.api.v1.portal import get_portal, get_promo, notification_opened, start_chat_session
+            from app.api.v1.portal import (
+                get_portal,
+                get_promo,
+                notification_opened,
+                start_chat_session,
+            )
 
             await engine.dispose()
             async with AsyncSessionLocal() as db:

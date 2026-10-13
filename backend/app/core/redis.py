@@ -2,6 +2,7 @@ import logging
 
 import redis.asyncio as aioredis
 from fastapi import HTTPException
+
 try:
     from redis.backoff import ExponentialWithJitterBackoff
 except ImportError:  # redis-py >= 5.0

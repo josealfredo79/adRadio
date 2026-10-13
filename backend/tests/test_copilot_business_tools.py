@@ -284,7 +284,7 @@ def test_bot_tools_are_registered_and_need_no_confirmation():
 async def test_open_page_builder_opens_only_when_there_is_no_page():
     assert "open_page_builder" in {t["name"] for t in TOOLS}
     assert "open_page_builder" not in CONFIRM_TOOLS
-    mk = lambda **kw: User(id=uuid.uuid4(), email="a@b.c", password_hash="x", **kw)  # noqa: E731
+    mk = lambda **kw: User(id=uuid.uuid4(), email="a@b.c", password_hash="x", **kw)
     out = await _execute_immediate_tool(None, mk(role="advertiser", slug=None), "open_page_builder", {})
     assert out == {"has_page": False}
     out = await _execute_immediate_tool(None, mk(role="advertiser", slug="pepe"), "open_page_builder", {})

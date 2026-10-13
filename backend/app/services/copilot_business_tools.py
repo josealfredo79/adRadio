@@ -27,7 +27,13 @@ from app.models.product import Product
 from app.models.user import User
 from app.services.availability_service import TZ
 from app.services.loyalty_service import LOYALTY_DEFAULTS
-from app.services.voice_setup import DAY_LABELS, DAYS, _clean_hours, merge_instructions, render_hours
+from app.services.voice_setup import (
+    DAY_LABELS,
+    DAYS,
+    _clean_hours,
+    merge_instructions,
+    render_hours,
+)
 
 logger = logging.getLogger(__name__)
 

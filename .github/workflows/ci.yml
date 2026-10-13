@@ -49,10 +49,14 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio httpx
 
+      # Ruff's defaults move between releases — e.g. 0.17.0 (2026-10-09) bumped
+      # the default target-version 3.10→3.11 and suddenly flagged ~240 UP017
+      # (use datetime.UTC) across the backend. Keep CI deterministic by pinning;
+      # bump deliberately, with a check --fix pass, when we want the new rules.
       - name: Lint with ruff
         working-directory: backend
         run: |
-          pip install ruff
+          pip install "ruff==0.16.10"
           ruff check --output-format=github .
 
       - name: Run tests

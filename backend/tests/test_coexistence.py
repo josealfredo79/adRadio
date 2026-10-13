@@ -1,5 +1,6 @@
 """Coexistencia — un test por caso de docs/specs/2026-10-12-coexistencia.md.
 BD y Redis de verdad para el servicio; solo Meta (API de pago) se simula."""
+import contextlib
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -190,14 +191,13 @@ class TestBotStaysQuietWhileOwnerAttends:
         test_user.meta_coexistence = False
         self._db(mock_db, MagicMock(id="contact-1"))
         attending = AsyncMock(return_value=True)
+        # más adelante el pipeline necesita más mocks; aquí solo importa la compuerta
         with patch("app.services.coexistence_service.owner_is_attending", attending), \
-                patch("app.services.inbound_pipeline.answer_with_rag", new=AsyncMock()):
-            try:
-                await process_inbound_message(mock_db, InboundMessage(
-                    advertiser=test_user, from_number="+" + CUSTOMER, body_text="hola",
-                    external_message_id="wamid.C6b"), send=AsyncMock(), send_owner=AsyncMock())
-            except Exception:
-                pass  # más adelante el pipeline necesita más mocks; aquí solo importa la compuerta
+                patch("app.services.inbound_pipeline.answer_with_rag", new=AsyncMock()), \
+                contextlib.suppress(Exception):
+            await process_inbound_message(mock_db, InboundMessage(
+                advertiser=test_user, from_number="+" + CUSTOMER, body_text="hola",
+                external_message_id="wamid.C6b"), send=AsyncMock(), send_owner=AsyncMock())
         attending.assert_not_awaited()
 
 

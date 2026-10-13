@@ -95,8 +95,12 @@ async def _seed(enabled=True):
         await db.flush()
         pastor = Product(advertiser_id=user.id, name="Taco al pastor", price=25, active=True)
         db.add(pastor)
+        # Una cita que no estorbe: los tests proponen citas el "siguiente día hábil"
+        # (_next_open_day). Ponerla en now+3 (a las ~17:00) chocaba con ese día
+        # cuando hoy es viernes (now+3 == el lunes siguiente) y el horario libre
+        # desaparecía: los tests solo fallaban los viernes. now+5 nunca coincide.
         beto_appt = Appointment(advertiser_id=user.id, contact_id=beto.id, customer_name="Beto", service="Mesa",
-                                scheduled_at=datetime.now(timezone.utc) + timedelta(days=3), status="confirmed")
+                                scheduled_at=datetime.now(timezone.utc) + timedelta(days=5), status="confirmed")
         db.add(beto_appt)
         await db.commit()
         return user.id, ana.id, pastor.id, beto_appt.id

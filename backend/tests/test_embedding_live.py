@@ -41,9 +41,9 @@ def voyage_settings():
 async def test_live_rate_limit_fails_at_once_without_retrying(voyage_settings):
     _RateLimitedClient.calls = 0
     with patch("voyageai.AsyncClient", _RateLimitedClient), \
-            patch("asyncio.sleep", side_effect=AssertionError("no debe esperar")):
-        with pytest.raises(voyageai.error.RateLimitError):
-            await embedding_service.get_embedding("¿hacen envíos?", live=True)
+            patch("asyncio.sleep", side_effect=AssertionError("no debe esperar")), \
+            pytest.raises(voyageai.error.RateLimitError):
+        await embedding_service.get_embedding("¿hacen envíos?", live=True)
     assert _RateLimitedClient.calls == 1
 
 
@@ -65,9 +65,9 @@ async def test_background_still_retries_on_rate_limit(voyage_settings):
     async def no_wait(_):
         return None
 
-    with patch("voyageai.AsyncClient", _RateLimitedClient), patch("asyncio.sleep", no_wait):
-        with pytest.raises(voyageai.error.RateLimitError):
-            await embedding_service.get_embedding("chunk de documento")
+    with patch("voyageai.AsyncClient", _RateLimitedClient), patch("asyncio.sleep", no_wait), \
+            pytest.raises(voyageai.error.RateLimitError):
+        await embedding_service.get_embedding("chunk de documento")
     assert _RateLimitedClient.calls == 5
 
 
