@@ -1176,6 +1176,7 @@ async def run_parrilla_generation(job_id: str, advertiser_id: str, body_dict: di
         generate_banner_png,
         select_design,
     )
+    from app.services.radio.scripts import radio_business
     from app.services.radio_service import generate_radio_ad, generate_radio_script
     from app.services.storage_service import upload_bytes
     from app.workers.tasks import schedule_campaign
@@ -1224,13 +1225,15 @@ async def run_parrilla_generation(job_id: str, advertiser_id: str, body_dict: di
                     extra_context = body_dict.get("extra_context")
                     combined_context = f"{extra_context} - {day_context}" if extra_context else day_context
 
+                    business_name, contact = radio_business(advertiser, body_dict["business_name"])
                     script = await generate_radio_script(
-                        business_name=body_dict["business_name"],
+                        business_name=business_name,
                         message_or_intent=body_dict["intent"],
                         country=body_dict.get("country", "mx"),
                         mode=mode,
                         business_category=body_dict.get("business_category"),
                         extra_context=combined_context,
+                        contact=contact,
                     )
 
                     audio_url = None

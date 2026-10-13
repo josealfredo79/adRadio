@@ -198,3 +198,21 @@ async def test_inbox_sees_which_promo():
         assert not any("Promoción vigente" in m["content"] for m in conv.messages)
     finally:
         await _cleanup(s["user_id"])
+
+
+@pytest.mark.asyncio
+async def test_radio_promo_brings_its_audio_to_the_chat():
+    s = await _seed()
+    try:
+        async with AsyncSessionLocal() as db:
+            camp = Campaign(advertiser_id=s["user_id"], name="Micas", type="promo", message_text="2 micas x 1",
+                            ab_test={"campaign_mode": "radio", "audio_url": "https://cdn.test/cuna.mp3"})
+            db.add(camp)
+            await db.flush()
+            db.add(Message(advertiser_id=s["user_id"], contact_id=s["ana"], campaign_id=camp.id,
+                           direction="outbound", content="[WEB] Micas", status="sent"))
+            await db.commit()
+        promo = _promos(await _chat(s, "ana"))[0]
+        assert promo["promo"]["audio_url"] == "https://cdn.test/cuna.mp3"
+    finally:
+        await _cleanup(s["user_id"])

@@ -46,6 +46,8 @@ interface ChatPromo {
   id: string
   title: string
   image_url: string
+  // Cuña de radio: se escucha ahí mismo.
+  audio_url?: string
   coupon: { code: string; description: string; expires_at: string } | null
 }
 
@@ -894,6 +896,9 @@ function PromoHeader({ promo, pal }: { promo: ChatPromo; pal: ChatPal }) {
       <p className="mb-0.5 text-[13px] font-semibold" style={{ color: pal.accent }}>
         🎁 {promo.title}
       </p>
+      {promo.audio_url && (
+        <audio controls preload="none" src={promo.audio_url} className="mb-1.5 h-10 w-full min-w-[220px]" aria-label={`Escuchar ${promo.title}`} />
+      )}
     </>
   )
 }

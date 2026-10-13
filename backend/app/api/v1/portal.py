@@ -364,6 +364,8 @@ def _promo_message(p: dict) -> dict:
             "id": str(p["campaign"].id),
             "title": p["campaign"].name,
             "image_url": p["image_url"] or "",
+            # Cuña de radio: se escucha ahí mismo en la burbuja.
+            "audio_url": _promo_audio(p["campaign"]),
             "coupon": _coupon_out(p["coupon"]),
         },
     }

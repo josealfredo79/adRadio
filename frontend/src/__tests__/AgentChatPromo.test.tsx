@@ -94,4 +94,13 @@ describe('Promo en el chat', () => {
     await waitFor(() => expect(chatPosts()).toHaveLength(2))
     expect((chatPosts()[1][1] as { promo_id?: string }).promo_id).toBeUndefined()
   })
+
+  it('a radio promo plays its spot right in the bubble', async () => {
+    get.mockResolvedValue({
+      data: { messages: [{ ...PROMO_MSG, promo: { ...PROMO_MSG.promo, audio_url: 'https://cdn.test/cuna.mp3' } }] },
+    })
+    renderChat()
+    const audio = await screen.findByLabelText('Escuchar Fundas 2x1')
+    expect(audio.getAttribute('src')).toBe('https://cdn.test/cuna.mp3')
+  })
 })

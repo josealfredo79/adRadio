@@ -9,7 +9,7 @@ Reglas:
 - Tono cálido, nostálgico, como locutor de radio de barrio
 - Empieza con una frase gancho (pregunta o dato sorprendente)
 - Menciona el negocio con naturalidad en medio del guión
-- Termina con llamada a acción clara y WhatsApp o teléfono
+- Termina con llamada a acción clara usando SOLO el contacto que te doy
 - SOLO el texto del locutor — sin acotaciones de dirección ni indicaciones de sonido
 - Máximo 200 palabras
 - Lenguaje latinoamericano coloquial, no corporativo
@@ -170,6 +170,33 @@ _MODE_PROMPTS: dict[str, str] = {
 }
 
 
+# Va al final de todos los modos. Sin esto la IA inventaba teléfonos ("55 1234
+# 5678") porque la regla pedía cerrar con un teléfono que nunca se le daba
+# (cuña "Promo Micas" de CityCell, 2026-10-13).
+NO_INVENTAR = """
+DATOS DEL NEGOCIO — regla estricta:
+- NUNCA inventes teléfonos, números de WhatsApp, direcciones, sitios web ni precios.
+  Usa solo los que vienen en "Contacto". Si no viene ninguno, cierra invitando a
+  escribir "aquí mismo" (el cliente escucha la cuña en su chat con el negocio).
+- El nombre del negocio es el que viene en "Negocio"; no uses otro.
+"""
+
+
+def radio_business(user, fallback_name: str = "") -> tuple[str, str]:
+    """(nombre real del negocio, línea de contacto) para el guion. El número es
+    solo el WhatsApp Business conectado: nunca el personal del dueño."""
+    from app.api.v1.public_site import _public_whatsapp_number
+
+    name = (getattr(user, "business_name", None) or fallback_name or "el negocio").strip()
+    parts = []
+    number = _public_whatsapp_number(user) if user is not None else ""
+    if number:
+        parts.append(f"WhatsApp {number}")
+    if getattr(user, "city", None):
+        parts.append(f"en {user.city}")
+    return name, ", ".join(parts)
+
+
 async def generate_radio_script(
     business_name: str,
     message_or_intent: str,
@@ -177,17 +204,20 @@ async def generate_radio_script(
     mode: str = "classic",
     business_category: str | None = None,
     extra_context: str | None = None,
+    contact: str = "",
 ) -> str:
-    """Genera el guión de la cuña según el modo seleccionado."""
+    """Genera el guión de la cuña según el modo seleccionado. `contact`: el
+    contacto real (radio_business); vacío = la cuña no da ningún número."""
     from datetime import datetime, timezone
 
     from app.services.llm_client import chat_completion
 
-    system = _MODE_PROMPTS.get(mode, GUION_SYSTEM_PROMPT)
+    system = _MODE_PROMPTS.get(mode, GUION_SYSTEM_PROMPT) + NO_INVENTAR
 
     base = f"""Negocio: {business_name}
 Categoría: {business_category or 'general'}
 País: {country.upper()}
+Contacto: {contact or 'ninguno (no des teléfono ni WhatsApp; invita a escribir aquí mismo)'}
 """
 
     if mode == "classic":

@@ -662,16 +662,22 @@ async def generate_radio_ad_endpoint(
                 detail=f"Ya usaste las {limit} cuñas de radio de tu plan este mes. "
                        "Sube de plan para tener más (Negocio: 4, Crecimiento: 15).",
             )
+    from app.services.radio.scripts import radio_business
+
+    # El nombre y el contacto salen de la cuenta, no del formulario: el panel
+    # mandaba el nombre de la campaña ("Promo Micas") como si fuera el negocio.
+    business_name, contact = radio_business(current_user, body.business_name)
     script = await generate_radio_script(
-        business_name=body.business_name,
+        business_name=business_name,
         message_or_intent=body.intent,
         country=body.country,
         mode=body.mode,
-        business_category=body.business_category,
+        business_category=body.business_category or current_user.business_category,
         extra_context=body.extra_context,
+        contact=contact,
     )
     audio_url = await generate_radio_ad(
-        business_name=body.business_name,
+        business_name=business_name,
         message_or_intent=body.intent,
         country=body.country,
         _script=script,
