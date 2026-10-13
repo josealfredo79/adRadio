@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     # cargada en prod pero el botón oculto hasta que Meta apruebe TP/BSP,
     # y encenderlo solo en staging para probar. Requiere APP_ID + CONFIG_ID.
     META_EMBEDDED_SIGNUP_ENABLED: bool = False
+    # Con el botón encendido, primero solo lo ven los admins (prueba real en
+    # producción sin exponer a los negocios); false = todos.
+    META_EMBEDDED_SIGNUP_ADMINS_ONLY: bool = True
 
     # Número central de IaRadio — canal con los DUEÑOS (no con sus clientes):
     # avisos y "Déjame preguntarle al dueño". Vive en el WABA propio de

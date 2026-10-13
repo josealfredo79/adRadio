@@ -223,6 +223,16 @@ export default function WhatsappWizard() {
             Se abrirá una ventana de Meta: inicia sesión, elige tu negocio y tu número. El token y la
             configuración se hacen solos — no necesitas pegar nada.
           </p>
+          <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+            <li>
+              Usa un número que <strong>no</strong> esté en la app de WhatsApp de un celular (un chip nuevo, o
+              da de baja ese WhatsApp primero). Te llegará un código por SMS o llamada para confirmarlo.
+            </li>
+            <li>
+              Meta puede pedirte una tarjeta en tu cuenta de Meta. Contestar a tus clientes es gratis; los
+              mensajes de promoción los cobra Meta directamente, aparte de tu plan de IaRadio.
+            </li>
+          </ul>
           {connectError && (
             <p className="text-sm text-red-600">{connectError}</p>
           )}

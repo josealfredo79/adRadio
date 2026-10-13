@@ -279,6 +279,7 @@ class TestEmbeddedConfig:
             mock_settings.META_APP_ID = "123456789"
             mock_settings.META_EMBEDDED_SIGNUP_CONFIG_ID = "cfg-123"
             mock_settings.META_EMBEDDED_SIGNUP_ENABLED = True
+            mock_settings.META_EMBEDDED_SIGNUP_ADMINS_ONLY = False
             r = client.get("/api/v1/me/whatsapp-embedded-config")
             assert r.status_code == 200
             data = r.json()
@@ -288,6 +289,14 @@ class TestEmbeddedConfig:
 
 
 class TestEmbeddedSignup:
+    @pytest.fixture(autouse=True)
+    def _button_on_for_everyone(self, monkeypatch):
+        from app.config import settings
+        monkeypatch.setattr(settings, "META_APP_ID", "123456789")
+        monkeypatch.setattr(settings, "META_EMBEDDED_SIGNUP_CONFIG_ID", "cfg-123")
+        monkeypatch.setattr(settings, "META_EMBEDDED_SIGNUP_ENABLED", True)
+        monkeypatch.setattr(settings, "META_EMBEDDED_SIGNUP_ADMINS_ONLY", False, raising=False)
+
     def test_missing_server_config_returns_422(self, client, test_user):
         with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(
             ok=False, code="missing_config", message="META_APP_ID / META_APP_SECRET no están configurados en el servidor",
@@ -444,3 +453,77 @@ class TestMetaTemplates:
             })
         assert r.status_code == 422
         assert r.json()["detail"] == "Ya existe una plantilla con ese nombre"
+
+
+# docs/specs/2026-10-12-conectar-con-meta.md — encender el botón con cuidado.
+def _settings(mock, enabled=True, admins_only=True):
+    mock.META_APP_ID = "123456789"
+    mock.META_EMBEDDED_SIGNUP_CONFIG_ID = "cfg-123"
+    mock.META_EMBEDDED_SIGNUP_ENABLED = enabled
+    mock.META_EMBEDDED_SIGNUP_ADMINS_ONLY = admins_only
+
+
+class TestEmbeddedRollout:
+    def _enabled(self, client, test_user, role, **kw):
+        test_user.role = role
+        with patch("app.api.v1.meta_whatsapp.settings") as s:
+            _settings(s, **kw)
+            return client.get("/api/v1/me/whatsapp-embedded-config").json()["enabled"]
+
+    def test_caso1_switch_off_hides_it_even_from_admins(self, client, test_user):
+        assert self._enabled(client, test_user, "admin", enabled=False) is False
+
+    def test_caso2_admins_only_mode(self, client, test_user):
+        assert self._enabled(client, test_user, "admin") is True
+        assert self._enabled(client, test_user, "advertiser") is False
+
+    def test_caso3_everyone_mode(self, client, test_user):
+        assert self._enabled(client, test_user, "advertiser", admins_only=False) is True
+
+    def test_caso4_server_refuses_connection_when_not_enabled_for_user(self, client, test_user):
+        test_user.role = "advertiser"
+        exchange = AsyncMock()
+        with patch("app.api.v1.meta_whatsapp.settings") as s, \
+                patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=exchange):
+            _settings(s)
+            r = client.post("/api/v1/me/whatsapp-connection/embedded", json={"code": "abc"})
+        assert r.status_code == 403
+        exchange.assert_not_awaited()
+
+    def _connect(self, client, test_user, phone_number_id="phone-1"):
+        test_user.role = "admin"
+        with patch("app.api.v1.meta_whatsapp.settings") as s, \
+                patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(
+                    ok=True, token="tok", waba_id="waba-1", phone_number_id=phone_number_id))), \
+                patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()), \
+                patch("app.api.v1.meta_whatsapp.register_phone_number",
+                      new=AsyncMock(return_value=ProvisionResult(ok=True))):
+            _settings(s)
+            return client.post("/api/v1/me/whatsapp-connection/embedded", json={"code": "abc"})
+
+    def test_caso6_same_number_keeps_the_anti_ban_ramp(self, client, test_user):
+        from datetime import datetime, timezone
+        before = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        test_user.meta_phone_number_id = "phone-1"
+        test_user.meta_connected_at = before
+        assert self._connect(client, test_user, "phone-1").status_code == 200
+        assert test_user.meta_connected_at == before
+
+    def test_caso6_new_number_restarts_the_ramp(self, client, test_user):
+        from datetime import datetime, timezone
+        before = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        test_user.meta_phone_number_id = "phone-viejo"
+        test_user.meta_connected_at = before
+        assert self._connect(client, test_user, "phone-1").status_code == 200
+        assert test_user.meta_connected_at > before
+
+    def test_caso7_old_own_app_is_forgotten(self, client, test_user):
+        test_user.meta_app_id = "app-propia"
+        test_user.meta_app_secret_cipher = "c"
+        test_user.meta_app_secret_iv = "i"
+        test_user.meta_app_secret_tag = "t"
+        test_user.meta_webhook_configured = True
+        assert self._connect(client, test_user).status_code == 200
+        assert test_user.meta_app_id is None
+        assert test_user.meta_app_secret_cipher is None
+        assert test_user.meta_webhook_configured is False

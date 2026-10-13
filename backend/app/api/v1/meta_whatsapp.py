@@ -185,15 +185,22 @@ async def get_whatsapp_embedded_config(current_user: User = Depends(get_current_
     `enabled` also requires the explicit META_EMBEDDED_SIGNUP_ENABLED switch —
     the config can sit loaded in prod with the button still hidden until Meta
     approves TP/BSP (see meta_oauth_service docstring / migration notes)."""
-    enabled = bool(
-        settings.META_APP_ID
-        and settings.META_EMBEDDED_SIGNUP_CONFIG_ID
-        and settings.META_EMBEDDED_SIGNUP_ENABLED
-    )
     return MetaEmbeddedConfigOut(
         app_id=settings.META_APP_ID,
         config_id=settings.META_EMBEDDED_SIGNUP_CONFIG_ID,
-        enabled=enabled,
+        enabled=_embedded_enabled_for(current_user),
+    )
+
+
+def _embedded_enabled_for(user: User) -> bool:
+    """El botón aplica a este usuario: configurado, encendido y, mientras
+    META_EMBEDDED_SIGNUP_ADMINS_ONLY siga activo, solo para admins
+    (docs/specs/2026-10-12-conectar-con-meta.md)."""
+    return bool(
+        settings.META_APP_ID
+        and settings.META_EMBEDDED_SIGNUP_CONFIG_ID
+        and settings.META_EMBEDDED_SIGNUP_ENABLED
+        and (not settings.META_EMBEDDED_SIGNUP_ADMINS_ONLY or user.role == "admin")
     )
 
 
@@ -216,6 +223,8 @@ async def connect_whatsapp_embedded(
     """One-click "Conectar con Meta" (Embedded Signup). Exchanges the code
     server-side, persists the resulting long-lived token, and subscribes the
     webhook — the advertiser never touches a token."""
+    if not _embedded_enabled_for(current_user):
+        raise HTTPException(status_code=403, detail="Conectar con Meta todavía no está disponible para tu cuenta")
     result = await exchange_embedded_code(body.code, body.waba_id, body.phone_number_id)
     if not result.ok or not result.token:
         status_code = 503 if result.code == "meta_unavailable" else 422
@@ -233,6 +242,18 @@ async def connect_whatsapp_embedded(
         current_user.meta_pin_tag = pin_enc.tag
     current_user.meta_verification_status = "registered" if registration.ok else "register_failed"
 
+    # Igual que el formulario manual: la rampa anti-baneo (capa 11) solo se
+    # reinicia con un número distinto, no al reconectar el mismo.
+    if current_user.meta_phone_number_id != result.phone_number_id:
+        current_user.meta_connected_at = datetime.now(timezone.utc)
+    # Ahora el número va por la app de IaRadio: los datos de una app propia
+    # (formulario manual) ya no aplican y no deben mezclarse.
+    current_user.meta_app_id = None
+    current_user.meta_app_secret_cipher = None
+    current_user.meta_app_secret_iv = None
+    current_user.meta_app_secret_tag = None
+    current_user.meta_webhook_configured = False
+
     enc = encrypt_secret(result.token)
     current_user.meta_waba_id = result.waba_id
     current_user.meta_phone_number_id = result.phone_number_id
@@ -242,7 +263,6 @@ async def connect_whatsapp_embedded(
     current_user.meta_token_iv = enc.iv
     current_user.meta_token_tag = enc.tag
     current_user.meta_connection_status = "connected"
-    current_user.meta_connected_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(current_user)
 

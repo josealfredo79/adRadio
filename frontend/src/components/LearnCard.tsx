@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Lightbulb, X } from 'lucide-react'
 import api from '@/lib/api'
@@ -24,8 +24,9 @@ function oldAnswer(text: string): string {
  */
 export default function LearnCard({ conversationId, msgId }: { conversationId: string; msgId: string }) {
   const [closed, setClosed] = useState(false)
-  const [question, setQuestion] = useState('')
-  const [answer, setAnswer] = useState('')
+  // Lo que el dueño corrigió; mientras no toque un campo, se ve la sugerencia
+  // tal cual (sin un primer pintado con los campos vacíos).
+  const [edits, setEdits] = useState<{ question?: string; answer?: string }>({})
 
   const { data: suggestion } = useQuery({
     queryKey: ['learn-suggestion', msgId],
@@ -37,23 +38,18 @@ export default function LearnCard({ conversationId, msgId }: { conversationId: s
     retry: false,
   })
 
-  useEffect(() => {
-    if (suggestion) {
-      setQuestion(suggestion.question)
-      setAnswer(suggestion.answer)
-    }
-  }, [suggestion])
-
   const save = useMutation({
-    mutationFn: () =>
+    mutationFn: (text: { question: string; answer: string }) =>
       api.post(`/conversations/${conversationId}/learn`, {
-        question: question.trim(),
-        answer: answer.trim(),
+        question: text.question.trim(),
+        answer: text.answer.trim(),
         replace_ids: suggestion?.replaces.map((r) => r.id) ?? [],
       }),
   })
 
   if (!suggestion || closed) return null
+  const question = edits.question ?? suggestion.question
+  const answer = edits.answer ?? suggestion.answer
 
   if (save.isSuccess) {
     return (
@@ -76,9 +72,9 @@ export default function LearnCard({ conversationId, msgId }: { conversationId: s
         ¿Guardo esto para que el bot lo sepa?
       </p>
       <label className="mb-1 block text-[11px] text-amber-800 dark:text-amber-300">Si un cliente pregunta</label>
-      <textarea aria-label="Pregunta" rows={1} value={question} onChange={(e) => setQuestion(e.target.value)} className={field} />
+      <textarea aria-label="Pregunta" rows={1} value={question} onChange={(e) => setEdits((v) => ({ ...v, question: e.target.value }))} className={field} />
       <label className="mb-1 mt-2 block text-[11px] text-amber-800 dark:text-amber-300">El bot contesta</label>
-      <textarea aria-label="Respuesta" rows={2} value={answer} onChange={(e) => setAnswer(e.target.value)} className={field} />
+      <textarea aria-label="Respuesta" rows={2} value={answer} onChange={(e) => setEdits((v) => ({ ...v, answer: e.target.value }))} className={field} />
 
       {suggestion.replaces.map((r) => (
         <p key={r.id} className="mt-2 text-xs text-amber-800 dark:text-amber-300">
@@ -93,7 +89,7 @@ export default function LearnCard({ conversationId, msgId }: { conversationId: s
 
       <div className="mt-3 flex gap-2">
         <button
-          onClick={() => save.mutate()}
+          onClick={() => save.mutate({ question, answer })}
           disabled={!question.trim() || !answer.trim() || save.isPending}
           className="rounded-lg bg-amber-500 px-4 py-1.5 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-40"
         >
