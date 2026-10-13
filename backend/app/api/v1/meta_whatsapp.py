@@ -196,12 +196,26 @@ def _embedded_enabled_for(user: User) -> bool:
     """El botón aplica a este usuario: configurado, encendido y, mientras
     META_EMBEDDED_SIGNUP_ADMINS_ONLY siga activo, solo para admins
     (docs/specs/2026-10-12-conectar-con-meta.md)."""
+    testers = {e.strip().lower() for e in (settings.META_EMBEDDED_SIGNUP_TEST_EMAILS or "").split(",") if e.strip()}
     return bool(
         settings.META_APP_ID
         and settings.META_EMBEDDED_SIGNUP_CONFIG_ID
         and settings.META_EMBEDDED_SIGNUP_ENABLED
-        and (not settings.META_EMBEDDED_SIGNUP_ADMINS_ONLY or user.role == "admin")
+        and not _is_central_account(user)
+        and (
+            not settings.META_EMBEDDED_SIGNUP_ADMINS_ONLY
+            or user.role == "admin"
+            or (user.email or "").lower() in testers
+        )
     )
+
+
+def _is_central_account(user: User) -> bool:
+    """La cuenta que tiene el número central de IaRadio (bot de ventas,
+    códigos de acceso, Copiloto de los dueños): conectar otro número ahí lo
+    reemplazaría y tumbaría todo eso."""
+    central = settings.IARADIO_WA_PHONE_NUMBER_ID
+    return bool(central) and user.meta_phone_number_id == central
 
 
 class MetaEmbeddedSignupBody(BaseModel):
@@ -223,6 +237,8 @@ async def connect_whatsapp_embedded(
     """One-click "Conectar con Meta" (Embedded Signup). Exchanges the code
     server-side, persists the resulting long-lived token, and subscribes the
     webhook — the advertiser never touches a token."""
+    if _is_central_account(current_user):
+        raise HTTPException(status_code=403, detail="Esta cuenta tiene el número central de IaRadio; no se puede reemplazar desde aquí")
     if not _embedded_enabled_for(current_user):
         raise HTTPException(status_code=403, detail="Conectar con Meta todavía no está disponible para tu cuenta")
     result = await exchange_embedded_code(body.code, body.waba_id, body.phone_number_id)

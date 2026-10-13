@@ -456,11 +456,13 @@ class TestMetaTemplates:
 
 
 # docs/specs/2026-10-12-conectar-con-meta.md — encender el botón con cuidado.
-def _settings(mock, enabled=True, admins_only=True):
+def _settings(mock, enabled=True, admins_only=True, testers=""):
     mock.META_APP_ID = "123456789"
     mock.META_EMBEDDED_SIGNUP_CONFIG_ID = "cfg-123"
     mock.META_EMBEDDED_SIGNUP_ENABLED = enabled
     mock.META_EMBEDDED_SIGNUP_ADMINS_ONLY = admins_only
+    mock.META_EMBEDDED_SIGNUP_TEST_EMAILS = testers
+    mock.IARADIO_WA_PHONE_NUMBER_ID = "central-1"
 
 
 class TestEmbeddedRollout:
@@ -527,3 +529,20 @@ class TestEmbeddedRollout:
         assert test_user.meta_app_id is None
         assert test_user.meta_app_secret_cipher is None
         assert test_user.meta_webhook_configured is False
+
+    def test_caso9_central_number_account_never_sees_or_uses_it(self, client, test_user):
+        # La cuenta IaRadio (número central): reemplazarlo tumbaría ventas, códigos y Copiloto.
+        test_user.meta_phone_number_id = "central-1"
+        assert self._enabled(client, test_user, "admin", admins_only=False) is False
+        exchange = AsyncMock()
+        with patch("app.api.v1.meta_whatsapp.settings") as s, \
+                patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=exchange):
+            _settings(s, admins_only=False)
+            r = client.post("/api/v1/me/whatsapp-connection/embedded", json={"code": "abc"})
+        assert r.status_code == 403 and "número central" in r.json()["detail"]
+        exchange.assert_not_awaited()
+
+    def test_caso10_test_emails_see_it_in_admins_only_mode(self, client, test_user):
+        test_user.email = "Prueba@IaRadio.online"
+        assert self._enabled(client, test_user, "advertiser", testers="otro@x.com, prueba@iaradio.online") is True
+        assert self._enabled(client, test_user, "advertiser", testers="otro@x.com") is False

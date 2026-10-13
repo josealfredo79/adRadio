@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # Con el botón encendido, primero solo lo ven los admins (prueba real en
     # producción sin exponer a los negocios); false = todos.
     META_EMBEDDED_SIGNUP_ADMINS_ONLY: bool = True
+    # Correos (separados por coma) que también ven el botón en modo solo
+    # admins: cuentas de negocio de prueba, sin abrirlo a todos.
+    META_EMBEDDED_SIGNUP_TEST_EMAILS: str = ""
 
     # Número central de IaRadio — canal con los DUEÑOS (no con sus clientes):
     # avisos y "Déjame preguntarle al dueño". Vive en el WABA propio de

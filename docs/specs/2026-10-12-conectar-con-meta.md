@@ -19,9 +19,11 @@ Meta aprobó la App Review (2026-10-11: whatsapp_business_messaging, whatsapp_bu
 5. Antes del botón el negocio lee: Meta puede pedirle una tarjeta en su cuenta; contestar a sus clientes es gratis y los mensajes de promoción los cobra Meta. — prueba: `WhatsappWizard.embedded` «caso 5» ✅ (también avisa que el número no debe estar en la app de WhatsApp)
 6. Si el negocio vuelve a conectar el MISMO número, no se reinicia su rampa de envíos (anti-baneo); si conecta un número distinto, sí. Igual que el formulario manual. — prueba: `test_caso6_same_number_keeps_the_anti_ban_ramp`, `test_caso6_new_number_restarts_the_ramp` ✅
 7. Si el negocio tenía conectada su propia app de Meta (formulario manual) y ahora conecta con el botón, se olvidan los datos de su app vieja para que no se mezclen. — prueba: `test_caso7_old_own_app_is_forgotten` ✅
+9. La cuenta que tiene el número central de IaRadio nunca ve el botón ni puede conectar por ahí (reemplazarlo tumbaría ventas, códigos y Copiloto). Hallado en la prueba real: el dueño abrió el botón desde esa cuenta. — prueba: `test_caso9_central_number_account_never_sees_or_uses_it` ✅
+10. En modo solo admins, los correos de `META_EMBEDDED_SIGNUP_TEST_EMAILS` también ven el botón (cuenta de negocio de prueba). — prueba: `test_caso10_test_emails_see_it_in_admins_only_mode` ✅
 8. Conectar con éxito deja el número registrado, el token cifrado y el webhook suscrito; si Meta falla o el negocio cancela, ve un mensaje claro y el formulario manual sigue ahí. — pruebas existentes: `TestEmbeddedSignup` ✅
 
-Pruebas: backend 1555 ✅ (`tests/test_meta_whatsapp_endpoints.py`), frontend 195 ✅. De paso: arreglada una carrera en LearnCard (campos vacíos en el primer pintado).
+Pruebas: backend 1557 ✅ (`tests/test_meta_whatsapp_endpoints.py`), frontend 195 ✅. De paso: arreglada una carrera en LearnCard (campos vacíos en el primer pintado).
 
 ## Fuera de alcance
 - Coexistencia (mismo número de la app de WhatsApp Business).
@@ -40,6 +42,7 @@ Pruebas: backend 1555 ✅ (`tests/test_meta_whatsapp_endpoints.py`), frontend 19
 - Railway (adRadio): `META_EMBEDDED_SIGNUP_ENABLED=true` (con ADMINS_ONLY por defecto). Tras la prueba real: `META_EMBEDDED_SIGNUP_ADMINS_ONLY=false`.
 
 ## Pendientes fuera del código (dueño)
+- En Meta → Inicio de sesión con Facebook para empresas → Configuración: "Inicio de sesión con el SDK para JavaScript" = Sí y dominios permitidos www.iaradio.online / iaradio.online (la prueba real dio "La opción de JSSDK está desactivada").
 - Confirmar que la App esté publicada (Live) y revisar "Acciones requeridas" en Meta.
 - Cambiar la contraseña de iaradio@iaradio.online (salió en una captura; ya terminó la revisión).
 
