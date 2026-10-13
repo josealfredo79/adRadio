@@ -60,6 +60,30 @@ async def meta_webhook_verify(
     return Response(status_code=403)
 
 
+_COEXISTENCE_FIELDS = {"smb_message_echoes", "smb_app_state_sync", "history", "account_update"}
+
+
+async def _handle_coexistence(db: AsyncSession, field: str, waba_id: str | None, value: dict) -> None:
+    """Avisos de los números en coexistencia (app WhatsApp Business + IaRadio):
+    ver coexistence_service.py. Un número que no es de ningún negocio se ignora."""
+    from app.core.redis import get_redis_optional
+    from app.services import coexistence_service as coex
+
+    phone_number_id = (value.get("metadata") or {}).get("phone_number_id")
+    advertiser = await coex.advertiser_for(db, phone_number_id, waba_id)
+    if advertiser is None:
+        logger.info("[META WEBHOOK] %s for unknown number/waba — ignored", field)
+        return
+    if field == "smb_message_echoes":
+        await coex.handle_echoes(db, await get_redis_optional(), advertiser, value)
+    elif field == "smb_app_state_sync":
+        await coex.handle_contacts(db, advertiser, value)
+    elif field == "history":
+        await coex.handle_history(db, advertiser, value)
+    elif field == "account_update":
+        await coex.handle_account_update(db, advertiser, value)
+
+
 def _hmac_matches(secret: str, raw_body: bytes, header: str) -> bool:
     if not header or not header.startswith("sha256="):
         return False
@@ -255,6 +279,13 @@ async def meta_incoming(
                     await _handle_account_alert(db, waba_id, change.get("value", {}))
                 except Exception:
                     logger.exception("[META WEBHOOK] Failed to process account alert")
+                continue
+
+            if field in _COEXISTENCE_FIELDS:
+                try:
+                    await _handle_coexistence(db, field, waba_id, change.get("value", {}))
+                except Exception:
+                    logger.exception("[META WEBHOOK] Failed to process %s", field)
                 continue
 
             if field != "messages":

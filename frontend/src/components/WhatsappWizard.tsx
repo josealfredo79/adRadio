@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
-import { launchEmbeddedSignup } from '@/lib/fbSdk'
+import { launchEmbeddedSignup, type EmbeddedSignupResult } from '@/lib/fbSdk'
 import WhatsappTemplates from '@/components/WhatsappTemplates'
 import { useMetaTemplates } from '@/lib/metaTemplates'
 import { Check, ChevronDown, ExternalLink, Loader2, MessageCircle, Sparkles, X } from 'lucide-react'
@@ -29,6 +29,7 @@ interface Connection {
   webhook_configured?: boolean
   webhook_message?: string | null
   verification_status?: string
+  coexistence?: boolean
 }
 
 interface TestResult {
@@ -52,12 +53,13 @@ export default function WhatsappWizard() {
   const [connectError, setConnectError] = useState<string | null>(null)
 
   const embeddedMutation = useMutation({
-    mutationFn: ({ code, wabaId, phoneNumberId }: { code: string; wabaId: string; phoneNumberId: string }) =>
+    mutationFn: ({ code, wabaId, phoneNumberId, coexistence }: EmbeddedSignupResult) =>
       api
         .post('/me/whatsapp-connection/embedded', {
           code,
           waba_id: wabaId,
           phone_number_id: phoneNumberId,
+          coexistence,
         })
         .then((r) => r.data),
     onSuccess: () => {
@@ -145,6 +147,7 @@ export default function WhatsappWizard() {
           <div className="text-sm text-green-800">
             <span className="font-medium">{connection?.display_phone_number}</span>
             {connection?.verified_name ? ` — ${connection.verified_name}` : ''}
+            {connection?.coexistence && <span className="text-green-700"> · también en tu app WhatsApp Business</span>}
             {connection?.token_last4 && (
               <span className="text-green-600"> · token termina en {connection.token_last4}</span>
             )}
@@ -225,8 +228,18 @@ export default function WhatsappWizard() {
           </p>
           <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
             <li>
-              Usa un número que <strong>no</strong> esté en la app de WhatsApp de un celular (un chip nuevo, o
-              da de baja ese WhatsApp primero). Te llegará un código por SMS o llamada para confirmarlo.
+              <strong>Puedes usar tu número de siempre</strong> si está en la app <strong>WhatsApp Business</strong>{' '}
+              (versión 2.24.17 o más nueva): en la ventana de Meta elige conectar tu app existente y lo sigues
+              usando en tu celular. Lo que contestes desde ahí aparece en tu Inbox y el bot no se te encima.
+            </li>
+            <li>
+              Con tu app conectada dejan de funcionar en el celular: grupos, mensajes temporales, listas de
+              difusión, catálogo y respuestas rápidas de la app, y llamadas. WhatsApp Web se desvincula (lo vuelves
+              a vincular; WhatsApp para Windows ya no).
+            </li>
+            <li>
+              O usa un número nuevo que <strong>no</strong> esté en ninguna app de WhatsApp: te llega un código por
+              SMS o llamada para confirmarlo.
             </li>
             <li>
               Meta puede pedirte una tarjeta en tu cuenta de Meta. Contestar a tus clientes es gratis; los

@@ -455,7 +455,7 @@ export default function InboxPage() {
                         >
                           {msg.channel === 'web' && <Globe className="h-3 w-3" />}
                           {msg.sender === 'owner' ? 'Tú' : msg.role === 'assistant' ? 'Bot' : 'Cliente'}
-                          {msg.channel === 'web' ? ' · por la web' : ' · por WhatsApp'}
+                          {msg.channel === 'web' ? ' · por la web' : msg.channel === 'app' ? ' · desde tu celular' : ' · por WhatsApp'}
                         </p>
                       )}
                       <div

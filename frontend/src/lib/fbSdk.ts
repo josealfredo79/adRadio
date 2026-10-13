@@ -8,16 +8,18 @@ export interface EmbeddedSignupResult {
   code: string
   wabaId: string
   phoneNumberId: string
+  /** El negocio conectó el número de su app WhatsApp Business (coexistencia). */
+  coexistence: boolean
 }
 
 export interface FbLoginOptions {
   config_id: string
   response_type: 'code'
   override_default_response_type: boolean
+  // Embedded Signup v4: los productos se eligen en la configuración de
+  // "Inicio de sesión con Facebook para empresas", no aquí.
   extras: {
-    feature: string
-    sessionInfoVersion?: number
-    setup?: Record<string, unknown>
+    setup: Record<string, unknown>
   }
 }
 
@@ -99,12 +101,15 @@ export function launchEmbeddedSignup(appId: string, configId: string): Promise<E
             }
           }
           if (data.type !== 'WA_EMBEDDED_SIGNUP') return
-          if ((data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA') && data.data) {
-            // FINISH_ONLY_WABA has no number; the server looks it up from the token.
+          const finished = ['FINISH', 'FINISH_ONLY_WABA', 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING']
+          if (data.event && finished.includes(data.event) && data.data) {
+            // FINISH_ONLY_WABA y la coexistencia (FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING)
+            // solo traen el waba_id; el servidor busca el número con el token.
             signup = {
               code: '',
               wabaId: String(data.data.waba_id ?? ''),
               phoneNumberId: String(data.data.phone_number_id ?? ''),
+              coexistence: data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
             }
           } else if (data.event === 'CANCEL') {
             abortMessage = data.data?.error_message
@@ -113,9 +118,17 @@ export function launchEmbeddedSignup(appId: string, configId: string): Promise<E
           }
         }
         window.FB.Event?.subscribe('message', handleMessage)
+        // La guía oficial (v4) manda el resultado por window.postMessage desde
+        // facebook.com; sin escucharlo, una coexistencia podía tratarse como
+        // número nuevo.
+        const onWindowMessage = (event: MessageEvent) => {
+          if (typeof event.origin === 'string' && event.origin.endsWith('facebook.com')) handleMessage(event.data)
+        }
+        window.addEventListener('message', onWindowMessage)
 
         window.FB.login(
           (response) => {
+            window.removeEventListener('message', onWindowMessage)
             if (response.status === 'not_authorized') {
               reject(new Error('Cancelaste la autorización con Meta'))
               return
@@ -134,14 +147,15 @@ export function launchEmbeddedSignup(appId: string, configId: string): Promise<E
             } else {
               // Some flows resolve without the sessionInfo message; the
               // server reads the WABA and number from the token.
-              resolve({ code, wabaId: '', phoneNumberId: '' })
+              resolve({ code, wabaId: '', phoneNumberId: '', coexistence: false })
             }
           },
           {
             config_id: configId,
             response_type: 'code',
             override_default_response_type: true,
-            extras: { feature: 'whatsapp_embedded_signup', sessionInfoVersion: 3 },
+            // v4: la v2 (feature + sessionInfoVersion) se retira el 15-oct-2026.
+            extras: { setup: {} },
           },
         )
       })

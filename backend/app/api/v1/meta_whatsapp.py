@@ -68,6 +68,7 @@ def _connection_out(user: User, *, webhook_message: str | None = None) -> MetaWh
         verified_name=user.meta_verified_name,
         status=user.meta_connection_status,
         token_last4=token_last4,
+        coexistence=bool(user.meta_coexistence),
         utility_template_status=user.meta_utility_template_status,
         utility_template_name=user.meta_utility_template_name,
         appointment_template_name=user.meta_appointment_template_name,
@@ -226,6 +227,9 @@ class MetaEmbeddedSignupBody(BaseModel):
     code: str
     waba_id: str = ""
     phone_number_id: str = ""
+    # Meta terminó con FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING: el número es
+    # el de su app WhatsApp Business (coexistencia).
+    coexistence: bool = False
 
 
 @router.post("/me/whatsapp-connection/embedded", response_model=MetaWhatsappConnectionOut)
@@ -246,17 +250,28 @@ async def connect_whatsapp_embedded(
         status_code = 503 if result.code == "meta_unavailable" else 422
         raise HTTPException(status_code=status_code, detail=result.message)
 
-    # Embedded Signup numbers must be registered on the Cloud API before they
-    # can send. A failure doesn't block the connection (the token is valid);
-    # verification_status tells the wizard to show it.
-    pin = new_registration_pin()
-    registration = await register_phone_number(result.phone_number_id, result.token, pin)
-    if registration.ok and not registration.data.get("already_registered"):
-        pin_enc = encrypt_secret(pin)
-        current_user.meta_pin_cipher = pin_enc.cipher
-        current_user.meta_pin_iv = pin_enc.iv
-        current_user.meta_pin_tag = pin_enc.tag
-    current_user.meta_verification_status = "registered" if registration.ok else "register_failed"
+    from app.services.coexistence_service import is_on_business_app
+
+    # El aviso del navegador puede perderse: Meta también dice si el número
+    # está en la app Business, y registrarlo ahí está prohibido.
+    coexistence = body.coexistence or await is_on_business_app(result.phone_number_id, result.token) is True
+    if coexistence:
+        # Coexistencia: el número ya está registrado en su app y Meta prohíbe
+        # volver a registrarlo (docs/specs/2026-10-12-coexistencia.md).
+        current_user.meta_verification_status = "registered"
+    else:
+        # Embedded Signup numbers must be registered on the Cloud API before they
+        # can send. A failure doesn't block the connection (the token is valid);
+        # verification_status tells the wizard to show it.
+        pin = new_registration_pin()
+        registration = await register_phone_number(result.phone_number_id, result.token, pin)
+        if registration.ok and not registration.data.get("already_registered"):
+            pin_enc = encrypt_secret(pin)
+            current_user.meta_pin_cipher = pin_enc.cipher
+            current_user.meta_pin_iv = pin_enc.iv
+            current_user.meta_pin_tag = pin_enc.tag
+        current_user.meta_verification_status = "registered" if registration.ok else "register_failed"
+    current_user.meta_coexistence = coexistence
 
     # Igual que el formulario manual: la rampa anti-baneo (capa 11) solo se
     # reinicia con un número distinto, no al reconectar el mismo.
@@ -283,6 +298,12 @@ async def connect_whatsapp_embedded(
     await db.refresh(current_user)
 
     await subscribe_app_to_waba(result.waba_id, result.token)
+    if coexistence:
+        # Contactos e historial: Meta los da una sola vez y solo en las
+        # primeras 24 h — se piden ya; si falla, la conexión no se pierde.
+        from app.services.coexistence_service import request_initial_sync
+
+        await request_initial_sync(result.phone_number_id, result.token)
 
     return _connection_out(current_user)
 

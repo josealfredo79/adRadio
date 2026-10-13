@@ -13,6 +13,13 @@ from app.services.meta_oauth_service import OAuthResult
 from app.services.meta_provisioning import ProvisionResult
 
 
+@pytest.fixture(autouse=True)
+def _meta_does_not_know_if_on_business_app():
+    # Nunca llamar a Meta en estas pruebas; cada caso que lo necesite lo cambia.
+    with patch("app.services.coexistence_service.is_on_business_app", new=AsyncMock(return_value=None)):
+        yield
+
+
 @pytest.fixture
 def client(test_user):
     async def _fake_user():
@@ -546,3 +553,96 @@ class TestEmbeddedRollout:
         test_user.email = "Prueba@IaRadio.online"
         assert self._enabled(client, test_user, "advertiser", testers="otro@x.com, prueba@iaradio.online") is True
         assert self._enabled(client, test_user, "advertiser", testers="otro@x.com") is False
+
+
+# docs/specs/2026-10-12-coexistencia.md
+class TestEmbeddedCoexistence:
+    @pytest.fixture(autouse=True)
+    def _button_on(self, monkeypatch):
+        from app.config import settings
+        monkeypatch.setattr(settings, "META_APP_ID", "123456789")
+        monkeypatch.setattr(settings, "META_EMBEDDED_SIGNUP_CONFIG_ID", "cfg-123")
+        monkeypatch.setattr(settings, "META_EMBEDDED_SIGNUP_ENABLED", True)
+        monkeypatch.setattr(settings, "META_EMBEDDED_SIGNUP_ADMINS_ONLY", False)
+
+    def _connect(self, client, coexistence, sync=None):
+        register = AsyncMock(return_value=ProvisionResult(ok=True))
+        sync = sync or AsyncMock(return_value={"smb_app_state_sync": "r1", "history": "r2"})
+        with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(
+                    ok=True, token="tok", waba_id="waba-1", phone_number_id="phone-1"))), \
+                patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()), \
+                patch("app.api.v1.meta_whatsapp.register_phone_number", new=register), \
+                patch("app.services.coexistence_service.request_initial_sync", new=sync):
+            r = client.post("/api/v1/me/whatsapp-connection/embedded",
+                            json={"code": "abc", "waba_id": "waba-1", "coexistence": coexistence})
+        return r, register, sync
+
+    def test_caso2_business_app_number_connects_without_registering(self, client, test_user):
+        r, register, _ = self._connect(client, True)
+        assert r.status_code == 200 and r.json()["coexistence"] is True
+        register.assert_not_awaited()  # Meta prohíbe volver a registrarlo
+        assert test_user.meta_coexistence is True
+        assert test_user.meta_verification_status == "registered"
+        assert test_user.meta_connection_status == "connected"
+
+    def test_caso2_new_number_still_registers(self, client, test_user):
+        r, register, sync = self._connect(client, False)
+        assert r.status_code == 200 and r.json()["coexistence"] is False
+        register.assert_awaited_once()
+        sync.assert_not_awaited()
+        assert test_user.meta_coexistence is False
+
+    def test_caso3_contacts_and_history_requested_right_away(self, client, test_user):
+        _, _, sync = self._connect(client, True)
+        sync.assert_awaited_once_with("phone-1", "tok")
+
+    def test_caso3_sync_failure_keeps_the_connection(self, client, test_user):
+        failing = AsyncMock(return_value={"smb_app_state_sync": "error: x", "history": "error: y"})
+        r, _, _ = self._connect(client, True, sync=failing)
+        assert r.status_code == 200
+        assert test_user.meta_connection_status == "connected"
+
+    def test_caso2_meta_says_business_app_even_if_browser_missed_it(self, client, test_user):
+        # El aviso del navegador se perdió (coexistence=false), pero Meta dice
+        # que el número está en la app Business: no se registra.
+        with patch("app.services.coexistence_service.is_on_business_app", new=AsyncMock(return_value=True)):
+            r, register, sync = self._connect(client, False)
+        assert r.status_code == 200 and r.json()["coexistence"] is True
+        register.assert_not_awaited()
+        sync.assert_awaited_once()
+
+
+class TestInitialSyncCall:
+    @pytest.mark.asyncio
+    async def test_caso3_asks_meta_for_contacts_then_history(self):
+        import httpx
+
+        from app.services.coexistence_service import request_initial_sync
+
+        calls = []
+
+        def handler(request: httpx.Request):
+            import json as _json
+            calls.append((request.url.path, _json.loads(request.content)["sync_type"],
+                          request.headers["Authorization"]))
+            return httpx.Response(200, json={"request_id": f"req-{len(calls)}"})
+
+        transport = httpx.MockTransport(handler)
+        real_client = httpx.AsyncClient
+        with patch("httpx.AsyncClient", lambda **kw: real_client(transport=transport)):
+            out = await request_initial_sync("phone-1", "tok")
+        assert [c[1] for c in calls] == ["smb_app_state_sync", "history"]
+        assert all(c[0].endswith("/phone-1/smb_app_data") and c[2] == "Bearer tok" for c in calls)
+        assert out == {"smb_app_state_sync": "req-1", "history": "req-2"}
+
+    @pytest.mark.asyncio
+    async def test_caso3_meta_error_is_reported_not_raised(self):
+        import httpx
+
+        from app.services.coexistence_service import request_initial_sync
+
+        transport = httpx.MockTransport(lambda r: httpx.Response(400, json={"error": {"message": "fuera de las 24 h"}}))
+        real_client = httpx.AsyncClient
+        with patch("httpx.AsyncClient", lambda **kw: real_client(transport=transport)):
+            out = await request_initial_sync("phone-1", "tok")
+        assert out["history"] == "error: fuera de las 24 h"

@@ -173,7 +173,13 @@ async def process_inbound_message(
             )
         )
         escalated_conv = escalated_result.scalar_one_or_none()
-        if escalated_conv:
+        # Coexistencia: el dueño le acaba de escribir desde su celular → el bot
+        # no se le encima con este cliente por 30 min (coexistence_service.py).
+        from app.services.coexistence_service import owner_is_attending
+
+        owner_attending = advertiser.meta_coexistence and await owner_is_attending(
+            await get_redis_optional(), advertiser.id, existing_contact.id)
+        if escalated_conv or owner_attending:
             try:
                 handoff_msg = Message(
                     advertiser_id=advertiser.id,
@@ -188,7 +194,12 @@ async def process_inbound_message(
             except IntegrityError:
                 await db.rollback()
             else:
-                escalated_conv.last_activity = func.now()
+                # Que el dueño lo vea en la plática del Inbox (se arma con
+                # Conversation.messages, no con las filas de Message).
+                from app.services.web_conversation import log_turns, open_conversation
+
+                conv_for_owner = escalated_conv or await open_conversation(db, advertiser.id, existing_contact.id)
+                log_turns(conv_for_owner, {"role": "user", "content": body_text})
                 await db.commit()
                 await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(existing_contact.id)})
             return {"message": "ok"}

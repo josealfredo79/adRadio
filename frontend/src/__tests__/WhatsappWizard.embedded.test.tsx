@@ -31,6 +31,12 @@ describe('WhatsappWizard — Conectar con Meta', () => {
     expect(screen.getByText('Conectar con Meta')).toBeDefined()
     expect(screen.getByText(/Meta puede pedirte una tarjeta/)).toBeDefined()
     expect(screen.getByText(/Contestar a tus clientes es gratis/)).toBeDefined()
-    expect(screen.getByText(/esté en la app de WhatsApp de un celular/)).toBeDefined()
+    expect(screen.getByText(/ninguna app de WhatsApp/)).toBeDefined()
+  })
+
+  it('coexistencia caso 11: explains using the same number and what stops working on the phone', () => {
+    renderWizard(true)
+    expect(screen.getByText(/Puedes usar tu número de siempre/)).toBeDefined()
+    expect(screen.getByText(/dejan de funcionar en el celular: grupos, mensajes temporales/)).toBeDefined()
   })
 })

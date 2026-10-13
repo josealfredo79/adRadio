@@ -95,6 +95,9 @@ class User(Base):
     # refrescar el token) no reinicia la rampa de warm-up (ver Capa 11 en
     # meta_quality_service.py).
     meta_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Número de la app WhatsApp Business del negocio, compartido con la Cloud
+    # API (coexistencia): el dueño lo sigue usando en su celular.
+    meta_coexistence: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Nombre de cualquier plantilla ya aprobada por Meta, usada para reabrir
     # una ventana de 24h cerrada — pese al nombre del campo, NO necesita ser
     # categoría Utility específicamente (Marketing/Utility ambas sirven para

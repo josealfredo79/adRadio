@@ -53,6 +53,8 @@ class MetaWhatsappConnectionOut(BaseModel):
     webhook_configured: bool = False
     webhook_message: str | None = None
     verification_status: str = "not_started"
+    # El número es el de su app WhatsApp Business (coexistencia).
+    coexistence: bool = False
 
 
 class MetaWhatsappHealthOut(BaseModel):
