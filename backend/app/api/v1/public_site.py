@@ -280,7 +280,7 @@ async def site_listen(
 @router.post("/{slug}/speak")
 @limiter.limit("12/minute")
 async def site_speak(request: Request, slug: str, body: dict, db: AsyncSession = Depends(get_db)) -> Response:
-    from app.services.radio.tts import _tts_edge
+    from app.services.radio.tts import speak_voice
 
     await _site_owner(db, slug)
     from app.services.speech_text import speakable
@@ -289,7 +289,7 @@ async def site_speak(request: Request, slug: str, body: dict, db: AsyncSession =
     if not text:
         raise HTTPException(status_code=400, detail="Nada que decir")
     try:
-        audio = await _tts_edge(text, "es-MX-DaliaNeural", rate="+0%", pitch="+0Hz")
+        audio = await speak_voice(text)
     except Exception:
         logger.warning("[SITE] TTS failed", exc_info=True)
         raise HTTPException(status_code=503, detail="Voz no disponible")

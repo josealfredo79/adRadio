@@ -111,10 +111,10 @@ def _to_ogg(mp3: bytes) -> bytes:
 
 async def _voice_note_url(owner: User, text: str) -> str | None:
     """La respuesta dicha con la voz de IaRadio, subida para mandarla por link."""
-    from app.services.radio.tts import _tts_edge
+    from app.services.radio.tts import speak_voice
 
     try:
-        mp3 = await _tts_edge(_speakable(text), "es-MX-DaliaNeural", rate="+0%", pitch="+0Hz")
+        mp3 = await speak_voice(_speakable(text))
         ogg = await asyncio.to_thread(_to_ogg, mp3)
         return await upload_bytes(ogg, f"copilot_voice/{owner.id}/{uuid.uuid4()}.ogg", "audio/ogg")
     except Exception:

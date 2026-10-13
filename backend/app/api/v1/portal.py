@@ -613,7 +613,7 @@ async def portal_listen(
 async def portal_speak(request: Request, token: str, body: dict, db: AsyncSession = Depends(get_db)) -> Response:
     """La respuesta del bot dicha en voz alta (edge-tts, voz mexicana, sin
     costo). Si falla, el navegador usa su propia voz."""
-    from app.services.radio.tts import _tts_edge
+    from app.services.radio.tts import speak_voice
 
     await _resolve(db, token)
     from app.services.speech_text import speakable
@@ -622,7 +622,7 @@ async def portal_speak(request: Request, token: str, body: dict, db: AsyncSessio
     if not text:
         raise HTTPException(status_code=400, detail="Nada que decir")
     try:
-        audio = await _tts_edge(text, "es-MX-DaliaNeural", rate="+0%", pitch="+0Hz")
+        audio = await speak_voice(text)
     except Exception:
         logger.warning("[PORTAL] TTS failed", exc_info=True)
         raise HTTPException(status_code=503, detail="Voz no disponible")

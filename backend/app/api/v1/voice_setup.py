@@ -148,13 +148,13 @@ class SpeakBody(BaseModel):
 async def speak(request: Request, body: SpeakBody, current_user: User = Depends(get_current_user)) -> Response:
     """La voz de la carita: voz mexicana (edge-tts, la misma tecnología de las
     cuñas, sin costo). Si falla, el navegador usa su propia voz."""
-    from app.services.radio.tts import _tts_edge
+    from app.services.radio.tts import speak_voice
 
     text = " ".join(body.text.split())[:600]
     if not text:
         raise HTTPException(status_code=400, detail="Nada que decir")
     try:
-        audio = await _tts_edge(text, "es-MX-DaliaNeural", rate="+0%", pitch="+0Hz")
+        audio = await speak_voice(text)
     except Exception:
         logger.warning("[VOICE-SETUP] TTS failed", exc_info=True)
         raise HTTPException(status_code=503, detail="Voz no disponible")

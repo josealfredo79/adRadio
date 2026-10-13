@@ -66,6 +66,36 @@ async def _tts_edge(text: str, voice: str, rate: str = "-5%", pitch: str = "-5Hz
     return audio_data
 
 
+# Voz de las respuestas en vivo (mascota, chat del cliente, Copiloto): edge-tts
+# es gratis, pero Microsoft lo bloquea a ratos (403 desde oct-2026, edge-tts
+# issue #490). Si falla, Google (ya configurado para la radio) y se salta
+# edge un rato para no gastar tiempo en cada frase.
+LIVE_EDGE_VOICE = "es-MX-DaliaNeural"
+LIVE_GOOGLE_VOICE = "es-US-Neural2-A"  # femenina latina, la más parecida a Dalia
+EDGE_COOLDOWN_SECONDS = 600
+_edge_down_until = 0.0
+
+
+async def speak_voice(text: str) -> bytes:
+    """Una frase dicha en voz alta (MP3). Lanza si ninguna voz está disponible."""
+    import time
+
+    from app.config import settings
+
+    global _edge_down_until
+    if time.monotonic() >= _edge_down_until:
+        try:
+            audio = await _tts_edge(text, LIVE_EDGE_VOICE, rate="+0%", pitch="+0Hz")
+            if audio:
+                return audio
+        except Exception as e:
+            logger.warning("[TTS] edge-tts falló (%s); uso Google %d min", type(e).__name__, EDGE_COOLDOWN_SECONDS // 60)
+        _edge_down_until = time.monotonic() + EDGE_COOLDOWN_SECONDS
+    if not settings.GOOGLE_SERVICE_ACCOUNT_JSON:
+        raise RuntimeError("Sin voz: edge-tts no responde y Google TTS no está configurado")
+    return await _tts_google_cloud(text, LIVE_GOOGLE_VOICE)
+
+
 async def _tts_google_cloud(text: str, voice_name: str = "es-ES-Neural2-F") -> bytes:
     """Sintetiza voz con Google Cloud Text-to-Speech (WaveNet). Retorna bytes MP3."""
     import json

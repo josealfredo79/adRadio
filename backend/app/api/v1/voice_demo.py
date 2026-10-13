@@ -104,10 +104,10 @@ class DemoSpeakBody(BaseModel):
 async def speak(request: Request, body: DemoSpeakBody) -> Response:
     if not verify_line(body.text, body.sig):
         raise HTTPException(status_code=403, detail="Frase no permitida")
-    from app.services.radio.tts import _tts_edge
+    from app.services.radio.tts import speak_voice
 
     try:
-        audio = await _tts_edge(body.text[:600], "es-MX-DaliaNeural", rate="+0%", pitch="+0Hz")
+        audio = await speak_voice(body.text[:600])
     except Exception:
         logger.warning("[VOICE-DEMO] TTS failed", exc_info=True)
         raise HTTPException(status_code=503, detail="Voz no disponible")
