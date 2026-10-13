@@ -145,6 +145,10 @@ async def test_want_it_gives_bot_the_promo_context():
         context = rag.await_args.kwargs["conversation_history"][-1]
         assert context["role"] == "assistant"
         assert "2x1 en cortes" in context["content"] and f"PRO{s['tag']}" in context["content"]
+        # Y junto al contexto del negocio: como turno de la plática solo, el modelo
+        # lo ignoraba en producción ("responde SOLO con el contexto") — 13-oct.
+        note = rag.await_args.kwargs["extra_note"]
+        assert "2x1 en cortes" in note and f"PRO{s['tag']}" in note
     finally:
         await _cleanup(s["user_id"])
 
@@ -160,6 +164,7 @@ async def test_want_it_with_foreign_or_bad_promo_gives_bot_nothing(which):
         _, rag = await _web_chat(s, "¡La quiero!", promo_id=promo_id)
         history = rag.await_args.kwargs["conversation_history"]
         assert not any("Promoción vigente" in h["content"] for h in history)
+        assert rag.await_args.kwargs["extra_note"] == ""
     finally:
         await _cleanup(s["user_id"])
 

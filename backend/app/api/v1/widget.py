@@ -161,6 +161,7 @@ async def widget_chat(
         return {"reply": paused_reply(user), "session_id": session_id, "cards": []}
     redis_key = f"{CHAT_REDIS_PREFIX}{advertiser_id}:{session_id}"
     history: list[dict] = []
+    promo_note = ""
 
     # Cliente con su link (/c/{token}): el chat manda el token en cada mensaje.
     # La sesión en Redis vence a los 30 min y, sin esto, una pestaña que se
@@ -213,6 +214,11 @@ async def widget_chat(
             promo_context = await _promo_context(db, contact, user, body.get("promo_id"))
             if promo_context:
                 history = [*history, {"role": "assistant", "content": promo_context}]
+                promo_note = (
+                    "PROMOCIÓN QUE ESTE CLIENTE QUIERE APROVECHAR (dato real del negocio, úsalo): "
+                    f"{promo_context.strip('()')}. Confírmale con gusto la promo y su cupón (si tiene) "
+                    "y pregúntale si la quiere apartar o cuándo pasa por ella."
+                )
         # El dueño pausó el bot para atender en persona: en la web tampoco
         # contesta el bot — el mensaje le llega al dueño al Inbox, igual que
         # en WhatsApp, y él responde desde ahí (ver web_conversation.py).
@@ -272,6 +278,7 @@ async def widget_chat(
                 conversation_key=str(contact.id) if contact else f"session:{session_id}",
                 redis=redis,
                 contact_id=contact.id if contact and not unverified else None,
+                extra_note=promo_note,
             )
         except Exception:
             logger.exception("[WIDGET-CHAT] advertiser=%s", advertiser_id)

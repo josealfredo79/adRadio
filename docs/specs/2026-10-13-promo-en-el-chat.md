@@ -46,6 +46,10 @@ hace que el bot conteste ahí mismo sabiendo de qué promo se habla.
 - Backend: 87 passed (test_promo_in_chat, test_web_conversation, test_portal, test_web_push, test_campaign_web_e2e) con Postgres y Redis locales.
 - Frontend: 202 passed (37 archivos), tsc y eslint limpios.
 
+## Prueba con la IA de verdad
+- 13-oct, prueba real en prod: el bot contestó "No tengo ese dato" a "¡La quiero!" — la promo iba solo como turno de la plática y el prompt dice "responde SOLO con el contexto". Arreglo: la promo va también como `extra_note` junto al contexto del negocio (rag_service).
+- Cadena real de modelos, 5 casos ("¡La quiero!" ×2, vigencia del cupón, ¿aplica a micas?, "me interesa la promo"): 5/5 — confirma 2x1 y cupón 2WTDTA3S, no inventa que aplique a micas.
+
 ## Prueba real (la hace el dueño)
 1. Pestaña A: panel de CityCell → Campañas → nueva promo "Solo por web".
 2. Pestaña B: la tarjeta de "Tú (prueba)" con el chat abierto → la promo aparece sola como burbuja.

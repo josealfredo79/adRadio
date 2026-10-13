@@ -128,8 +128,13 @@ async def answer_with_rag(
     conversation_key: str | None = None,
     redis=None,
     contact_id: uuid.UUID | None = None,
+    extra_note: str = "",
 ) -> str:
     """
+    `extra_note`: un dato de este cliente que no está en la base de conocimiento
+    (ej. la promo de la que dijo "¡La quiero!"). Va junto al contexto del
+    negocio: como turno de la plática el modelo lo ignoraba ("responde SOLO
+    con el contexto") y contestaba "no tengo ese dato".
     `conversation_key` (contacto o sesión del chat web) activa la cuota de
     conversaciones del plan (plan_usage.py): se cuenta solo si de verdad se
     llama a la IA, y pasado el límite se contesta con el modelo económico.
@@ -155,6 +160,8 @@ async def answer_with_rag(
             customer_note = await bot_note(db, user, contact_id)
         except Exception:
             logger.warning("[RAG] loyalty note failed", exc_info=True)
+    if extra_note:
+        customer_note = f"{customer_note}\n{extra_note}".strip()
 
     # Always call Claude if there are custom instructions or KB context. With
     # ask_owner, also with neither: a brand-new business with nothing loaded
