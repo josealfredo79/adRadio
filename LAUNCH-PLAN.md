@@ -26,9 +26,9 @@ sin baneo); WhatsApp es el anzuelo.
 
 | # | Qué | Quién | Tiempo |
 |---|-----|-------|--------|
-| 1 | Prueba real de **cobro**: CityCell compra Arranque → Stripe debe decir **$449.00 MXN** → plan activo solo → cancelar y reembolsar | Dueño | 15 min |
-| 2 | Prueba real de **campañas por web** (pasos abajo) | Dueño + Claude | 15 min |
-| 3 | **Neon**: confirmar plan. En sep-2026 el plan Free agotó sus horas y tumbó el login; con clientes reales la BD casi no duerme | Dueño | 5 min (~US$19/mes) |
+| 1 | ✅ **Cobro** probado 13-oct: $449,00 MXN, plan activo, cancelar y reembolso OK. La prueba destapó que el webhook tronaba en todo pago real y que las renovaciones no se acreditaban — arreglado (`fc5e5bb`) | — | Hecho |
+| 2 | ✅ **Campañas por web** probadas 13-oct: promo y cuña llegan al chat con cupón, audio y "¡La quiero!" (`dfb7f2a`…`825e8a7`). Falta ver que la notificación de Chrome suene (revisar `chrome://gcm-internals`) | Dueño + Claude | 10 min |
+| 3 | **Neon — URGENTE**: el 13-oct iba en 80/100 horas de cómputo; beat y el monitoreo no dejan dormir la base y al 100% (~16-oct) producción cae. Pasar a Launch Plan | Dueño | 5 min (~US$19/mes) |
 | 4 | **Voyage**: poner tarjeta (hoy 3 búsquedas/min en total; los 200M tokens gratis siguen) | Dueño | 2 min |
 
 ### Prueba de campañas por web
