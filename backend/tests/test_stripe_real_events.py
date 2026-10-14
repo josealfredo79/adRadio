@@ -132,3 +132,22 @@ async def test_monthly_renewal_without_payment_intent_is_credited_once():
         assert user.messages_remaining == 50 + 2 * PLAN_MESSAGES["starter"]
     finally:
         await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_me_tells_the_panel_if_cancelled_and_until_when():
+    # Planes muestra "Cancelada, sigues hasta el…" o "Se renueva el…" (2026-10-13).
+    from app.api.v1.profile import _user_out
+
+    user_id, customer = await _seed()
+    try:
+        await _send(_checkout(customer))
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, user_id)
+            user.cancel_at_period_end = True
+            await db.commit()
+            out = _user_out(await db.get(User, user_id)).model_dump()
+        assert out["cancel_at_period_end"] is True
+        assert out["plan_expires_at"] is not None
+    finally:
+        await _cleanup(user_id)

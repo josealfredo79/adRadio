@@ -76,6 +76,9 @@ class UserOut(BaseModel):
     subscription_status: str
     current_plan: str
     messages_remaining: int
+    # Planes: "cancelada, sigue activa hasta…" o "se renueva el…".
+    cancel_at_period_end: bool | None = False
+    plan_expires_at: datetime | None = None
     language: str
     bot_name: str | None = None
     bot_personality: str | None = None

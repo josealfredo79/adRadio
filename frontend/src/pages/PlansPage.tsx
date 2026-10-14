@@ -305,6 +305,8 @@ export default function PlansPage() {
         })}
       </div>
 
+      {user?.subscription_status === 'active' && <SubscriptionCard />}
+
       {/* Incluido en todos + transparencia con Meta */}
       <div className="rounded-xl border border-brand-200 dark:border-brand-900 bg-brand-50/60 dark:bg-brand-950/20 p-5">
         <p className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -406,6 +408,67 @@ function UsagePanel({
               <span className="ml-1 text-xs text-gray-400">({a.note})</span>
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+const longDate = (iso: string) =>
+  new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'long', timeZone: 'America/Mexico_City' }).format(new Date(iso))
+
+// Cancelar desde aquí, donde el dueño lo busca (antes solo estaba en
+// Configuración). Cancela al final del periodo: sigue activo lo que ya pagó.
+function SubscriptionCard() {
+  const { user, refreshUser } = useAuth()
+  const { toast } = useToast()
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  if (!user) return null
+  const until = user.plan_expires_at ? longDate(user.plan_expires_at) : null
+
+  const cancel = async () => {
+    setBusy(true)
+    try {
+      await api.post('/cancel-subscription')
+      await refreshUser?.()
+      setConfirming(false)
+      toast({ title: 'Suscripción cancelada', description: until ? `Sigues con tu plan hasta el ${until}.` : undefined, variant: 'success' })
+    } catch {
+      toast({ title: 'No se pudo cancelar', description: 'Intenta de nuevo en un momento.', variant: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-5">
+      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Tu suscripción: {planDisplayName(user.current_plan)}</p>
+      {user.cancel_at_period_end ? (
+        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          Cancelada. Sigues con tu plan{until ? ` hasta el ${until}` : ' hasta el final del periodo pagado'}; no se te volverá a cobrar.
+        </p>
+      ) : confirming ? (
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <p className="flex-1 text-sm text-red-700 dark:text-red-300">
+            ¿Cancelar? Sigues con tu plan{until ? ` hasta el ${until}` : ' hasta el final del periodo pagado'} y ya no se te cobra el siguiente mes.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => setConfirming(false)} className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm">
+              No, seguir
+            </button>
+            <button onClick={() => void cancel()} disabled={busy} className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">
+              {busy ? 'Cancelando…' : 'Sí, cancelar'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400">{until ? `Se renueva el ${until}.` : 'Se renueva cada mes.'}</p>
+          <button onClick={() => setConfirming(true)} className="text-sm font-medium text-red-600 hover:underline dark:text-red-400">
+            Cancelar suscripción
+          </button>
         </div>
       )}
     </div>

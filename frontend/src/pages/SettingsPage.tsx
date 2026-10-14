@@ -13,6 +13,7 @@ import AgentSettingsCard from '@/components/AgentSettingsCard'
 import LoyaltySettingsCard from '@/components/LoyaltySettingsCard'
 import CounterQrCard from '@/components/CounterQrCard'
 import DirectoryCard from '@/components/DirectoryCard'
+import { planDisplayName } from '@/lib/plans'
 
 const CATEGORIES = [
   { value: 'restaurante', label: 'Restaurante / Bar / Taquería' },
@@ -493,7 +494,7 @@ function ApiKeysSection() {
 
 
 export default function SettingsPage() {
-  const { user, setUser } = useAuth()
+  const { user, setUser, refreshUser } = useAuth()
   const qc = useQueryClient()
   const [saved, setSaved] = useState(false)
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
@@ -508,6 +509,7 @@ export default function SettingsPage() {
       setCancelDone(true)
       setCancelConfirm(false)
       qc.invalidateQueries({ queryKey: ['dashboard'] })
+      void refreshUser?.()
     },
   })
 
@@ -718,7 +720,7 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-muted-foreground">Plan</span>
-              <p className="font-medium capitalize">{dashboard.plan}</p>
+              <p className="font-medium">{planDisplayName(dashboard.plan)}</p>
             </div>
             <div>
               <span className="text-muted-foreground">Estado</span>

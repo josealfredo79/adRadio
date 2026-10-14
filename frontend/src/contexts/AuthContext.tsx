@@ -19,6 +19,8 @@ interface User {
   bot_instructions: string | null
   subscription_status: string
   current_plan: string
+  cancel_at_period_end?: boolean | null
+  plan_expires_at?: string | null
   // Prueba gratis (backend: trial_lifecycle.py)
   paused?: boolean
   trial_days_left?: number | null
@@ -69,6 +71,9 @@ interface AuthContextType {
   logout: () => Promise<void>
   register: (email: string, password: string, businessName?: string) => Promise<void>
   setUser: (user: User) => void
+  // Vuelve a leer /me: el plan cambia por fuera (aviso de Stripe tras pagar,
+  // cancelación) y el letrero del plan se quedaba como al abrir la pestaña.
+  refreshUser?: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -106,6 +111,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me.data)
   }
 
+  const refreshUser = async () => {
+    try {
+      setUser((await api.get('/me')).data)
+    } catch {
+      // sin sesión o sin red: se queda lo que había
+    }
+  }
+
   const logout = async () => {
     await api.post('/auth/logout').catch(() => {})
     setAccessToken(null)
@@ -124,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, register, setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, register, setUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

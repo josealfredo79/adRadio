@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams, Link } from 'react-router-dom'
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCopilot } from '@/contexts/CopilotContext'
@@ -60,12 +60,21 @@ const DAYS_ES: Record<string, string> = {
 const Mascot3D = lazy(() => import('@/components/Mascot3D'))
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const { setAssistantOpen } = useCopilot()
   const [talkHover, setTalkHover] = useState(false)
   const [hasDemoDraft] = useState(() => loadDemoDraft() !== null)
   const [searchParams, setSearchParams] = useSearchParams()
   const paymentSuccess = searchParams.get('success') === '1'
+  // Al volver de Stripe el aviso del pago puede tardar unos segundos en llegar
+  // al servidor: se relee el plan un par de veces para que el letrero cambie solo.
+  useEffect(() => {
+    if (!paymentSuccess) return
+    void refreshUser?.()
+    const timers = [4000, 12000].map((ms) => setTimeout(() => void refreshUser?.(), ms))
+    return () => timers.forEach(clearTimeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentSuccess])
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
 
   // Remove ?success param from URL after showing the banner
