@@ -1,6 +1,7 @@
 """
 Script prompts and generation for radio ads.
 """
+import re
 
 GUION_SYSTEM_PROMPT = """Eres un guionista experto en radio AM/FM latinoamericana de los años 80-90.
 Escribe el guión de una cuña publicitaria de 20-25 segundos.
@@ -269,7 +270,34 @@ de forma que el oyente sienta que el mensaje llegó justo cuando lo necesitaba."
     else:
         prompt = base + f"Mensaje: {message_or_intent}\n\nDevuelve SOLO el texto del locutor."
 
-    return await chat_completion(
+    script = await chat_completion(
         [{"role": "user", "content": prompt}],
         system=system, max_tokens=600, temperature=0.85,
     )
+    return clean_script(script)
+
+
+_BRACKETS = re.compile(r"\[[^\]]*\]")
+_STANDALONE = re.compile(r"^\s*(\*+[^*]+\*+|\([^)]*\))\s*$")
+# Paréntesis que son indicaciones, no texto: "(pausa)", "(efecto: ding)", "(música sube)".
+_CUE = re.compile(
+    r"\((?:[^)]*\b)?(?:pausa|efecto|sfx|m[uú]sica|sonido|risa|r[ií]e|suspir|inhal|exhal|voz|tono|jingle|fx)\b[^)]*\)",
+    re.IGNORECASE,
+)
+
+
+def clean_script(text: str) -> str:
+    """Solo lo que dice el locutor. Aunque las instrucciones lo piden, la IA a
+    veces mete acotaciones ("*[Música suave de fondo]*", "*Inhala.*",
+    separadores "---") y la voz las leía en voz alta (13-oct). Se quitan los
+    corchetes, las líneas que son solo una acotación entre asteriscos o
+    paréntesis, y los asteriscos de énfasis (se queda la palabra)."""
+    lines = []
+    for line in (text or "").splitlines():
+        line = _CUE.sub("", _BRACKETS.sub("", line))
+        if _STANDALONE.match(line) or re.fullmatch(r"\s*[-–—_*=]{3,}\s*", line):
+            continue
+        line = line.replace("*", "").strip()
+        if line:
+            lines.append(line)
+    return re.sub(r"[ \t]{2,}", " ", "\n\n".join(lines)).strip()

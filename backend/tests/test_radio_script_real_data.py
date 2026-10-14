@@ -46,3 +46,23 @@ async def test_every_mode_forbids_inventing_contact_data(mode):
     assert system.endswith(NO_INVENTAR)
     assert "Negocio: CityCell" in prompt
     assert "Contacto: ninguno" in prompt
+
+
+@pytest.mark.parametrize("raw,spoken", [
+    ("*[Música suave de fondo]*\n\n---\n\n¿Sabías que cargar el cel **toda la noche** daña la batería?",
+     "¿Sabías que cargar el cel toda la noche daña la batería?"),
+    ("*Inhala.*\n\nValeria tenía entrevista. (pausa) Se le rompió la pantalla.",
+     "Valeria tenía entrevista. Se le rompió la pantalla."),
+    ("(Efecto: ding) En CityCell te ayudan.", "En CityCell te ayudan."),
+    ("Lleva 2x1 (solo esta semana) en CityCell.", "Lleva 2x1 (solo esta semana) en CityCell."),
+])
+def test_stage_directions_are_not_read_aloud(raw, spoken):
+    from app.services.radio.scripts import clean_script
+
+    assert clean_script(raw) == spoken
+
+
+@pytest.mark.asyncio
+async def test_generated_script_comes_out_clean():
+    with patch("app.services.llm_client.chat_completion", AsyncMock(return_value="*[Jingle]*\n¡Hola, Tlaxiaco! (pausa) Esto es CityCell.")):
+        assert await generate_radio_script("CityCell", "promo") == "¡Hola, Tlaxiaco! Esto es CityCell."

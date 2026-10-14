@@ -315,6 +315,13 @@ async def widget_chat(
                        created_at=asked_at + timedelta(milliseconds=1)))
         try:
             conv = await open_conversation(db, user.id, contact.id)
+            # Igual que en WhatsApp (inbound_pipeline): sin esto un "¡La quiero!"
+            # por la web dejaba al cliente en "Frío" en el Inbox.
+            from app.services.lead_score import calculate_lead_score
+
+            new_score = calculate_lead_score(message, len(conv.messages or []))
+            if new_score:
+                conv.lead_score = new_score
             log_turns(
                 conv,
                 {"role": "user", "content": message, "channel": "web"},

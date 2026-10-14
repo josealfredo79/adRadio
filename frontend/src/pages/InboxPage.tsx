@@ -6,7 +6,7 @@ import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import SEO from '@/components/SEO'
 import LearnCard from '@/components/LearnCard'
-import { renderChatText } from '@/lib/chatText'
+import { plainChatText, renderChatText } from '@/lib/chatText'
 
 // Detect and render WhatsApp media stored as [media:type]url
 function isSafeUrl(url: string): boolean {
@@ -323,7 +323,7 @@ export default function InboxPage() {
                       {conv.last_message.role === 'assistant' ? '🤖 ' : '👤 '}
                       {conv.last_message.content.startsWith('[media:')
                         ? '📎 Archivo adjunto'
-                        : conv.last_message.content}
+                        : plainChatText(conv.last_message.content)}
                     </p>
                   )}
                   <div className="mt-1 flex items-center gap-2">

@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
-import { renderChatText } from '@/lib/chatText'
+import { plainChatText, renderChatText } from '@/lib/chatText'
 
 describe('renderChatText', () => {
   it('turns the bot asterisks into bold instead of showing them', () => {
@@ -13,5 +13,11 @@ describe('renderChatText', () => {
     const { container } = render(<p>{renderChatText('5 * 3 = 15')}</p>)
     expect(container.textContent).toBe('5 * 3 = 15')
     expect(container.querySelector('strong')).toBeNull()
+  })
+})
+
+describe('plainChatText', () => {
+  it('drops the bold asterisks in one-line previews (Inbox list)', () => {
+    expect(plainChatText('¡Genial! Confirmamos tu cupón **2WTDTA3S** para *2x1*')).toBe('¡Genial! Confirmamos tu cupón 2WTDTA3S para 2x1')
   })
 })

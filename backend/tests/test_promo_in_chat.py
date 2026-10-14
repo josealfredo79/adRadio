@@ -216,3 +216,17 @@ async def test_radio_promo_brings_its_audio_to_the_chat():
         assert promo["promo"]["audio_url"] == "https://cdn.test/cuna.mp3"
     finally:
         await _cleanup(s["user_id"])
+
+
+@pytest.mark.asyncio
+async def test_want_it_on_the_web_marks_the_customer_hot():
+    # En el Inbox seguía "Frío" después de "¡La quiero!" (13-oct): la web no calculaba el interés.
+    s = await _seed()
+    try:
+        c = await _seed_promos(s)
+        await _web_chat(s, "¡La quiero! — 2x1 en cortes", promo_id=str(c["promo"]))
+        async with AsyncSessionLocal() as db:
+            conv = (await db.execute(select(Conversation).where(Conversation.contact_id == s["ana"]))).scalar_one()
+        assert conv.lead_score == "hot"
+    finally:
+        await _cleanup(s["user_id"])
