@@ -121,6 +121,12 @@ async def stripe_webhook(
         logger.warning("[WEBHOOK] Invalid signature")
         raise HTTPException(status_code=400, detail="Firma Stripe inválida")
 
+    # stripe-python 15 entrega un StripeObject que ya no es dict (sin .get):
+    # cada pago real tronaba con 500 y el plan nunca se activaba (13-oct,
+    # primera prueba real de cobro). Las pruebas no lo veían porque simulaban
+    # construct_event con un dict.
+    if hasattr(event, "to_dict"):
+        event = event.to_dict()
     event_id = event.get("id", "unknown")
     event_type = event["type"]
     data = event["data"]["object"]
@@ -188,9 +194,18 @@ async def stripe_webhook(
 
     elif event_type == "invoice.payment_succeeded":
 
-        payment_intent = data.get("payment_intent")
+        # La factura del primer pago ya la acreditó checkout.session.completed:
+        # sin esto, con una API que sí trae payment_intent, se sumaban dos veces
+        # los mensajes del plan.
+        if data.get("billing_reason") == "subscription_create":
+            logger.info("[WEBHOOK] First invoice %s already credited by checkout", data.get("id"))
+            return {"received": True}
+        # Desde la API 2025-03-31 la factura ya no trae payment_intent: sin el
+        # id de la factura como respaldo, ninguna renovación mensual se
+        # acreditaba (ni mensajes ni vigencia del plan).
+        payment_intent = data.get("payment_intent") or data.get("id")
         if not payment_intent:
-            logger.warning("[WEBHOOK] invoice.payment_succeeded missing payment_intent")
+            logger.warning("[WEBHOOK] invoice.payment_succeeded missing payment_intent and id")
             return {"received": True}
 
         # Idempotency
