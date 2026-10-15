@@ -30,6 +30,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.plans import plan_limit
+from app.core.redis import get_redis_optional
 from app.core.security import decode_token, sign_jwt
 from app.domain.appointment_actions import AppointmentConflictError, check_no_conflict
 from app.domain.campaign_actions import (
@@ -345,6 +347,11 @@ TOOLS = [
     },
     *biz_tools.TOOLS,
 ]
+
+# Las herramientas (~3,300 tokens) no cambian entre llamadas: con la marca de
+# caché en la última, Anthropic cobra ~10% por ellas en cada vuelta del loop
+# en vez de leerlas completas otra vez.
+_CACHED_TOOLS = [*TOOLS[:-1], {**TOOLS[-1], "cache_control": {"type": "ephemeral"}}]
 
 
 # ─── Confirmación firmada (stateless) ─────────────────────────────────────────
@@ -1009,6 +1016,37 @@ async def _phrase_confirmed_result(user: User, tool_name: str, data: dict, chann
         return _summarize(tool_name, data)
 
 
+# ─── Tope diario ──────────────────────────────────────────────────────────────
+
+DAILY_LIMIT_REPLY = (
+    "Llegaste al límite de hoy del Copiloto; mañana sigues. "
+    "Tu bot sigue atendiendo a tus clientes normal."
+)
+
+
+async def _over_daily_limit(user: User) -> bool:
+    """Cuenta este mensaje contra el tope diario del plan (core/plans.py,
+    "copilot") y dice si ya se pasó. Los admins no tienen tope. Si Redis no
+    está, deja pasar: el tope es un seguro de costo, no vale tumbar el Copiloto."""
+    if user.role == "admin":
+        return False
+    limit = plan_limit(user.current_plan, "copilot")
+    if limit < 0:
+        return False
+    try:
+        redis = await get_redis_optional()
+        if redis is None:
+            return False
+        key = f"copilot:daily:{user.id}:{datetime.now(TZ):%Y-%m-%d}"
+        count = await redis.incr(key)
+        if count == 1:
+            await redis.expire(key, 2 * 24 * 3600)
+        return count > limit
+    except Exception:
+        logger.warning("[COPILOT] daily limit check failed", exc_info=True)
+        return False
+
+
 # ─── Entradas públicas ─────────────────────────────────────────────────────────
 
 _PHOTO_TOOLS = {"create_product", "update_product"}
@@ -1025,6 +1063,9 @@ async def handle_chat(
     """`attached_photo`: foto que el dueño mandó con este mensaje. Si con ella
     se crea o cambia un producto, se le pone aunque el modelo no haya copiado
     la URL a la herramienta (pasó en producción: el producto quedó sin foto)."""
+    if await _over_daily_limit(user):
+        return {"reply": DAILY_LIMIT_REPLY, "actions": [], "pending_confirmation": None}
+
     client = _get_client()
     system = _build_system_prompt(user, channel)
 
@@ -1044,8 +1085,11 @@ async def handle_chat(
                 max_tokens=1024,
                 temperature=0.2,
                 system=system,
-                tools=TOOLS,
+                tools=_CACHED_TOOLS,
                 messages=messages,
+                # Además cachea hasta el último mensaje: las vueltas 2–5 de este
+                # mismo turno (tras usar herramientas) reusan instrucciones e historial.
+                cache_control={"type": "ephemeral"},
             )
         except Exception as e:
             logger.warning("[COPILOT] Anthropic call failed: %s", e, exc_info=True)

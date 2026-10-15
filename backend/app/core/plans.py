@@ -22,44 +22,46 @@ en la cuenta de WhatsApp de cada negocio.
 # price_mxn es lo que se muestra Y lo que se cobra en Stripe (en pesos, desde
 # 2026-10-12); price_usd queda solo como referencia (≈ en la página de inicio,
 # MRR aproximado del panel admin). -1 = sin límite.
+# copilot = mensajes al Copiloto por día (hora MX): seguro contra la cuenta de
+# Anthropic, un dueño normal manda 5–10 (decisión 2026-10-14).
 PLANS: dict[str, dict] = {
     "starter": {
         "name": "Arranque", "price_mxn": 449, "price_usd": 26,
         "messages": 150, "conversations": 300, "radio": 0, "team": 1,
-        "days": 30, "sellable": True,
+        "days": 30, "sellable": True, "copilot": 25,
     },
     "growth": {
         "name": "Negocio", "price_mxn": 899, "price_usd": 52,
         "messages": 500, "conversations": 1000, "radio": 4, "team": 2,
-        "days": 30, "sellable": True,
+        "days": 30, "sellable": True, "copilot": 60,
     },
     "pro": {
         "name": "Crecimiento", "price_mxn": 1799, "price_usd": 104,
         "messages": 1500, "conversations": 3000, "radio": 15, "team": 5,
-        "days": 30, "sellable": True,
+        "days": 30, "sellable": True, "copilot": 120,
     },
     "enterprise": {
         "name": "Empresa", "price_mxn": 4999, "price_usd": 289,
         "messages": 5000, "conversations": -1, "radio": -1, "team": -1,
-        "days": 30, "sellable": True,
+        "days": 30, "sellable": True, "copilot": 300,
     },
     # Retirados de la venta (2026-10-01) — solo por compatibilidad.
     "micro": {
         "name": "Micro", "price_mxn": 299, "price_usd": 18,
         "messages": 100, "conversations": 300, "radio": 0, "team": 1,
-        "days": 30, "sellable": False,
+        "days": 30, "sellable": False, "copilot": 25,
     },
     "business": {
         "name": "Business", "price_mxn": 6799, "price_usd": 399,
         "messages": 3000, "conversations": 3000, "radio": 15, "team": 5,
-        "days": 30, "sellable": False,
+        "days": 30, "sellable": False, "copilot": 120,
     },
 }
 
 # Prueba gratis: 15 días (decisión 2026-10-01: 30 días era mucho costo de IA
 # sin ingreso), con los límites de Arranque más 3 cuñas para probar la radio.
 TRIAL_DAYS = 15
-TRIAL_LIMITS = {"conversations": 300, "radio": 3, "team": 1}
+TRIAL_LIMITS = {"conversations": 300, "radio": 3, "team": 1, "copilot": 25}
 
 # Programa Fundadores: ~30% menos, precio bloqueado 12 meses, cupo real en BD
 # (migración 0048). Solo en los dos planes de entrada.
@@ -79,7 +81,7 @@ PLAN_MESSAGES: dict[str, int] = {key: p["messages"] for key, p in PLANS.items()}
 
 
 def plan_limit(plan: str | None, field: str) -> int:
-    """Límite de `field` (conversations/radio/team) del plan; -1 = sin límite."""
+    """Límite de `field` (conversations/radio/team/copilot) del plan; -1 = sin límite."""
     if not plan or plan == "trial":
         return TRIAL_LIMITS.get(field, 0)
     return PLANS.get(plan, {}).get(field, TRIAL_LIMITS.get(field, 0))
