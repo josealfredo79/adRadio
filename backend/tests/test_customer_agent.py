@@ -221,6 +221,34 @@ class TestBooking:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
+    async def test_cancel_one_appointment_asks_only_once(self):
+        """Prod 2026-10-15: "¿Esa es la que quieres cancelar?" (sin proponer) y luego
+        "¿Lo confirmo?" — dos preguntas para un solo sí. Ahora en el mismo turno sale
+        la propuesta con sus botones."""
+        user_id, ana, *_ = await _seed()
+        async with AsyncSessionLocal() as db:
+            appt = Appointment(advertiser_id=user_id, contact_id=ana, customer_name="Ana", service="Corte",
+                               scheduled_at=datetime.now(timezone.utc) + timedelta(days=2), status="confirmed")
+            db.add(appt)
+            await db.commit()
+            appt_id = appt.id
+        r = Redis()
+        try:
+            claude, client = fake_claude(
+                resp(tool("mis_citas")),
+                resp(text("Tienes una cita el viernes a las 3 pm. ¿Esa es la que quieres cancelar? 🤔"), stop="end_turn"),
+                resp(tool("proponer_cancelar_cita", cita_id=str(appt_id))),
+                resp(text("¿Cancelo tu cita del viernes a las 3 pm? ¿Lo confirmo?"), stop="end_turn"),
+            )
+            out = await _say(user_id, ana, "cancela mi cita", r, claude)
+            assert out.confirm is True and client.messages.create.await_count == 4
+            await _say(user_id, ana, "sí", r)
+            async with AsyncSessionLocal() as db:
+                assert (await db.get(Appointment, appt_id)).status == "cancelled"
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
     async def test_taken_slot_is_refused(self):
         user_id, ana, *_ = await _seed()
         when = _next_open_day()

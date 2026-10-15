@@ -1,6 +1,9 @@
+import threading
+
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 
@@ -36,29 +39,30 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,
 )
 
-_celery_engine = None
+_celery_local = threading.local()
 
 
 def _get_celery_engine():
-    global _celery_engine
-    if _celery_engine is None:
-        _celery_engine = create_async_engine(
-            settings.database_url_safe,
-            echo=settings.DEBUG,
-            pool_pre_ping=True,
-            pool_size=max(3, settings.DB_POOL_SIZE // 4),
-            max_overflow=max(5, settings.DB_MAX_OVERFLOW // 2),
-            pool_recycle=300,
-        )
-        event.listens_for(_celery_engine.sync_engine, "connect")(_set_search_path)
-    return _celery_engine
+    """Un motor por hilo del worker, sin grupo de conexiones (NullPool).
+
+    El worker corre tareas en hilos (`--pool threads -c 4`, railway.json) y
+    cada una con su propio asyncio.run (run_async). Un solo motor compartido
+    entre hilos tronaba con "Lock ... is bound to a different event loop"
+    (prod 13/14-oct, tareas del beat que caen en el mismo segundo) o se
+    trababa para siempre — aun sin grupo de conexiones (comprobado con dos
+    hilos: con un motor por hilo no pasa). Dentro de un hilo las tareas van
+    una tras otra y NullPool evita reusar conexiones de un ciclo anterior."""
+    engine = getattr(_celery_local, "engine", None)
+    if engine is None:
+        engine = create_async_engine(settings.database_url_safe, echo=settings.DEBUG, poolclass=NullPool)
+        event.listens_for(engine.sync_engine, "connect")(_set_search_path)
+        _celery_local.engine = engine
+    return engine
 
 
-CeleryAsyncSessionLocal = async_sessionmaker(
-    _get_celery_engine(),
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+def CeleryAsyncSessionLocal(**kwargs) -> AsyncSession:
+    """Sesión para tareas de Celery, con el motor del hilo actual."""
+    return AsyncSession(bind=_get_celery_engine(), expire_on_commit=False, **kwargs)
 
 
 class Base(DeclarativeBase):

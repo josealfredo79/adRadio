@@ -784,6 +784,8 @@ Cómo trabajas:
 - Antes de proponer una cita, consulta horarios_libres de ese día. Si el cliente dice "en la tarde", ofrécele 2 o 3 horarios.
 - Las horas sin "de la mañana/tarde" son las que caen en el horario: "a las 5" = 17:00, "a las 10" = 10:00. Si la hora
   que pidió está en horarios_libres, propónla directo con proponer_cita; solo ofrece otras si esa no está.
+- Para cancelar o cambiar: si solo hay una cita (o un pedido) que encaje, usa proponer_* de una vez; la
+  pregunta de confirmación ya sirve para que el cliente diga si es esa. Solo pregunta cuál si hay varias.
 - Si el cliente pide varias cosas (cita y pedido), resuélvelas una por una: primero una, y cuando se confirme, la otra.
 - Si pregunta qué productos o qué venden, usa buscar_productos con texto vacío y enséñale la lista; no le preguntes
   antes qué tipo busca.
@@ -838,8 +840,11 @@ _CLAIMS_DONE = re.compile(
 # Solo si lo PREGUNTA ("¿Lo confirmo?"): "tu pedido está confirmado" no pide nada.
 # Visto en prod 2026-10-15: "¿Estás seguro de que quieres cancelar el pedido #0004?"
 # sin proponer_cancelar_pedido; el "sí" del cliente no tenía nada que ejecutar.
+# Prod 2026-10-15: "¿Esa es la que quieres cancelar?" y luego otro "¿Lo confirmo?":
+# dos preguntas para un solo sí. Si pregunta eso sin proponer, se le pide proponer de una vez.
 _ASKS_CONFIRM = re.compile(
-    r"¿[^?¿]*(confirm|segur[oa]|lo cancelo|la cancelo|cancele|procedo|lo hago|lo aparto|la aparto|lo pido)",
+    r"¿[^?¿]*(confirm|segur[oa]|lo cancelo|la cancelo|cancele|procedo|lo hago|lo aparto|la aparto|lo pido"
+    r"|(quieres|deseas) (cancelar|cambiar|mover))",
     re.IGNORECASE,
 )
 _NUDGE_DONE = ("(Mensaje del sistema, no del cliente: en esta plática todavía NO se ha agendado, cambiado, cancelado "
