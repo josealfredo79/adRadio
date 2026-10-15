@@ -111,7 +111,36 @@ interface HistoryTurn {
   content: string
 }
 
+const LABELS: Record<string, string> = {
+  count: 'Total',
+  total: 'Total',
+  items: 'Resultados',
+  name: 'Nombre',
+  phone: 'Teléfono',
+  tags: 'Etiquetas',
+  status: 'Estado',
+  pipeline_stage: 'Etapa',
+  email: 'Correo',
+  code: 'Código',
+}
+
+const VALUE_LABELS: Record<string, string> = {
+  active: 'activo',
+  unsubscribed: 'dado de baja',
+  draft: 'borrador',
+  scheduled: 'programada',
+  paused: 'pausada',
+  sent: 'enviada',
+  completed: 'terminada',
+}
+
+// Los ids no le dicen nada al dueño: nunca se muestran.
+function isIdKey(key: string): boolean {
+  return key === 'id' || key.endsWith('_id')
+}
+
 function humanizeLabel(key: string): string {
+  if (LABELS[key]) return LABELS[key]
   return key
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
@@ -120,14 +149,29 @@ function humanizeLabel(key: string): string {
 function formatPrimitive(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—'
   if (typeof value === 'boolean') return value ? 'Sí' : 'No'
+  if (typeof value === 'string' && VALUE_LABELS[value]) return VALUE_LABELS[value]
   return String(value)
+}
+
+// Un elemento de una lista (un contacto, una campaña…) en una sola línea:
+// "Movimiento · +529515199084 · prueba" en vez del objeto crudo.
+function summarizeItem(item: Record<string, unknown>): string {
+  const parts = Object.entries(item)
+    .filter(([key, value]) => !isIdKey(key) && value !== null && value !== undefined && value !== '')
+    .map(([, value]) => {
+      if (Array.isArray(value)) return value.filter((v) => typeof v !== 'object').map(formatPrimitive).join(', ')
+      if (typeof value === 'object') return ''
+      return formatPrimitive(value)
+    })
+    .filter(Boolean)
+  return parts.join(' · ') || '—'
 }
 
 // Renders a single action's `data` payload as label/value rows or a compact
 // list — never raw JSON. Handles the common shapes (a flat object, a list of
 // objects/primitives) with one level of nesting; anything deeper falls back
 // to a short stringified summary so we never dump raw JSON on screen.
-function ActionData({ data, depth = 0 }: { data: unknown; depth?: number }) {
+export function ActionData({ data, depth = 0 }: { data: unknown; depth?: number }) {
   if (data === null || data === undefined) return null
 
   if (Array.isArray(data)) {
@@ -138,7 +182,7 @@ function ActionData({ data, depth = 0 }: { data: unknown; depth?: number }) {
           <li key={i} className="flex items-start gap-1.5 text-xs text-gray-600 dark:text-gray-400">
             <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-gray-400 dark:bg-gray-600" />
             {typeof item === 'object' && item !== null ? (
-              depth < 1 ? <ActionData data={item} depth={depth + 1} /> : <span>{JSON.stringify(item)}</span>
+              <span>{summarizeItem(item as Record<string, unknown>)}</span>
             ) : (
               <span>{formatPrimitive(item)}</span>
             )}
@@ -152,7 +196,7 @@ function ActionData({ data, depth = 0 }: { data: unknown; depth?: number }) {
   }
 
   if (typeof data === 'object') {
-    const entries = Object.entries(data as Record<string, unknown>)
+    const entries = Object.entries(data as Record<string, unknown>).filter(([key]) => !isIdKey(key))
     if (!entries.length) return null
     return (
       <div className="space-y-1">
@@ -165,7 +209,9 @@ function ActionData({ data, depth = 0 }: { data: unknown; depth?: number }) {
                   <ActionData data={value} depth={depth + 1} />
                 </div>
               ) : (
-                <span className="font-medium text-gray-700 dark:text-gray-300 text-right">{JSON.stringify(value)}</span>
+                <span className="font-medium text-gray-700 dark:text-gray-300 text-right">
+                  {Array.isArray(value) ? `${value.length}` : summarizeItem(value as Record<string, unknown>)}
+                </span>
               )
             ) : (
               <span className="font-medium text-gray-700 dark:text-gray-300 text-right">{formatPrimitive(value)}</span>
