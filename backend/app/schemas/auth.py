@@ -94,7 +94,7 @@ class UserOut(BaseModel):
     closer_config: dict | None = None
     loyalty_config: dict | None = None
     directory_listed: bool = True
-    customer_agent_enabled: bool = False
+    customer_agent_enabled: bool = True
     appointment_services: list[dict] | None = None
     staff: list[dict] | None = None
     payment_link: str | None = None
