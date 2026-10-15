@@ -392,6 +392,30 @@ class TestCouponsAndOrderStatus:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
+    async def test_are_you_sure_without_proposing_is_corrected(self):
+        """Prod 2026-10-15: "¿Estás seguro de que quieres cancelar el pedido #0004?"
+        sin proponer_cancelar_pedido; el "sí" no cancelaba nada."""
+        user_id, ana, *_ = await _seed()
+        order_id = await self._order(user_id, ana, minutes_ago=3)
+        r = Redis()
+        try:
+            claude, client = fake_claude(
+                resp(tool("mis_pedidos")),
+                resp(text("¿Estás seguro de que quieres cancelar el pedido #0007? 🤔"), stop="end_turn"),
+                resp(tool("proponer_cancelar_pedido", numero=7)),
+                resp(text("¿Cancelo tu pedido #0007? ¿Lo confirmo?"), stop="end_turn"),
+            )
+            out = await _say(user_id, ana, "cancela mi pedido", r, claude)
+            calls = client.messages.create.await_args_list
+            assert calls[0].kwargs["tool_choice"] == {"type": "tool", "name": "mis_pedidos"}
+            assert out.confirm is True
+            out = await _say(user_id, ana, "si", r)
+            async with AsyncSessionLocal() as db:
+                assert (await db.get(Order, order_id)).state == "cancelled"
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
     async def test_old_order_cannot_be_cancelled_by_the_customer(self):
         user_id, ana, *_ = await _seed()
         order_id = await self._order(user_id, ana, minutes_ago=30)

@@ -786,7 +786,12 @@ _CLAIMS_DONE = re.compile(
     re.IGNORECASE,
 )
 # Solo si lo PREGUNTA ("¿Lo confirmo?"): "tu pedido está confirmado" no pide nada.
-_ASKS_CONFIRM = re.compile(r"¿[^?¿]*confirm", re.IGNORECASE)
+# Visto en prod 2026-10-15: "¿Estás seguro de que quieres cancelar el pedido #0004?"
+# sin proponer_cancelar_pedido; el "sí" del cliente no tenía nada que ejecutar.
+_ASKS_CONFIRM = re.compile(
+    r"¿[^?¿]*(confirm|segur[oa]|lo cancelo|la cancelo|cancele|procedo|lo hago|lo aparto|la aparto|lo pido)",
+    re.IGNORECASE,
+)
 _NUDGE_DONE = ("(Mensaje del sistema, no del cliente: en esta plática todavía NO se ha agendado, cambiado, cancelado "
                "ni pedido nada. No digas que quedó hecho. Si el cliente quiere eso, usa la herramienta proponer_* "
                "y pregúntale si lo confirmas. No te disculpes ni menciones este mensaje: contesta normal al cliente.)")
@@ -830,6 +835,22 @@ _ASKS_CATALOG = re.compile(
 )
 
 
+# "Cancela mi pedido / mi cita": Haiku preguntaba "¿estás seguro?" sin buscar
+# cuál. Primero ve los suyos (de ahí sale el número o el id para proponer_*).
+_CANCEL_ORDER = re.compile(r"\bcancel\w*\b.*\bpedido|\bpedido\b.*\bcancel", re.IGNORECASE)
+_CANCEL_APPT = re.compile(r"\bcancel\w*\b.*\bcita|\bcita\b.*\bcancel", re.IGNORECASE)
+
+
+def _forced_tool(message: str) -> str | None:
+    if _CANCEL_ORDER.search(message):
+        return "mis_pedidos"
+    if _CANCEL_APPT.search(message):
+        return "mis_citas"
+    if _ASKS_CATALOG.search(message):
+        return "buscar_productos"
+    return None
+
+
 async def _agent_loop(ctx: _Ctx, message: str, history: list[dict]) -> str | None:
     messages: list = [
         {"role": h["role"], "content": h["content"]}
@@ -846,12 +867,12 @@ async def _agent_loop(ctx: _Ctx, message: str, history: list[dict]) -> str | Non
     ]
     client = _get_client()
     corrections = 0
-    force_catalog = bool(_ASKS_CATALOG.search(message))
+    forced = _forced_tool(message)
     for _ in range(MAX_STEPS + MAX_CORRECTIONS):
         extra = {}
-        if force_catalog:
-            extra["tool_choice"] = {"type": "tool", "name": "buscar_productos"}
-            force_catalog = False
+        if forced:
+            extra["tool_choice"] = {"type": "tool", "name": forced}
+            forced = None
         response = await client.messages.create(
             model=settings.CUSTOMER_AGENT_MODEL,
             max_tokens=MAX_TOKENS,
