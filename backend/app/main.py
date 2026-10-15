@@ -530,5 +530,7 @@ if _SPA_DIR.is_dir():
         candidate = _SPA_DIR / full_path
         if candidate.is_file():
             return FileResponse(str(candidate))
-        return FileResponse(str(_SPA_DIR / "index.html"))
+        # no-cache: el navegador revalida (ETag) en cada visita en vez de quedarse
+        # con un index.html viejo que apunta al JS de antes del último despliegue.
+        return FileResponse(str(_SPA_DIR / "index.html"), headers={"Cache-Control": "no-cache"})
 # Trigger deployment

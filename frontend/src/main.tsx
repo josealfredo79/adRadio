@@ -19,6 +19,21 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   })
 }
 
+// Tras un despliegue, una pestaña abierta pide los archivos JS de la versión
+// anterior, que ya no existen: recarga una vez para tomar la nueva en vez de
+// quedarse en blanco. El tope de 1 por minuto evita un ciclo si el error es otro.
+window.addEventListener('vite:preloadError', (event) => {
+  try {
+    const last = Number(sessionStorage.getItem('reloadedForNewVersion') || 0)
+    if (Date.now() - last < 60_000) return
+    sessionStorage.setItem('reloadedForNewVersion', String(Date.now()))
+  } catch {
+    // sin sessionStorage igual recargamos
+  }
+  event.preventDefault()
+  window.location.reload()
+})
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
