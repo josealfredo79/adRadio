@@ -85,3 +85,31 @@ describe('OrdersPage', () => {
     expect(screen.getByText('Imprimir / PDF')).toBeDefined()
   })
 })
+
+describe('OrdersPage — cancelar un pedido ya confirmado', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('pide confirmación y manda el pedido a cancelado', async () => {
+    const { fireEvent, waitFor } = await import('@testing-library/react')
+    const api = (await import('@/lib/api')).default
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: {} })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderPage()
+    fireEvent.click(screen.getByText('#ORD-001'))
+    fireEvent.click(screen.getByText('Cancelar pedido'))
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/orders/1/state', { state: 'cancelled' }))
+  })
+
+  it('no cancela si el dueño dice que no', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const api = (await import('@/lib/api')).default
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({ data: {} })
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderPage()
+    fireEvent.click(screen.getByText('#ORD-001'))
+    fireEvent.click(screen.getByText('Cancelar pedido'))
+    expect(patch).not.toHaveBeenCalled()
+  })
+})

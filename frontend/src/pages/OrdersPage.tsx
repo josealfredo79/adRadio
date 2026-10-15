@@ -250,6 +250,23 @@ export default function OrdersPage() {
                           </button>
                         </div>
                       )}
+                      {/* Ya confirmado: el cliente puede pedir cancelarlo por el chat (el agente le avisa al dueño). */}
+                      {order.state === 'confirmed' && (
+                        <div className="mt-4">
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`¿Cancelar el pedido #${order.order_number}?`)) {
+                                patchState.mutate({ id: order.id, state: 'cancelled' })
+                              }
+                            }}
+                            disabled={patchState.isPending}
+                            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            Cancelar pedido
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </li>
