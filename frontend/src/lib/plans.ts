@@ -81,13 +81,13 @@ export const PLANS_CONFIG: PlanDefinition[] = [
       'Bot que conoce tu catálogo e información',
       'Banners y flyers con IA',
       '4 cuñas de radio con IA al mes',
-      'Automatizaciones',
+      'Seguimiento automático de interesados',
       '2 usuarios',
     ],
     highlightFeatures: [
       'Bot que conoce tu catálogo e información',
       '4 cuñas de radio con IA al mes',
-      'Automatizaciones',
+      'Seguimiento automático de interesados',
     ],
   },
   {

@@ -61,7 +61,6 @@ const MODULES: ModuleEntry[] = [
   { path: '/app/contacts', icon: Users, label: 'Contactos', prompt: 'Muéstrame mis contactos' },
   { path: '/app/campaigns', icon: Megaphone, label: 'Campañas', prompt: 'Muéstrame mis campañas' },
   { path: '/app/appointments', icon: CalendarDays, label: 'Citas', prompt: 'Muéstrame mis próximas citas' },
-  { path: '/app/automations', icon: Bot, label: 'Automatizaciones' },
   { path: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
   { path: '/app/orders', icon: ShoppingBag, label: 'Pedidos' },
   { path: '/app/products', icon: Package, label: 'Catálogo' },

@@ -100,7 +100,7 @@ CARACTERÍSTICAS PRINCIPALES:
 - Campañas de marketing masivo por WhatsApp
 - Cuñas de radio generadas con IA (texto a voz)
 - Panel de control con analytics en tiempo real
-- Cupones de descuento y automatizaciones
+- Cupones de descuento y seguimiento automático de interesados
 - Integración con Stripe, Google Calendar
 - Widget de WhatsApp embebible para tu web
 - Importación de contactos desde CSV

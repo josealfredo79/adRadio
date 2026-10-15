@@ -4,7 +4,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCopilot } from '@/contexts/CopilotContext'
-import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, GitBranch, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic, Globe, Gift } from 'lucide-react'
+import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic, Globe, Gift } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
 import PageBuilderCard from '@/components/PageBuilderCard'
@@ -119,13 +119,6 @@ export default function DashboardPage() {
       icon: Megaphone,
       color: 'text-purple-500 dark:text-purple-400',
       bg: 'bg-purple-50 dark:bg-purple-950/30',
-    },
-    {
-      label: 'Automatizaciones',
-      value: data?.automations_active ?? 0,
-      icon: GitBranch,
-      color: 'text-orange-500 dark:text-orange-400',
-      bg: 'bg-orange-50 dark:bg-orange-950/30',
     },
     {
       label: 'Mensajes de WhatsApp este mes',
@@ -515,7 +508,7 @@ export default function DashboardPage() {
           )}
 
           {/* Quick actions */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="rounded-xl border border-brand-100 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/30 p-5">
               <h3 className="font-semibold text-brand-700 dark:text-brand-300">🎙️ Nueva campaña</h3>
               <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">
@@ -526,18 +519,6 @@ export default function DashboardPage() {
                 className="mt-3 inline-flex items-center text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline"
               >
                 Crear campaña →
-              </Link>
-            </div>
-            <div className="rounded-xl border border-orange-100 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 p-5">
-              <h3 className="font-semibold text-orange-700 dark:text-orange-300">⚡ Automatización</h3>
-              <p className="mt-1 text-sm text-orange-600 dark:text-orange-400">
-                Mensajes automáticos en secuencia para dar seguimiento a tus contactos.
-              </p>
-              <Link
-                to="/app/automations"
-                className="mt-3 inline-flex items-center text-sm font-medium text-orange-600 dark:text-orange-400 hover:underline"
-              >
-                Crear flujo →
               </Link>
             </div>
             <div className="rounded-xl border border-green-100 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-5">
