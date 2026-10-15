@@ -102,6 +102,43 @@ async def send_whatsapp(to: str, body: str, *, advertiser: User) -> tuple[str | 
         return None, str(e)[:100]
 
 
+async def send_whatsapp_reply_buttons(
+    to: str, body: str, buttons: list[str], *, advertiser: User
+) -> tuple[str | None, str | None]:
+    """Texto con hasta 3 botones de respuesta (mensaje interactivo). Solo vale
+    dentro de la ventana de 24 h, así que es para contestarle al cliente, no
+    para iniciar plática; no necesita plantilla. El botón que toque llega como
+    su título (meta_incoming: button_reply). Si Meta lo rechaza o el texto es
+    muy largo para un interactivo, se manda como texto normal."""
+    titles = [b[:20] for b in buttons[:3]]
+    conn = _connection(advertiser)
+    if conn is None or len(body) > 1024 or not titles:
+        return await send_whatsapp(to, body, advertiser=advertiser)
+    phone_number_id, token = conn
+    try:
+        data = await graph_request(
+            f"{phone_number_id}/messages",
+            token=token,
+            method="POST",
+            body={
+                "messaging_product": "whatsapp",
+                "to": normalize_recipient(to),
+                "type": "interactive",
+                "interactive": {
+                    "type": "button",
+                    "body": {"text": body},
+                    "action": {"buttons": [
+                        {"type": "reply", "reply": {"id": f"btn_{i}", "title": t}} for i, t in enumerate(titles)
+                    ]},
+                },
+            },
+        )
+        return (data.get("messages") or [{}])[0].get("id"), None
+    except MetaApiError as e:
+        logger.warning("[META] reply buttons rejected advertiser=%s: %s — sending plain text", advertiser.id, e)
+        return await send_whatsapp(to, body, advertiser=advertiser)
+
+
 async def send_whatsapp_media(
     to: str, media_url: str, body: str = "", *, advertiser: User
 ) -> tuple[str | None, str | None]:

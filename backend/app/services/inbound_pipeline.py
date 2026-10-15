@@ -14,7 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,6 +69,8 @@ logger = logging.getLogger(__name__)
 
 # (external_id, error) — same shape meta_service already returns.
 SendFn = Callable[[str, str], Awaitable[tuple[str | None, str | None]]]
+# (to, body, botones) — mensaje con botones de respuesta (meta_service.send_whatsapp_reply_buttons).
+ButtonsFn = Callable[[str, str, list[str]], Awaitable[tuple[str | None, str | None]]]
 
 
 @dataclass
@@ -127,6 +129,7 @@ async def process_inbound_message(
     msg: InboundMessage,
     send: SendFn,
     send_owner: SendFn,
+    send_buttons: ButtonsFn | None = None,
 ) -> dict[str, str]:
     """
     Run the full bot pipeline for an already-resolved advertiser + inbound text.
@@ -204,11 +207,33 @@ async def process_inbound_message(
                 await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(existing_contact.id)})
             return {"message": "ok"}
 
+    # Agente del cliente en WhatsApp (spec docs/specs/2026-10-15-agente-en-whatsapp.md):
+    # solo en el número propio del negocio (el central no trae send_buttons),
+    # con el interruptor CUSTOMER_AGENT_WHATSAPP y sin notas de voz.
+    from app.config import settings
+    from app.services import customer_agent
+
+    agent_wa = bool(
+        send_buttons is not None and not audio_transcription
+        and customer_agent.whatsapp_enabled(advertiser) and advertiser.customer_agent_enabled
+        and settings.ANTHROPIC_API_KEY
+    )
+    # Un "sí" a un "¿lo confirmo?" del agente es del agente, aunque haya un
+    # recordatorio de cita esperando respuesta (los manejadores de abajo).
+    agent_pending = False
+    if agent_wa and existing_contact:
+        _agent_redis = await get_redis_optional()
+        agent_pending = bool(_agent_redis and await _agent_redis.get(
+            f"{customer_agent.PENDING_PREFIX}{existing_contact.id}"))
+
     # Capa 12 anti-baneo: opt-out por palabra clave. Un STOP ignorado (por un
     # desfase de formato de número, o por puntuación/espacios que rompen el
     # match exacto) sigue enviándole campañas a alguien que pidió baja — la
     # causa #1 de reportes de spam que hunden el quality rating de la cuenta.
     stop_words = {"baja", "stop", "no quiero", "cancelar", "salir"}
+    if agent_wa:
+        # Con el agente, "cancelar" casi siempre es su cita o su pedido (más abajo).
+        stop_words.discard("cancelar")
     normalized_stop_body = body_text.strip().lower().rstrip(".!¡¿? ")
     if normalized_stop_body in stop_words:
         contact_result = await db.execute(
@@ -252,15 +277,22 @@ async def process_inbound_message(
         return {"message": "ok"}
 
     # Appointment reschedule handler
+    # Solo las citas de ESTE cliente: sin este filtro, el "sí" de un cliente
+    # contestaba el recordatorio de otro cliente del mismo negocio.
+    _own_appt = (
+        or_(Appointment.contact_id == existing_contact.id, Appointment.customer_phone.in_(from_candidates))
+        if existing_contact else Appointment.customer_phone.in_(from_candidates)
+    )
     reschedule_result = await db.execute(
         select(Appointment).where(
             Appointment.advertiser_id == advertiser.id,
+            _own_appt,
             Appointment.awaiting_reschedule == True,
             Appointment.status == "cancelled",
         ).order_by(Appointment.scheduled_at.desc())
     )
     reschedule_appt = reschedule_result.scalars().first()
-    if reschedule_appt:
+    if reschedule_appt and not agent_pending:
         normalized = body_text.strip().lower()
         if normalized in ("1", "si", "sí", "s", "yes", "y", "claro", "por supuesto", "reagendar"):
             reschedule_appt.awaiting_reschedule = False
@@ -287,10 +319,11 @@ async def process_inbound_message(
     cancel_keywords = {"2", "no", "cancela", "cancelar", "cancelar cita", "no puedo", "❌"}
     normalized = body_text.lower().strip()
 
-    if normalized in confirm_keywords or normalized in cancel_keywords:
+    if (normalized in confirm_keywords or normalized in cancel_keywords) and not agent_pending:
         appt_result = await db.execute(
             select(Appointment).where(
                 Appointment.advertiser_id == advertiser.id,
+                _own_appt,
                 Appointment.awaiting_confirmation == True,
                 Appointment.status.in_(["pending", "confirmed"]),
             ).order_by(Appointment.scheduled_at.asc())
@@ -765,6 +798,43 @@ async def process_inbound_message(
             except Exception:
                 logger.warning("[HANDOFF] Failed to notify owner of client-requested handoff", exc_info=True)
         return {"message": "ok"}
+
+    if agent_wa:
+        if normalized_stop_body == "cancelar" and not await customer_agent.has_something_to_cancel(
+                db, advertiser, contact):
+            agent_text, agent_confirm = customer_agent.NOTHING_TO_CANCEL_REPLY, False
+        else:
+            agent_reply = await customer_agent.handle(
+                db, await get_redis_optional(), advertiser, contact, body_text, list(conv.messages or []),
+                channel="whatsapp",
+            )
+            agent_text = agent_reply.text if agent_reply else None
+            agent_confirm = bool(agent_reply and agent_reply.confirm)
+        if agent_text is not None:
+            conv.messages = (conv.messages + [
+                {"role": "user", "content": body_text},
+                {"role": "assistant", "content": agent_text},
+            ])[-40:]
+            conv.last_activity = func.now()
+            out_msg = Message(advertiser_id=advertiser.id, contact_id=contact.id, direction="outbound",
+                              content=agent_text, status="queued")
+            db.add(out_msg)
+            await db.commit()
+            await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
+            if agent_confirm:
+                sid_g, err_g = await send_buttons(from_number, agent_text, customer_agent.CONFIRM_BUTTONS)
+            else:
+                sid_g, err_g = await send(from_number, agent_text)
+            if sid_g:
+                out_msg.status = "sent"
+                out_msg.wa_message_id = sid_g
+                out_msg.sent_at = datetime.now(timezone.utc)
+            else:
+                out_msg.status = "failed"
+                out_msg.error_code = err_g
+            await db.commit()
+            await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
+            return {"message": "ok"}
 
     # Catalog query (channel-agnostic, shared with the widget) — checked
     # first: narrowest, read-only, never creates a row, so it can't collide

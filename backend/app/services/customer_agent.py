@@ -1,4 +1,5 @@
-"""Agente del cliente — el bot del chat web que piensa y actúa como el
+"""Agente del cliente — el bot del chat web (y del WhatsApp propio del
+negocio, ver whatsapp_enabled) que piensa y actúa como el
 Copiloto del dueño (copilot_service.py), pero del lado del cliente: entiende
 "¿tienes lugar el viernes en la tarde? y apúntame 2 órdenes para llevar" y
 usa herramientas en vez de seguir flujos fijos.
@@ -90,6 +91,44 @@ def _plain(text: str) -> str:
     return "".join(c for c in text if not unicodedata.combining(c))
 
 
+def whatsapp_enabled(advertiser: User) -> bool:
+    """WhatsApp del negocio (decisión 2026-10-15): apagado hasta que haya
+    negocios con número propio. settings.CUSTOMER_AGENT_WHATSAPP = "all" o
+    correos separados por coma."""
+    raw = (settings.CUSTOMER_AGENT_WHATSAPP or "").strip().lower()
+    if not raw:
+        return False
+    return raw == "all" or (advertiser.email or "").lower() in {e.strip() for e in raw.split(",")}
+
+
+# Botones de WhatsApp (máx. 20 caracteres): los mismos textos que el chat web,
+# así parse_spoken_yes_no los entiende igual.
+CONFIRM_BUTTONS = ["Sí, confírmalo", "No"]
+NOTHING_TO_CANCEL_REPLY = ("No tienes citas ni pedidos activos 🙂 Si lo que quieres es dejar de recibir "
+                           "mensajes, escribe *BAJA*.")
+
+
+async def has_something_to_cancel(db: AsyncSession, advertiser: User, contact: Contact) -> bool:
+    """¿Tiene una cita próxima o un pedido que todavía puede cancelar? Para el
+    "cancelar" a secas de WhatsApp, que antes daba de baja."""
+    now = datetime.now(timezone.utc)
+    appt = (await db.execute(
+        select(Appointment.id).where(
+            Appointment.advertiser_id == advertiser.id, Appointment.contact_id == contact.id,
+            Appointment.status.in_(("pending", "confirmed")), Appointment.scheduled_at > now,
+        ).limit(1)
+    )).scalar_one_or_none()
+    if appt is not None:
+        return True
+    order = (await db.execute(
+        select(Order.id).where(
+            Order.advertiser_id == advertiser.id, Order.contact_id == contact.id, Order.state == "confirmed",
+            Order.confirmed_at > now - ORDER_CANCEL_WINDOW,
+        ).limit(1)
+    )).scalar_one_or_none()
+    return order is not None
+
+
 def agent_available(advertiser: User, contact: Contact | None) -> bool:
     return bool(
         contact is not None
@@ -123,6 +162,11 @@ class _Ctx:
     contact: Contact
     pending: dict | None = None
     used_tools: list[str] = field(default_factory=list)
+    channel: str = "web"  # "web" | "whatsapp": solo cambia cómo se le avisa al dueño
+
+    @property
+    def origin(self) -> str:
+        return "por WhatsApp" if self.channel == "whatsapp" else "desde la web"
 
 
 # ─── Herramientas ─────────────────────────────────────────────────────────────
@@ -654,8 +698,14 @@ async def _tool_proponer_canjear_premio(ctx: _Ctx, args: dict) -> dict:
 async def _tool_avisar_al_dueno(ctx: _Ctx, args: dict) -> dict:
     from app.services.owner_alerts import alert_web_message
 
-    await alert_web_message(ctx.redis, ctx.advertiser, ctx.contact.id, ctx.contact.name or "Un cliente",
-                            str(args.get("mensaje") or "")[:300])
+    text = str(args.get("mensaje") or "")[:300]
+    if ctx.channel == "whatsapp":
+        from app.services.owner_alerts import _inbox_url
+
+        await _owner_text(ctx, f"💬 {ctx.contact.name or 'Un cliente'} te escribió por WhatsApp:\n«{text}»\n\n"
+                               f"Contéstale desde tu Inbox: {_inbox_url()}")
+    else:
+        await alert_web_message(ctx.redis, ctx.advertiser, ctx.contact.id, ctx.contact.name or "Un cliente", text)
     return {"ok": "El dueño recibirá el aviso y contestará por este chat."}
 
 
@@ -719,7 +769,7 @@ def _stable_system(advertiser: User) -> str:
     from app.services.payment_info import payment_methods_line
 
     pay_line = f"Formas de pago de los pedidos: {payment_methods_line(advertiser)}.\n"
-    return f"""Eres {advertiser.bot_name or "Asistente"}, el asistente de {name} en su chat web. Atiendes a UN cliente que ya está identificado.
+    return f"""Eres {advertiser.bot_name or "Asistente"}, el asistente de {name} en su chat. Atiendes a UN cliente que ya está identificado.
 Personalidad: {advertiser.bot_personality or "amigable y profesional"}.
 Horario del negocio: {schedule}.
 {services_line}{staff_line}{pay_line}
@@ -976,7 +1026,7 @@ async def _do_book(ctx: _Ctx, pending: dict) -> str:
         except Exception:
             logger.warning("[AGENT] Google Calendar create failed", exc_info=True)
     await ctx.db.commit()
-    await _notify_owner(ctx.advertiser, appt, "widget")
+    await _notify_owner(ctx.advertiser, appt, "whatsapp" if ctx.channel == "whatsapp" else "widget")
     who = f" con {assigned}" if assigned else ""
     return f"✅ ¡Listo! T{_tu_cita(appt.service)[1:]} quedó el {_spanish_when(when)}{who}. ¡Te esperamos!"
 
@@ -999,7 +1049,7 @@ async def _do_move(ctx: _Ctx, pending: dict) -> str:
         except Exception:
             logger.warning("[AGENT] Google Calendar update failed", exc_info=True)
     await ctx.db.commit()
-    await _owner_text(ctx, f"🔁 *Cita movida desde la web*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(when)}")
+    await _owner_text(ctx, f"🔁 *Cita movida {ctx.origin}*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(when)}")
     return f"✅ Listo, {_tu_cita(appt.service)} quedó el {_spanish_when(when)}."
 
 
@@ -1018,7 +1068,7 @@ async def _do_cancel(ctx: _Ctx, pending: dict) -> str:
         except Exception:
             logger.warning("[AGENT] Google Calendar delete failed", exc_info=True)
     await ctx.db.commit()
-    await _owner_text(ctx, f"❌ *Cita cancelada desde la web*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(appt.scheduled_at)}")
+    await _owner_text(ctx, f"❌ *Cita cancelada {ctx.origin}*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(appt.scheduled_at)}")
     return f"Listo, cancelé {_tu_cita(appt.service)}. Cuando quieras agendamos otra 🙌"
 
 
@@ -1047,7 +1097,7 @@ async def _do_order(ctx: _Ctx, pending: dict) -> str:
     ])
     stamped = await add_stamp(ctx.db, ctx.advertiser, ctx.contact.id, "order", str(order.id))
     await ctx.db.commit()
-    await _notify_owner(ctx.advertiser, ctx.contact, order)
+    await _notify_owner(ctx.advertiser, ctx.contact, order, origin=ctx.origin)
     loyalty = await stamp_line(ctx.db, ctx.advertiser, ctx.contact.id) if stamped else ""
     where = f"a domicilio: {order.delivery_address}" if pending.get("delivery") == "domicilio" else "para recoger"
     from app.services.payment_info import payment_lines
@@ -1076,7 +1126,7 @@ async def _do_redeem(ctx: _Ctx) -> str:
                     source="loyalty", expires_at=expires, max_uses=1)
     ctx.db.add(coupon)
     await ctx.db.commit()
-    await _owner_text(ctx, f"🎁 *Premio canjeado desde la web*\n👤 {ctx.contact.name}\n🏆 {reward}\n🔑 Código: {coupon.code}")
+    await _owner_text(ctx, f"🎁 *Premio canjeado {ctx.origin}*\n👤 {ctx.contact.name}\n🏆 {reward}\n🔑 Código: {coupon.code}")
     local = expires.astimezone(TZ)
     return (f"🎁 ¡Listo! Tu premio: *{reward}*.\nMuestra este código en el negocio: *{coupon.code}*\n"
             f"Vale hasta el {local.day} de {_MONTHS[local.month - 1]}.")
@@ -1110,14 +1160,15 @@ async def _owner_text(ctx: _Ctx, body: str) -> None:
 # ─── Entrada ──────────────────────────────────────────────────────────────────
 
 async def handle(
-    db: AsyncSession, redis, advertiser: User, contact: Contact, message: str, history: list[dict]
+    db: AsyncSession, redis, advertiser: User, contact: Contact, message: str, history: list[dict],
+    channel: str = "web",
 ) -> AgentReply | None:
     """La respuesta del agente, o None para que el chat siga con lo de siempre
     (pregunta simple, agente apagado o Claude no disponible)."""
     if not agent_available(advertiser, contact) or redis is None:
         return None
     key = f"{PENDING_PREFIX}{contact.id}"
-    ctx = _Ctx(db=db, redis=redis, advertiser=advertiser, contact=contact)
+    ctx = _Ctx(db=db, redis=redis, advertiser=advertiser, contact=contact, channel=channel)
 
     raw = await redis.get(key)
     if raw:

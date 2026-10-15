@@ -28,7 +28,11 @@ from app.services.inbound_pipeline import InboundMessage, process_inbound_messag
 from app.services.message_status_service import apply_status_update
 from app.services.meta_client import download_media
 from app.services.meta_quality_service import apply_quality_signal
-from app.services.meta_service import send_typing_indicator, send_whatsapp
+from app.services.meta_service import (
+    send_typing_indicator,
+    send_whatsapp,
+    send_whatsapp_reply_buttons,
+)
 from app.services.owner_question_service import (
     handle_owner_message,
     is_registered_owner,
@@ -438,8 +442,17 @@ async def meta_incoming(
                 # nunca (el celular del dueño ES el número del negocio).
                 _send_owner = _send_platform_owner if platform_enabled() else _send
 
+                async def _send_buttons(to: str, body: str, buttons: list[str],
+                                        advertiser=advertiser) -> tuple[str | None, str | None]:
+                    return await send_whatsapp_reply_buttons(to, body, buttons, advertiser=advertiser)
+
+                # El agente del cliente (botones Sí/No) solo en el número propio
+                # del negocio; el central de IaRadio sigue con su bot de ventas.
+                is_central = platform_enabled() and phone_number_id == settings.IARADIO_WA_PHONE_NUMBER_ID
+
                 try:
-                    await process_inbound_message(db, inbound, send=_send, send_owner=_send_owner)
+                    await process_inbound_message(db, inbound, send=_send, send_owner=_send_owner,
+                                                  send_buttons=None if is_central else _send_buttons)
                 except Exception:
                     logger.exception("[META WEBHOOK] Pipeline failed for advertiser=%s wamid=%s", advertiser.id, wamid)
 

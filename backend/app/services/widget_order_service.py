@@ -138,7 +138,7 @@ async def _advance(
     )
 
 
-async def _notify_owner(advertiser: User, contact: Contact, order: Order) -> None:
+async def _notify_owner(advertiser: User, contact: Contact, order: Order, origin: str = "desde tu página web") -> None:
     from app.core.email import send_new_order_email
 
     asyncio.create_task(
@@ -159,7 +159,7 @@ async def _notify_owner(advertiser: User, contact: Contact, order: Order) -> Non
 
         owner_number = get_owner_number(advertiser)
         wa_notify = (
-            f"📦 *NUEVO PEDIDO #{order.order_number:04d}* (desde tu página web)\n"
+            f"📦 *NUEVO PEDIDO #{order.order_number:04d}* ({origin})\n"
             f"────────────────\n"
             f"🛒 {order.items_raw}\n"
             f"👤 Cliente: {order.customer_name}\n"

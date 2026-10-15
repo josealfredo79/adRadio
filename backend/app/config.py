@@ -124,6 +124,9 @@ class Settings(BaseSettings):
     # Agente del chat web del cliente (customer_agent.py): muchas pláticas
     # cortas con herramientas — Haiku por costo (decisión del dueño 2026-10-05).
     CUSTOMER_AGENT_MODEL: str = "claude-haiku-4-5"
+    # Agente del cliente en el WhatsApp propio del negocio: "" apagado, "all", o
+    # correos de negocios separados por coma (customer_agent.whatsapp_enabled).
+    CUSTOMER_AGENT_WHATSAPP: str = ""
 
     # OpenRouter — adaptador de proveedor LLM intercambiable (port del patrón
     # de vocero-crm). Si OPENROUTER_API_KEY y OPENROUTER_MODEL están ambos
