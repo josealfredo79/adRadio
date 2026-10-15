@@ -499,6 +499,33 @@ class TestProductSearch:
             await _cleanup(user_id)
 
 
+    @pytest.mark.asyncio
+    async def test_product_question_forces_a_catalog_search(self):
+        user_id, ana, _, _ = await _seed()
+        try:
+            claude, client = fake_claude(
+                resp(tool("buscar_productos", texto="")),
+                resp(text("Tenemos Taco al pastor a $25 😊"), stop="end_turn"),
+            )
+            out = await _say(user_id, ana, "que productos tienen??", Redis(), claude)
+            assert "Taco al pastor" in out.text
+            calls = client.messages.create.await_args_list
+            assert calls[0].kwargs["tool_choice"] == {"type": "tool", "name": "buscar_productos"}
+            assert "tool_choice" not in calls[1].kwargs
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_other_questions_are_not_forced(self):
+        user_id, ana, _, _ = await _seed()
+        try:
+            claude, client = fake_claude(resp(text("Abrimos de 9 a 6 😊"), stop="end_turn"))
+            await _say(user_id, ana, "¿a qué hora abren mañana? quiero agendar", Redis(), claude)
+            assert "tool_choice" not in client.messages.create.await_args_list[0].kwargs
+        finally:
+            await _cleanup(user_id)
+
+
 def test_appointment_wording_without_service():
     assert agent._tu_cita("Cita") == "tu cita"
     assert agent._tu_cita("") == "tu cita"

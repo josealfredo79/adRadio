@@ -821,6 +821,15 @@ def _safe_text(ctx: _Ctx) -> str:
     return "Todavía no queda nada apartado ni pedido. ¿Me dices qué necesitas y para cuándo?"
 
 
+# "¿Qué productos tienen?" se le deja a Haiku y contesta de memoria: visto en prod
+# 2026-10-15, "Acabo de revisar y no hay productos" sin haber buscado (repetía
+# un "no hay" anterior de la misma plática). Con estas palabras busca sí o sí.
+_ASKS_CATALOG = re.compile(
+    r"\b(productos?|cat[aá]logo|men[uú]|qu[eé] (venden|vendes|manejan|manejas|ofrecen|ofreces))\b",
+    re.IGNORECASE,
+)
+
+
 async def _agent_loop(ctx: _Ctx, message: str, history: list[dict]) -> str | None:
     messages: list = [
         {"role": h["role"], "content": h["content"]}
@@ -837,13 +846,19 @@ async def _agent_loop(ctx: _Ctx, message: str, history: list[dict]) -> str | Non
     ]
     client = _get_client()
     corrections = 0
+    force_catalog = bool(_ASKS_CATALOG.search(message))
     for _ in range(MAX_STEPS + MAX_CORRECTIONS):
+        extra = {}
+        if force_catalog:
+            extra["tool_choice"] = {"type": "tool", "name": "buscar_productos"}
+            force_catalog = False
         response = await client.messages.create(
             model=settings.CUSTOMER_AGENT_MODEL,
             max_tokens=MAX_TOKENS,
             system=system,
             tools=TOOLS,
             messages=messages,
+            **extra,
         )
         usage = getattr(response, "usage", None)
         if usage is not None:
@@ -1102,7 +1117,9 @@ async def handle(
         await redis.delete(key)
 
     active_key = f"{ACTIVE_PREFIX}{contact.id}"
-    if not (wants_action(message) or _mentions_service(advertiser, message) or await redis.get(active_key)):
+    # Preguntar por productos suele ser el primer paso de un pedido: lo atiende el agente, que sí ve el catálogo.
+    if not (wants_action(message) or _mentions_service(advertiser, message) or _ASKS_CATALOG.search(message)
+            or await redis.get(active_key)):
         return None
     from app.services.plan_usage import register_bot_conversation
 
