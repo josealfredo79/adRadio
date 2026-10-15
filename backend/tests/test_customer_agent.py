@@ -465,3 +465,42 @@ class TestFallback:
             assert out["reply"].startswith("Te lo preparo así: Corte, el ") and out["confirm"] is True
         finally:
             await _cleanup(user_id)
+
+
+class TestProductSearch:
+    """Visto en prod 2026-10-15: "los que tengas" buscaba "los"/"que"/"tengas",
+    no encontraba nada y el agente decía que el negocio no tenía productos."""
+
+    async def _search(self, user_id, ana, texto):
+        async with AsyncSessionLocal() as db:
+            ctx = agent._Ctx(db=db, redis=None, advertiser=await db.get(User, user_id), contact=await db.get(Contact, ana))
+            return await agent._tool_buscar_productos(ctx, {"texto": texto})
+
+    @pytest.mark.asyncio
+    async def test_generic_questions_list_the_whole_catalog(self):
+        user_id, ana, _, _ = await _seed()
+        try:
+            for texto in ("los que tengas", "¿qué productos tienen?", ""):
+                out = await self._search(user_id, ana, texto)
+                assert [p["nombre"] for p in out["productos"]] == ["Taco al pastor"], texto
+                assert "nota" not in out, texto
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_no_match_shows_what_there_is(self):
+        user_id, ana, _, _ = await _seed()
+        try:
+            out = await self._search(user_id, ana, "pizza hawaiana")
+            assert [p["nombre"] for p in out["productos"]] == ["Taco al pastor"]
+            assert "todo lo que hay" in out["nota"]
+            assert (await self._search(user_id, ana, "pastor"))["productos"][0]["nombre"] == "Taco al pastor"
+        finally:
+            await _cleanup(user_id)
+
+
+def test_appointment_wording_without_service():
+    assert agent._tu_cita("Cita") == "tu cita"
+    assert agent._tu_cita("") == "tu cita"
+    assert agent._tu_cita(None) == "tu cita"
+    assert agent._tu_cita("Mesa para 4") == "tu cita de Mesa para 4"

@@ -193,7 +193,8 @@ TOOLS = [
     },
     {
         "name": "buscar_productos",
-        "description": "Busca en el catálogo del negocio por nombre o descripción. Devuelve id, nombre y precio.",
+        "description": "Busca en el catálogo del negocio por nombre o descripción. Devuelve id, nombre y precio. "
+                       "Con texto vacío devuelve todo el catálogo.",
         "input_schema": {
             "type": "object",
             "properties": {"texto": {"type": "string", "description": "Qué busca el cliente (ej. 'tacos pastor')."}},
@@ -454,7 +455,7 @@ async def _tool_proponer_cambio_cita(ctx: _Ctx, args: dict) -> dict:
         return {"error": "No encontré esa cita entre las próximas del cliente. Usa mis_citas."}
     if when is None or not await _slot_is_free(ctx, when, appt.duration_min or APPOINTMENT_MINUTES, exclude_id=appt.id):
         return {"error": "Ese horario no está libre. Consulta horarios_libres."}
-    summary = f"mover tu cita de {appt.service} del {_spanish_when(appt.scheduled_at)} al {_spanish_when(when)}"
+    summary = f"mover {_tu_cita(appt.service)} del {_spanish_when(appt.scheduled_at)} al {_spanish_when(when)}"
     ctx.pending = {"type": "move", "appointment_id": str(appt.id), "at": when.isoformat(), "summary": summary}
     return {"listo_para_confirmar": summary,
             "siguiente_paso": "Pregúntale al cliente si lo confirmas. Todavía NO se movió."}
@@ -464,7 +465,7 @@ async def _tool_proponer_cancelar_cita(ctx: _Ctx, args: dict) -> dict:
     appt = await _own_appointment(ctx, args.get("cita_id"))
     if appt is None:
         return {"error": "No encontré esa cita entre las próximas del cliente. Usa mis_citas."}
-    summary = f"cancelar tu cita de {appt.service} del {_spanish_when(appt.scheduled_at)}"
+    summary = f"cancelar {_tu_cita(appt.service)} del {_spanish_when(appt.scheduled_at)}"
     ctx.pending = {"type": "cancel", "appointment_id": str(appt.id), "summary": summary}
     return {"listo_para_confirmar": summary,
             "siguiente_paso": "Pregúntale al cliente si lo confirmas. Todavía NO se canceló."}
@@ -474,16 +475,41 @@ def _price(p: Product) -> str:
     return f"${p.price:,.2f}".replace(".00", "") if p.price is not None else "precio a consultar"
 
 
+# Palabras de la pregunta que no dicen QUÉ busca ("¿qué productos tienen?", "los que tengas").
+_PRODUCT_STOPWORDS = {
+    "que", "qué", "los", "las", "una", "uno", "unos", "unas", "del", "por", "para", "con", "todo", "todos",
+    "tienen", "tienes", "tengas", "tengan", "hay", "venden", "vendes", "manejan", "ofrecen", "productos",
+    "producto", "cosas", "catalogo", "catálogo", "lista", "quiero", "busco", "ver", "algo", "cual", "cuál",
+    "cuales", "cuáles", "precio", "precios", "mas", "más",
+}
+
+
+def _tu_cita(service: str | None) -> str:
+    """'tu cita de Corte', o solo 'tu cita' si no hay servicio (evita "tu cita de Cita")."""
+    name = (service or "").strip()
+    return f"tu cita de {name}" if name and name.lower() != "cita" else "tu cita"
+
+
 async def _tool_buscar_productos(ctx: _Ctx, args: dict) -> dict:
-    words = [w for w in re.findall(r"\w+", str(args.get("texto") or "").lower()) if len(w) > 2][:5]
-    q = select(Product).where(Product.advertiser_id == ctx.advertiser.id, Product.active.is_(True))
+    words = [w for w in re.findall(r"\w+", str(args.get("texto") or "").lower())
+             if len(w) > 2 and w not in _PRODUCT_STOPWORDS][:5]
+    base = select(Product).where(Product.advertiser_id == ctx.advertiser.id, Product.active.is_(True))
+    q = base
     if words:
         q = q.where(or_(*[func.lower(Product.name).contains(w) | func.lower(func.coalesce(Product.description, "")).contains(w)
                           for w in words]))
     rows = (await ctx.db.execute(q.order_by(Product.name).limit(10))).scalars().all()
+    nota = None
+    if not rows and words:
+        # Sin coincidencia: mejor enseñar lo que sí hay que decir "no tenemos productos".
+        rows = (await ctx.db.execute(base.order_by(Product.name).limit(10))).scalars().all()
+        nota = "No hay nada con eso exacto; esto es todo lo que hay en el catálogo."
     if not rows:
-        return {"productos": [], "nota": "No hay productos con eso en el catálogo."}
-    return {"productos": [{"producto_id": str(p.id), "nombre": p.name, "precio": _price(p)} for p in rows]}
+        return {"productos": [], "nota": "El catálogo de este negocio está vacío."}
+    out = {"productos": [{"producto_id": str(p.id), "nombre": p.name, "precio": _price(p)} for p in rows]}
+    if nota:
+        out["nota"] = nota
+    return out
 
 
 async def _tool_proponer_pedido(ctx: _Ctx, args: dict) -> dict:
@@ -709,6 +735,8 @@ Cómo trabajas:
 - Las horas sin "de la mañana/tarde" son las que caen en el horario: "a las 5" = 17:00, "a las 10" = 10:00. Si la hora
   que pidió está en horarios_libres, propónla directo con proponer_cita; solo ofrece otras si esa no está.
 - Si el cliente pide varias cosas (cita y pedido), resuélvelas una por una: primero una, y cuando se confirme, la otra.
+- Si pregunta qué productos o qué venden, usa buscar_productos con texto vacío y enséñale la lista; no le preguntes
+  antes qué tipo busca.
 - Para un pedido necesitas: productos del catálogo (buscar_productos), si es a domicilio (con dirección) o para recoger, y forma de pago.
 - No prometas sellos, descuentos, regalos ni tiempos de entrega que no te haya dado una herramienta. Para cupones o
   promociones usa mis_cupones; para "¿y mi pedido?" usa mis_pedidos; para canjear el premio de su tarjeta, mis_sellos
@@ -914,7 +942,7 @@ async def _do_book(ctx: _Ctx, pending: dict) -> str:
     await ctx.db.commit()
     await _notify_owner(ctx.advertiser, appt, "widget")
     who = f" con {assigned}" if assigned else ""
-    return f"✅ ¡Listo! Tu cita de {appt.service} quedó el {_spanish_when(when)}{who}. ¡Te esperamos!"
+    return f"✅ ¡Listo! T{_tu_cita(appt.service)[1:]} quedó el {_spanish_when(when)}{who}. ¡Te esperamos!"
 
 
 async def _do_move(ctx: _Ctx, pending: dict) -> str:
@@ -936,7 +964,7 @@ async def _do_move(ctx: _Ctx, pending: dict) -> str:
             logger.warning("[AGENT] Google Calendar update failed", exc_info=True)
     await ctx.db.commit()
     await _owner_text(ctx, f"🔁 *Cita movida desde la web*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(when)}")
-    return f"✅ Listo, tu cita de {appt.service} quedó el {_spanish_when(when)}."
+    return f"✅ Listo, {_tu_cita(appt.service)} quedó el {_spanish_when(when)}."
 
 
 async def _do_cancel(ctx: _Ctx, pending: dict) -> str:
@@ -955,7 +983,7 @@ async def _do_cancel(ctx: _Ctx, pending: dict) -> str:
             logger.warning("[AGENT] Google Calendar delete failed", exc_info=True)
     await ctx.db.commit()
     await _owner_text(ctx, f"❌ *Cita cancelada desde la web*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(appt.scheduled_at)}")
-    return f"Listo, cancelé tu cita de {appt.service}. Cuando quieras agendamos otra 🙌"
+    return f"Listo, cancelé {_tu_cita(appt.service)}. Cuando quieras agendamos otra 🙌"
 
 
 async def _do_order(ctx: _Ctx, pending: dict) -> str:
