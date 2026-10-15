@@ -857,6 +857,29 @@ def send_closer_reminders_task():
 
 
 @celery_app.task
+def send_followups():
+    """Celery Beat, cada 15 min: seguimiento automático de interesados
+    (followup_service.py)."""
+    async def _run():
+        import redis.asyncio as aioredis
+
+        from app.config import settings
+        from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.services.followup_service import run_followups
+
+        redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        try:
+            async with AsyncSessionLocal() as db:
+                counts = await run_followups(db, redis)
+            if any(counts.values()):
+                logger.info("[FOLLOWUP] sent %s", counts)
+        finally:
+            await redis.aclose()
+
+    run_async(_run())
+
+
+@celery_app.task
 def send_owner_morning_digests():
     """Celery Beat, 8 am México: resumen único para el dueño de lo que llegó
     por la web mientras estaba en silencio (ver owner_alerts.py)."""

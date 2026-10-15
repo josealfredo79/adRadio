@@ -52,6 +52,7 @@ celery_app.conf.update(
         "app.workers.tasks.send_trial_expiry_reminders": {"queue": "campaigns"},
         "app.workers.tasks.poll_meta_quality_ratings": {"queue": "campaigns"},
         "app.workers.tasks.send_owner_morning_digests": {"queue": "campaigns"},
+        "app.workers.tasks.send_followups": {"queue": "campaigns"},
     },
 )
 
@@ -88,6 +89,10 @@ celery_app.conf.beat_schedule = {
     "send-trial-expiry-reminders": {
         "task": "app.workers.tasks.send_trial_expiry_reminders",
         "schedule": 43200.0,  # every 12 hours — enough for daily reminders
+    },
+    "send-followups": {
+        "task": "app.workers.tasks.send_followups",
+        "schedule": 900.0,  # every 15 min — un seguimiento ~20 h después (followup_service.py)
     },
     "send-owner-morning-digests": {
         "task": "app.workers.tasks.send_owner_morning_digests",

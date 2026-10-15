@@ -175,8 +175,10 @@ async def send_morning_digests(db, redis) -> int:
     guardado (silencio nocturno, tope por hora, clientes nuevos agrupados)."""
     from sqlalchemy import select
 
+    from app.services.followup_service import PENDING_FOLLOWUP
+
     ids: set[str] = set()
-    for prefix in (PENDING_WEB, PENDING_NEW):
+    for prefix in (PENDING_WEB, PENDING_NEW, PENDING_FOLLOWUP):
         async for key in redis.scan_iter(match=f"{prefix}*"):
             ids.add(str(key).split(":", 1)[1])
     sent = 0
@@ -186,14 +188,20 @@ async def send_morning_digests(db, redis) -> int:
         except ValueError:
             continue
         web, new = await _pop_pending(redis, advertiser_id)
+        follow = set(await redis.smembers(f"{PENDING_FOLLOWUP}{advertiser_id}") or [])
+        await redis.delete(f"{PENDING_FOLLOWUP}{advertiser_id}")
         to = _destination(advertiser) if advertiser else None
-        if not to or not (web or new):
+        if not to or not (web or new or follow):
             continue
         lines = ["☀️ Buenos días. Mientras estabas fuera:"]
         if web:
             lines.append(f"• {len(web)} {'cliente te escribió' if len(web) == 1 else 'clientes te escribieron'} por la web: {_names(web)}")
         if new:
             lines.append(f"• {len(new)} {'cliente nuevo' if len(new) == 1 else 'clientes nuevos'}: {_names(new)}")
+        if follow:
+            # followup_service: preguntaron, no compraron y no hay canal gratis para escribirles.
+            lines.append(f"• {'Preguntó y no compró' if len(follow) == 1 else 'Preguntaron y no compraron'}: "
+                         f"{_names(follow)}. Escríbeles tú si quieres")
         lines.append(f"\nRevísalo en tu Inbox: {_inbox_url()}")
         if await _send(advertiser, to, "\n".join(lines)):
             sent += 1

@@ -43,6 +43,7 @@ interface User {
   loyalty_config: LoyaltyConfig | null
   directory_listed: boolean
   customer_agent_enabled: boolean
+  followup_enabled?: boolean
   appointment_services?: { name: string; minutes: number }[] | null
   staff?: { name: string; services: string[] }[] | null
   payment_link?: string | null

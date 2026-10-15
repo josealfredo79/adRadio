@@ -95,6 +95,7 @@ class UserOut(BaseModel):
     loyalty_config: dict | None = None
     directory_listed: bool = True
     customer_agent_enabled: bool = True
+    followup_enabled: bool = True
     appointment_services: list[dict] | None = None
     staff: list[dict] | None = None
     payment_link: str | None = None
