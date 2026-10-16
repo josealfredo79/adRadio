@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '@/lib/api'
 import MascotAbCard from '@/pages/admin/MascotAbCard'
+import PilotCard from '@/pages/admin/PilotCard'
 import { formatNumber, formatCurrency } from '@/lib/utils'
 import {
   Users,
@@ -80,6 +81,8 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-foreground">Panel de Administración</h1>
+
+      <PilotCard />
 
       {/* User metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

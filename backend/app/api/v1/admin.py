@@ -326,3 +326,82 @@ async def mascot_ab_results(redis=Depends(get_redis_optional)) -> dict:
     if redis is None:
         raise HTTPException(status_code=503, detail="Redis no disponible")
     return await mascot_ab.results(redis)
+
+
+# ─── Piloto: cómo van los negocios (en vez de PostHog) ──────────────────────
+
+
+@router.get("/admin/pilot")
+async def pilot_overview(db: AsyncSession = Depends(get_db)):
+    """Embudo, altas por semana y uso de cada negocio, sacado de la base
+    (decisión 2026-10-15: no se usa PostHog). Las cuentas admin no cuentan."""
+    from datetime import timedelta
+
+    from app.models.appointment import Appointment
+    from app.models.campaign import Campaign
+    from app.models.contact import Contact
+    from app.models.conversation import Conversation
+    from app.models.order import Order
+
+    now = datetime.now(timezone.utc)
+    since_30 = now - timedelta(days=30)
+    owners = (await db.execute(
+        select(User).where(User.role != "admin").order_by(desc(User.created_at))
+    )).scalars().all()
+
+    verified = [u for u in owners if u.email_verified]
+    paying = [u for u in owners if u.subscription_status == "active"]
+    funnel = {
+        "registrados": len(owners),
+        "verificaron_correo": len(verified),
+        "en_prueba": sum(1 for u in owners if u.subscription_status == "trial"),
+        "pagando": len(paying),
+        # Tienen cliente en Stripe (abrieron el pago) pero siguen sin pagar.
+        "abrieron_pago_sin_pagar": sum(1 for u in owners if u.stripe_customer_id and u.subscription_status == "trial"),
+        "cancelaron": sum(1 for u in owners if u.subscription_status == "churned" or u.cancel_at_period_end),
+        "prueba_a_pago_pct": round(100 * len(paying) / len(verified), 1) if verified else 0.0,
+    }
+
+    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    weeks = []
+    for i in range(7, -1, -1):
+        start = week_start - timedelta(weeks=i)
+        end = start + timedelta(weeks=1)
+        in_week = [u for u in owners if start <= u.created_at < end]
+        weeks.append({"semana": start.date().isoformat(), "registros": len(in_week),
+                      "verificaron": sum(1 for u in in_week if u.email_verified)})
+
+    ids = [u.id for u in owners]
+
+    async def per_owner(model, *where) -> dict:
+        if not ids:
+            return {}
+        rows = await db.execute(
+            select(model.advertiser_id, func.count()).where(model.advertiser_id.in_(ids), *where)
+            .group_by(model.advertiser_id)
+        )
+        return dict(rows.all())
+
+    chats = await per_owner(Conversation, Conversation.last_activity >= since_30)
+    citas = await per_owner(Appointment, Appointment.created_at >= since_30)
+    pedidos = await per_owner(Order, Order.created_at >= since_30)
+    campanas = await per_owner(Campaign, Campaign.created_at >= since_30)
+    contactos = await per_owner(Contact)
+
+    negocios = [{
+        "id": str(u.id),
+        "negocio": u.business_name or "(sin nombre)",
+        "email": u.email,
+        "verificado": u.email_verified,
+        "estado": u.subscription_status,
+        "plan": u.current_plan,
+        "alta": u.created_at,
+        "ultimo_acceso": u.last_seen_at,
+        "prueba_vence": u.plan_expires_at if u.subscription_status == "trial" else None,
+        "chats_30d": chats.get(u.id, 0),
+        "citas_30d": citas.get(u.id, 0),
+        "pedidos_30d": pedidos.get(u.id, 0),
+        "campanas_30d": campanas.get(u.id, 0),
+        "contactos": contactos.get(u.id, 0),
+    } for u in owners]
+    return {"embudo": funnel, "semanas": weeks, "negocios": negocios}
