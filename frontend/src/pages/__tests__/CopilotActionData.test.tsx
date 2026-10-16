@@ -23,3 +23,22 @@ describe('ActionData del Copiloto', () => {
     expect(container.textContent).not.toContain('2263f1b1')
   })
 })
+
+describe('ActionData — resumen de analíticas', () => {
+  it('lo muestra en español y con % en los porcentajes', () => {
+    render(
+      <ActionData
+        data={{
+          totals: { messages_outbound: 179, replied: 4 },
+          rates: { response_rate: 66.7 },
+          business: { active_contacts: 6 },
+        }}
+      />,
+    )
+    expect(screen.getByText('Mensajes enviados')).toBeDefined()
+    expect(screen.getByText('Clientes que respondieron')).toBeDefined()
+    expect(screen.getByText('Contactos activos')).toBeDefined()
+    expect(screen.getByText('66.7%')).toBeDefined()
+    expect(screen.queryByText(/Messages Outbound|Response Rate/)).toBeNull()
+  })
+})

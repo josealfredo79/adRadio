@@ -139,11 +139,12 @@ class TestAnalyticsSummary:
             assert data["totals"]["sent"] == 3  # non-queued: delivered, delivered, failed
             assert data["totals"]["delivered"] == 2
             assert data["totals"]["read"] == 1
-            assert data["totals"]["replied"] == 2
+            # Solo A recibió mensajes y contestó; B escribió sin que le mandáramos nada.
+            assert data["totals"]["replied"] == 1
             assert data["totals"]["failed"] == 1
             assert data["rates"]["delivery_rate"] == round(2 / 3 * 100, 1)
             assert data["rates"]["read_rate"] == round(1 / 3 * 100, 1)
-            assert data["rates"]["response_rate"] == round(2 / 3 * 100, 1)
+            assert data["rates"]["response_rate"] == 100.0
             assert data["business"]["active_contacts"] == 2
             assert data["business"]["total_campaigns"] == 2
             assert data["business"]["active_campaigns"] == 1
@@ -297,5 +298,38 @@ class TestTopContacts:
                 user = await db.get(User, user_id)
                 result = await top_contacts(current_user=user, db=db, limit=10)
             assert result == []
+        finally:
+            await _cleanup([user_id])
+
+
+class TestResponseRateNeverAbove100:
+    @pytest.mark.asyncio
+    async def test_customers_writing_on_their_own_dont_inflate_it(self):
+        """Prod 2026-10-15: el Copiloto mostró 114.9 % de respuesta (162 recibidos / 141 enviados)."""
+        user_id = await _seed_user()
+        try:
+            now = datetime.now(timezone.utc)
+            async with AsyncSessionLocal() as db:
+                a = Contact(advertiser_id=user_id, name="A", phone="+521000000011", status="active")
+                b = Contact(advertiser_id=user_id, name="B", phone="+521000000012", status="active")
+                db.add_all([a, b])
+                await db.commit()
+                db.add_all([
+                    # A escribió antes de que le mandáramos algo y no contestó después.
+                    Message(advertiser_id=user_id, contact_id=a.id, direction="inbound", content="hola",
+                            created_at=now - timedelta(hours=2)),
+                    Message(advertiser_id=user_id, contact_id=a.id, direction="outbound", content="promo",
+                            status="sent", created_at=now - timedelta(hours=1)),
+                    # B recibió y contestó tres veces.
+                    Message(advertiser_id=user_id, contact_id=b.id, direction="outbound", content="promo",
+                            status="sent", created_at=now - timedelta(hours=1)),
+                    *[Message(advertiser_id=user_id, contact_id=b.id, direction="inbound", content="sí",
+                              created_at=now - timedelta(minutes=m)) for m in (30, 20, 10)],
+                ])
+                await db.commit()
+            async with AsyncSessionLocal() as db:
+                data = await analytics_summary(current_user=await db.get(User, user_id), db=db)
+            assert data["totals"]["replied"] == 1
+            assert data["rates"]["response_rate"] == 50.0
         finally:
             await _cleanup([user_id])

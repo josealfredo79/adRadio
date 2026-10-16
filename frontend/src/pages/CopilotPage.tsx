@@ -121,6 +121,25 @@ const LABELS: Record<string, string> = {
   pipeline_stage: 'Etapa',
   email: 'Correo',
   code: 'Código',
+  // Resumen de analíticas (analytics_service.compute_analytics_summary)
+  totals: 'Totales',
+  rates: 'Porcentajes',
+  business: 'Negocio',
+  messages_outbound: 'Mensajes enviados',
+  messages_inbound: 'Mensajes recibidos',
+  sent: 'Enviados',
+  delivered: 'Entregados',
+  read: 'Leídos',
+  replied: 'Clientes que respondieron',
+  failed: 'Fallidos',
+  delivery_rate: 'Entregados',
+  read_rate: 'Leídos',
+  response_rate: 'Respondieron',
+  active_contacts: 'Contactos activos',
+  total_campaigns: 'Campañas',
+  active_campaigns: 'Campañas activas',
+  orders_confirmed: 'Pedidos confirmados',
+  conversations_active: 'Pláticas abiertas',
 }
 
 const VALUE_LABELS: Record<string, string> = {
@@ -213,7 +232,10 @@ export function ActionData({ data, depth = 0 }: { data: unknown; depth?: number 
                 </span>
               )
             ) : (
-              <span className="font-medium text-gray-700 dark:text-gray-300 text-right">{formatPrimitive(value)}</span>
+              <span className="font-medium text-gray-700 dark:text-gray-300 text-right">
+                {formatPrimitive(value)}
+                {key.endsWith('_rate') && typeof value === 'number' ? '%' : ''}
+              </span>
             )}
           </div>
         ))}

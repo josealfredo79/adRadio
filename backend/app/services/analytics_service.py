@@ -93,8 +93,22 @@ async def compute_analytics_summary(db: AsyncSession, user_id: UUID) -> dict:
             Message.advertiser_id == user_id, Message.direction == "outbound", Message.read_at.isnot(None)
         )
     )
+    # Clientes que contestaron DESPUÉS de que les escribimos, entre los clientes a los que
+    # les escribimos. Antes era "mensajes recibidos / enviados" y daba más de 100 % (el
+    # Copiloto mostró 114.9 % el 2026-10-15): los clientes escriben sin que les mandes nada.
+    first_out = (
+        select(Message.contact_id, func.min(Message.created_at).label("at"))
+        .where(Message.advertiser_id == user_id, Message.direction == "outbound",
+               Message.status != "queued", Message.contact_id.isnot(None))
+        .group_by(Message.contact_id)
+        .subquery()
+    )
+    reached = await db.scalar(select(func.count()).select_from(first_out))
     replied = await db.scalar(
-        select(func.count()).where(Message.advertiser_id == user_id, Message.direction == "inbound")
+        select(func.count(func.distinct(Message.contact_id)))
+        .join(first_out, first_out.c.contact_id == Message.contact_id)
+        .where(Message.advertiser_id == user_id, Message.direction == "inbound",
+               Message.created_at >= first_out.c.at)
     )
     failed = await db.scalar(
         select(func.count()).where(
@@ -121,7 +135,7 @@ async def compute_analytics_summary(db: AsyncSession, user_id: UUID) -> dict:
     sent_val = sent or 0
     delivery_rate = round((delivered or 0) / sent_val * 100, 1) if sent_val > 0 else 0.0
     read_rate = round((read or 0) / sent_val * 100, 1) if sent_val > 0 else 0.0
-    response_rate = round((replied or 0) / sent_val * 100, 1) if sent_val > 0 else 0.0
+    response_rate = round((replied or 0) / reached * 100, 1) if reached else 0.0
 
     return {
         "totals": {
