@@ -45,6 +45,7 @@ from app.models.coupon import Coupon
 from app.models.user import User
 from app.schemas.contact import ContactCreate
 from app.services import copilot_business_tools as biz_tools
+from app.services import copilot_sales_tools as sales_tools
 from app.services.analytics_service import capture_event, compute_analytics_summary
 from app.services.availability_service import TZ
 from app.services.campaign_stats_service import compute_campaign_stats, merge_stats
@@ -177,6 +178,15 @@ Reglas estrictas:
    update_page_style (verde, azul, morado, rojo… o claro/crema/medianoche). No borres lo que no pidió quitar. Si te piden algo
    que aún no puedes (ej. mover secciones o cambiar la distribución de la página), dilo con claridad y ofrece
    el armador; no le mandes a menús que no conoces.
+8. COBROS: cuando el dueño diga que cobró o vendió algo ("cobré 85 a Ana", "vendí 120", "me pagaron
+   300"), llama record_sale de inmediato, sin pedir confirmación ni preguntar nada antes. Contesta en
+   una o dos líneas con lo que devolvió: monto, cliente (nombre y …últimos 4), si sumó sello y cuánto
+   lleva hoy, y termina con: "¿Me equivoqué? Di 'deshacer'". Si devuelve `choices`, pregunta cuál
+   (nombre y …últimos 4) y no digas que se guardó; si devuelve `not_found`, di que no lo encontraste y
+   ofrece guardarlo sin cliente o darlo de alta con su WhatsApp. "Deshacer" o "me equivoqué" justo
+   después de un cobro → undo_last_sale. "¿Cuánto llevo/vendí hoy?" → get_sales_today. Fiados o deudas
+   ("me debe 50", "apúntale 50") NO son cobros: no llames record_sale; di que por ahora solo registras lo
+   que ya te pagaron.
 {_loyalty_note(user)}{channel_note}"""
 
 
@@ -345,6 +355,7 @@ TOOLS = [
             "required": ["contact_id", "datetime_iso"],
         },
     },
+    *sales_tools.TOOLS,
     *biz_tools.TOOLS,
 ]
 
@@ -430,6 +441,8 @@ def _summarize(tool_name: str, data: dict) -> str:
         return f"Cita agendada para {data.get('customer_name', '')} el {data.get('scheduled_at', '')}."
     if tool_name in biz_tools.READ_TOOLS | biz_tools.CHANGE_TOOLS:
         return biz_tools.summarize(tool_name, data)
+    if tool_name in sales_tools.NAMES:
+        return sales_tools.summarize(tool_name, data)
     return tool_name
 
 
@@ -574,6 +587,8 @@ async def _execute_immediate_tool(db: AsyncSession, user: User, tool_name: str, 
             return await _tool_create_contact(db, user, args)
         if tool_name in biz_tools.READ_TOOLS:
             return await biz_tools.run_read_tool(db, user, tool_name, args)
+        if tool_name in sales_tools.NAMES:
+            return await sales_tools.run(db, user, tool_name, args)
         return {"error": f"Herramienta desconocida: {tool_name}"}
     except Exception as e:
         logger.warning("[COPILOT] Tool %s failed: %s", tool_name, e, exc_info=True)

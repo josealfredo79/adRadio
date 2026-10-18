@@ -158,3 +158,44 @@ async def today_summary(db: AsyncSession, owner: User) -> dict:
         )
     ).one()
     return {"count": row[0], "total": float(row[1])}
+
+
+DEFAULT_QUICK_AMOUNTS = [20, 50, 100, 200]
+
+
+async def shortcuts(db: AsyncSession, owner: User, recent_limit: int = 5) -> dict:
+    """Atajos de la pantalla Cobrar: los 4 montos que más cobra (o los de
+    siempre si aún no hay ventas) y los últimos clientes a los que les cobró."""
+    since = datetime.now(timezone.utc) - timedelta(days=60)
+    top = (
+        await db.execute(
+            select(Sale.amount, func.count().label("n"))
+            .where(Sale.advertiser_id == owner.id, Sale.source == "counter", Sale.created_at >= since)
+            .group_by(Sale.amount)
+            .order_by(func.count().desc(), Sale.amount)
+            .limit(4)
+        )
+    ).all()
+    amounts = [float(a) for a, _ in top]
+    for default in DEFAULT_QUICK_AMOUNTS:
+        if len(amounts) >= 4:
+            break
+        if default not in amounts:
+            amounts.append(float(default))
+
+    last_sale = (
+        select(Sale.contact_id, func.max(Sale.created_at).label("at"))
+        .where(Sale.advertiser_id == owner.id, Sale.contact_id.is_not(None))
+        .group_by(Sale.contact_id)
+        .subquery()
+    )
+    recent = (
+        await db.execute(
+            select(Contact)
+            .join(last_sale, last_sale.c.contact_id == Contact.id)
+            .where(Contact.advertiser_id == owner.id, Contact.status != "blocked")
+            .order_by(last_sale.c.at.desc())
+            .limit(recent_limit)
+        )
+    ).scalars().all()
+    return {"amounts": sorted(amounts), "recent": list(recent)}

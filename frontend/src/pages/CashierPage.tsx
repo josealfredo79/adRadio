@@ -53,6 +53,11 @@ export default function CashierPage() {
     queryKey: ['sales-today'],
     queryFn: () => api.get('/sales/today').then((r) => r.data),
   })
+  // Atajos: los montos que más cobra y los últimos clientes (docs/specs/2026-10-17-cobrar-con-copiloto.md).
+  const { data: shortcuts } = useQuery<{ amounts: number[]; recent: Customer[] }>({
+    queryKey: ['sales-shortcuts'],
+    queryFn: () => api.get('/sales/shortcuts').then((r) => r.data),
+  })
   const { data: results, isFetching: searching } = useQuery<Customer[]>({
     queryKey: ['sales-customers', debounced],
     queryFn: () => api.get('/sales/customers', { params: { q: debounced } }).then((r) => r.data),
@@ -80,6 +85,7 @@ export default function CashierPage() {
         .then((r) => r.data as SaleOut),
     onSuccess: (sale) => {
       qc.setQueryData(['sales-today'], sale.today)
+      qc.invalidateQueries({ queryKey: ['sales-shortcuts'] })
       setLast(sale)
       reset()
     },
@@ -89,6 +95,7 @@ export default function CashierPage() {
     mutationFn: (id: string) => api.delete(`/sales/${id}`).then((r) => r.data as { today: Today }),
     onSuccess: (out) => {
       qc.setQueryData(['sales-today'], out.today)
+      qc.invalidateQueries({ queryKey: ['sales-shortcuts'] })
       setLast(null)
     },
   })
@@ -152,6 +159,22 @@ export default function CashierPage() {
             />
           </div>
         </label>
+        {shortcuts && shortcuts.amounts.length > 0 && (
+          <div className="-mt-3 grid grid-cols-4 gap-2">
+            {shortcuts.amounts.map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => setAmount(String(a))}
+                className={`rounded-lg border px-2 py-2 text-sm font-semibold tabular-nums transition-colors ${
+                  amount === String(a) ? 'border-brand-500 bg-brand-500/10 text-foreground' : 'border-border text-foreground hover:bg-muted'
+                }`}
+              >
+                ${a % 1 === 0 ? a : a.toFixed(2)}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div>
           <span className="text-sm font-medium text-foreground">¿A quién?</span>
@@ -168,6 +191,23 @@ export default function CashierPage() {
                 />
                 {searching && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
               </div>
+              {debounced.length < 2 && (shortcuts?.recent.length ?? 0) > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs text-muted-foreground">Recientes</p>
+                  <div className="flex flex-wrap gap-2">
+                    {shortcuts!.recent.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setWho({ kind: 'customer', customer: c })}
+                        className="max-w-full truncate rounded-full border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {debounced.length >= 2 && results && (
                 <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
                   {results.length === 0 && (

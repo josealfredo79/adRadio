@@ -228,3 +228,126 @@ async def test_caso10_admin_pilot_shows_sales_per_business(seeded):
     other = next(n for n in data["negocios"] if n["id"] == str(seeded["otro"]))
     assert row["ventas_30d"] == 2 and row["vendido_30d"] == 100.0
     assert other["ventas_30d"] == 0 and other["vendido_30d"] == 0.0
+
+
+# ─── Cobrar con el Copiloto + atajos (docs/specs/2026-10-17-cobrar-con-copiloto.md) ───
+
+async def _copilot(owner_id, tool, **args):
+    from app.services import copilot_sales_tools
+
+    async with AsyncSessionLocal() as db:
+        owner = await db.get(User, owner_id)
+        return await copilot_sales_tools.run(db, owner, tool, args)
+
+
+async def test_copiloto_caso1_cobre_85_a_ana_saves_with_stamp_and_today(seeded):
+    out = await _copilot(seeded["lupe"], "record_sale", amount=85, customer="ana")
+    assert out["saved"] and out["amount"] == 85.0 and out["stamped"]
+    assert out["customer"] == {"name": "Ana López", "phone_last4": "1234"}
+    assert out["today_total"] == 85.0 and out["today_count"] == 1
+    assert await _stamps(seeded["ana"]) == 1
+
+
+async def test_copiloto_caso2_sale_without_customer_and_amount_with_words(seeded):
+    out = await _copilot(seeded["lupe"], "record_sale", amount="120 pesos")
+    assert out["saved"] and out["customer"] is None and out["amount"] == 120.0
+
+
+async def test_copiloto_caso3_several_matches_asks_and_saves_nothing_unless_exact(seeded):
+    async with AsyncSessionLocal() as db:
+        db.add(Contact(advertiser_id=seeded["lupe"], name="Ana", phone=f"+52954{seeded['tail']}0001"))
+        db.add(Contact(advertiser_id=seeded["lupe"], name="Anabel Cruz", phone=f"+52954{seeded['tail']}0002"))
+        await db.commit()
+    out = await _copilot(seeded["lupe"], "record_sale", amount=50, customer="Anab")
+    assert out["saved"] and out["customer"]["name"] == "Anabel Cruz"  # una sola coincidencia
+    ambiguous = await _copilot(seeded["lupe"], "record_sale", amount=50, customer="an")
+    assert ambiguous["saved"] is False and len(ambiguous["choices"]) >= 3
+    exact = await _copilot(seeded["lupe"], "record_sale", amount=60, customer="ana")
+    assert exact["saved"] and exact["customer"]["name"] == "Ana"
+    assert len(await _sales(seeded["lupe"])) == 2
+
+
+async def test_copiloto_caso4_not_found_offers_options_then_registers_new(seeded):
+    out = await _copilot(seeded["lupe"], "record_sale", amount=70, customer="Rodolfo")
+    assert out["saved"] is False and out["not_found"] == "Rodolfo" and await _sales(seeded["lupe"]) == []
+    phone = f"954{seeded['tail']}9"
+    new = await _copilot(seeded["lupe"], "record_sale", amount=70, customer="Rodolfo", customer_phone=phone)
+    again = await _copilot(seeded["lupe"], "record_sale", amount=30, customer="Rodolfo", customer_phone=phone)
+    assert new["saved"] and new["customer"]["name"] == "Rodolfo" and again["customer"] == new["customer"]
+    bad = await _copilot(seeded["lupe"], "record_sale", amount=70, customer="Rodolfo", customer_phone="123")
+    assert "error" in bad
+
+
+async def test_copiloto_caso5_undo_last_sale_within_15_minutes(seeded):
+    assert (await _copilot(seeded["lupe"], "undo_last_sale"))["undone"] is False
+    await _copilot(seeded["lupe"], "record_sale", amount=40)
+    await _copilot(seeded["lupe"], "record_sale", amount=85, customer="ana")
+    out = await _copilot(seeded["lupe"], "undo_last_sale")
+    assert out["undone"] and out["amount"] == 85.0 and out["today_total"] == 40.0
+    assert await _stamps(seeded["ana"]) == 0
+    async with AsyncSessionLocal() as db:
+        await db.execute(update(Sale).where(Sale.advertiser_id == seeded["lupe"])
+                         .values(created_at=datetime.now(timezone.utc) - timedelta(minutes=30)))
+        await db.commit()
+    late = await _copilot(seeded["lupe"], "undo_last_sale")
+    assert late["undone"] is False and "15 minutos" in late["note"]
+
+
+@pytest.mark.parametrize("bad", [0, -10, 100001, "nada"])
+async def test_copiloto_caso6_bad_amount_is_explained(seeded, bad):
+    out = await _copilot(seeded["lupe"], "record_sale", amount=bad, customer="ana")
+    assert "error" in out and await _sales(seeded["lupe"]) == []
+
+
+async def test_copiloto_caso7_tools_are_registered_and_run_without_confirmation():
+    from app.services import copilot_service
+
+    names = {t["name"] for t in copilot_service.TOOLS}
+    assert {"record_sale", "undo_last_sale"} <= names
+    assert not ({"record_sale", "undo_last_sale"} & copilot_service.CONFIRM_TOOLS)
+    assert "COBROS" in copilot_service._build_system_prompt(User(business_name="X"), "whatsapp")
+
+
+async def test_atajos_caso8_quick_amounts_default_then_most_charged(seeded):
+    from app.api.v1.sales import sales_shortcuts
+
+    async with AsyncSessionLocal() as db:
+        lupe = await db.get(User, seeded["lupe"])
+        empty = await sales_shortcuts(db=db, current_user=lupe)
+    assert empty["amounts"] == [20.0, 50.0, 100.0, 200.0] and empty["recent"] == []
+    for amount in ["35", "35", "35", "12", "12", "50"]:
+        await _sell(seeded["lupe"], amount=amount)
+    async with AsyncSessionLocal() as db:
+        lupe = await db.get(User, seeded["lupe"])
+        out = await sales_shortcuts(db=db, current_user=lupe)
+    assert out["amounts"] == [12.0, 20.0, 35.0, 50.0]
+
+
+async def test_atajos_caso9_recent_customers_newest_first_without_repeats(seeded):
+    from app.api.v1.sales import sales_shortcuts
+
+    await _sell(seeded["lupe"], amount="10", contact_id=seeded["ana"])
+    await _sell(seeded["lupe"], amount="10", contact_id=seeded["beto"])
+    await _sell(seeded["lupe"], amount="10", contact_id=seeded["ana"])
+    await _sell(seeded["lupe"], amount="10")
+    async with AsyncSessionLocal() as db:
+        lupe = await db.get(User, seeded["lupe"])
+        out = await sales_shortcuts(db=db, current_user=lupe)
+        otro = await sales_shortcuts(db=db, current_user=await db.get(User, seeded["otro"]))
+    assert [c["name"] for c in out["recent"]] == ["Ana López", "Beto Ruiz"]
+    assert otro["recent"] == []
+
+
+async def test_copiloto_courtesy_titles_and_today_tool(seeded):
+    async with AsyncSessionLocal() as db:
+        db.add(Contact(advertiser_id=seeded["lupe"], name="Juan Pérez", phone=f"+52955{seeded['tail']}0003"))
+        await db.commit()
+    out = await _copilot(seeded["lupe"], "record_sale", amount=300, customer="don Juan")
+    assert out["saved"] and out["customer"]["name"] == "Juan Pérez"
+    today = await _copilot(seeded["lupe"], "get_sales_today")
+    assert today == {"count": 1, "total": 300.0}
+
+
+async def test_copiloto_name_plus_last_digits_picks_that_customer(seeded):
+    out = await _copilot(seeded["lupe"], "record_sale", amount=50, customer="Ana 1234")
+    assert out["saved"] and out["customer"] == {"name": "Ana López", "phone_last4": "1234"}

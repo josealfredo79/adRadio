@@ -30,7 +30,12 @@ function renderPage() {
 
 beforeEach(() => {
   vi.mocked(api.get).mockReset().mockImplementation((url: string) =>
-    Promise.resolve({ data: url === '/sales/today' ? { count: 0, total: 0 } : [ana] }),
+    Promise.resolve({
+      data:
+        url === '/sales/today' ? { count: 0, total: 0 }
+        : url === '/sales/shortcuts' ? { amounts: [20, 35, 50, 100], recent: [{ id: 'c7', name: 'Beto Ruiz', phone_last4: '5678' }] }
+        : [ana],
+    }),
   )
   vi.mocked(api.post).mockReset()
   vi.mocked(api.delete).mockReset()
@@ -109,5 +114,23 @@ describe('CashierPage', () => {
     expect((screen.getByText('Cobré') as HTMLButtonElement).disabled).toBe(true)
     fireEvent.change(screen.getByLabelText('Monto cobrado'), { target: { value: '10' } })
     expect((screen.getByText('Cobré $10') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('caso 8 (copiloto): a quick amount fills the amount with one tap', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByText('$35'))
+    expect((screen.getByLabelText('Monto cobrado') as HTMLInputElement).value).toBe('35')
+    expect(screen.getByText('Cobré $35')).toBeDefined()
+  })
+
+  it('caso 9 (copiloto): a recent customer is picked without searching', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: { id: 's5', amount: 35, customer: { id: 'c7', name: 'Beto Ruiz', phone_last4: '5678' }, stamped: true, today: { count: 1, total: 35 } },
+    })
+    renderPage()
+    fireEvent.click(await screen.findByText('$35'))
+    fireEvent.click(await screen.findByText('Beto Ruiz'))
+    fireEvent.click(screen.getByText('Cobré $35'))
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/sales', { amount: '35', contact_id: 'c7' }))
   })
 })

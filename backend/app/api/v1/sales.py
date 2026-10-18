@@ -46,6 +46,16 @@ async def search_customers(
     return [_customer_out(c) for c in await sales_service.find_customers(db, current_user, q)]
 
 
+@router.get("/shortcuts")
+async def sales_shortcuts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Montos rápidos y clientes recientes de la pantalla Cobrar."""
+    data = await sales_service.shortcuts(db, current_user)
+    return {"amounts": data["amounts"], "recent": [_customer_out(c) for c in data["recent"]]}
+
+
 @router.get("/today")
 async def sales_today(
     db: AsyncSession = Depends(get_db),
