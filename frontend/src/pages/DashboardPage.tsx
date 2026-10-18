@@ -8,6 +8,7 @@ import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, Shopp
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
 import PageBuilderCard from '@/components/PageBuilderCard'
+import WhatsappUpgradeCard from '@/components/WhatsappUpgradeCard'
 import { loadDemoDraft } from '@/lib/demoDraft'
 import SEO from '@/components/SEO'
 import { LOYALTY_ANCHOR, loyaltyNeedsReward } from '@/lib/loyalty'
@@ -274,6 +275,8 @@ export default function DashboardPage() {
               </span>
             </Link>
           )}
+
+          <WhatsappUpgradeCard webCustomers={data?.web_customers_this_month ?? 0} />
 
           {/* Ahorro: cada respuesta por la web es un WhatsApp que no se pagó */}
           {(data?.web_replies_this_month ?? 0) > 0 && (

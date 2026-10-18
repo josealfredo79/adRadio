@@ -646,3 +646,24 @@ class TestInitialSyncCall:
         with patch("httpx.AsyncClient", lambda **kw: real_client(transport=transport)):
             out = await request_initial_sync("phone-1", "tok")
         assert out["history"] == "error: fuera de las 24 h"
+
+
+class TestMetaSinFriccion:
+    """docs/specs/2026-10-17-meta-sin-friccion.md"""
+
+    def test_caso5_config_tells_the_real_meta_pricing(self, client, test_user):
+        from app.config import settings
+        data = client.get("/api/v1/me/whatsapp-embedded-config").json()
+        assert data["free_service_messages"] == settings.META_FREE_SERVICE_MESSAGES
+        assert data["service_price_mxn"] == settings.META_SERVICE_PRICE_MXN
+
+    def test_caso2_help_endpoint_saves_the_request(self, client, test_user):
+        with patch("app.services.meta_help_request.request_whatsapp_help", new=AsyncMock(return_value=True)) as req:
+            r = client.post("/api/v1/me/whatsapp-connection/help")
+        assert r.status_code == 200 and r.json() == {"ok": True}
+        assert req.await_args.args[1] is test_user
+
+    def test_help_without_phone_explains_what_to_fill(self, client, test_user):
+        with patch("app.services.meta_help_request.request_whatsapp_help", new=AsyncMock(return_value=False)):
+            r = client.post("/api/v1/me/whatsapp-connection/help")
+        assert r.status_code == 422 and "WhatsApp personal" in r.json()["detail"]

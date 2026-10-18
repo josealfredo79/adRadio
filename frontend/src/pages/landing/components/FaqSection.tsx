@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react'
 const FAQ_ITEMS = [
   { q: '¿Necesito saber programar?', a: 'No. Si sabes mandar un WhatsApp, sabes usar IaRadio. Todo está diseñado para dueños de negocio, no para ingenieros.' },
   { q: '¿Cómo aprende el bot sobre mi negocio?', a: 'Subes tu menú, catálogo o descripción de servicios (PDF o texto). El sistema genera embeddings vectoriales y el bot responde solo con esa información, nunca inventa cosas.' },
-  { q: '¿El número de WhatsApp es el mío?', a: 'Sí. Conectas tu propio número de WhatsApp Business directo con Meta (WhatsApp Cloud API) desde tu panel — nosotros nunca vemos ni compartimos tu token de acceso, se guarda cifrado.' },
+  { q: '¿El número de WhatsApp es el mío?', a: 'Arrancas sin conectar nada: tu bot atiende desde el primer día en tu página y tu cartel QR. Cuando quieras, conectas tu propio número de WhatsApp con un botón — nosotros nunca vemos ni compartimos tu token de acceso, se guarda cifrado.' },
   { q: '¿Qué pasa si me quedo sin mensajes?', a: 'Puedes subir de plan en cualquier momento desde tu dashboard. Tus contactos, campañas y base de conocimiento se mantienen intactos.' },
   { q: '¿Puedo cancelar en cualquier momento?', a: 'Sí, sin penalizaciones ni contratos. Cancelas desde Configuración → Suscripción en menos de 1 minuto.' },
   { q: '¿Funciona para cualquier tipo de negocio?', a: 'Sí. Restaurantes, farmacias, estéticas, tiendas de ropa, clínicas, servicios profesionales... cualquier negocio que use WhatsApp para comunicarse con clientes.' },

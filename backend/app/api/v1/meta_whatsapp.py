@@ -23,6 +23,7 @@ from app.schemas.meta_whatsapp import (
     MetaWhatsappTestResult,
 )
 from app.services.meta_connect_service import subscribe_app_to_waba, test_connection
+from app.services.meta_cost import service_pricing
 from app.services.meta_oauth_service import exchange_embedded_code
 from app.services.meta_provisioning import (
     configure_app_webhook,
@@ -177,6 +178,9 @@ class MetaEmbeddedConfigOut(BaseModel):
     app_id: str
     config_id: str
     enabled: bool
+    # Para el aviso de cobro: respuestas gratis al mes y lo que cobra Meta después.
+    free_service_messages: int
+    service_price_mxn: float
 
 
 @router.get("/me/whatsapp-embedded-config", response_model=MetaEmbeddedConfigOut)
@@ -186,11 +190,31 @@ async def get_whatsapp_embedded_config(current_user: User = Depends(get_current_
     `enabled` also requires the explicit META_EMBEDDED_SIGNUP_ENABLED switch —
     the config can sit loaded in prod with the button still hidden until Meta
     approves TP/BSP (see meta_oauth_service docstring / migration notes)."""
+    free_messages, price_mxn = service_pricing()
     return MetaEmbeddedConfigOut(
         app_id=settings.META_APP_ID,
         config_id=settings.META_EMBEDDED_SIGNUP_CONFIG_ID,
         enabled=_embedded_enabled_for(current_user),
+        free_service_messages=free_messages,
+        service_price_mxn=price_mxn,
     )
+
+
+@router.post("/me/whatsapp-connection/help")
+async def request_whatsapp_connection_help(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """"Quiero conectar mi WhatsApp": la petición queda en el Inbox de IaRadio
+    (docs/specs/2026-10-17-meta-sin-friccion.md)."""
+    from app.services.meta_help_request import request_whatsapp_help
+
+    if not await request_whatsapp_help(db, current_user):
+        raise HTTPException(
+            status_code=422,
+            detail="No pudimos registrar tu solicitud. Revisa que tu WhatsApp personal esté en Datos del negocio.",
+        )
+    return {"ok": True}
 
 
 def _embedded_enabled_for(user: User) -> bool:

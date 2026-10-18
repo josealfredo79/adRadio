@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import { launchEmbeddedSignup, type EmbeddedSignupResult } from '@/lib/fbSdk'
 import WhatsappTemplates from '@/components/WhatsappTemplates'
 import { useMetaTemplates } from '@/lib/metaTemplates'
@@ -13,6 +14,11 @@ import { Check, ChevronDown, ExternalLink, Loader2, MessageCircle, Sparkles, X }
 // META_EMBEDDED_SIGNUP_ENABLED=true. Así se prueba en staging sin exponerlo
 // en producción hasta que Meta apruebe la verificación de negocio y el App
 // Review para acceso avanzado / TP-BSP (ver memoria de sesión 2026-08-04).
+//
+// Conectar es una mejora, no un requisito (docs/specs/2026-10-17-meta-sin-friccion.md):
+// el bot ya atiende en la página y el QR. La guía manual (Meta for Developers,
+// token, IDs) solo la ven admins; un dueño sin botón pide ayuda y la petición
+// cae en el Inbox de IaRadio.
 
 interface Connection {
   waba_id: string | null
@@ -45,12 +51,29 @@ export default function WhatsappWizard() {
     queryKey: ['whatsapp-connection'],
     queryFn: () => api.get('/me/whatsapp-connection').then((r) => r.data),
   })
-  const { data: embeddedConfig } = useQuery<{ app_id: string; config_id: string; enabled: boolean }>({
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const sectionRef = useRef<HTMLDivElement>(null)
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash === '#whatsapp') sectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [hash])
+  const { data: embeddedConfig } = useQuery<{
+    app_id: string
+    config_id: string
+    enabled: boolean
+    free_service_messages?: number
+    service_price_mxn?: number
+  }>({
     queryKey: ['whatsapp-embedded-config'],
     queryFn: () => api.get('/me/whatsapp-embedded-config').then((r) => r.data),
     staleTime: 60_000,
   })
   const [connectError, setConnectError] = useState<string | null>(null)
+
+  const helpMutation = useMutation({
+    mutationFn: () => api.post('/me/whatsapp-connection/help').then((r) => r.data),
+  })
 
   const embeddedMutation = useMutation({
     mutationFn: ({ code, wabaId, phoneNumberId, coexistence }: EmbeddedSignupResult) =>
@@ -89,6 +112,7 @@ export default function WhatsappWizard() {
   const [appSecret, setAppSecret] = useState('')
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [showGuide, setShowGuide] = useState(false)
+  const [showManual, setShowManual] = useState(false)
 
   const canTest = wabaId.trim() && phoneNumberId.trim() && token.trim()
 
@@ -133,12 +157,16 @@ export default function WhatsappWizard() {
   const isConnected = connection?.status === 'connected'
   const { data: metaTemplates } = useMetaTemplates(isConnected)
   const approvedTemplates = (metaTemplates ?? []).filter((t) => t.status === 'APPROVED')
+  const freeReplies = (embeddedConfig?.free_service_messages ?? 1000).toLocaleString('es-MX')
+  const replyPrice = (embeddedConfig?.service_price_mxn ?? 0.16).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+  // Sin botón y sin poder conectar a mano: le toca pedir ayuda.
+  const needsHelp = !isConnected && !embeddedConfig?.enabled && !isAdmin
 
   return (
-    <div className="rounded-xl bg-card p-6 shadow-sm border border-border space-y-5">
+    <div id="whatsapp" ref={sectionRef} className="scroll-mt-20 rounded-xl bg-card p-6 shadow-sm border border-border space-y-5">
       <div className="flex items-center gap-2">
         <MessageCircle className="h-5 w-5 text-brand-500" />
-        <h2 className="text-base font-semibold text-foreground">WhatsApp Business (Meta Cloud API)</h2>
+        <h2 className="text-base font-semibold text-foreground">Tu WhatsApp</h2>
       </div>
 
       {isConnected && (
@@ -196,17 +224,52 @@ export default function WhatsappWizard() {
         <div className="flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800">
           <Sparkles className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
           <span>
-            Mientras conectas tu WhatsApp, tu bot ya puede atender a tus clientes desde tu sitio web con el{' '}
-            <Link to="/app/widget" className="font-medium underline hover:no-underline">Widget de chat</Link>.
+            Tu bot ya atiende a tus clientes en{' '}
+            <Link to="/app/widget" className="font-medium underline hover:no-underline">tu página</Link> y tu cartel QR.
+            No necesitas conectar nada para empezar; conectar tu WhatsApp es una mejora para cuando quieras.
           </span>
+        </div>
+      )}
+
+      {needsHelp && (
+        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+          <p className="text-sm text-foreground">
+            ¿Quieres que el bot conteste también en tu WhatsApp? Te ayudamos a conectarlo.
+          </p>
+          {helpMutation.isSuccess ? (
+            <p className="flex items-center gap-2 text-sm font-medium text-green-700">
+              <Check className="h-4 w-4 shrink-0" /> Listo, te escribimos pronto.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => helpMutation.mutate()}
+              disabled={helpMutation.isPending}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50 transition-colors"
+            >
+              {helpMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Quiero conectar mi WhatsApp
+            </button>
+          )}
+          {helpMutation.isError && (
+            <p className="text-sm text-red-600">{getApiError(helpMutation.error, 'No pudimos registrar tu solicitud')}</p>
+          )}
         </div>
       )}
 
       {embeddedConfig?.enabled && (
         <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
           <p className="text-sm font-medium text-foreground">
-            ¿Ya tienes tu cuenta de negocio en Meta? Conecta en un solo clic.
+            Conecta tu WhatsApp para que el bot conteste también ahí.
           </p>
+          <div className="rounded-md border border-border bg-card px-3 py-2.5 text-xs text-foreground">
+            <p className="font-semibold">Antes de empezar ten a la mano (son unos 10 minutos):</p>
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-muted-foreground">
+              <li>Tu cuenta de Facebook (correo y contraseña).</li>
+              <li>Tu celular con el número que vas a conectar.</li>
+              <li>Una tarjeta: Meta la pide para cobrar sus mensajes; IaRadio no la ve.</li>
+            </ul>
+          </div>
           <button
             type="button"
             onClick={handleConnectWithMeta}
@@ -242,8 +305,9 @@ export default function WhatsappWizard() {
               SMS o llamada para confirmarlo.
             </li>
             <li>
-              Meta puede pedirte una tarjeta en tu cuenta de Meta. Contestar a tus clientes es gratis; los
-              mensajes de promoción los cobra Meta directamente, aparte de tu plan de IaRadio.
+              Meta puede pedirte una tarjeta en tu cuenta de Meta. Las primeras {freeReplies} respuestas a tus
+              clientes de cada mes son gratis; después Meta cobra unos {replyPrice} por respuesta, y los mensajes de
+              promoción aparte. Lo cobra Meta directamente, no entra en tu plan de IaRadio.
             </li>
           </ul>
           {connectError && (
@@ -252,234 +316,250 @@ export default function WhatsappWizard() {
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => setShowGuide((v) => !v)}
-        className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/50 px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
-      >
-        <span>Guía paso a paso (cómo conseguir estos datos)</span>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showGuide ? 'rotate-180' : ''}`} />
-      </button>
-
-      {showGuide && (
-        <ol className="space-y-4 rounded-lg border border-border p-4 text-sm text-foreground">
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">1</span>
-            <div className="space-y-1">
-              <p className="font-medium">
-                Crea tu cuenta de negocio (si no la tienes) y agrega WhatsApp
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Entra a{' '}
-                <a href="https://business.facebook.com" target="_blank" rel="noreferrer" className="underline">
-                  business.facebook.com
-                </a>{' '}
-                con tu cuenta personal. Crea un Business Manager (o entra al tuyo) → en la barra lateral busca{' '}
-                <span className="font-medium">WhatsApp</span> →{' '}
-                <span className="font-medium">Empezar a usar</span>. Esto crea tu WhatsApp Business Account (WABA) gratis.
-              </p>
-              <a
-                href="https://business.facebook.com/settings/whatsapp-business-accounts"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 underline hover:no-underline"
+      {isAdmin && (
+        <div className="space-y-5">
+          <button
+            type="button"
+            onClick={() => setShowManual((v) => !v)}
+            className="flex w-full items-center justify-between text-left text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            <span>Conectar a mano (avanzado, solo admins)</span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${showManual ? 'rotate-180' : ''}`} />
+          </button>
+          {showManual && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowGuide((v) => !v)}
+                className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/50 px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
               >
-                <ExternalLink className="h-3 w-3" />
-                Ver mis cuentas de WhatsApp (ahí se ve tu WABA ID directamente)
-              </a>
-            </div>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">2</span>
-            <div className="space-y-1">
-              <p className="font-medium">Agrega tu número de teléfono</p>
-              <p className="text-xs text-muted-foreground">
-                Dentro de la WABA → <span className="font-medium">Configuración de números de teléfono</span> →{' '}
-                <span className="font-medium">Agregar número</span>. Usa un número <span className="font-medium">libre de WhatsApp</span> (otro chip).
-                Verifícalo con el código por SMS o llamada que te llega a ese número.
-              </p>
-              <a
-                href="https://business.facebook.com/wa/manage/phone-numbers"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 underline hover:no-underline"
-              >
-                <ExternalLink className="h-3 w-3" />
-                Administrador de WhatsApp — números de teléfono
-              </a>
-            </div>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">3</span>
-            <div className="space-y-1">
-              <p className="font-medium">Crea tu app en Meta for Developers</p>
-              <p className="text-xs text-muted-foreground">
-                En{' '}
-                <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="underline">
-                  developers.facebook.com
-                </a>{' '}
-                → <span className="font-medium">Mis apps</span> → <span className="font-medium">Crear app</span> (tipo 'Negocio', luego
-                agrega el producto <span className="font-medium">WhatsApp</span>). Ahí verás{' '}
-                <span className="font-medium">WABA ID</span> y <span className="font-medium">Phone Number ID</span> en la sección{' '}
-                <span className="font-medium">API Setup</span>. El <span className="font-medium">App ID</span> y el{' '}
-                <span className="font-medium">App Secret</span> están en{' '}
-                <span className="font-medium">Configuración de la app → Básico</span> — cópialos también.
-              </p>
-              <a
-                href="https://developers.facebook.com/apps"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 underline hover:no-underline"
-              >
-                <ExternalLink className="h-3 w-3" />
-                Ir a Mis apps (Meta for Developers)
-              </a>
-            </div>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">4</span>
-            <div className="space-y-1">
-              <p className="font-medium">Genera el token permanente</p>
-              <p className="text-xs text-muted-foreground">
-                En{' '}
-                <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noreferrer" className="underline">
-                  business.facebook.com → Configuración → Usuarios del sistema
-                </a>{' '}
-                crea un usuario del sistema con tu app y permiso{' '}
-                <span className="font-medium">whatsapp_business_messaging</span> y{' '}
-                <span className="font-medium">whatsapp_business_management</span>, luego{' '}
-                <span className="font-medium">Generar token</span> (elige tu app, sin expiración). Ese token de larga duración es el que pegas aquí.
-              </p>
-            </div>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">5</span>
-            <div className="space-y-1">
-              <p className="font-medium">Pega los 3 datos abajo y dale 'Probar conexión'</p>
-              <p className="text-xs text-muted-foreground">
-                El botón de prueba valida el token contra Meta sin guardar nada. Si todo sale bien, guarda. Listo.
-              </p>
-            </div>
-          </li>
-          <li className="flex items-center gap-2 text-xs text-muted-foreground">
-            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              Guía oficial:{' '}
-              <a
-                href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
-                target="_blank"
-                rel="noreferrer"
-                className="underline"
-              >
-                developers.facebook.com/docs/whatsapp/cloud-api/get-started
-              </a>
-            </span>
-          </li>
-        </ol>
-      )}
+                <span>Guía paso a paso (cómo conseguir estos datos)</span>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showGuide ? 'rotate-180' : ''}`} />
+              </button>
 
-      <p className="text-xs text-muted-foreground">
-        Pega abajo los datos que viste en los pasos 3 y 4. El token debe ser de un usuario del sistema (no expira).
-        Si además pegas el <span className="font-medium">App ID</span> y el <span className="font-medium">App Secret</span>
-        de tu Meta App, configuramos el webhook por ti — sin eso tu app no recibe las respuestas de tus clientes.
-      </p>
+              {showGuide && (
+                <ol className="space-y-4 rounded-lg border border-border p-4 text-sm text-foreground">
+                  <li className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">1</span>
+                    <div className="space-y-1">
+                      <p className="font-medium">
+                        Crea tu cuenta de negocio (si no la tienes) y agrega WhatsApp
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Entra a{' '}
+                        <a href="https://business.facebook.com" target="_blank" rel="noreferrer" className="underline">
+                          business.facebook.com
+                        </a>{' '}
+                        con tu cuenta personal. Crea un Business Manager (o entra al tuyo) → en la barra lateral busca{' '}
+                        <span className="font-medium">WhatsApp</span> →{' '}
+                        <span className="font-medium">Empezar a usar</span>. Esto crea tu WhatsApp Business Account (WABA) gratis.
+                      </p>
+                      <a
+                        href="https://business.facebook.com/settings/whatsapp-business-accounts"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 underline hover:no-underline"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Ver mis cuentas de WhatsApp (ahí se ve tu WABA ID directamente)
+                      </a>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">2</span>
+                    <div className="space-y-1">
+                      <p className="font-medium">Agrega tu número de teléfono</p>
+                      <p className="text-xs text-muted-foreground">
+                        Dentro de la WABA → <span className="font-medium">Configuración de números de teléfono</span> →{' '}
+                        <span className="font-medium">Agregar número</span>. Usa un número <span className="font-medium">libre de WhatsApp</span> (otro chip).
+                        Verifícalo con el código por SMS o llamada que te llega a ese número.
+                      </p>
+                      <a
+                        href="https://business.facebook.com/wa/manage/phone-numbers"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 underline hover:no-underline"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Administrador de WhatsApp — números de teléfono
+                      </a>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">3</span>
+                    <div className="space-y-1">
+                      <p className="font-medium">Crea tu app en Meta for Developers</p>
+                      <p className="text-xs text-muted-foreground">
+                        En{' '}
+                        <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="underline">
+                          developers.facebook.com
+                        </a>{' '}
+                        → <span className="font-medium">Mis apps</span> → <span className="font-medium">Crear app</span> (tipo 'Negocio', luego
+                        agrega el producto <span className="font-medium">WhatsApp</span>). Ahí verás{' '}
+                        <span className="font-medium">WABA ID</span> y <span className="font-medium">Phone Number ID</span> en la sección{' '}
+                        <span className="font-medium">API Setup</span>. El <span className="font-medium">App ID</span> y el{' '}
+                        <span className="font-medium">App Secret</span> están en{' '}
+                        <span className="font-medium">Configuración de la app → Básico</span> — cópialos también.
+                      </p>
+                      <a
+                        href="https://developers.facebook.com/apps"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 underline hover:no-underline"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Ir a Mis apps (Meta for Developers)
+                      </a>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">4</span>
+                    <div className="space-y-1">
+                      <p className="font-medium">Genera el token permanente</p>
+                      <p className="text-xs text-muted-foreground">
+                        En{' '}
+                        <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noreferrer" className="underline">
+                          business.facebook.com → Configuración → Usuarios del sistema
+                        </a>{' '}
+                        crea un usuario del sistema con tu app y permiso{' '}
+                        <span className="font-medium">whatsapp_business_messaging</span> y{' '}
+                        <span className="font-medium">whatsapp_business_management</span>, luego{' '}
+                        <span className="font-medium">Generar token</span> (elige tu app, sin expiración). Ese token de larga duración es el que pegas aquí.
+                      </p>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">5</span>
+                    <div className="space-y-1">
+                      <p className="font-medium">Pega los 3 datos abajo y dale 'Probar conexión'</p>
+                      <p className="text-xs text-muted-foreground">
+                        El botón de prueba valida el token contra Meta sin guardar nada. Si todo sale bien, guarda. Listo.
+                      </p>
+                    </div>
+                  </li>
+                  <li className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Guía oficial:{' '}
+                      <a
+                        href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        developers.facebook.com/docs/whatsapp/cloud-api/get-started
+                      </a>
+                    </span>
+                  </li>
+                </ol>
+              )}
 
-      <div className="space-y-3">
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">WABA ID</label>
-          <input
-            type="text"
-            value={wabaId}
-            onChange={(e) => { setWabaId(e.target.value); setTestResult(null) }}
-            placeholder="Ej: 123456789012345"
-            className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Phone Number ID</label>
-          <input
-            type="text"
-            value={phoneNumberId}
-            onChange={(e) => { setPhoneNumberId(e.target.value); setTestResult(null) }}
-            placeholder="Ej: 109876543210987"
-            className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Token de acceso</label>
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => { setToken(e.target.value); setTestResult(null) }}
-            placeholder="EAAG..."
-            className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
-          />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              App ID <span className="font-normal text-muted-foreground">(recomendado)</span>
-            </label>
-            <input
-              type="text"
-              value={appId}
-              onChange={(e) => { setAppId(e.target.value); setTestResult(null) }}
-              placeholder="Ej: 123456789012345"
-              className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              App Secret <span className="font-normal text-muted-foreground">(recomendado)</span>
-            </label>
-            <input
-              type="password"
-              value={appSecret}
-              onChange={(e) => { setAppSecret(e.target.value); setTestResult(null) }}
-              placeholder={connection?.app_secret_set ? '•••• (ya guardado — pega de nuevo para cambiarlo)' : 'App Secret'}
-              className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
-            />
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          App ID y App Secret salen de <span className="font-medium">Configuración de la app → Básico</span> en
-          developers.facebook.com. No necesitas configurar webhooks a mano: al guardar los dejamos listos.
-        </p>
-      </div>
+              <p className="text-xs text-muted-foreground">
+                Pega abajo los datos que viste en los pasos 3 y 4. El token debe ser de un usuario del sistema (no expira).
+                Si además pegas el <span className="font-medium">App ID</span> y el <span className="font-medium">App Secret</span>
+                de tu Meta App, configuramos el webhook por ti — sin eso tu app no recibe las respuestas de tus clientes.
+              </p>
 
-      {testResult && (
-        <div
-          className={`flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm ${
-            testResult.ok ? 'border border-green-200 bg-green-50 text-green-800' : 'border border-red-200 bg-red-50 text-red-800'
-          }`}
-        >
-          {testResult.ok ? <Check className="h-4 w-4 shrink-0" /> : <X className="h-4 w-4 shrink-0" />}
-          {testResult.ok
-            ? `✓ Token válido para ${testResult.display_phone_number}${testResult.verified_name ? ` (${testResult.verified_name})` : ''}`
-            : testResult.message}
-        </div>
-      )}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">WABA ID</label>
+                  <input
+                    type="text"
+                    value={wabaId}
+                    onChange={(e) => { setWabaId(e.target.value); setTestResult(null) }}
+                    placeholder="Ej: 123456789012345"
+                    className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Phone Number ID</label>
+                  <input
+                    type="text"
+                    value={phoneNumberId}
+                    onChange={(e) => { setPhoneNumberId(e.target.value); setTestResult(null) }}
+                    placeholder="Ej: 109876543210987"
+                    className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Token de acceso</label>
+                  <input
+                    type="password"
+                    value={token}
+                    onChange={(e) => { setToken(e.target.value); setTestResult(null) }}
+                    placeholder="EAAG..."
+                    className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">
+                      App ID <span className="font-normal text-muted-foreground">(recomendado)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={appId}
+                      onChange={(e) => { setAppId(e.target.value); setTestResult(null) }}
+                      placeholder="Ej: 123456789012345"
+                      className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">
+                      App Secret <span className="font-normal text-muted-foreground">(recomendado)</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={appSecret}
+                      onChange={(e) => { setAppSecret(e.target.value); setTestResult(null) }}
+                      placeholder={connection?.app_secret_set ? '•••• (ya guardado — pega de nuevo para cambiarlo)' : 'App Secret'}
+                      className="w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  App ID y App Secret salen de <span className="font-medium">Configuración de la app → Básico</span> en
+                  developers.facebook.com. No necesitas configurar webhooks a mano: al guardar los dejamos listos.
+                </p>
+              </div>
 
-      <div className="flex gap-3">
-        <button
-          onClick={() => testMutation.mutate()}
-          disabled={!canTest || testMutation.isPending}
-          className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          {testMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Probar conexión
-        </button>
-        <button
-          onClick={() => saveMutation.mutate()}
-          disabled={!testResult?.ok || saveMutation.isPending}
-          className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          {saveMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Guardar conexión
-        </button>
-      </div>
-      {saveMutation.isError && (
-        <p className="text-sm text-red-600">{getApiError(saveMutation.error, 'No se pudo guardar la conexión')}</p>
+              {testResult && (
+                <div
+                  className={`flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm ${
+                    testResult.ok ? 'border border-green-200 bg-green-50 text-green-800' : 'border border-red-200 bg-red-50 text-red-800'
+                  }`}
+                >
+                  {testResult.ok ? <Check className="h-4 w-4 shrink-0" /> : <X className="h-4 w-4 shrink-0" />}
+                  {testResult.ok
+                    ? `✓ Token válido para ${testResult.display_phone_number}${testResult.verified_name ? ` (${testResult.verified_name})` : ''}`
+                    : testResult.message}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => testMutation.mutate()}
+                  disabled={!canTest || testMutation.isPending}
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {testMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Probar conexión
+                </button>
+                <button
+                  onClick={() => saveMutation.mutate()}
+                  disabled={!testResult?.ok || saveMutation.isPending}
+                  className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {saveMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Guardar conexión
+                </button>
+              </div>
+              {saveMutation.isError && (
+                <p className="text-sm text-red-600">{getApiError(saveMutation.error, 'No se pudo guardar la conexión')}</p>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       {isConnected && <WhatsappTemplates />}

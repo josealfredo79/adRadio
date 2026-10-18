@@ -8,6 +8,12 @@ las de WhatsApp. Si con todo y la web no se pasaría de las 1,000, el ahorro es 
 from app.config import settings
 
 
+def service_pricing() -> tuple[int, float]:
+    """(respuestas gratis al mes, precio en MXN de cada una después), para
+    explicárselo al dueño tal cual lo cobra Meta."""
+    return settings.META_FREE_SERVICE_MESSAGES, settings.META_SERVICE_PRICE_MXN
+
+
 def paid_service_messages(count: int) -> int:
     return max(0, count - settings.META_FREE_SERVICE_MESSAGES)
 
