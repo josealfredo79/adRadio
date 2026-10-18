@@ -342,6 +342,7 @@ async def pilot_overview(db: AsyncSession = Depends(get_db)):
     from app.models.contact import Contact
     from app.models.conversation import Conversation
     from app.models.order import Order
+    from app.models.sale import Sale
 
     now = datetime.now(timezone.utc)
     since_30 = now - timedelta(days=30)
@@ -387,6 +388,15 @@ async def pilot_overview(db: AsyncSession = Depends(get_db)):
     pedidos = await per_owner(Order, Order.created_at >= since_30)
     campanas = await per_owner(Campaign, Campaign.created_at >= since_30)
     contactos = await per_owner(Contact)
+    ventas = await per_owner(Sale, Sale.created_at >= since_30)
+    vendido = {}
+    if ids:
+        rows = await db.execute(
+            select(Sale.advertiser_id, func.sum(Sale.amount))
+            .where(Sale.advertiser_id.in_(ids), Sale.created_at >= since_30)
+            .group_by(Sale.advertiser_id)
+        )
+        vendido = {k: float(v) for k, v in rows.all()}
 
     negocios = [{
         "id": str(u.id),
@@ -403,5 +413,7 @@ async def pilot_overview(db: AsyncSession = Depends(get_db)):
         "pedidos_30d": pedidos.get(u.id, 0),
         "campanas_30d": campanas.get(u.id, 0),
         "contactos": contactos.get(u.id, 0),
+        "ventas_30d": ventas.get(u.id, 0),
+        "vendido_30d": vendido.get(u.id, 0.0),
     } for u in owners]
     return {"embudo": funnel, "semanas": weeks, "negocios": negocios}

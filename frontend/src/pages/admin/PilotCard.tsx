@@ -36,6 +36,8 @@ export interface PilotBusiness {
   pedidos_30d: number
   campanas_30d: number
   contactos: number
+  ventas_30d?: number
+  vendido_30d?: number
 }
 
 interface Pilot {
@@ -127,7 +129,8 @@ export default function PilotCard() {
                   <th className="py-2 pr-3 text-right font-medium">Citas</th>
                   <th className="py-2 pr-3 text-right font-medium">Pedidos</th>
                   <th className="py-2 pr-3 text-right font-medium">Campañas</th>
-                  <th className="py-2 text-right font-medium">Contactos</th>
+                  <th className="py-2 pr-3 text-right font-medium">Contactos</th>
+                  <th className="py-2 text-right font-medium">Vendido 30 d</th>
                 </tr>
               </thead>
               <tbody>
@@ -151,7 +154,11 @@ export default function PilotCard() {
                     <td className="py-2 pr-3 text-right tabular-nums">{n.citas_30d}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{n.pedidos_30d}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{n.campanas_30d}</td>
-                    <td className="py-2 text-right tabular-nums">{n.contactos}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{n.contactos}</td>
+                    <td className="py-2 text-right tabular-nums" title={`${n.ventas_30d ?? 0} ventas`}>
+                      {(n.vendido_30d ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })}
+                      <span className="block text-xs text-muted-foreground">{n.ventas_30d ?? 0} ventas</span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

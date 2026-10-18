@@ -4,7 +4,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCopilot } from '@/contexts/CopilotContext'
-import { Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic, Globe, Gift } from 'lucide-react'
+import { Banknote, Megaphone, Users, MessageSquare, TrendingUp, CheckCircle, Circle, ShoppingBag, AlertCircle, Bot, CreditCard, PhoneOff, Flame, Ticket, Mic, Globe, Gift } from 'lucide-react'
 import { formatNumber } from '@/lib/utils'
 import OnboardingWizard from '@/components/OnboardingWizard'
 import PageBuilderCard from '@/components/PageBuilderCard'
@@ -260,6 +260,14 @@ export default function DashboardPage() {
               </span>
             </p>
           </div>
+
+          {/* "Cobré $___": cada cobro del mostrador cuenta (docs/specs/2026-10-17-cobre.md). */}
+          <Link
+            to="/app/cobrar"
+            className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 px-5 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-600 sm:w-fit"
+          >
+            <Banknote className="h-5 w-5" /> Cobrar
+          </Link>
 
           {/* La tarjeta de lealtad es el regalo que lleva al cliente a la web;
               sin premio no se les ofrece. */}

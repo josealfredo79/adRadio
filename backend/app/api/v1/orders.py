@@ -18,6 +18,12 @@ from app.database import get_db
 from app.models.order import Order
 from app.models.user import User
 from app.services.loyalty_service import add_stamp, notify_stamp, remove_stamp
+from app.services.sales_service import (
+    SaleError,
+    parse_amount,
+    remove_order_sale,
+    set_order_sale,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +32,8 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 
 class OrderStateUpdate(BaseModel):
     state: Literal["confirmed", "cancelled"]
+    # Cuánto fue el pedido, opcional al confirmar ("Cobré", docs/specs/2026-10-17-cobre.md).
+    amount: str | float | None = None
 
 
 @router.get("")
@@ -90,6 +98,13 @@ async def update_order_state(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    amount = None
+    if body.state == "confirmed" and body.amount not in (None, ""):
+        try:
+            amount = parse_amount(body.amount)
+        except SaleError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+
     order.state = body.state
     if body.state == "confirmed" and not order.confirmed_at:
         order.confirmed_at = datetime.now(timezone.utc)
@@ -98,8 +113,11 @@ async def update_order_state(
     stamped = False
     if body.state == "confirmed":
         stamped = await add_stamp(db, current_user, order.contact_id, "order", str(order.id))
+        if amount is not None:
+            await set_order_sale(db, current_user, order, amount)
     else:
         await remove_stamp(db, order.contact_id, "order", str(order.id))
+        await remove_order_sale(db, current_user, order)
     await db.commit()
     if stamped:
         await notify_stamp(db, current_user, order.contact_id)

@@ -33,6 +33,7 @@ import {
   Kanban,
   Package,
   Sparkles,
+  Banknote,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import BrandMark from '@/components/BrandMark'
@@ -42,6 +43,7 @@ import PageBuilderHost from '@/components/PageBuilderHost'
 const navItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/app/copilot', icon: Sparkles, label: 'Copiloto' },
+  { to: '/app/cobrar', icon: Banknote, label: 'Cobrar' },
   { to: '/app/campaigns', icon: Megaphone, label: 'Campañas', badge: 'voces_stories_pending' as const },
   { to: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
   { to: '/app/orders', icon: ShoppingBag, label: 'Pedidos', badge: 'orders_pending' as const },

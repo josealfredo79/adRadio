@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Gift, Loader2, Plus, Stamp, X } from 'lucide-react'
+import { Banknote, Check, Gift, Loader2, Plus, Stamp, X } from 'lucide-react'
 
 export interface LoyaltyCard {
   stamps: number
@@ -12,9 +12,10 @@ export interface LoyaltyCard {
   history: { label: string; at: string | null }[]
 }
 
-// Tarjeta de lealtad de un cliente desde Contactos: el dueño le pone un sello
-// por una compra de mostrador o le entrega el premio. No aparece si el
-// negocio no activó la tarjeta en Configuración.
+// Tarjeta de lealtad de un cliente desde Contactos: el dueño registra lo que
+// le cobró ("Cobré $___", que también le pone el sello — docs/specs/2026-10-17-cobre.md),
+// le pone un sello suelto o le entrega el premio. No aparece si el negocio no
+// activó la tarjeta en Configuración (cobrar sigue en /app/cobrar).
 export default function LoyaltyContactButton({
   contactId,
   contactName,
@@ -54,6 +55,15 @@ function LoyaltyModal({ contactId, contactName, onClose }: { contactId: string; 
     onSuccess: (out) => qc.setQueryData(key, out),
   })
   const card = data?.card
+  const [amount, setAmount] = useState('')
+  const charge = useMutation({
+    mutationFn: () => api.post('/sales', { amount, contact_id: contactId }).then((r) => r.data as { amount: number }),
+    onSuccess: () => {
+      setAmount('')
+      qc.invalidateQueries({ queryKey: key })
+      qc.invalidateQueries({ queryKey: ['sales-today'] })
+    },
+  })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -97,8 +107,34 @@ function LoyaltyModal({ contactId, contactName, onClose }: { contactId: string; 
                 : `${card.stamps} de ${card.required} sellos`}
             </p>
 
-            {action.isError && <p className="mt-2 text-sm text-red-600">{getApiError(action.error, 'No se pudo guardar')}</p>}
             <div className="mt-5 flex gap-2">
+              <label className="flex min-w-0 flex-1 items-center rounded-lg border border-border bg-background px-2.5 focus-within:border-brand-500">
+                <span className="text-sm text-muted-foreground">$</span>
+                <input
+                  value={amount}
+                  onChange={(e) => { setAmount(e.target.value); charge.reset() }}
+                  inputMode="decimal"
+                  placeholder="¿Cuánto le cobraste?"
+                  aria-label={`Monto cobrado a ${contactName}`}
+                  className="w-full min-w-0 bg-transparent px-1.5 py-2 text-base text-foreground focus:outline-none"
+                />
+              </label>
+              <button
+                onClick={() => charge.mutate()}
+                disabled={!amount.trim() || charge.isPending}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-40"
+              >
+                {charge.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />} Cobré
+              </button>
+            </div>
+            {charge.isSuccess && (
+              <p className="mt-2 flex items-center gap-1 text-sm text-green-700">
+                <Check className="h-4 w-4" /> Cobro de ${charge.data.amount} guardado, con su sello.
+              </p>
+            )}
+            {charge.isError && <p className="mt-2 text-sm text-red-600">{getApiError(charge.error, 'No se pudo guardar el cobro')}</p>}
+            {action.isError && <p className="mt-2 text-sm text-red-600">{getApiError(action.error, 'No se pudo guardar')}</p>}
+            <div className="mt-3 flex gap-2">
               <button
                 onClick={() => action.mutate('stamp')}
                 disabled={action.isPending}

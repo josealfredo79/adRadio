@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
+import api, { getApiError } from '@/lib/api'
 import { ShoppingBag, Search, CheckCircle, XCircle, Clock, ChevronDown } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
 import { formatDate } from '@/lib/utils'
@@ -66,9 +66,11 @@ export default function OrdersPage() {
       api.get('/orders', { params: stateFilter ? { state: stateFilter } : {} }).then((r) => r.data),
   })
 
+  // Cuánto fue cada pedido al confirmarlo (opcional): cuenta como venta (docs/specs/2026-10-17-cobre.md).
+  const [amounts, setAmounts] = useState<Record<string, string>>({})
   const patchState = useMutation({
-    mutationFn: ({ id, state }: { id: string; state: string }) =>
-      api.patch(`/orders/${id}/state`, { state }),
+    mutationFn: ({ id, state, amount }: { id: string; state: string; amount?: string }) =>
+      api.patch(`/orders/${id}/state`, { state, ...(amount?.trim() ? { amount: amount.trim() } : {}) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
   })
 
@@ -231,9 +233,20 @@ export default function OrdersPage() {
 
                       {/* Actions */}
                       {isPending && (
-                        <div className="mt-4 flex gap-2">
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <label className="flex items-center rounded-lg border border-border bg-background px-2.5">
+                            <span className="text-sm text-muted-foreground">$</span>
+                            <input
+                              value={amounts[order.id] ?? ''}
+                              onChange={(e) => setAmounts((a) => ({ ...a, [order.id]: e.target.value }))}
+                              inputMode="decimal"
+                              placeholder="¿Cuánto fue? (opcional)"
+                              aria-label={`Monto del pedido #${order.order_number}`}
+                              className="w-44 bg-transparent px-1.5 py-1.5 text-base sm:text-sm text-foreground focus:outline-none"
+                            />
+                          </label>
                           <button
-                            onClick={() => patchState.mutate({ id: order.id, state: 'confirmed' })}
+                            onClick={() => patchState.mutate({ id: order.id, state: 'confirmed', amount: amounts[order.id] })}
                             disabled={patchState.isPending}
                             className="flex items-center gap-1.5 rounded-lg bg-green-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600 transition-colors disabled:opacity-50"
                           >
@@ -248,6 +261,9 @@ export default function OrdersPage() {
                             <XCircle className="h-3.5 w-3.5" />
                             Cancelar
                           </button>
+                          {patchState.isError && patchState.variables?.id === order.id && (
+                            <p className="w-full text-xs text-red-600">{getApiError(patchState.error, 'No se pudo guardar')}</p>
+                          )}
                         </div>
                       )}
                       {/* Ya confirmado: el cliente puede pedir cancelarlo por el chat (el agente le avisa al dueño). */}

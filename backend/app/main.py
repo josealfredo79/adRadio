@@ -45,6 +45,7 @@ from app.api.v1 import (
     public_api_routes,
     public_site,
     radio,
+    sales,
     team,
     template_seeds,
     templates,
@@ -260,6 +261,7 @@ app.include_router(payments.router, prefix=settings.API_PREFIX)
 app.include_router(webhooks.router, prefix=settings.API_PREFIX)
 app.include_router(radio.router, prefix=settings.API_PREFIX)
 app.include_router(orders.router, prefix=settings.API_PREFIX)
+app.include_router(sales.router, prefix=settings.API_PREFIX)
 app.include_router(appointments.router, prefix=settings.API_PREFIX)
 app.include_router(templates.router, prefix=settings.API_PREFIX)
 app.include_router(template_seeds.router, prefix=settings.API_PREFIX)

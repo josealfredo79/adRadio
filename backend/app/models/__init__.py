@@ -15,6 +15,7 @@ from app.models.order import Order
 from app.models.owner_question import OwnerQuestion
 from app.models.push_subscription import PushSubscription
 from app.models.recipient_send import RecipientSend
+from app.models.sale import Sale
 from app.models.send_block_log import SendBlockLog
 from app.models.team_member import TeamMember
 from app.models.template import MessageTemplate
@@ -44,6 +45,7 @@ __all__ = [
     "OwnerQuestion",
     "PushSubscription",
     "RecipientSend",
+    "Sale",
     "SendBlockLog",
     "TeamMember",
     "Transaction",
