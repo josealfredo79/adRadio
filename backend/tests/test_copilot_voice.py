@@ -135,10 +135,12 @@ async def test_attached_photo_reaches_the_product_even_if_the_model_drops_it():
 
     user = _user()
     photo = f"https://www.iaradio.online/api/v1/radio/audio/products/{user.id}/vaso.jpg"
-    response = _Block(content=[_Block(type="tool_use", id="t1", name="create_product",
-                                      input={"name": "Vaso Rosa", "price": 65})])
-    client = _Block(messages=_Block(create=AsyncMock(return_value=response)))
-    with patch.object(cs, "_get_client", return_value=client):
+    from app.services import llm_client
+
+    call = llm_client.ToolCall("t1", "create_product", {"name": "Vaso Rosa", "price": 65})
+    response = llm_client.ToolReply("", [call], [{"type": "tool_use", "id": "t1", "name": "create_product",
+                                                 "input": call.input}])
+    with patch.object(llm_client, "tool_completion", AsyncMock(return_value=response)):
         out = await cs.handle_chat(None, user, f"vaso rosa 65\n[Foto adjunta: {photo}]", [],
                                    channel="whatsapp", attached_photo=photo)
         assert out["pending_confirmation"]["args"]["photo_url"] == photo

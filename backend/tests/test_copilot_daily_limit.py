@@ -3,14 +3,13 @@
 Es un seguro contra la cuenta de Anthropic: al pasarse, el Copiloto contesta un
 aviso fijo SIN llamar a Claude. Corre contra Redis real (el contador vive ahí)."""
 import uuid
-from types import SimpleNamespace
 
 import pytest
 
 from app.core.plans import plan_limit
 from app.core.redis import get_redis
 from app.models.user import User
-from app.services import copilot_service
+from app.services import copilot_service, llm_client
 from app.services.copilot_service import DAILY_LIMIT_REPLY, handle_chat
 
 
@@ -18,15 +17,15 @@ class _FakeMessages:
     def __init__(self):
         self.calls = 0
 
-    async def create(self, **kwargs):
+    async def create(self, messages, **kwargs):
         self.calls += 1
-        return SimpleNamespace(content=[SimpleNamespace(type="text", text="Hola, ¿en qué te ayudo?")])
+        return llm_client.ToolReply("Hola, ¿en qué te ayudo?", [], provider="Groq")
 
 
 @pytest.fixture
 def fake_claude(monkeypatch):
     messages = _FakeMessages()
-    monkeypatch.setattr(copilot_service, "_get_client", lambda: SimpleNamespace(messages=messages))
+    monkeypatch.setattr(llm_client, "tool_completion", messages.create)
     return messages
 
 

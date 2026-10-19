@@ -1,11 +1,12 @@
 """
-Copiloto CRM — orquestador de tool-calling con Claude para que el anunciante
+Copiloto CRM — orquestador de tool-calling para que el anunciante
 autenticado opere su propio CRM (contactos, campañas, cupones, citas) en
 lenguaje natural desde el dashboard.
 
 100% interno: nunca toca WhatsApp/Meta, es un chat web sobre la propia API
-REST de la app. Llama a anthropic.AsyncAnthropic directamente (no
-llm_client.chat_completion — ese helper es texto plano, sin tool use).
+REST de la app. Pasa por llm_client.tool_completion: la misma cadena del bot
+(gratis primero, Claude al final — decisión del dueño 2026-10-18, tras quedarse
+el Copiloto caído por falta de saldo en Anthropic).
 
 Confirmación de acciones costosas/irreversibles (launch_campaign,
 create_coupon, schedule_appointment): en vez de un dict en memoria (Railway
@@ -24,12 +25,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-import anthropic
 from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.core.plans import plan_limit
 from app.core.redis import get_redis_optional
 from app.core.security import decode_token, sign_jwt
@@ -46,6 +45,7 @@ from app.models.user import User
 from app.schemas.contact import ContactCreate
 from app.services import copilot_business_tools as biz_tools
 from app.services import copilot_sales_tools as sales_tools
+from app.services import llm_client
 from app.services.analytics_service import capture_event, compute_analytics_summary
 from app.services.availability_service import TZ
 from app.services.campaign_stats_service import compute_campaign_stats, merge_stats
@@ -60,18 +60,6 @@ CONFIRMATION_TTL_MINUTES = 5
 _MAX_TARGET_CONTACTS = 2000
 
 CONFIRM_TOOLS = {"launch_campaign", "create_coupon", "schedule_appointment"} | biz_tools.CHANGE_TOOLS
-
-
-# ─── Cliente Anthropic ────────────────────────────────────────────────────────
-
-_client: anthropic.AsyncAnthropic | None = None
-
-
-def _get_client() -> anthropic.AsyncAnthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-    return _client
 
 
 # ─── System prompt ────────────────────────────────────────────────────────────
@@ -358,12 +346,6 @@ TOOLS = [
     *sales_tools.TOOLS,
     *biz_tools.TOOLS,
 ]
-
-# Las herramientas (~3,300 tokens) no cambian entre llamadas: con la marca de
-# caché en la última, Anthropic cobra ~10% por ellas en cada vuelta del loop
-# en vez de leerlas completas otra vez.
-_CACHED_TOOLS = [*TOOLS[:-1], {**TOOLS[-1], "cache_control": {"type": "ephemeral"}}]
-
 
 # ─── Confirmación firmada (stateless) ─────────────────────────────────────────
 
@@ -1000,14 +982,12 @@ async def _execute_confirm_tool(db: AsyncSession, user: User, tool_name: str, ar
 
 
 async def _phrase_confirmed_result(user: User, tool_name: str, data: dict, channel: str = "panel") -> str:
-    """Una sola llamada a Claude (sin tools) para redactar la confirmación final
+    """Una sola llamada a la cadena (sin tools) para redactar la confirmación final
     en lenguaje natural a partir del resultado REAL de la acción — mismo
     principio anti-fabricación que el loop principal, solo que aquí no hay
     conversación en curso que continuar (el flujo de /confirm es stateless)."""
     try:
-        client = _get_client()
-        response = await client.messages.create(
-            model=settings.ANTHROPIC_MODEL,
+        text = await llm_client.chat_completion(
             max_tokens=300,
             temperature=0.3,
             system=_build_system_prompt(user, channel),
@@ -1022,10 +1002,7 @@ async def _phrase_confirmed_result(user: User, tool_name: str, data: dict, chann
                 },
             ],
         )
-        text = "\n".join(
-            b.text for b in response.content if getattr(b, "type", None) == "text"
-        ).strip()
-        return text or _summarize(tool_name, data)
+        return text.strip() or _summarize(tool_name, data)
     except Exception as e:
         logger.warning("[COPILOT] Failed to phrase confirmation result: %s", e, exc_info=True)
         return _summarize(tool_name, data)
@@ -1081,7 +1058,6 @@ async def handle_chat(
     if await _over_daily_limit(user):
         return {"reply": DAILY_LIMIT_REPLY, "actions": [], "pending_confirmation": None}
 
-    client = _get_client()
     system = _build_system_prompt(user, channel)
 
     messages: list[dict] = [
@@ -1095,31 +1071,24 @@ async def handle_chat(
 
     for _ in range(MAX_ITERATIONS):
         try:
-            response = await client.messages.create(
-                model=settings.ANTHROPIC_MODEL,
-                max_tokens=1024,
-                temperature=0.2,
-                system=system,
-                tools=_CACHED_TOOLS,
-                messages=messages,
-                # Además cachea hasta el último mensaje: las vueltas 2–5 de este
-                # mismo turno (tras usar herramientas) reusan instrucciones e historial.
-                cache_control={"type": "ephemeral"},
+            response = await llm_client.tool_completion(
+                messages, system=system, tools=TOOLS, max_tokens=1024, temperature=0.2,
             )
         except Exception as e:
-            logger.warning("[COPILOT] Anthropic call failed: %s", e, exc_info=True)
+            logger.warning("[COPILOT] every model failed: %s", e, exc_info=True)
             return {
                 "reply": "Tuve un problema para procesar tu mensaje. Intenta de nuevo en un momento.",
                 "actions": actions,
                 "pending_confirmation": None,
             }
 
-        text_parts = [b.text for b in response.content if getattr(b, "type", None) == "text"]
-        tool_blocks = [b for b in response.content if getattr(b, "type", None) == "tool_use"]
+        logger.info("[COPILOT] user=%s provider=%s tools=%s", user.id, response.provider,
+                    [c.name for c in response.tool_calls])
+        text_parts = [response.text]
+        tool_blocks = response.tool_calls
 
         if not tool_blocks:
-            reply = "\n".join(t.strip() for t in text_parts if t and t.strip())
-            return {"reply": reply or "Listo.", "actions": actions, "pending_confirmation": None}
+            return {"reply": response.text.strip() or "Listo.", "actions": actions, "pending_confirmation": None}
 
         messages.append({"role": "assistant", "content": response.content})
         tool_results: list[dict] = []
@@ -1130,6 +1099,9 @@ async def handle_chat(
             tool_name = block.name
             args = block.input or {}
 
+            if block.error:
+                tool_results.append(_tool_result_block(block.id, {"error": block.error}, is_error=True))
+                continue
             if tool_name in CONFIRM_TOOLS:
                 if attached_photo and tool_name in _PHOTO_TOOLS and not args.get("photo_url"):
                     args = {**args, "photo_url": attached_photo}
