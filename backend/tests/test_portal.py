@@ -237,6 +237,21 @@ class TestGetPortal:
         finally:
             await _cleanup(s["user_id"])
 
+    @pytest.mark.asyncio
+    async def test_owner_test_contact_has_no_name(self):
+        # "Probar como cliente" crea "Tú (prueba)": el saludo no debe decir "¡Hola, Tú!".
+        s = await _seed()
+        try:
+            async with AsyncSessionLocal() as db:
+                contact = await db.get(Contact, s["ana"])
+                contact.name, contact.tags = "Tú (prueba)", ["prueba"]
+                await db.commit()
+            async with AsyncSessionLocal() as db:
+                out = await get_portal(request=_request(), token=make_portal_token(s["ana"]), db=db)
+            assert out["customer"] == {"first_name": ""}
+        finally:
+            await _cleanup(s["user_id"])
+
 
 class TestCancelAppointment:
     @pytest.mark.asyncio

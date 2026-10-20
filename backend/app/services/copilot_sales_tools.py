@@ -92,6 +92,12 @@ def _money(value) -> int | float:
     return int(value) if value.is_integer() else value
 
 
+def _pesos(value) -> str:
+    """$20, $1,250 o $20.50 — como en el chat, sin ".00" de sobra."""
+    value = _money(value or 0)
+    return f"${value:,}" if isinstance(value, int) else f"${value:,.2f}"
+
+
 def _who(c) -> dict:
     return {"name": c.name, "phone_last4": (c.phone or "")[-4:]}
 
@@ -204,10 +210,10 @@ def summarize(tool_name: str, data: dict) -> str:
         if not data.get("saved"):
             return "No guardé el cobro: falta saber el cliente."
         who = f" a {data['customer']['name']}" if data.get("customer") else ""
-        return f"Cobro de ${data.get('amount', 0):,.2f}{who} guardado."
+        return f"Cobro de {_pesos(data.get('amount'))}{who} guardado."
     if tool_name == "get_sales_today":
-        return f"Hoy: ${data.get('today_total', 0):,.2f} en {data.get('today_count', 0)} venta(s)."
+        return f"Hoy: {_pesos(data.get('today_total'))} en {data.get('today_count', 0)} venta(s)."
     if data.get("undone"):
         who = f" de {data['customer']}" if data.get("customer") else ""
-        return f"Cobro de ${data.get('amount', 0):,.2f}{who} borrado."
+        return f"Cobro de {_pesos(data.get('amount'))}{who} borrado."
     return data.get("note") or "No había cobro que borrar."

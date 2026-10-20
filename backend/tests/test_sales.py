@@ -388,3 +388,13 @@ async def test_copiloto_courtesy_titles_and_today_tool(seeded):
 async def test_copiloto_name_plus_last_digits_picks_that_customer(seeded):
     out = await _copilot(seeded["lupe"], "record_sale", amount=50, customer="Ana 1234")
     assert out["saved"] and out["customer"] == {"name": "Ana López", "phone_last4": "1234"}
+
+
+def test_copilot_card_titles_drop_trailing_zeros():
+    # La tarjeta decía "Cobro de $20.00 guardado." mientras el chat ya decía $20.
+    from app.services.copilot_sales_tools import summarize
+
+    assert summarize("record_sale", {"saved": True, "amount": 20}) == "Cobro de $20 guardado."
+    assert summarize("record_sale", {"saved": True, "amount": 20.5, "customer": {"name": "Ana"}}) == "Cobro de $20.50 a Ana guardado."
+    assert summarize("get_sales_today", {"today_total": 1250, "today_count": 3}) == "Hoy: $1,250 en 3 venta(s)."
+    assert summarize("undo_sale", {"undone": True, "amount": 85.0}) == "Cobro de $85 borrado."
