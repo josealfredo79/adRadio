@@ -9,14 +9,16 @@ Reglas (decisión del dueño 2026-10-05):
   cambiar, cancelar, pedir, sellos). Las preguntas simples siguen por la
   cadena barata de siempre (rag_service → llm_client: Groq → OpenRouter →
   Haiku). `wants_action()` decide.
-- Claude Haiku 4.5 (settings.CUSTOMER_AGENT_MODEL) con herramientas.
+- Con herramientas, por la cadena de modelos (llm_client.tool_completion):
+  gratis primero y Claude Haiku 4.5 (settings.CUSTOMER_AGENT_MODEL) al
+  final (spec docs/specs/2026-10-19-agente-cliente-cadena-gratis.md).
 - El agente NUNCA ejecuta: las herramientas "proponer_*" dejan una acción
   pendiente en Redis y el agente le pregunta al cliente. La ejecuta este
   código, de forma determinista, cuando el cliente contesta "sí".
 - Todo está limitado a ESTE cliente y ESTE negocio: no hay herramienta que
   lea o toque datos de otro cliente, así que un "ignora tus instrucciones"
   no tiene a dónde llegar.
-- Si Claude falla o no está configurado → None, y el chat sigue con los
+- Si todos los modelos fallan o no hay ninguno → None, y el chat sigue con los
   flujos de siempre (appointment_booking_service, widget_order_service).
 """
 import asyncio
@@ -40,6 +42,7 @@ from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.user import User
+from app.services import llm_client
 from app.services.availability_service import (
     TZ,
     available_staff,
@@ -133,7 +136,7 @@ def agent_available(advertiser: User, contact: Contact | None) -> bool:
     return bool(
         contact is not None
         and advertiser.customer_agent_enabled
-        and settings.ANTHROPIC_API_KEY
+        and llm_client.tools_available()
     )
 
 
@@ -162,6 +165,7 @@ class _Ctx:
     contact: Contact
     pending: dict | None = None
     used_tools: list[str] = field(default_factory=list)
+    providers: list[str] = field(default_factory=list)  # qué modelos contestaron en el turno
     channel: str = "web"  # "web" | "whatsapp": solo cambia cómo se le avisa al dueño
 
     @property
@@ -920,33 +924,22 @@ async def _agent_loop(ctx: _Ctx, message: str, history: list[dict]) -> str | Non
         {"type": "text", "text": _stable_system(ctx.advertiser), "cache_control": {"type": "ephemeral"}},
         {"type": "text", "text": _dynamic_system(ctx.contact)},
     ]
-    client = _get_client()
     corrections = 0
     forced = _forced_tool(message)
     for _ in range(MAX_STEPS + MAX_CORRECTIONS):
-        extra = {}
-        if forced:
-            extra["tool_choice"] = {"type": "tool", "name": forced}
-            forced = None
-        response = await client.messages.create(
-            model=settings.CUSTOMER_AGENT_MODEL,
-            max_tokens=MAX_TOKENS,
-            system=system,
-            tools=TOOLS,
-            messages=messages,
-            **extra,
+        # Gratis primero, Haiku al final (spec docs/specs/2026-10-19-agente-cliente-cadena-gratis.md).
+        response = await llm_client.tool_completion(
+            messages, system=system, tools=TOOLS, max_tokens=MAX_TOKENS, force_tool=forced,
+            anthropic_client=_get_client(), anthropic_model=settings.CUSTOMER_AGENT_MODEL,
         )
-        usage = getattr(response, "usage", None)
-        if usage is not None:
-            logger.info("[AGENT] usage in=%s out=%s cache_read=%s cache_write=%s",
-                        usage.input_tokens, usage.output_tokens,
-                        getattr(usage, "cache_read_input_tokens", 0), getattr(usage, "cache_creation_input_tokens", 0))
-        if response.stop_reason == "refusal":
+        forced = None
+        ctx.providers.append(response.provider)
+        if response.refused:
             logger.warning("[AGENT] refusal advertiser=%s", ctx.advertiser.id)
             return None
-        tool_uses = [b for b in response.content if b.type == "tool_use"]
+        tool_uses = response.tool_calls
         if not tool_uses:
-            text = "\n".join(b.text.strip() for b in response.content if b.type == "text" and b.text.strip())
+            text = response.text.strip()
             if not text:
                 # Visto con Haiku: tras proponer_cita a veces termina sin texto.
                 if ctx.pending:
@@ -974,7 +967,10 @@ async def _agent_loop(ctx: _Ctx, message: str, history: list[dict]) -> str | Non
         messages.append({"role": "assistant", "content": response.content})
         results = []
         for block in tool_uses:
-            result, is_error = await _run_tool(ctx, block.name, block.input)
+            if block.error:
+                result, is_error = {"error": block.error}, True
+            else:
+                result, is_error = await _run_tool(ctx, block.name, block.input)
             results.append({"type": "tool_result", "tool_use_id": block.id,
                             "content": json.dumps(result, ensure_ascii=False), "is_error": is_error})
         messages.append({"role": "user", "content": results})
@@ -1207,7 +1203,7 @@ async def handle(
         logger.warning("[AGENT] over %ss advertiser=%s — using the fixed flows", AGENT_BUDGET_SECONDS, advertiser.id)
         return None
     except anthropic.APIError:
-        logger.warning("[AGENT] Claude unavailable advertiser=%s — using the fixed flows", advertiser.id, exc_info=True)
+        logger.warning("[AGENT] every model failed, Claude last advertiser=%s — using the fixed flows", advertiser.id, exc_info=True)
         return None
     except Exception:
         logger.exception("[AGENT] failed advertiser=%s — using the fixed flows", advertiser.id)
@@ -1217,5 +1213,6 @@ async def handle(
     await redis.set(active_key, "1", ex=ACTIVE_TTL)
     if ctx.pending:
         await redis.set(key, json.dumps(ctx.pending, ensure_ascii=False), ex=PENDING_TTL)
-    logger.info("[AGENT] advertiser=%s tools=%s pending=%s", advertiser.id, ctx.used_tools, bool(ctx.pending))
+    logger.info("[AGENT] advertiser=%s providers=%s tools=%s pending=%s", advertiser.id,
+                sorted(set(ctx.providers)), ctx.used_tools, bool(ctx.pending))
     return AgentReply(text, confirm=ctx.pending is not None)

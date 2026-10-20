@@ -235,6 +235,7 @@ class ToolReply:
     tool_calls: list[ToolCall]
     content: list[dict] = field(default_factory=list)  # bloques para el historial
     provider: str = ""
+    refused: bool = False  # Claude se negó a contestar (stop_reason "refusal")
 
 
 def _openai_tools(tools: list[dict]) -> list[dict]:
@@ -242,7 +243,15 @@ def _openai_tools(tools: list[dict]) -> list[dict]:
                                                "parameters": t["input_schema"]}} for t in tools]
 
 
-def _to_openai_messages(messages: list[dict], system: str | None) -> list[dict]:
+def _system_text(system: str | list[dict] | None) -> str | None:
+    """El system de Anthropic puede venir en bloques (con marca de caché)."""
+    if isinstance(system, list):
+        return "\n\n".join(b["text"] for b in system if b.get("text")) or None
+    return system
+
+
+def _to_openai_messages(messages: list[dict], system: str | list[dict] | None) -> list[dict]:
+    system = _system_text(system)
     out: list[dict] = [{"role": "system", "content": system}] if system else []
     for m in messages:
         content = m["content"]
@@ -284,8 +293,10 @@ def _parse_tool_call(call) -> ToolCall:
     return ToolCall(call_id, call.function.name, args, extra=extra)
 
 
-async def _openai_tool_completion(client: AsyncOpenAI, model: str, messages: list[dict], system: str | None,
-                                  tools: list[dict], max_tokens: int, temperature: float) -> ToolReply:
+async def _openai_tool_completion(client: AsyncOpenAI, model: str, messages: list[dict], system: str | list[dict] | None,
+                                  tools: list[dict], max_tokens: int, temperature: float,
+                                  force_tool: str | None = None) -> ToolReply:
+    extra = {"tool_choice": {"type": "function", "function": {"name": force_tool}}} if force_tool else {}
     response = await client.chat.completions.create(
         model=model,
         max_tokens=max_tokens,
@@ -293,6 +304,7 @@ async def _openai_tool_completion(client: AsyncOpenAI, model: str, messages: lis
         messages=_to_openai_messages(messages, system),
         tools=_openai_tools(tools),
         timeout=_timeout(max_tokens, settings.LLM_PROVIDER_TIMEOUT_SECONDS),
+        **extra,
     )
     msg = response.choices[0].message if response.choices else None
     text = _THINK_RE.sub("", (msg.content or "") if msg else "").strip()
@@ -315,6 +327,12 @@ _NO_TOOLS = {"Cloudflare"}
 _TOOLS_FIRST = "Gemini"
 
 
+def tools_available() -> bool:
+    """¿Hay al menos un modelo que pueda usar herramientas?"""
+    return bool(settings.ANTHROPIC_API_KEY) or any(
+        configured() for name, configured, _, _ in _free_providers() if name not in _NO_TOOLS)
+
+
 def _for_anthropic(messages: list[dict]) -> list[dict]:
     """Quita del historial los campos de otros proveedores (Anthropic los rechaza)."""
     def clean(content):
@@ -327,14 +345,20 @@ def _for_anthropic(messages: list[dict]) -> list[dict]:
 async def tool_completion(
     messages: list[dict],
     *,
-    system: str | None,
+    system: str | list[dict] | None,
     tools: list[dict],
     max_tokens: int = 1024,
     temperature: float = 0.2,
+    force_tool: str | None = None,
+    anthropic_client: anthropic.AsyncAnthropic | None = None,
+    anthropic_model: str | None = None,
 ) -> ToolReply:
     """Como chat_completion pero con herramientas: gratis primero (Gemini a la
     cabeza, ver _TOOLS_FIRST), Anthropic al final. `tools` en formato
-    Anthropic (name/description/input_schema)."""
+    Anthropic (name/description/input_schema). `force_tool` obliga a usar esa
+    herramienta en esta vuelta. `anthropic_client`/`anthropic_model` cambian
+    solo el respaldo final (el agente del cliente usa Haiku con su propio
+    tope de tiempo)."""
     providers = sorted(_free_providers(), key=lambda p: p[0] != _TOOLS_FIRST)
     for name, configured, get_client, models in providers:
         if name in _NO_TOOLS or not configured():
@@ -342,7 +366,7 @@ async def tool_completion(
         for model in models():
             try:
                 reply = await _openai_tool_completion(get_client(), model, messages, system, tools,
-                                                      max_tokens, temperature)
+                                                      max_tokens, temperature, force_tool)
                 reply.provider = name
                 return reply
             except Exception as e:
@@ -351,8 +375,12 @@ async def tool_completion(
     # Las herramientas no cambian entre llamadas: con la marca de caché en la
     # última, Anthropic cobra ~10% por ellas en cada vuelta.
     cached_tools = [*tools[:-1], {**tools[-1], "cache_control": {"type": "ephemeral"}}] if tools else []
-    response = await _get_anthropic_client().messages.create(
-        model=settings.ANTHROPIC_MODEL,
+    extra = {"tool_choice": {"type": "tool", "name": force_tool}} if force_tool else {}
+    if anthropic_client is None:
+        # Con cliente propio, su tope de tiempo es el del cliente.
+        extra["timeout"] = _timeout(max_tokens, 25.0)
+    response = await (anthropic_client or _get_anthropic_client()).messages.create(
+        model=anthropic_model or settings.ANTHROPIC_MODEL,
         max_tokens=max_tokens,
         temperature=temperature,
         system=system or anthropic.NOT_GIVEN,
@@ -361,7 +389,7 @@ async def tool_completion(
         # Además cachea hasta el último mensaje: las vueltas siguientes del
         # mismo turno reusan instrucciones e historial.
         cache_control={"type": "ephemeral"},
-        timeout=_timeout(max_tokens, 25.0),
+        **extra,
     )
     content: list[dict] = []
     calls: list[ToolCall] = []
@@ -372,4 +400,5 @@ async def tool_completion(
             calls.append(ToolCall(b.id, b.name, b.input or {}))
             content.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input or {}})
     text = "\n".join(b["text"].strip() for b in content if b["type"] == "text")
-    return ToolReply(text, calls, content, provider="Anthropic")
+    return ToolReply(text, calls, content, provider="Anthropic",
+                     refused=getattr(response, "stop_reason", None) == "refusal")
