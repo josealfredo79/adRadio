@@ -64,6 +64,23 @@ async def sales_today(
     return await sales_service.today_summary(db, current_user)
 
 
+@router.get("/today/list")
+async def sales_today_list(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Cobros del mostrador de hoy, para borrar el que salió mal."""
+    return [
+        {
+            "id": str(sale.id),
+            "amount": float(sale.amount),
+            "customer": _customer_out(contact) if contact else None,
+            "created_at": sale.created_at.isoformat(),
+        }
+        for sale, contact in await sales_service.today_counter_sales(db, current_user)
+    ]
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_sale(
     body: SaleCreate,
@@ -107,7 +124,7 @@ async def delete_sale(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    """Deshacer un cobro mal capturado (solo en los primeros minutos)."""
+    """Borrar un cobro mal capturado (cualquiera de hoy)."""
     try:
         await sales_service.undo_sale(db, current_user, sale_id)
     except LookupError:

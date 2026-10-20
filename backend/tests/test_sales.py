@@ -17,6 +17,7 @@ from app.api.v1.sales import (
     create_sale,
     delete_sale,
     sales_today,
+    sales_today_list,
     search_customers,
 )
 from app.database import AsyncSessionLocal, engine
@@ -25,6 +26,7 @@ from app.models.loyalty_stamp import LoyaltyStamp
 from app.models.order import Order
 from app.models.sale import Sale
 from app.models.user import User
+from app.services.sales_service import _local_day_start
 
 CONFIG = {"enabled": True, "stamps_required": 5, "reward": "Un kilo gratis"}
 
@@ -136,7 +138,14 @@ async def test_caso5_bad_amounts_are_rejected_with_a_reason(seeded, bad):
     assert await _sales(seeded["lupe"]) == [] and await _stamps(seeded["ana"]) == 0
 
 
-async def test_caso6_undo_removes_the_sale_and_its_stamp_but_not_after_15_min(seeded):
+async def _set_time(sale_id, when):
+    async with AsyncSessionLocal() as db:
+        await db.execute(update(Sale).where(Sale.id == sale_id).values(created_at=when))
+        await db.commit()
+
+
+# Caso real (19-oct): pasados 15 minutos el dueño ya no podía corregir un cobro. Ahora: cualquiera de hoy.
+async def test_caso6_any_sale_from_today_can_be_deleted_with_its_stamp_but_not_yesterdays(seeded):
     out = await _sell(seeded["lupe"], amount="85", contact_id=seeded["ana"])
     async with AsyncSessionLocal() as db:
         lupe = await db.get(User, seeded["lupe"])
@@ -144,15 +153,24 @@ async def test_caso6_undo_removes_the_sale_and_its_stamp_but_not_after_15_min(se
     assert undone["today"] == {"count": 0, "total": 0.0}
     assert await _sales(seeded["lupe"]) == [] and await _stamps(seeded["ana"]) == 0
 
-    old = await _sell(seeded["lupe"], amount="85", contact_id=seeded["ana"])
+    earlier = await _sell(seeded["lupe"], amount="85", contact_id=seeded["ana"])
+    await _set_time(uuid.UUID(earlier["id"]), _local_day_start() + timedelta(seconds=1))
+    await _sell(seeded["lupe"], amount="20")
     async with AsyncSessionLocal() as db:
-        await db.execute(update(Sale).where(Sale.id == uuid.UUID(old["id"]))
-                         .values(created_at=datetime.now(timezone.utc) - timedelta(minutes=20)))
-        await db.commit()
         lupe = await db.get(User, seeded["lupe"])
+        listed = await sales_today_list(db=db, current_user=lupe)
+        assert [x["amount"] for x in listed] == [20.0, 85.0] and listed[1]["customer"]["name"] == "Ana López"
+        out = await delete_sale(uuid.UUID(earlier["id"]), db=db, current_user=lupe)
+    assert out["today"] == {"count": 1, "total": 20.0} and await _stamps(seeded["ana"]) == 0
+
+    old = await _sell(seeded["lupe"], amount="85", contact_id=seeded["ana"])
+    await _set_time(uuid.UUID(old["id"]), _local_day_start() - timedelta(hours=1))
+    async with AsyncSessionLocal() as db:
+        lupe = await db.get(User, seeded["lupe"])
+        assert all(x["id"] != old["id"] for x in await sales_today_list(db=db, current_user=lupe))
         with pytest.raises(HTTPException) as e:
             await delete_sale(uuid.UUID(old["id"]), db=db, current_user=lupe)
-    assert e.value.status_code == 409
+    assert e.value.status_code == 409 and "hoy" in e.value.detail
 
 
 async def test_caso7_today_total(seeded):
@@ -278,19 +296,38 @@ async def test_copiloto_caso4_not_found_offers_options_then_registers_new(seeded
     assert "error" in bad
 
 
-async def test_copiloto_caso5_undo_last_sale_within_15_minutes(seeded):
-    assert (await _copilot(seeded["lupe"], "undo_last_sale"))["undone"] is False
+async def test_copiloto_caso5_undo_takes_the_last_sale_of_today(seeded):
+    assert (await _copilot(seeded["lupe"], "undo_sale"))["undone"] is False
     await _copilot(seeded["lupe"], "record_sale", amount=40)
     await _copilot(seeded["lupe"], "record_sale", amount=85, customer="ana")
-    out = await _copilot(seeded["lupe"], "undo_last_sale")
-    assert out["undone"] and out["amount"] == 85.0 and out["today_total"] == 40.0
+    out = await _copilot(seeded["lupe"], "undo_sale")
+    assert out["undone"] and out["amount"] == 85 and out["customer"] == "Ana López" and out["today_total"] == 40
     assert await _stamps(seeded["ana"]) == 0
     async with AsyncSessionLocal() as db:
         await db.execute(update(Sale).where(Sale.advertiser_id == seeded["lupe"])
-                         .values(created_at=datetime.now(timezone.utc) - timedelta(minutes=30)))
+                         .values(created_at=_local_day_start() - timedelta(hours=1)))
         await db.commit()
-    late = await _copilot(seeded["lupe"], "undo_last_sale")
-    assert late["undone"] is False and "15 minutos" in late["note"]
+    late = await _copilot(seeded["lupe"], "undo_sale")
+    assert late["undone"] is False and "hoy" in late["note"]
+
+
+async def test_copiloto_caso5b_undo_the_one_the_owner_names(seeded):
+    """"borra el de 50", "el de Beto": cualquiera de hoy; si hay varios así, pregunta."""
+    await _copilot(seeded["lupe"], "record_sale", amount=50, customer="ana")
+    await _copilot(seeded["lupe"], "record_sale", amount=50, customer="beto")
+    await _copilot(seeded["lupe"], "record_sale", amount=120)
+
+    two = await _copilot(seeded["lupe"], "undo_sale", amount=50)
+    assert two["undone"] is False and len(two["choices"]) == 2 and len(await _sales(seeded["lupe"])) == 3
+
+    out = await _copilot(seeded["lupe"], "undo_sale", amount="50 pesos", customer="don Beto")
+    assert out["undone"] and out["customer"] == "Beto Ruiz" and out["today_total"] == 170
+    by_digits = await _copilot(seeded["lupe"], "undo_sale", customer="1234")
+    assert by_digits["undone"] and by_digits["customer"] == "Ana López"
+
+    none = await _copilot(seeded["lupe"], "undo_sale", amount=999)
+    assert none["undone"] is False and none["choices"][0]["amount"] == 120
+    assert [float(s.amount) for s in await _sales(seeded["lupe"])] == [120.0]
 
 
 @pytest.mark.parametrize("bad", [0, -10, 100001, "nada"])
@@ -303,8 +340,8 @@ async def test_copiloto_caso7_tools_are_registered_and_run_without_confirmation(
     from app.services import copilot_service
 
     names = {t["name"] for t in copilot_service.TOOLS}
-    assert {"record_sale", "undo_last_sale"} <= names
-    assert not ({"record_sale", "undo_last_sale"} & copilot_service.CONFIRM_TOOLS)
+    assert {"record_sale", "undo_sale"} <= names
+    assert not ({"record_sale", "undo_sale"} & copilot_service.CONFIRM_TOOLS)
     assert "COBROS" in copilot_service._build_system_prompt(User(business_name="X"), "whatsapp")
 
 

@@ -152,6 +152,7 @@ const LABELS: Record<string, string> = {
   choices: 'Opciones',
   not_found: 'No encontrado',
   note: 'Nota',
+  time: 'Hora',
 }
 
 const MONEY_KEYS = new Set(['amount', 'today_total'])
@@ -194,7 +195,8 @@ function formatPrimitive(value: unknown): string {
 function summarizeItem(item: Record<string, unknown>): string {
   const parts = Object.entries(item)
     .filter(([key, value]) => !isIdKey(key) && value !== null && value !== undefined && value !== '')
-    .map(([, value]) => {
+    .map(([key, value]) => {
+      if (MONEY_KEYS.has(key) && typeof value === 'number') return formatMoney(value)
       if (Array.isArray(value)) return value.filter((v) => typeof v !== 'object').map(formatPrimitive).join(', ')
       if (typeof value === 'object') return ''
       return formatPrimitive(value)

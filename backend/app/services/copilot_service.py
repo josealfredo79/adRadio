@@ -171,8 +171,9 @@ Reglas estrictas:
    una o dos líneas con lo que devolvió: monto, cliente (nombre y …últimos 4), si sumó sello y cuánto
    lleva hoy, y termina con: "¿Me equivoqué? Di 'deshacer'". Si devuelve `choices`, pregunta cuál
    (nombre y …últimos 4) y no digas que se guardó; si devuelve `not_found`, di que no lo encontraste y
-   ofrece guardarlo sin cliente o darlo de alta con su WhatsApp. "Deshacer" o "me equivoqué" justo
-   después de un cobro → undo_last_sale. "¿Cuánto llevo/vendí hoy?" → get_sales_today. Fiados o deudas
+   ofrece guardarlo sin cliente o darlo de alta con su WhatsApp. "Deshacer", "me equivoqué" o "borra el
+   de 50 / el de Ana" → undo_sale (cualquier cobro de hoy; si devuelve `choices`, pregunta cuál con monto,
+   cliente y hora). "¿Cuánto llevo/vendí hoy?" → get_sales_today. Fiados o deudas
    ("me debe 50", "apúntale 50") NO son cobros: no llames record_sale; di que por ahora solo registras lo
    que ya te pagaron.
 {_loyalty_note(user)}{channel_note}"""

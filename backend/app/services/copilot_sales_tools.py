@@ -3,17 +3,15 @@
 
 Se guardan directo, sin la tarjeta de confirmación (decisión del dueño: en
 el mostrador hay fila); para eso está "deshacer" (15 min, igual que la
-pantalla Cobrar). Si el cliente no queda claro, no se guarda nada y el
+pantalla Cobrar, sirve con cualquier cobro de hoy). Si el cliente no queda claro, no se guarda nada y el
 Copiloto pregunta.
 """
 import logging
 import re
 
 from pydantic import ValidationError
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.sale import Sale
 from app.models.user import User
 from app.schemas.contact import validate_phone_e164
 from app.services import sales_service
@@ -57,12 +55,20 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
-        "name": "undo_last_sale",
+        "name": "undo_sale",
         "description": (
-            "Borra el último cobro que registró el dueño (solo de los últimos 15 minutos) y el sello "
-            "que dio. Úsalo cuando diga \"deshacer\", \"me equivoqué\" o \"borra ese cobro\"."
+            "Borra un cobro de hoy y el sello que dio. Sin datos borra el último (\"deshacer\", "
+            "\"me equivoqué\"); si el dueño dice cuál (\"borra el de 50\", \"el de Ana\"), manda el "
+            "monto y/o el cliente. Si el resultado trae `choices`, pregunta cuál de esos es."
         ),
-        "input_schema": {"type": "object", "properties": {}, "required": []},
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "number", "description": "Monto del cobro a borrar, si lo dijo."},
+                "customer": {"type": "string", "description": "Nombre o últimos dígitos del cliente, si lo dijo."},
+            },
+            "required": [],
+        },
     },
 ]
 NAMES = {t["name"] for t in TOOLS}
@@ -140,25 +146,48 @@ async def record_sale(db: AsyncSession, user: User, args: dict) -> dict:
     }
 
 
-async def undo_last_sale(db: AsyncSession, user: User, args: dict) -> dict:
-    last = (
-        await db.execute(
-            select(Sale)
-            .where(Sale.advertiser_id == user.id, Sale.source == "counter")
-            .order_by(Sale.created_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    if last is None:
-        return {"undone": False, "note": "No hay cobros que deshacer."}
-    amount = float(last.amount)
+def _sale_line(sale, contact) -> dict:
+    from app.services.availability_service import TZ
+
+    return {"amount": _money(sale.amount), "customer": contact.name if contact else None,
+            "time": sale.created_at.astimezone(TZ).strftime("%H:%M")}
+
+
+async def undo_sale(db: AsyncSession, user: User, args: dict) -> dict:
+    sales = await sales_service.today_counter_sales(db, user)
+    if not sales:
+        return {"undone": False, "note": "No hay cobros de hoy que borrar."}
+    raw_amount = args.get("amount")
+    who = _COURTESY.sub("", (args.get("customer") or "").strip()).strip().lower()
+    digits = "".join(ch for ch in who if ch.isdigit())
+    matches = sales
+    if raw_amount not in (None, ""):
+        try:
+            amount = sales_service.parse_amount(_amount_from(raw_amount))
+        except SaleError as e:
+            return {"undone": False, "note": str(e)}
+        matches = [(s, c) for s, c in matches if s.amount == amount]
+    if who:
+        matches = [
+            (s, c) for s, c in matches
+            if c is not None and (who in c.name.lower() or (len(digits) >= 3 and (c.phone or "").endswith(digits)))
+        ]
+    if not matches:
+        return {"undone": False, "note": "No encontré un cobro así hoy.",
+                "choices": [_sale_line(s, c) for s, c in sales[:5]]}
+    if (raw_amount not in (None, "") or who) and len(matches) > 1:
+        return {"undone": False, "choices": [_sale_line(s, c) for s, c in matches[:5]],
+                "note": "No borré nada: hay varios cobros así hoy. Pregunta cuál."}
+    sale, contact = matches[0]
+    line = _sale_line(sale, contact)
     try:
-        await sales_service.undo_sale(db, user, last.id)
+        await sales_service.undo_sale(db, user, sale.id)
     except SaleError as e:
         return {"undone": False, "note": str(e)}
     await db.commit()
     today = await sales_service.today_summary(db, user)
-    return {"undone": True, "amount": _money(amount), "today_total": _money(today["total"]), "today_count": today["count"]}
+    return {"undone": True, "amount": line["amount"], "customer": line["customer"],
+            "today_total": _money(today["total"]), "today_count": today["count"]}
 
 
 async def run(db: AsyncSession, user: User, tool_name: str, args: dict) -> dict:
@@ -167,7 +196,7 @@ async def run(db: AsyncSession, user: User, tool_name: str, args: dict) -> dict:
     if tool_name == "get_sales_today":
         today = await sales_service.today_summary(db, user)
         return {"today_total": _money(today["total"]), "today_count": today["count"]}
-    return await undo_last_sale(db, user, args)
+    return await undo_sale(db, user, args)
 
 
 def summarize(tool_name: str, data: dict) -> str:
@@ -179,5 +208,6 @@ def summarize(tool_name: str, data: dict) -> str:
     if tool_name == "get_sales_today":
         return f"Hoy: ${data.get('today_total', 0):,.2f} en {data.get('today_count', 0)} venta(s)."
     if data.get("undone"):
-        return f"Cobro de ${data.get('amount', 0):,.2f} deshecho."
-    return data.get("note") or "No había cobro que deshacer."
+        who = f" de {data['customer']}" if data.get("customer") else ""
+        return f"Cobro de ${data.get('amount', 0):,.2f}{who} borrado."
+    return data.get("note") or "No había cobro que borrar."

@@ -2,8 +2,8 @@
 
 El dueño registra lo que cobró en el mostrador ("Cobré $85") o el monto de un
 pedido al confirmarlo. Es la base para medir si IaRadio le trae dinero. Un
-cobro con cliente le pone su sello (si la tarjeta está activa); deshacer el
-cobro se lo quita.
+cobro con cliente le pone su sello (si la tarjeta está activa); borrar el
+cobro se lo quita. Cualquier cobro del mostrador de hoy se puede borrar.
 
 Nada aquí hace commit: le toca al que llama, igual que loyalty_service.py.
 """
@@ -22,8 +22,6 @@ from app.services.customer_account import contact_phone_canonical
 from app.services.loyalty_service import add_stamp, remove_stamp
 
 MAX_AMOUNT = Decimal(100000)
-# Cuánto tiempo hay para deshacer un cobro mal capturado.
-UNDO_WINDOW = timedelta(minutes=15)
 
 
 class SaleError(ValueError):
@@ -116,8 +114,8 @@ async def undo_sale(db: AsyncSession, owner: User, sale_id: uuid.UUID) -> None:
         raise LookupError("sale")
     if sale.source != "counter":
         raise SaleError("Esta venta es de un pedido: cancélalo en Pedidos")
-    if datetime.now(timezone.utc) - sale.created_at > UNDO_WINDOW:
-        raise SaleError("Ya pasaron más de 15 minutos; ese cobro ya no se puede deshacer")
+    if sale.created_at < _local_day_start():
+        raise SaleError("Solo se pueden borrar los cobros de hoy")
     await remove_stamp(db, sale.contact_id, "manual", _stamp_key(sale.id))
     await db.delete(sale)
 
@@ -147,6 +145,17 @@ def _local_day_start() -> datetime:
     from app.services.availability_service import TZ
 
     return datetime.now(TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+async def today_counter_sales(db: AsyncSession, owner: User) -> list[tuple[Sale, Contact | None]]:
+    """Los cobros del mostrador de hoy, el más nuevo primero: los que se pueden borrar."""
+    rows = await db.execute(
+        select(Sale, Contact)
+        .outerjoin(Contact, Contact.id == Sale.contact_id)
+        .where(Sale.advertiser_id == owner.id, Sale.source == "counter", Sale.created_at >= _local_day_start())
+        .order_by(Sale.created_at.desc())
+    )
+    return [(sale, contact) for sale, contact in rows.all()]
 
 
 async def today_summary(db: AsyncSession, owner: User) -> dict:

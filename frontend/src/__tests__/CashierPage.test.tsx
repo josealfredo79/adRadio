@@ -14,6 +14,7 @@ vi.mock('@/lib/api', () => ({
 }))
 
 const ana = { id: 'c1', name: 'Ana López', phone_last4: '1234' }
+let todayList: unknown[] = []
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -29,10 +30,12 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  todayList = []
   vi.mocked(api.get).mockReset().mockImplementation((url: string) =>
     Promise.resolve({
       data:
         url === '/sales/today' ? { count: 0, total: 0 }
+        : url === '/sales/today/list' ? todayList
         : url === '/sales/shortcuts' ? { amounts: [20, 35, 50, 100], recent: [{ id: 'c7', name: 'Beto Ruiz', phone_last4: '5678' }] }
         : [ana],
     }),
@@ -107,6 +110,22 @@ describe('CashierPage', () => {
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sales/s4'))
     await waitFor(() => expect(screen.queryByText(/Cobraste/)).toBeNull())
     expect(screen.getByText(/Hoy llevas/).textContent).toMatch(/0 ventas$/)
+  })
+
+  // Caso real (19-oct): el dueño no podía corregir un cobro de hace más de 15 minutos.
+  it('caso 6b: any charge from today can be deleted, with a second tap to confirm', async () => {
+    todayList = [
+      { id: 's9', amount: 50, customer: null, created_at: '2026-10-19T15:00:00Z' },
+      { id: 's8', amount: 85, customer: ana, created_at: '2026-10-19T14:00:00Z' },
+    ]
+    vi.mocked(api.delete).mockResolvedValue({ data: { today: { count: 1, total: 50 } } })
+    renderPage()
+    expect(await screen.findByText('Cobros de hoy')).toBeDefined()
+    fireEvent.click(screen.getByLabelText('Borrar cobro de $85.00'))
+    expect(api.delete).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('¿Borrar?'))
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sales/s8'))
+    expect(screen.getByText(/Hoy llevas/).textContent).toMatch(/50\.00.*1 venta$/)
   })
 
   it('needs an amount and who before enabling the button', () => {

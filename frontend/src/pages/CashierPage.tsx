@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Loader2, Search, Stamp, Undo2, UserPlus, UserX, X } from 'lucide-react'
+import { Check, Loader2, Search, Stamp, Trash2, Undo2, UserPlus, UserX, X } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import SEO from '@/components/SEO'
@@ -29,6 +29,13 @@ interface SaleOut {
   today: Today
 }
 
+interface TodaySale {
+  id: string
+  amount: number
+  customer: Customer | null
+  created_at: string
+}
+
 type Who = { kind: 'customer'; customer: Customer } | { kind: 'new' } | { kind: 'none' } | null
 
 const mxn = (n: number) => formatCurrency(n, 'MXN')
@@ -42,6 +49,8 @@ export default function CashierPage() {
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
   const [last, setLast] = useState<SaleOut | null>(null)
+  // Borrar pide un segundo toque: así no se va el cobro equivocado.
+  const [confirmId, setConfirmId] = useState<string | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -57,6 +66,11 @@ export default function CashierPage() {
   const { data: shortcuts } = useQuery<{ amounts: number[]; recent: Customer[] }>({
     queryKey: ['sales-shortcuts'],
     queryFn: () => api.get('/sales/shortcuts').then((r) => r.data),
+  })
+  // Cualquier cobro de hoy se puede borrar, no solo el último.
+  const { data: todaySales } = useQuery<TodaySale[]>({
+    queryKey: ['sales-today-list'],
+    queryFn: () => api.get('/sales/today/list').then((r) => r.data),
   })
   const { data: results, isFetching: searching } = useQuery<Customer[]>({
     queryKey: ['sales-customers', debounced],
@@ -86,6 +100,7 @@ export default function CashierPage() {
     onSuccess: (sale) => {
       qc.setQueryData(['sales-today'], sale.today)
       qc.invalidateQueries({ queryKey: ['sales-shortcuts'] })
+      qc.invalidateQueries({ queryKey: ['sales-today-list'] })
       setLast(sale)
       reset()
     },
@@ -93,10 +108,12 @@ export default function CashierPage() {
 
   const undo = useMutation({
     mutationFn: (id: string) => api.delete(`/sales/${id}`).then((r) => r.data as { today: Today }),
-    onSuccess: (out) => {
+    onSuccess: (out, id) => {
       qc.setQueryData(['sales-today'], out.today)
       qc.invalidateQueries({ queryKey: ['sales-shortcuts'] })
-      setLast(null)
+      qc.invalidateQueries({ queryKey: ['sales-today-list'] })
+      if (last?.id === id) setLast(null)
+      setConfirmId(null)
     },
   })
 
@@ -294,6 +311,44 @@ export default function CashierPage() {
           Cobré{amount.trim() ? ` $${amount.trim().replace(/^\$/, '')}` : ''}
         </button>
       </div>
+
+      {todaySales && todaySales.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-sm font-medium text-foreground">Cobros de hoy</p>
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+            {todaySales.map((s) => (
+              <li key={s.id} className="flex items-center gap-3 px-4 py-2.5">
+                <span className="w-12 shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {new Date(s.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                  {s.customer ? s.customer.name : <span className="text-muted-foreground">Sin cliente</span>}
+                </span>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{mxn(s.amount)}</span>
+                {confirmId === s.id ? (
+                  <button
+                    type="button"
+                    onClick={() => undo.mutate(s.id)}
+                    disabled={undo.isPending}
+                    className="shrink-0 rounded-lg bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700"
+                  >
+                    ¿Borrar?
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmId(s.id)}
+                    aria-label={`Borrar cobro de ${mxn(s.amount)}`}
+                    className="shrink-0 rounded p-1 text-muted-foreground hover:text-red-600"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
