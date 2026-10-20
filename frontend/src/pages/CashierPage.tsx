@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Loader2, Search, Stamp, Trash2, Undo2, UserPlus, UserX, X } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
-import { formatCurrency } from '@/lib/utils'
+import { formatPesos } from '@/lib/utils'
 import SEO from '@/components/SEO'
 
 // "Cobré $___" (docs/specs/2026-10-17-cobre.md): el dueño registra lo que
@@ -38,7 +38,7 @@ interface TodaySale {
 
 type Who = { kind: 'customer'; customer: Customer } | { kind: 'new' } | { kind: 'none' } | null
 
-const mxn = (n: number) => formatCurrency(n, 'MXN')
+const mxn = formatPesos
 
 export default function CashierPage() {
   const qc = useQueryClient()
@@ -187,7 +187,7 @@ export default function CashierPage() {
                   amount === String(a) ? 'border-brand-500 bg-brand-500/10 text-foreground' : 'border-border text-foreground hover:bg-muted'
                 }`}
               >
-                ${a % 1 === 0 ? a : a.toFixed(2)}
+                {mxn(a)}
               </button>
             ))}
           </div>

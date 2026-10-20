@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { formatPesos } from '@/lib/utils'
 import { Banknote, Check, Gift, Loader2, Plus, Stamp, X } from 'lucide-react'
 
 export interface LoyaltyCard {
@@ -129,7 +130,7 @@ function LoyaltyModal({ contactId, contactName, onClose }: { contactId: string; 
             </div>
             {charge.isSuccess && (
               <p className="mt-2 flex items-center gap-1 text-sm text-green-700">
-                <Check className="h-4 w-4" /> Cobro de ${charge.data.amount} guardado, con su sello.
+                <Check className="h-4 w-4" /> Cobro de {formatPesos(charge.data.amount)} guardado, con su sello.
               </p>
             )}
             {charge.isError && <p className="mt-2 text-sm text-red-600">{getApiError(charge.error, 'No se pudo guardar el cobro')}</p>}

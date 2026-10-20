@@ -9,7 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, formatPesos } from '@/lib/utils'
 import SEO from '@/components/SEO'
 import { useCopilot, type CopilotAction, type PendingConfirmation, type CopilotFormTool } from '@/contexts/CopilotContext'
 
@@ -157,10 +157,6 @@ const LABELS: Record<string, string> = {
 
 const MONEY_KEYS = new Set(['amount', 'today_total'])
 
-function formatMoney(value: number): string {
-  return `$${value.toLocaleString('es-MX', { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 })}`
-}
-
 const VALUE_LABELS: Record<string, string> = {
   active: 'activo',
   unsubscribed: 'dado de baja',
@@ -196,7 +192,7 @@ function summarizeItem(item: Record<string, unknown>): string {
   const parts = Object.entries(item)
     .filter(([key, value]) => !isIdKey(key) && value !== null && value !== undefined && value !== '')
     .map(([key, value]) => {
-      if (MONEY_KEYS.has(key) && typeof value === 'number') return formatMoney(value)
+      if (MONEY_KEYS.has(key) && typeof value === 'number') return formatPesos(value)
       if (Array.isArray(value)) return value.filter((v) => typeof v !== 'object').map(formatPrimitive).join(', ')
       if (typeof value === 'object') return ''
       return formatPrimitive(value)
@@ -253,7 +249,7 @@ export function ActionData({ data, depth = 0 }: { data: unknown; depth?: number 
               )
             ) : (
               <span className="font-medium text-gray-700 dark:text-gray-300 text-right">
-                {MONEY_KEYS.has(key) && typeof value === 'number' ? formatMoney(value) : formatPrimitive(value)}
+                {MONEY_KEYS.has(key) && typeof value === 'number' ? formatPesos(value) : formatPrimitive(value)}
                 {key.endsWith('_rate') && typeof value === 'number' ? '%' : ''}
               </span>
             )}

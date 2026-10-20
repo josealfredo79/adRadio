@@ -56,7 +56,7 @@ describe('CashierPage', () => {
     fireEvent.click(screen.getByText('Cobré $85'))
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/sales', { amount: '85', contact_id: 'c1' }))
     expect(await screen.findByText(/\+1 sello/)).toBeDefined()
-    expect(screen.getByText(/Hoy llevas/).textContent).toMatch(/85\.00.*1 venta$/)
+    expect(screen.getByText(/Hoy llevas/).textContent).toMatch(/\$85 en 1 venta$/)
   })
 
   it('caso 3: new customer sends name and phone', async () => {
@@ -121,11 +121,11 @@ describe('CashierPage', () => {
     vi.mocked(api.delete).mockResolvedValue({ data: { today: { count: 1, total: 50 } } })
     renderPage()
     expect(await screen.findByText('Cobros de hoy')).toBeDefined()
-    fireEvent.click(screen.getByLabelText('Borrar cobro de $85.00'))
+    fireEvent.click(screen.getByLabelText('Borrar cobro de $85'))
     expect(api.delete).not.toHaveBeenCalled()
     fireEvent.click(screen.getByText('¿Borrar?'))
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sales/s8'))
-    expect(screen.getByText(/Hoy llevas/).textContent).toMatch(/50\.00.*1 venta$/)
+    expect(screen.getByText(/Hoy llevas/).textContent).toMatch(/\$50 en 1 venta$/)
   })
 
   it('needs an amount and who before enabling the button', () => {
