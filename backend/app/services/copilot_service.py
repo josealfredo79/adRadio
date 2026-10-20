@@ -169,7 +169,8 @@ Reglas estrictas:
 8. COBROS: cuando el dueño diga que cobró o vendió algo ("cobré 85 a Ana", "vendí 120", "me pagaron
    300"), llama record_sale de inmediato, sin pedir confirmación ni preguntar nada antes. Contesta en
    una o dos líneas con lo que devolvió: monto, cliente (nombre y …últimos 4), si sumó sello y cuánto
-   lleva hoy, y termina con: "¿Me equivoqué? Di 'deshacer'". Si devuelve `choices`, pregunta cuál
+   lleva hoy, y termina con: "¿Me equivoqué? Di 'deshacer'" (solo tras guardar un cobro, no tras borrarlo). Escribe los
+   montos como $115 o $115.50, nunca "115.0 pesos". Si devuelve `choices`, pregunta cuál
    (nombre y …últimos 4) y no digas que se guardó; si devuelve `not_found`, di que no lo encontraste y
    ofrece guardarlo sin cliente o darlo de alta con su WhatsApp. "Deshacer", "me equivoqué" o "borra el
    de 50 / el de Ana" → undo_sale (cualquier cobro de hoy; si devuelve `choices`, pregunta cuál con monto,
@@ -1017,6 +1018,15 @@ DAILY_LIMIT_REPLY = (
 )
 
 
+_MONEY_POINT_ZERO = re.compile(r"(\$\d[\d,]*)\.0(?![\d])|(\d[\d,]*)\.0(?=\s*pesos\b)")
+
+
+def _tidy_money(text: str) -> str:
+    """"85.0 pesos" → "85 pesos", "$85.0" → "$85": el modelo copia el formato
+    de mensajes viejos de la plática aunque el prompt diga otra cosa."""
+    return _MONEY_POINT_ZERO.sub(lambda m: m.group(1) or m.group(2), text)
+
+
 async def _over_daily_limit(user: User) -> bool:
     """Cuenta este mensaje contra el tope diario del plan (core/plans.py,
     "copilot") y dice si ya se pasó. Los admins no tienen tope. Si Redis no
@@ -1089,7 +1099,7 @@ async def handle_chat(
         tool_blocks = response.tool_calls
 
         if not tool_blocks:
-            return {"reply": response.text.strip() or "Listo.", "actions": actions, "pending_confirmation": None}
+            return {"reply": _tidy_money(response.text.strip()) or "Listo.", "actions": actions, "pending_confirmation": None}
 
         messages.append({"role": "assistant", "content": response.content})
         tool_results: list[dict] = []

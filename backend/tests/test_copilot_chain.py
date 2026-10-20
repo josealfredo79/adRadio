@@ -220,3 +220,14 @@ async def test_gemini_goes_first_for_tools(anthropic_mock):
         out = await copilot_service.handle_chat(None, _user(), "hola", [])
     assert out["reply"] == "soy Gemini"
     groq.chat.completions.create.assert_not_called()
+
+
+# Caso real (19-oct): "Llevas 1 venta por un total de 85.0 pesos" aunque la herramienta ya manda 85.
+@pytest.mark.parametrize("raw,clean", [
+    ("Cobré 30.0 pesos. Llevas $165.0 hoy.", "Cobré 30 pesos. Llevas $165 hoy."),
+    ("Total de 1,250.0 pesos", "Total de 1,250 pesos"),
+    ("Llevas $165.00 y $85.50", "Llevas $165.00 y $85.50"),
+    ("La versión 2.0 del menú", "La versión 2.0 del menú"),
+])
+def test_tidy_money_drops_point_zero_only_on_amounts(raw, clean):
+    assert copilot_service._tidy_money(raw) == clean
