@@ -345,7 +345,7 @@ async def test_copiloto_courtesy_titles_and_today_tool(seeded):
     out = await _copilot(seeded["lupe"], "record_sale", amount=300, customer="don Juan")
     assert out["saved"] and out["customer"]["name"] == "Juan Pérez"
     today = await _copilot(seeded["lupe"], "get_sales_today")
-    assert today == {"count": 1, "total": 300.0}
+    assert today == {"today_total": 300, "today_count": 1}
 
 
 async def test_copiloto_name_plus_last_digits_picks_that_customer(seeded):

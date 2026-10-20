@@ -140,6 +140,24 @@ const LABELS: Record<string, string> = {
   active_campaigns: 'Campañas activas',
   orders_confirmed: 'Pedidos confirmados',
   conversations_active: 'Pláticas abiertas',
+  // Cobros (copilot_sales_tools)
+  saved: 'Guardado',
+  undone: 'Borrado',
+  amount: 'Monto',
+  customer: 'Cliente',
+  phone_last4: 'Teléfono',
+  stamped: 'Sello',
+  today_total: 'Llevas hoy',
+  today_count: 'Ventas hoy',
+  choices: 'Opciones',
+  not_found: 'No encontrado',
+  note: 'Nota',
+}
+
+const MONEY_KEYS = new Set(['amount', 'today_total'])
+
+function formatMoney(value: number): string {
+  return `$${value.toLocaleString('es-MX', { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 })}`
 }
 
 const VALUE_LABELS: Record<string, string> = {
@@ -233,7 +251,7 @@ export function ActionData({ data, depth = 0 }: { data: unknown; depth?: number 
               )
             ) : (
               <span className="font-medium text-gray-700 dark:text-gray-300 text-right">
-                {formatPrimitive(value)}
+                {MONEY_KEYS.has(key) && typeof value === 'number' ? formatMoney(value) : formatPrimitive(value)}
                 {key.endsWith('_rate') && typeof value === 'number' ? '%' : ''}
               </span>
             )}

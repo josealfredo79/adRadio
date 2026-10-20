@@ -42,3 +42,27 @@ describe('ActionData — resumen de analíticas', () => {
     expect(screen.queryByText(/Messages Outbound|Response Rate/)).toBeNull()
   })
 })
+
+// Caso real (19-oct): la tarjeta del cobro salía con "Saved", "Today Total"… y montos sin $.
+describe('ActionData — cobro', () => {
+  it('lo muestra en español y con $', () => {
+    render(
+      <ActionData
+        data={{
+          saved: true,
+          amount: 85,
+          customer: { name: 'Cliente Prueba', phone_last4: '4567' },
+          stamped: false,
+          today_total: 1250.5,
+          today_count: 1,
+        }}
+      />,
+    )
+    expect(screen.getByText('Monto')).toBeDefined()
+    expect(screen.getByText('$85')).toBeDefined()
+    expect(screen.getByText('Llevas hoy')).toBeDefined()
+    expect(screen.getByText('$1,250.50')).toBeDefined()
+    expect(screen.getByText('Ventas hoy')).toBeDefined()
+    expect(screen.queryByText(/Saved|Amount|Today Total|Phone Last4|Stamped/)).toBeNull()
+  })
+})

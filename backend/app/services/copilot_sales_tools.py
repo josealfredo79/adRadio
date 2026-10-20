@@ -80,6 +80,12 @@ def _amount_from(raw) -> str:
     return match.group(0) if match else str(raw or "")
 
 
+def _money(value) -> int | float:
+    """85 y no 85.0: el modelo copia el número tal cual ("Cobré 85.0 pesos")."""
+    value = round(float(value), 2)
+    return int(value) if value.is_integer() else value
+
+
 def _who(c) -> dict:
     return {"name": c.name, "phone_last4": (c.phone or "")[-4:]}
 
@@ -126,10 +132,10 @@ async def record_sale(db: AsyncSession, user: User, args: dict) -> dict:
     logger.info("[COPILOT] sale recorded owner=%s amount=%s customer=%s", user.id, amount, bool(customer))
     return {
         "saved": True,
-        "amount": float(sale.amount),
+        "amount": _money(sale.amount),
         "customer": _who(customer) if customer else None,
         "stamped": stamped,
-        "today_total": today["total"],
+        "today_total": _money(today["total"]),
         "today_count": today["count"],
     }
 
@@ -152,14 +158,15 @@ async def undo_last_sale(db: AsyncSession, user: User, args: dict) -> dict:
         return {"undone": False, "note": str(e)}
     await db.commit()
     today = await sales_service.today_summary(db, user)
-    return {"undone": True, "amount": amount, "today_total": today["total"], "today_count": today["count"]}
+    return {"undone": True, "amount": _money(amount), "today_total": _money(today["total"]), "today_count": today["count"]}
 
 
 async def run(db: AsyncSession, user: User, tool_name: str, args: dict) -> dict:
     if tool_name == "record_sale":
         return await record_sale(db, user, args)
     if tool_name == "get_sales_today":
-        return await sales_service.today_summary(db, user)
+        today = await sales_service.today_summary(db, user)
+        return {"today_total": _money(today["total"]), "today_count": today["count"]}
     return await undo_last_sale(db, user, args)
 
 
@@ -170,7 +177,7 @@ def summarize(tool_name: str, data: dict) -> str:
         who = f" a {data['customer']['name']}" if data.get("customer") else ""
         return f"Cobro de ${data.get('amount', 0):,.2f}{who} guardado."
     if tool_name == "get_sales_today":
-        return f"Hoy: ${data.get('total', 0):,.2f} en {data.get('count', 0)} venta(s)."
+        return f"Hoy: ${data.get('today_total', 0):,.2f} en {data.get('today_count', 0)} venta(s)."
     if data.get("undone"):
         return f"Cobro de ${data.get('amount', 0):,.2f} deshecho."
     return data.get("note") or "No había cobro que deshacer."
