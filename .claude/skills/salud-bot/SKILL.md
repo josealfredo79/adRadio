@@ -16,6 +16,15 @@ curl -s -m 20 -w ' %{http_code}\n' https://www.iaradio.online/health/ready
 ```
 200 = base de datos y Redis bien.
 
+## 1b. ¿Le queda saldo a Anthropic?
+
+Claude es el último respaldo del bot, del agente del cliente y del Copiloto. Anthropic no avisa ni tiene API de saldo: cuando se acaba, cada llamada da 400 "credit balance is too low" y nadie se entera hasta que fallan los gratis.
+
+```bash
+python3 .claude/skills/salud-bot/scripts/anthropic_saldo.py
+```
+Hace una llamada de 1 token con la llave de producción (menos de un centavo). ✅ = con saldo; 🔴 = recargar en console.anthropic.com → Settings → Billing (lo hace el usuario). El clasificador bloquea leer la llave de Railway: pídele al usuario que lo corra con `! python3 .claude/skills/salud-bot/scripts/anthropic_saldo.py`. En los registros, `prod_logs.py` también cuenta "Anthropic SIN SALDO".
+
 ## 2. Lo que pasó en producción (últimas 24 h)
 
 ```bash
@@ -28,7 +37,7 @@ Llena esta tabla con lo que salga en "Servicios externos" y "Patrones conocidos"
 |---|---|---|---|
 | api.groq.com | 1er modelo del bot (gratis) | casi todo 200 | muchos 429 o 404 → modelo borrado o al límite |
 | api.cloudflare.com / gemini / mistral / openrouter | respaldos gratis | 200 cuando aparecen | 404 = modelo que ya no existe o dejó de ser gratis |
-| api.anthropic.com | respaldo de pago (Claude) | pocas llamadas | muchas = los gratis están fallando y se está pagando |
+| api.anthropic.com | respaldo de pago (Claude) | pocas llamadas, 200 | muchas = los gratis están fallando y se está pagando; 400 + "Anthropic SIN SALDO" = recargar |
 | Voyage (embeddings) | buscar en la base de conocimiento | sin 429 | 429 = plan sin tarjeta (3/min); el bot contesta sin lo que el dueño le enseñó |
 | graph.facebook.com | WhatsApp | 200 | 4xx frecuentes (no cuenta 131047, que es normal) |
 | Base de datos | todo | sin "conexión cerrada" con 5xx/499 | conexiones cerradas junto con errores = problema real |

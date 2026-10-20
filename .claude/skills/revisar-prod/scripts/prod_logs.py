@@ -28,6 +28,7 @@ KNOWN = [
     ("Voyage al límite (429, plan sin tarjeta = 3/min)", re.compile(r"voyage.*response_code=429")),
     ("Proveedor de IA falló y se pasó al siguiente", re.compile(r"\[LLM\] .* falló")),
     ("Conexión a la base de datos cerrada", re.compile(r"connection is closed|ConnectionDoesNotExist")),
+    ("Anthropic SIN SALDO (credit balance too low)", re.compile(r"credit balance is too low")),
     ("Cuota de Neon agotada", re.compile(r"exceeded the quota")),
     ("Meta: fuera de la ventana de 24 h (131047)", re.compile(r"131047")),
     ("Meta: límite de envíos / calidad", re.compile(r"131048|131056|130429")),
