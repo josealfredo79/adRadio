@@ -35,6 +35,9 @@ def load_llm_env() -> None:
         key, _, value = line.strip().partition("=")
         if re.fullmatch(r"[A-Z_]*(API_KEY|API_TOKEN|ACCOUNT_ID|_BASE_URL|_MODEL)", key):
             os.environ[key] = value.strip().strip('"')
+    if os.environ.get("USAR_OPENROUTER") != "1":
+        # La llave local es la de producción y su cuota gratis (~50/día) es de los clientes reales.
+        os.environ.pop("OPENROUTER_API_KEY", None)
     os.environ["APP_ENV_FILE"] = ""  # que app/config.py no lea el .env (producción)
     os.environ["DATABASE_URL"] = "postgresql+asyncpg://u:p@localhost:1/none"
     os.environ.setdefault("SECRET_KEY", "probar-ia")
