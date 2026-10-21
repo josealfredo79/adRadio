@@ -346,6 +346,26 @@ class TestServicesWithDuration:
         assert agent._mentions_service(owner, "¿a qué hora abren?") is False
         assert agent._mentions_service(SimpleNamespace(appointment_services=None), "manicure") is False
 
+    def test_first_word_of_the_service_is_enough(self):
+        # Simulación 2026-10-20: "quiero un corte mañana a las 9" no entraba al
+        # agente y el bot de siempre preguntaba "¿qué día?".
+        owner = SimpleNamespace(appointment_services=[{"name": "Corte de cabello", "minutes": 30},
+                                                      {"name": "Tinte", "minutes": 90}])
+        assert agent._mentions_service(owner, "quiero un corte mañana a las 9") is True
+        assert agent._mentions_service(owner, "que horarios tienen libres el domingo pa un corte?") is True
+        assert agent._mentions_service(owner, "cortesía") is False  # palabra completa, no pedazo
+        assert agent._mentions_service(owner, "¿dónde están?") is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("sent", [True, False])
+    async def test_owner_alert_does_not_count_or_gender_the_owner(self, sent):
+        ctx = agent._Ctx(db=None, redis=None, advertiser=SimpleNamespace(id=uuid.uuid4()),
+                         contact=SimpleNamespace(id=uuid.uuid4(), name="Lupe"), channel="web")
+        with patch("app.services.owner_alerts.alert_web_message", AsyncMock(return_value=sent)):
+            out = await agent._tool_avisar_al_dueno(ctx, {"mensaje": "quiere hablar con alguien"})
+        assert ("Ya se le avisó" in out["ok"]) is sent
+        assert "nunca «el dueño»" in out["ok"]
+
     @pytest.mark.asyncio
     async def test_unknown_service_lists_the_real_ones(self):
         user_id, ana, *_ = await _seed()

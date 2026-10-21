@@ -141,8 +141,8 @@ async def generate_bot_response(
 """
     else:
         missing_info_rule = f"""   - Si no tienes la información, di algo como:
-     "No tengo ese dato a la mano, pero puedes consultarlo directamente con nosotros 😊
-      ¿Te ayudo con algo más de {business_name}?"
+     "No tengo ese dato a la mano 🙏 ¿Te ayudo con algo más de {business_name}?"
+     No le digas que lo consulte "con nosotros" o "con el equipo": ya está hablando con el negocio.
 """
 
     system = f"""Eres {bot_name}, el asistente virtual de {business_name}.

@@ -82,10 +82,7 @@ def holding_reply(business_name: str) -> str:
 def no_info_reply(business_name: str) -> str:
     """Lo que el bot decía antes de esta función — se usa si el aviso al dueño
     no se pudo mandar, para no dejar al cliente esperando algo que no llegará."""
-    return (
-        "No tengo ese dato a la mano, pero puedes consultarlo directamente "
-        f"con nosotros 😊 ¿Te ayudo con algo más de {business_name}?"
-    )
+    return f"No tengo ese dato a la mano 🙏 ¿Te ayudo con algo más de {business_name}?"
 
 
 async def escalate_to_owner(

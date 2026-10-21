@@ -354,10 +354,18 @@ def _find_service(advertiser: User, name: str) -> dict | None:
 
 def _mentions_service(advertiser: User, message: str) -> bool:
     """"Quiero una manicure el sábado" no trae ningún verbo de acción, pero
-    nombra un servicio del negocio: eso es querer agendar."""
+    nombra un servicio del negocio: eso es querer agendar. Basta la primera
+    palabra del servicio: "quiero un corte mañana" nombra "Corte de cabello"."""
     text = _plain(message)
-    return any(_plain(s["name"]) in text or text in _plain(s["name"]) and len(text) > 3
-               for s in _services(advertiser)) if text else False
+    if not text:
+        return False
+    words = set(re.findall(r"\w+", text))
+    for s in _services(advertiser):
+        name = _plain(s["name"])
+        head = name.split()[0] if name.split() else ""
+        if name in text or (text in name and len(text) > 3) or (len(head) > 3 and head in words):
+            return True
+    return False
 
 
 def _staff_error(ctx: _Ctx) -> dict:
@@ -708,9 +716,15 @@ async def _tool_avisar_al_dueno(ctx: _Ctx, args: dict) -> dict:
 
         await _owner_text(ctx, f"💬 {ctx.contact.name or 'Un cliente'} te escribió por WhatsApp:\n«{text}»\n\n"
                                f"Contéstale desde tu Inbox: {_inbox_url()}")
+        sent = True
     else:
-        await alert_web_message(ctx.redis, ctx.advertiser, ctx.contact.id, ctx.contact.name or "Un cliente", text)
-    return {"ok": "El dueño recibirá el aviso y contestará por este chat."}
+        sent = await alert_web_message(ctx.redis, ctx.advertiser, ctx.contact.id, ctx.contact.name or "Un cliente",
+                                       text)
+    # Un aviso por cliente cada 30 min: sin esto el modelo decía "ya es la tercera
+    # vez que le llega el aviso al dueño" (falso) y le ponía género al dueño.
+    done = "Ya se le avisó al negocio." if sent else "El negocio ya tiene este mensaje en su bandeja."
+    return {"ok": done + " Dile que le contestarán por este chat en cuanto puedan. No cuentes avisos ni expliques "
+                  "cómo funcionan, y di «el negocio» o «el equipo», nunca «el dueño» ni «la dueña»."}
 
 
 _HANDLERS = {
