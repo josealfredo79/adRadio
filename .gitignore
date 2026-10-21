@@ -70,3 +70,7 @@ cloudflared/credentials.json
 
 # Local working state of unrelated AI coding tools
 .mimocode/
+
+# Documentos y metadatos de Windows (el repo es público)
+docs/*.docx
+*:Zone.Identifier

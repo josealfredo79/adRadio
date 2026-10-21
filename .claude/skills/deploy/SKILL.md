@@ -18,6 +18,7 @@ Producción tiene clientes reales y **no hay staging**: lo que se sube a `master
 - Frontend, si se tocó `frontend/`: desde `frontend/`, `npx tsc --noEmit -p .`, `npx eslint <archivos tocados>`, `npx vitest run`.
 - Solo corre la parte que se tocó. Si la suite ya pasó en esta sesión con exactamente este código (nada cambió después salvo docs), no la repitas: dilo en el reporte.
 - Si algo falla, no se sube. Arregla o reporta la falla con la salida real.
+- Si el diff toca Stripe, pagos, planes o cuotas, Cobrar, cupones, campañas o envíos de WhatsApp, y el subagente `revisor-dinero` no lo revisó ya en esta sesión, lánzalo ahora. Con "No subir", no se sube.
 
 ## 3. Confirmar con el usuario
 

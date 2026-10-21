@@ -1,0 +1,48 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(bash .claude/skills/deploy/scripts/check_deploy.sh:*)",
+      "Bash(python3 .claude/skills/revisar-prod/scripts/prod_logs.py:*)",
+      "Bash(railway logs:*)",
+      "Bash(railway deployment list:*)",
+      "Bash(railway status:*)"
+    ],
+    "ask": [
+      "Bash(railway run:*)",
+      "Bash(railway up:*)",
+      "Bash(railway variables:*)",
+      "Bash(railway redeploy:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(alembic downgrade:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard_bash.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ruff_check.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

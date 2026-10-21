@@ -53,6 +53,8 @@ No escribas código de la función antes de esta aprobación.
 
 Las pruebas simulan la IA, así que no dicen si tus textos funcionan con un modelo real. Arma 5 a 10 casos realistas (incluye los difíciles: datos personales, respuestas ambiguas) y córrelos con `scripts/probar_ia.py` (instrucciones dentro; nunca toca la base de producción). Si falla alguno, ajusta el prompt antes de entregar y anota el resultado en la especificación.
 
+Si el cambio toca lo que el cliente vive en el chat (agente del cliente, citas, pedidos, catálogo, respuestas del bot), además lanza el subagente `cliente-simulado`: platica con el bot completo por el chat web real (`scripts/simular_cliente.py`, base local desechable) y reporta fallas verificadas. Si toca dinero o mensajes que Meta cobra, lanza el subagente `revisor-dinero` sobre el diff antes de entregar. Si toca la base, sigue la skill `migracion`.
+
 ## 6. Cierra contra la especificación
 
 Marca en la especificación cada caso con ✅ y el nombre de su prueba (o ❌ y por qué). Reporta al usuario:
