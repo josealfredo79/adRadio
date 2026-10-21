@@ -19,6 +19,8 @@ GROQ_CHAT_MODEL=<de arriba> OPENROUTER_MODEL=<de arriba> \
   | grep -E "^ |^===|escenarios"
 ```
 
+**Cuota compartida:** la llave de OpenRouter del `.env` local puede ser la misma de producción, y sin crédito OpenRouter da unas 50 llamadas gratis al día para todos sus modelos `:free` (con US$10 de crédito, 1,000). Cada turno simulado gasta varias. Si ves `429 free-models-per-day`, para y repórtalo; no sigas gastando la cuota de los clientes reales. Pregunta antes de correr más de 15 escenarios.
+
 Escribe el `escenarios.json` en el directorio scratchpad que te indiquen (o en `/tmp`), nunca en el repo. Tarda: cada turno son varias llamadas de IA y Groq tiene tope de tokens por minuto (429 → cae al siguiente modelo, es normal).
 
 ## Qué escenarios armar (10 a 15)
