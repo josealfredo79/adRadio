@@ -46,6 +46,7 @@ PHOTO_KEY_PREFIX = "products/{user_id}/"
 
 READ_TOOLS = {"list_appointments", "list_orders", "list_products", "get_bot_status", "test_bot", "open_page_builder"}
 CHANGE_TOOLS = {"create_product", "update_product", "update_business_hours", "set_loyalty_reward", "update_bot_info",
+                "set_home_delivery",
                 "update_page_style"}
 
 TOOLS = [
@@ -212,9 +213,9 @@ TOOLS = [
         "name": "update_bot_info",
         "description": (
             "Cambia lo que el bot sabe del negocio, sin tocar lo demás: dirección o ciudad, formas de "
-            "pago, preguntas frecuentes, políticas (garantías, devoluciones, envíos a domicilio) y otros "
+            "pago, preguntas frecuentes, políticas (garantías, devoluciones) y otros "
             "datos. Pasa SOLO lo que cambia. Para precios y horario usa update_product y "
-            "update_business_hours. SIEMPRE requiere confirmación."
+            "update_business_hours; si entrega o no a domicilio, set_home_delivery. SIEMPRE requiere confirmación."
         ),
         "input_schema": {
             "type": "object",
@@ -234,6 +235,18 @@ TOOLS = [
                 "add_policies": {"type": "array", "items": {"type": "string"}, "description": "Políticas nuevas, una por línea."},
                 "add_notes": {"type": "array", "items": {"type": "string"}, "description": "Otros datos que el bot debe saber."},
             },
+        },
+    },
+    {
+        "name": "set_home_delivery",
+        "description": (
+            "Dice si el negocio entrega a domicilio. Úsalo para 'ya no hago entregas', 'ya entrego a domicilio', "
+            "'solo para recoger'. Con false el bot ofrece solo recoger en el local. SIEMPRE requiere confirmación."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"delivers": {"type": "boolean", "description": "true = sí entrega a domicilio."}},
+            "required": ["delivers"],
         },
     },
     {
@@ -453,6 +466,7 @@ async def get_bot_status(db: AsyncSession, user: User, args: dict) -> dict:
         "page_url": page_url,
         "whatsapp_connected": user.meta_connection_status == "connected",
         "web_agent_enabled": bool(user.customer_agent_enabled),
+        "home_delivery": {True: "sí", False: "no"}.get(user.delivers_home, "sin definir (solo recoger)"),
         "loyalty_reward": (user.loyalty_config or {}).get("reward") or None,
         "missing": missing,
     }
@@ -690,6 +704,15 @@ async def preview_change(db: AsyncSession, user: User, tool_name: str, args: dic
             None,
         )
 
+    if tool_name == "set_home_delivery":
+        if not isinstance(args.get("delivers"), bool):
+            return None, None, "Dime si entregas a domicilio o solo para recoger."
+        if args["delivers"] is user.delivers_home:
+            return None, None, "Tu bot ya lo tiene así; no hay nada que cambiar."
+        what = "Entregas a domicilio: tu bot preguntará si lo quieren a domicilio o para recoger." if args["delivers"] \
+            else "No entregas a domicilio: tu bot ofrecerá los pedidos solo para recoger en tu local."
+        return what, {"delivers": args["delivers"]}, None
+
     if tool_name == "update_bot_info":
         ops = _clean_info_ops(args)
         if not ops:
@@ -795,6 +818,13 @@ async def execute_change(db: AsyncSession, user: User, tool_name: str, args: dic
         logger.info("[COPILOT] loyalty reward set by %s", user.id)
         return {"reward": reward, "stamps_required": stamps}, None
 
+    if tool_name == "set_home_delivery":
+        user.delivers_home = bool(args.get("delivers"))
+        db.add(user)
+        await db.commit()
+        logger.info("[COPILOT] home delivery set by %s: %s", user.id, user.delivers_home)
+        return {"delivers": user.delivers_home}, None
+
     if tool_name == "update_bot_info":
         # Se vuelve a leer lo que hay al confirmar: si cambió mientras tanto, no se pisa.
         ops = _clean_info_ops(args.get("ops") or {})
@@ -844,6 +874,9 @@ def summarize(tool_name: str, data: dict) -> str:
         return "Tu página ya está publicada." if data.get("has_page") else "Abrí el armador de tu página."
     if tool_name == "update_page_style":
         return "Tu página ya tiene el nuevo " + ("color" if data.get("color") else "fondo") + "."
+    if tool_name == "set_home_delivery":
+        return ("Listo: tu bot ya ofrece entrega a domicilio." if data.get("delivers")
+                else "Listo: tu bot ofrece los pedidos solo para recoger en tu local.")
     if tool_name == "update_bot_info":
         return "Tu bot ya sabe lo nuevo: " + "; ".join(data.get("changed", [])) + "."
     if tool_name == "create_product":

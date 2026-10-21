@@ -106,6 +106,12 @@ async def _advance(
         order.state = "collecting_address"
         await db.commit()
         first_name = message.split()[0] if message.split() else message
+        if not advertiser.delivers_home:
+            # Sin entrega a domicilio (o sin definir): no se pide dirección.
+            order.state = "collecting_payment"
+            await db.commit()
+            return (f"Perfecto, {first_name} 👍 Tu pedido es para recoger en el local 🏪\n"
+                    "¿Cómo prefieres pagar?\nResponde: *Efectivo*, *Tarjeta* o *Transferencia* 💳")
         return f"Perfecto, {first_name} 👍 ¿Cuál es tu dirección de entrega? 📍"
 
     if order.state == "collecting_address":
@@ -131,11 +137,17 @@ async def _advance(
         f"✅ *Pedido #{order.order_number:04d} confirmado*\n\n"
         f"🛒 {order.items_raw}\n"
         f"👤 {order.customer_name}\n"
-        f"📍 {order.delivery_address}\n"
+        f"📍 {where_line(order)}\n"
         f"💳 {order.payment_method}\n\n"
         "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
         f"{payment_lines(advertiser, order.payment_method)}{loyalty}"
     )
+
+
+def where_line(order: Order, prefix: str = "") -> str:
+    """La dirección del pedido, o "Para recoger en el local" si no hay."""
+    address = (order.delivery_address or "").strip()
+    return f"{prefix}{address}" if address else "Para recoger en el local"
 
 
 async def _notify_owner(advertiser: User, contact: Contact, order: Order, origin: str = "desde tu página web") -> None:
@@ -149,7 +161,7 @@ async def _notify_owner(advertiser: User, contact: Contact, order: Order, origin
             items_raw=order.items_raw or "",
             customer_name=order.customer_name or "",
             customer_phone=contact.phone or "",
-            delivery_address=order.delivery_address or "",
+            delivery_address=where_line(order),
             payment_method=order.payment_method or "",
         )
     )
@@ -164,7 +176,7 @@ async def _notify_owner(advertiser: User, contact: Contact, order: Order, origin
             f"🛒 {order.items_raw}\n"
             f"👤 Cliente: {order.customer_name}\n"
             f"📱 Teléfono: {contact.phone}\n"
-            f"📍 Dirección: {order.delivery_address}\n"
+            f"📍 {where_line(order, 'Dirección: ')}\n"
             f"💳 Pago: {order.payment_method}\n"
             f"────────────────"
         )

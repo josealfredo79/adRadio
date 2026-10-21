@@ -167,6 +167,7 @@ class _Ctx:
     used_tools: list[str] = field(default_factory=list)
     providers: list[str] = field(default_factory=list)  # qué modelos contestaron en el turno
     channel: str = "web"  # "web" | "whatsapp": solo cambia cómo se le avisa al dueño
+    message: str = ""  # lo que escribió el cliente en este turno
 
     @property
     def origin(self) -> str:
@@ -252,7 +253,8 @@ TOOLS = [
     {
         "name": "proponer_pedido",
         "description": "Prepara un pedido de este cliente con productos del catálogo. NO lo confirma: pregunta antes. "
-                       "Pide antes cómo lo quiere (a domicilio con dirección, o para recoger) y cómo va a pagar.",
+                       "Pide antes cómo va a pagar y, solo si el negocio entrega a domicilio, si lo quiere a domicilio "
+                       "(con dirección) o para recoger.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -568,7 +570,33 @@ async def _tool_buscar_productos(ctx: _Ctx, args: dict) -> dict:
     return out
 
 
+def _delivery_rule(advertiser: User) -> str:
+    """La regla de pedidos del prompt según si el negocio entrega a domicilio
+    (spec 2026-10-20-entrega-a-domicilio: sin definir = solo recoger)."""
+    if advertiser.delivers_home:
+        return ("- Para un pedido necesitas: productos del catálogo (buscar_productos), si es a domicilio (con dirección) "
+                "o para recoger, y forma de pago.")
+    if advertiser.delivers_home is False:
+        why = ("Este negocio NO entrega a domicilio: si el cliente pide que se lo lleven, dile con amabilidad que es "
+               "para recoger en el local y ofrécele el pedido así.")
+    else:
+        why = ("Este negocio no ha dicho si entrega a domicilio: si el cliente pide que se lo lleven, dile que lo "
+               "consultas con el negocio (avisar_al_dueno) y mientras ofrécele el pedido para recoger.")
+    return (f"- Todos los pedidos son para recoger en el local (entrega 'recoger'); no preguntes \"¿a domicilio o "
+            f"para recoger?\". {why}\n- Para un pedido necesitas: productos del catálogo (buscar_productos) y forma "
+            "de pago.")
+
+
+_ASKS_DELIVERY = re.compile(r"\b(domicilio|a mi casa|traen|traes|llevan|llevas|envio|envian|entregan)\b")
+
+
 async def _tool_proponer_pedido(ctx: _Ctx, args: dict) -> dict:
+    if "domic" in str(args.get("entrega") or "").lower() and not ctx.advertiser.delivers_home:
+        if ctx.advertiser.delivers_home is False:
+            return {"error": "Este negocio no entrega a domicilio. Dile que es para recoger en el local y ofrécele "
+                             "el pedido así (entrega 'recoger')."}
+        return {"error": "Este negocio no ha confirmado si entrega a domicilio. Dile que lo consultas con el negocio "
+                         "(avisar_al_dueno) y ofrécele mientras el pedido para recoger (entrega 'recoger')."}
     lines = []
     total = 0
     for item in (args.get("productos") or [])[:20]:
@@ -599,8 +627,20 @@ async def _tool_proponer_pedido(ctx: _Ctx, args: dict) -> dict:
                + f", {'a domicilio en ' + address if delivery == 'domicilio' else 'para recoger'}, pago: {payment}"
                + (f", total aprox. ${total:,.0f}" if total else ""))
     ctx.pending["summary"] = summary
-    return {"listo_para_confirmar": summary,
-            "siguiente_paso": "Pregúntale al cliente si lo confirmas. Todavía NO está pedido."}
+    result = {"listo_para_confirmar": summary,
+              "siguiente_paso": "Pregúntale al cliente si lo confirmas. Todavía NO está pedido."}
+    # Pidió que se lo lleven y el negocio no entrega (o no lo ha dicho): visto en la
+    # simulación del 2026-10-20, el modelo lo cambiaba a "recoger" sin decírselo.
+    if not ctx.advertiser.delivers_home and _ASKS_DELIVERY.search(_plain(ctx.message)):
+        if ctx.advertiser.delivers_home is False:
+            result["aviso"] = ("El cliente pidió que se lo lleven: dile claramente que este negocio no entrega a "
+                               "domicilio y que el pedido es para recoger en el local.")
+        else:
+            await _tool_avisar_al_dueno(ctx, {"mensaje": f"Pregunta si entregas a domicilio: «{ctx.message[:200]}»"})
+            result["aviso"] = ("El cliente pidió que se lo lleven: dile claramente que por ahora es para recoger en el "
+                               "local y que ya le preguntaste al negocio si puede llevárselo (ya se avisó, no lo "
+                               "vuelvas a avisar).")
+    return result
 
 
 async def _tool_mis_sellos(ctx: _Ctx, args: dict) -> dict:
@@ -807,7 +847,7 @@ Cómo trabajas:
 - Si el cliente pide varias cosas (cita y pedido), resuélvelas una por una: primero una, y cuando se confirme, la otra.
 - Si pregunta qué productos o qué venden, usa buscar_productos con texto vacío y enséñale la lista; no le preguntes
   antes qué tipo busca.
-- Para un pedido necesitas: productos del catálogo (buscar_productos), si es a domicilio (con dirección) o para recoger, y forma de pago.
+{_delivery_rule(advertiser)}
 - No prometas sellos, descuentos, regalos ni tiempos de entrega que no te haya dado una herramienta. Para cupones o
   promociones usa mis_cupones; para "¿y mi pedido?" usa mis_pedidos; para canjear el premio de su tarjeta, mis_sellos
   y si tiene premios_listos usa proponer_canjear_premio de una vez (no preguntes antes: los botones ya piden el sí).
@@ -1183,7 +1223,7 @@ async def handle(
     if not agent_available(advertiser, contact) or redis is None:
         return None
     key = f"{PENDING_PREFIX}{contact.id}"
-    ctx = _Ctx(db=db, redis=redis, advertiser=advertiser, contact=contact, channel=channel)
+    ctx = _Ctx(db=db, redis=redis, advertiser=advertiser, contact=contact, channel=channel, message=message)
 
     raw = await redis.get(key)
     if raw:

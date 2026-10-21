@@ -75,7 +75,7 @@ async def _send_whatsapp(advertiser, text):
 class TestOrderItemViaWhatsApp:
     @pytest.mark.asyncio
     async def test_real_order_creates_order_items_for_matched_products(self):
-        user_id, _contact_id = await _seed_advertiser_and_contact()
+        user_id, _contact_id = await _seed_advertiser_and_contact(delivers_home=True)
         product_id = await _seed_product(user_id, name="Pizza Pepperoni")
         try:
             async with AsyncSessionLocal() as db:

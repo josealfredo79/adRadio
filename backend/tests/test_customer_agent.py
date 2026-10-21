@@ -81,11 +81,11 @@ def _next_open_day() -> datetime:
     return datetime(day.year, day.month, day.day, 17, 0, tzinfo=TZ)
 
 
-async def _seed(enabled=True):
+async def _seed(enabled=True, delivers_home=None):
     await engine.dispose()
     async with AsyncSessionLocal() as db:
         user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x", business_name="Tacos El Primo",
-                    customer_agent_enabled=enabled,
+                    customer_agent_enabled=enabled, delivers_home=delivers_home,
                     loyalty_config={"enabled": True, "stamps_required": 5, "reward": "Orden gratis"})
         db.add(user)
         await db.flush()
@@ -293,7 +293,7 @@ class TestOrders:
 
     @pytest.mark.asyncio
     async def test_delivery_needs_an_address(self):
-        user_id, ana, pastor, _ = await _seed()
+        user_id, ana, pastor, _ = await _seed(delivers_home=True)
         try:
             claude, client = fake_claude(
                 resp(tool("proponer_pedido", productos=[{"producto_id": str(pastor), "cantidad": 1}],

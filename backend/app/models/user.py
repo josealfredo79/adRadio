@@ -177,6 +177,9 @@ class User(Base):
     # Agente con herramientas en el chat web del cliente (customer_agent.py).
     # Encendido para todos desde 0074; se puede apagar en Configuración.
     customer_agent_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # ¿Entrega a domicilio? None = no lo ha dicho: el bot ofrece solo "para
+    # recoger" y si el cliente pide domicilio lo consulta con el dueño.
+    delivers_home: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     # Seguimiento automático de interesados (followup_service.py); se apaga en Configuración.
     followup_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     # Servicios que se agendan y cuánto duran: [{"name": "Tinte", "minutes": 120}].

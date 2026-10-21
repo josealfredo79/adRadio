@@ -35,6 +35,7 @@ class ProfileUpdate(BaseModel):
     loyalty_config: dict | None = None
     directory_listed: bool | None = None
     customer_agent_enabled: bool | None = None
+    delivers_home: bool | None = None
     followup_enabled: bool | None = None
     # [] borra la lista (todo vuelve a 30 min); None no la toca.
     appointment_services: list[dict] | None = None

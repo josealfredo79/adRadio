@@ -63,7 +63,7 @@ from app.services.portal_service import (
 from app.services.rag_service import answer_with_rag
 from app.services.realtime import publish_conversation_event
 from app.services.template_lookup import get_template
-from app.services.widget_order_service import ORDER_RESUME_WINDOW
+from app.services.widget_order_service import ORDER_RESUME_WINDOW, where_line
 
 logger = logging.getLogger(__name__)
 
@@ -952,6 +952,15 @@ async def process_inbound_message(
                 pending_order.state = "cancelled"
                 await db.flush()
 
+        elif pending_order.state == "collecting_name" and not advertiser.delivers_home:
+            # Sin entrega a domicilio (o sin definir): no se pide dirección.
+            pending_order.customer_name = body_text.strip()
+            pending_order.state = "collecting_payment"
+            _first = (pending_order.customer_name.split() or ["👋"])[0]
+            order_reply = (
+                f"Perfecto, {_first} 👍 Tu pedido es para recoger en el local 🏪\n"
+                "¿Cómo prefieres pagar?\nResponde: *Efectivo*, *Tarjeta* o *Transferencia* 💳"
+            )
         elif pending_order.state == "collecting_name":
             pending_order.customer_name = body_text.strip()
             pending_order.state = "collecting_address"
@@ -985,7 +994,7 @@ async def process_inbound_message(
                 "nombre": pending_order.customer_name or "Cliente",
                 "order_number": f"{pending_order.order_number:04d}",
                 "items": pending_order.items_raw or "",
-                "direccion": pending_order.delivery_address or "",
+                "direccion": where_line(pending_order),
                 "pago": pending_order.payment_method or "",
                 "city": "",
             }
@@ -993,7 +1002,7 @@ async def process_inbound_message(
                 f"✅ *Pedido #{pending_order.order_number:04d} confirmado*\n\n"
                 f"🛒 {pending_order.items_raw}\n"
                 f"👤 {pending_order.customer_name}\n"
-                f"📍 {pending_order.delivery_address}\n"
+                f"📍 {where_line(pending_order)}\n"
                 f"💳 {pending_order.payment_method}\n\n"
                 "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
             )
@@ -1010,7 +1019,7 @@ async def process_inbound_message(
                 "order_number": f"{pending_order.order_number:04d}",
                 "items": pending_order.items_raw or "",
                 "telefono": from_number,
-                "direccion": pending_order.delivery_address or "",
+                "direccion": where_line(pending_order),
                 "pago": pending_order.payment_method or "",
                 "city": "",
             }
@@ -1020,7 +1029,7 @@ async def process_inbound_message(
                 f"🛒 {pending_order.items_raw}\n"
                 f"👤 Cliente: {pending_order.customer_name}\n"
                 f"📱 WhatsApp: {from_number}\n"
-                f"📍 Dirección: {pending_order.delivery_address}\n"
+                f"📍 {where_line(pending_order, 'Dirección: ')}\n"
                 f"💳 Pago: {pending_order.payment_method}\n"
                 f"────────────────\n"
                 f"Responde a este número para contactar al cliente."
@@ -1040,7 +1049,7 @@ async def process_inbound_message(
                     items_raw=pending_order.items_raw or "",
                     customer_name=pending_order.customer_name or "",
                     customer_phone=from_number,
-                    delivery_address=pending_order.delivery_address or "",
+                    delivery_address=where_line(pending_order),
                     payment_method=pending_order.payment_method or "",
                 )
             )

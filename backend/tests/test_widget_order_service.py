@@ -111,7 +111,7 @@ class TestHandleWidgetOrder:
 
     @pytest.mark.asyncio
     async def test_full_state_progression_to_confirmed(self):
-        user_id = await _seed_user(business_name="Tacos El Primo")
+        user_id = await _seed_user(business_name="Tacos El Primo", delivers_home=True)
         contact_id = await _seed_contact(user_id)
         try:
             async with AsyncSessionLocal() as db:
@@ -163,7 +163,7 @@ class TestHandleWidgetOrder:
         """Once an order is in progress, every message advances the state
         machine regardless of its content — 'quiero pedir X' as an address
         should be taken literally as the address, not re-trigger detection."""
-        user_id = await _seed_user()
+        user_id = await _seed_user(delivers_home=True)
         contact_id = await _seed_contact(user_id)
         try:
             async with AsyncSessionLocal() as db:

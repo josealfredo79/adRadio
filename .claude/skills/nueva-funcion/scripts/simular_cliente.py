@@ -16,6 +16,7 @@ escenarios.json:
 {
   "negocio": {                       # opcional; si falta, una estética de ejemplo
     "business_name": "Estética Lupita", "business_category": "estética", "city": "Tlaxiaco",
+    "delivers_home": true,             # opcional: true / false / null (sin definir = solo recoger)
     "business_hours": {"mon": ["09:00", "19:00"], ...},
     "appointment_services": [{"name": "Corte", "minutes": 30}],
     "productos": [{"name": "Shampoo", "price": 120}],
@@ -109,7 +110,7 @@ async def seed(spec: dict):
                     business_name=biz["business_name"], business_category=biz["business_category"],
                     city=biz["city"], business_hours=biz["business_hours"],
                     appointment_services=biz["appointment_services"], subscription_status="active",
-                    customer_agent_enabled=True)
+                    customer_agent_enabled=True, delivers_home=biz.get("delivers_home"))
         db.add(user)
         await db.flush()
         for p in biz["productos"]:

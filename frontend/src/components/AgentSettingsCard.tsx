@@ -49,7 +49,8 @@ export default function AgentSettingsCard() {
   const { user, setUser } = useAuth()
   const qc = useQueryClient()
   const mutation = useMutation({
-    mutationFn: (enabled: boolean) => api.patch('/me', { customer_agent_enabled: enabled }).then((r) => r.data),
+    mutationFn: (changes: { customer_agent_enabled?: boolean; delivers_home?: boolean }) =>
+      api.patch('/me', changes).then((r) => r.data),
     onSuccess: (updated) => {
       setUser?.(updated)
       qc.invalidateQueries({ queryKey: ['me'] })
@@ -76,9 +77,27 @@ export default function AgentSettingsCard() {
           type="checkbox"
           checked={!!user?.customer_agent_enabled}
           disabled={mutation.isPending}
-          onChange={(e) => mutation.mutate(e.target.checked)}
+          onChange={(e) => mutation.mutate({ customer_agent_enabled: e.target.checked })}
         />
         Activar el agente inteligente
+      </label>
+      {/* Lo respetan el agente y los pedidos de siempre (web y WhatsApp). Sin definir = solo recoger. */}
+      <label className="flex items-start gap-2 text-sm font-medium text-foreground">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={!!user?.delivers_home}
+          disabled={mutation.isPending}
+          onChange={(e) => mutation.mutate({ delivers_home: e.target.checked })}
+        />
+        <span>
+          Entrego a domicilio
+          <span className="block text-xs font-normal text-muted-foreground">
+            {user?.delivers_home
+              ? 'Tu asistente pregunta si lo quieren a domicilio (con dirección) o para recoger.'
+              : 'Apagado: tu asistente ofrece los pedidos solo para recoger en tu local.'}
+          </span>
+        </span>
       </label>
       {user?.customer_agent_enabled && (
         <div className="space-y-2 rounded-lg bg-muted/50 p-3">
