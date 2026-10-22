@@ -1020,7 +1020,8 @@ async def _agent_loop(ctx: _Ctx, message: str, history: list[dict]) -> str | Non
             nudge = _violation(text, ctx)
             if nudge is None:
                 # "¿Lo confirmo?" a secas no dice QUÉ: se arma con los datos reales.
-                if ctx.pending and len(text) < 40:
+                # Sim 2026-10-22: "¿Quieres confirmar el pedido con <90 espacios> ¿?" pasaba el largo.
+                if ctx.pending and len(" ".join(text.split())) < 40:
                     return _safe_text(ctx)
                 return text
             if corrections >= MAX_CORRECTIONS:

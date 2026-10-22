@@ -62,4 +62,15 @@ todos usan el texto nuevo.
 - `api/v1/orders.py` `public_router` + `main.py`: `GET /api/v1/o/{token}` (firma HMAC, como el portal) → 302 al wa.me.
 
 ## Prueba real (la hace el dueño)
-Pendiente de escribir al construir.
+Antes: en Pedidos, los datos de pago (CLABE) llenos; en Configuración, "Entrego a domicilio" encendido;
+al menos un producto con precio en el catálogo.
+1. "Probar como cliente": **"quiero 2 <producto de tu catálogo> pa' mi casa, pago por transferencia"** y termina el pedido →
+   el bot dice "📦 Pedido #N enviado a <tu negocio>… te escriben por WhatsApp". No dice "confirmado" ni
+   manda la CLABE.
+2. En el mismo chat: **"¿ya está mi pedido?"** → dice que ya está con el negocio y que te escriben; no da
+   tu número personal.
+3. En tu WhatsApp llega el aviso del pedido con "👉 Escribirle al cliente" en la 2.ª línea. Tócalo → abre
+   WhatsApp con el cliente y un mensaje ya escrito: el pedido, el total aprox., "te llega en ___ min" y tu CLABE.
+   No lo mandes si el número es de prueba.
+4. Página Pedidos: el pedido tiene el botón "Escribirle al cliente" con el mismo mensaje.
+5. Portal del cliente (`/mi`): el pedido dice "Enviado al negocio".

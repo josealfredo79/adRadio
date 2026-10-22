@@ -202,6 +202,22 @@ class TestBooking:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
+    async def test_confirm_padded_with_spaces_uses_the_real_summary(self):
+        # Sim 2026-10-22: "¿Quieres confirmar el pedido con <espacios> ¿?" llegó tal cual al cliente.
+        user_id, ana, *_ = await _seed()
+        r = Redis()
+        when = _next_open_day()
+        try:
+            claude, _ = fake_claude(
+                resp(tool("proponer_cita", servicio="Corte", fecha_hora=when.strftime("%Y-%m-%dT%H:%M"))),
+                resp(text("¿Quieres confirmar la cita con" + " " * 90 + "¿?"), stop="end_turn"),
+            )
+            out = await _say(user_id, ana, "agéndame mañana a las 5", r, claude)
+            assert out.text.startswith("Te lo preparo así:") and "Corte" in out.text and out.confirm is True
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
     async def test_cannot_touch_another_customers_appointment(self):
         user_id, ana, _, beto_appt = await _seed()
         r = Redis()
