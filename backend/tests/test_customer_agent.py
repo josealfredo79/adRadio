@@ -372,6 +372,18 @@ class TestServicesWithDuration:
         assert agent._mentions_service(owner, "cortesía") is False  # palabra completa, no pedazo
         assert agent._mentions_service(owner, "¿dónde están?") is False
 
+    def test_short_reply_to_an_order_question_goes_to_the_agent(self):
+        # Simulación 2026-10-22: "2" y "recojo" los contestaba el bot de siempre,
+        # que decía "¡Listo! estarán listas para recoger" sin haber pedido nada.
+        asked = [{"role": "user", "content": "sencia"},
+                 {"role": "assistant", "content": "La tlayuda sencilla cuesta $60. ¿Cuántas te gustaría ordenar?"}]
+        assert agent._continues_order("2", asked) is True
+        assert agent._continues_order("recojo", asked) is True
+        assert agent._continues_order("oye y tienen estacionamiento cerca del local?", asked) is False
+        greeted = [{"role": "assistant", "content": "¡Hola! ¿En qué te ayudo?"}]
+        assert agent._continues_order("2", greeted) is False
+        assert agent._continues_order("2", []) is False
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize("sent", [True, False])
     async def test_owner_alert_does_not_count_or_gender_the_owner(self, sent):

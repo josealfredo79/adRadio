@@ -959,6 +959,19 @@ _ASKS_CATALOG = re.compile(
     re.IGNORECASE,
 )
 
+# Sim 2026-10-22: "tlayuda sencilla $60, ¿cuántas?" → "2" → "recojo" no traen palabra
+# de pedido y los contestaba el bot de respaldo: "¡Listo! estarán listas" sin pedido.
+# Si el bot venía hablando de precios o de pedir, la respuesta corta sigue ese pedido.
+_ORDER_TALK = re.compile(r"\$\s?\d|pedid|ordenar|recoger|domicilio|cu[aá]nt[oa]s", re.IGNORECASE)
+_SHORT_REPLY_WORDS = 4
+
+
+def _continues_order(message: str, history: list[dict]) -> bool:
+    if len(message.split()) > _SHORT_REPLY_WORDS:
+        return False
+    last = next((m.get("content") for m in reversed(history) if m.get("role") == "assistant"), None)
+    return isinstance(last, str) and bool(_ORDER_TALK.search(last))
+
 
 # "Cancela mi pedido / mi cita": Haiku preguntaba "¿estás seguro?" sin buscar
 # cuál. Primero ve los suyos (de ahí sale el número o el id para proponer_*).
@@ -1257,7 +1270,7 @@ async def handle(
     active_key = f"{ACTIVE_PREFIX}{contact.id}"
     # Preguntar por productos suele ser el primer paso de un pedido: lo atiende el agente, que sí ve el catálogo.
     if not (wants_action(message) or _mentions_service(advertiser, message) or _ASKS_CATALOG.search(message)
-            or await redis.get(active_key)):
+            or _continues_order(message, history) or await redis.get(active_key)):
         return None
     from app.services.plan_usage import register_bot_conversation
 

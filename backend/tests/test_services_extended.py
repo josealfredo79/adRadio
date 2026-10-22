@@ -329,6 +329,21 @@ class TestRagService:
             )
             assert "no tengo" in result.lower() or "ayudar" in result.lower()
 
+    @pytest.mark.asyncio
+    async def test_catalog_prices_are_written_like_pesos(self):
+        # Simulación 2026-10-22: el bot copiaba "$60.00" del catálogo; se escribe $60.
+        from decimal import Decimal
+
+        from app.services.rag_service import catalog_context
+
+        rows = [MagicMock(price=Decimal("60.00"), category=None, description=None),
+                MagicMock(price=Decimal("12.50"), category=None, description=None)]
+        rows[0].name, rows[1].name = "Tlayuda sencilla", "Memela"
+        db = AsyncMock()
+        db.execute.return_value = MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=rows))))
+        text = await catalog_context(db, str(uuid.uuid4()))
+        assert "Tlayuda sencilla — $60" in text and "$60.00" not in text and "Memela — $12.50" in text
+
 
 class TestStorageService:
     """Tests para el servicio de storage."""

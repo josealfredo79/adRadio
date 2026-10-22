@@ -72,6 +72,7 @@ async def catalog_context(db: AsyncSession, advertiser_id: str) -> str:
     penthouse?") y eso no estaba escrito ahí, no lo sabía aunque el producto
     tuviera descripción y precio. "" si no hay productos o falla."""
     from app.models.product import Product
+    from app.services.order_handoff import pesos
 
     try:
         rows = (await db.execute(
@@ -87,7 +88,7 @@ async def catalog_context(db: AsyncSession, advertiser_id: str) -> str:
         return ""
     lines = []
     for p in rows:
-        price = f"${p.price:,.2f}" if p.price is not None else "precio a cotizar"
+        price = pesos(float(p.price)) if p.price is not None else "precio a cotizar"
         parts = [f"- {p.name} — {price}"]
         if p.category:
             parts.append(f"({p.category})")

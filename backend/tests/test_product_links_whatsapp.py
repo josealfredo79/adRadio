@@ -170,7 +170,7 @@ async def test_bot_sees_the_catalog_when_answering():
                 await answer_with_rag(advertiser_id=str(uid), query="¿cuántas recámaras tiene el penthouse?",
                                       conversation_history=[], db=db)
         ctx = gen.await_args.kwargs["advertiser_context"]
-        assert "Penthouse Roma Norte" in ctx and "$12,900,000.00" in ctx and "terraza privada" in ctx
+        assert "Penthouse Roma Norte" in ctx and "$12,900,000" in ctx and ".00" not in ctx and "terraza privada" in ctx
         assert "Oculto" not in ctx
     finally:
         await engine.dispose()
