@@ -1,6 +1,6 @@
 """"Cobré $___": ventas del mostrador y de pedidos (spec docs/specs/2026-10-17-cobre.md) — real-DB."""
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
