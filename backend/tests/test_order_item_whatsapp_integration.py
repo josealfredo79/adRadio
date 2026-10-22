@@ -109,7 +109,7 @@ class TestOrderItemViaWhatsApp:
             result, send = await _send_whatsapp(advertiser, "Efectivo")
             assert result == {"message": "ok"}
             reply_text = send.call_args.args[1].lower()
-            assert "confirmado" in reply_text
+            assert "enviado a" in reply_text and "confirmado" not in reply_text
 
             async with AsyncSessionLocal() as db:
                 order = await db.get(Order, order.id)

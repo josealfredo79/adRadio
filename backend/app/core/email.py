@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from html import escape as html_escape
 
 import httpx
 
@@ -85,8 +86,17 @@ async def send_new_order_email(
     customer_phone: str,
     delivery_address: str,
     payment_method: str,
+    wa_link: str | None = None,
 ) -> bool:
-    """Notify the business owner about a new confirmed order."""
+    """Notify the business owner about a new order (IaRadio no lo confirma: el
+    dueño le escribe al cliente con wa_link)."""
+    button = (
+        f'<a href="{html_escape(wa_link)}" style="display:block;margin-top:16px;background:#25d366;color:#fff;'
+        'text-align:center;padding:12px;border-radius:8px;font-weight:700;text-decoration:none">'
+        "💬 Escribirle al cliente por WhatsApp</a>"
+        '<p style="margin:8px 0 0;font-size:12px;color:#64748b;text-align:center">'
+        "Se abre tu WhatsApp con el mensaje listo: confirma el pedido y acuerda el pago.</p>"
+    ) if wa_link else ""
     html = f"""
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
       <!-- Header -->
@@ -124,6 +134,7 @@ async def send_new_order_email(
             <td style="padding:8px 0;font-weight:600;color:#1e293b">{payment_method}</td>
           </tr>
         </table>
+        {button}
       </div>
 
       <!-- Footer -->

@@ -621,7 +621,7 @@ async def _tool_proponer_pedido(ctx: _Ctx, args: dict) -> dict:
     payment = " ".join(str(args.get("pago") or "").split())[:50] or "Efectivo"
     ctx.pending = {
         "type": "order", "lines": lines, "delivery": delivery, "address": address, "payment": payment,
-        "notes": " ".join(str(args.get("notas") or "").split())[:300],
+        "notes": " ".join(str(args.get("notas") or "").split())[:300], "total": total,
     }
     summary = (", ".join(f"{line['cantidad']} {line['nombre']}" for line in lines)
                + f", {'a domicilio en ' + address if delivery == 'domicilio' else 'para recoger'}, pago: {payment}"
@@ -686,7 +686,7 @@ async def _tool_mis_cupones(ctx: _Ctx, args: dict) -> dict:
 
 
 def _order_state(o: Order) -> str:
-    return {"confirmed": "confirmado, el negocio ya lo tiene", "cancelled": "cancelado"}.get(o.state, "sin terminar")
+    return {"confirmed": "enviado al negocio", "cancelled": "cancelado"}.get(o.state, "sin terminar")
 
 
 async def _tool_mis_pedidos(ctx: _Ctx, args: dict) -> dict:
@@ -700,8 +700,20 @@ async def _tool_mis_pedidos(ctx: _Ctx, args: dict) -> dict:
         "pedidos": [{"numero": o.order_number, "productos": o.items_raw or "", "estado": _order_state(o),
                      "entrega": o.delivery_address or "", "cuando": _spanish_when(o.confirmed_at or o.created_at)}
                     for o in rows],
-        "nota": "No hay seguimiento de reparto: si pregunta cuánto falta, ofrece avisar al dueño.",
+        "nota": _orders_note(ctx.advertiser),
     }
+
+
+def _orders_note(advertiser: User) -> str:
+    """IaRadio no confirma, cobra ni reparte (spec 2026-10-21): el negocio le
+    escribe al cliente por WhatsApp. Nunca el número personal del dueño."""
+    from app.services.order_handoff import public_business_whatsapp
+
+    number = public_business_whatsapp(advertiser)
+    contact = (f"si tiene prisa, puede escribirle al WhatsApp del negocio {number}" if number
+               else "si tiene prisa, ofrece avisarle al dueño (avisar_al_dueno); no des ningún otro teléfono")
+    return ("Un pedido 'enviado al negocio' ya lo tiene el negocio: ellos le escriben por WhatsApp para confirmarlo, "
+            f"decirle el tiempo y acordar el pago. No sabes si ya lo aceptaron ni cuánto falta; {contact}.")
 
 
 async def _own_cancellable_order(ctx: _Ctx, numero) -> tuple[Order | None, str | None]:
@@ -1129,6 +1141,7 @@ async def _do_cancel(ctx: _Ctx, pending: dict) -> str:
 
 async def _do_order(ctx: _Ctx, pending: dict) -> str:
     from app.services.loyalty_service import add_stamp, stamp_line
+    from app.services.order_handoff import sent_to_business_text
     from app.services.widget_order_service import _notify_owner
 
     count = (await ctx.db.execute(
@@ -1152,13 +1165,10 @@ async def _do_order(ctx: _Ctx, pending: dict) -> str:
     ])
     stamped = await add_stamp(ctx.db, ctx.advertiser, ctx.contact.id, "order", str(order.id))
     await ctx.db.commit()
-    await _notify_owner(ctx.advertiser, ctx.contact, order, origin=ctx.origin)
+    await _notify_owner(ctx.advertiser, ctx.contact, order, origin=ctx.origin, total=pending.get("total"))
     loyalty = await stamp_line(ctx.db, ctx.advertiser, ctx.contact.id) if stamped else ""
-    where = f"a domicilio: {order.delivery_address}" if pending.get("delivery") == "domicilio" else "para recoger"
-    from app.services.payment_info import payment_lines
-
-    pay = payment_lines(ctx.advertiser, order.payment_method)
-    return f"✅ *Pedido #{order.order_number:04d} confirmado*\n🛒 {items_raw}\n📍 {where}\n💳 {order.payment_method}{pay}{loyalty}"
+    # IaRadio solo entrega el pedido: sin "confirmado" ni datos de pago (spec 2026-10-21).
+    return sent_to_business_text(ctx.advertiser, order, pending.get("total")) + loyalty
 
 
 async def _do_redeem(ctx: _Ctx) -> str:

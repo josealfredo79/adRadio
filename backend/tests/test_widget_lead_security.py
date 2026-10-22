@@ -133,7 +133,7 @@ class TestLeadCapture:
             assert out["message"] == "ok"
             assert r.store.get(f"{UNVERIFIED_SESSION_PREFIX}{user_id}:s1") == "1"
             reply = await _finish_order(user_id, uuid.UUID(out["contact_id"]), r)
-            assert "Pedido #0001 confirmado" in reply and "/c/" not in reply
+            assert "Pedido #0001 enviado a" in reply and "/c/" not in reply
         finally:
             await _cleanup(user_id)
 

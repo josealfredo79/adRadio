@@ -989,41 +989,42 @@ async def process_inbound_message(
 
             _stamped = await add_stamp(db, advertiser, pending_order.contact_id, "order", str(pending_order.id))
 
-            _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_confirmed")
-            _oc = {
-                "nombre": pending_order.customer_name or "Cliente",
-                "order_number": f"{pending_order.order_number:04d}",
-                "items": pending_order.items_raw or "",
-                "direccion": where_line(pending_order),
-                "pago": pending_order.payment_method or "",
-                "city": "",
-            }
-            order_reply = personalize_message(_tpl, _oc, {"business_name": "", "city": ""}) if _tpl else (
-                f"✅ *Pedido #{pending_order.order_number:04d} confirmado*\n\n"
-                f"🛒 {pending_order.items_raw}\n"
-                f"👤 {pending_order.customer_name}\n"
-                f"📍 {where_line(pending_order)}\n"
-                f"💳 {pending_order.payment_method}\n\n"
-                "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
+            from app.services.order_handoff import (
+                OLD_SEED_CONFIRMED,
+                OLD_SEED_OWNER_NOTIFY,
+                customer_wa_link,
+                fill_order_template,
+                order_total,
+                owner_short_link,
+                sent_to_business_text,
+                with_owner_link,
             )
-            from app.services.payment_info import payment_lines
 
-            order_reply += payment_lines(advertiser, pending_order.payment_method)
-            if _stamped:
-                order_reply += await stamp_line(db, advertiser, pending_order.contact_id)
-            order_reply += portal_footer(pending_order.contact_id)
-
-            _tpl_owner = await get_template(db, str(advertiser.id), "Pedido", "order_owner_notify")
-            _on = {
+            _total = await order_total(db, pending_order)
+            _wa_link = customer_wa_link(advertiser, pending_order, from_number, _total)
+            _values = {
                 "nombre": pending_order.customer_name or "Cliente",
                 "order_number": f"{pending_order.order_number:04d}",
                 "items": pending_order.items_raw or "",
                 "telefono": from_number,
                 "direccion": where_line(pending_order),
                 "pago": pending_order.payment_method or "",
-                "city": "",
+                "negocio": advertiser.business_name or "",
+                "primer_nombre": (pending_order.customer_name or "Cliente").split()[0],
+                "ciudad": advertiser.city or "",
             }
-            wa_notify = personalize_message(_tpl_owner, _on, {"business_name": "", "city": ""}) if _tpl_owner else (
+            # IaRadio solo entrega el pedido: sin "confirmado" ni datos de pago
+            # (spec 2026-10-21). La plantilla de ejemplo sin cambios usa el texto nuevo.
+            _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_confirmed")
+            order_reply = (fill_order_template(_tpl, _values) if _tpl and _tpl.strip() != OLD_SEED_CONFIRMED
+                           else sent_to_business_text(advertiser, pending_order, _total))
+            if _stamped:
+                order_reply += await stamp_line(db, advertiser, pending_order.contact_id)
+            order_reply += portal_footer(pending_order.contact_id)
+
+            _tpl_owner = await get_template(db, str(advertiser.id), "Pedido", "order_owner_notify")
+            wa_notify = (fill_order_template(_tpl_owner, _values)
+                         if _tpl_owner and _tpl_owner.strip() != OLD_SEED_OWNER_NOTIFY else (
                 f"📦 *NUEVO PEDIDO #{pending_order.order_number:04d}*\n"
                 f"────────────────\n"
                 f"🛒 {pending_order.items_raw}\n"
@@ -1031,9 +1032,9 @@ async def process_inbound_message(
                 f"📱 WhatsApp: {from_number}\n"
                 f"📍 {where_line(pending_order, 'Dirección: ')}\n"
                 f"💳 Pago: {pending_order.payment_method}\n"
-                f"────────────────\n"
-                f"Responde a este número para contactar al cliente."
-            )
+                f"────────────────"
+            ))
+            wa_notify = with_owner_link(wa_notify, _wa_link and owner_short_link(pending_order))
             if advertiser.phone or advertiser.whatsapp_number:
                 owner_number = get_owner_number(advertiser)
                 await send_owner(owner_number, wa_notify)
@@ -1051,6 +1052,7 @@ async def process_inbound_message(
                     customer_phone=from_number,
                     delivery_address=where_line(pending_order),
                     payment_method=pending_order.payment_method or "",
+                    wa_link=_wa_link,
                 )
             )
 

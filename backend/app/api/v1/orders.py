@@ -7,14 +7,17 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
+from app.core.rate_limiter import limiter
 from app.database import get_db
+from app.models.contact import Contact
 from app.models.order import Order
 from app.models.user import User
 from app.services.loyalty_service import add_stamp, notify_stamp, remove_stamp
@@ -63,9 +66,13 @@ async def list_orders(
         count_q = count_q.where(Order.state == state)
     total = (await db.execute(count_q)).scalar() or 0
 
+    from app.services.order_handoff import customer_wa_link, order_total
+
     items = []
     for o in orders:
         contact_phone = o.contact.phone if o.contact else None
+        wa_link = (customer_wa_link(current_user, o, contact_phone, await order_total(db, o))
+                   if o.state == "confirmed" else None)
 
         items.append({
             "id": str(o.id),
@@ -74,6 +81,7 @@ async def list_orders(
             "items_raw": o.items_raw,
             "customer_name": o.customer_name,
             "customer_phone": contact_phone,
+            "customer_wa_link": wa_link,
             "delivery_address": o.delivery_address,
             "payment_method": o.payment_method,
             "confirmed_at": o.confirmed_at.isoformat() if o.confirmed_at else None,
@@ -123,3 +131,28 @@ async def update_order_state(
         await notify_stamp(db, current_user, order.contact_id)
     logger.info("Order %s state updated to %s by user %s", order.order_number, body.state, current_user.id)
     return {"id": str(order.id), "state": order.state}
+
+
+# Link corto del aviso de WhatsApp al dueño → WhatsApp del cliente con el mensaje
+# ya escrito (spec 2026-10-21-pedido-se-entrega-al-dueno). Público: lo abre el
+# dueño desde su celular sin sesión; la firma es la llave.
+public_router = APIRouter(prefix="/o", tags=["orders"])
+
+
+@public_router.get("/{token}", include_in_schema=False)
+@limiter.limit("30/minute")
+async def open_customer_whatsapp(request: Request, token: str, db: AsyncSession = Depends(get_db)):
+    from app.services.order_handoff import (
+        customer_wa_link,
+        order_total,
+        read_owner_short_link,
+    )
+
+    order_id = read_owner_short_link(token)
+    order = await db.get(Order, order_id) if order_id else None
+    contact = await db.get(Contact, order.contact_id) if order and order.contact_id else None
+    advertiser = await db.get(User, order.advertiser_id) if order else None
+    link = customer_wa_link(advertiser, order, contact.phone, await order_total(db, order)) if contact else None
+    if not link:
+        raise HTTPException(status_code=404, detail="Link no válido")
+    return RedirectResponse(link, status_code=302)

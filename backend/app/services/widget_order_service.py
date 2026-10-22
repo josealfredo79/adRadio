@@ -125,23 +125,17 @@ async def _advance(
     order.state = "confirmed"
     order.confirmed_at = datetime.now(timezone.utc)
     from app.services.loyalty_service import add_stamp, stamp_line
-    from app.services.payment_info import payment_lines
+    from app.services.order_handoff import order_total, sent_to_business_text
 
     stamped = await add_stamp(db, advertiser, contact.id, "order", str(order.id))
     await db.commit()
     loyalty = await stamp_line(db, advertiser, contact.id) if stamped else ""
 
-    await _notify_owner(advertiser, contact, order)
+    total = await order_total(db, order)
+    await _notify_owner(advertiser, contact, order, total=total)
 
-    return (
-        f"✅ *Pedido #{order.order_number:04d} confirmado*\n\n"
-        f"🛒 {order.items_raw}\n"
-        f"👤 {order.customer_name}\n"
-        f"📍 {where_line(order)}\n"
-        f"💳 {order.payment_method}\n\n"
-        "¡Gracias! En breve te contactamos para confirmar el tiempo de entrega 🚀"
-        f"{payment_lines(advertiser, order.payment_method)}{loyalty}"
-    )
+    # IaRadio solo entrega el pedido: sin "confirmado" ni datos de pago (spec 2026-10-21).
+    return sent_to_business_text(advertiser, order, total) + loyalty
 
 
 def where_line(order: Order, prefix: str = "") -> str:
@@ -150,8 +144,17 @@ def where_line(order: Order, prefix: str = "") -> str:
     return f"{prefix}{address}" if address else "Para recoger en el local"
 
 
-async def _notify_owner(advertiser: User, contact: Contact, order: Order, origin: str = "desde tu página web") -> None:
+async def _notify_owner(
+    advertiser: User, contact: Contact, order: Order, origin: str = "desde tu página web", total: float | None = None
+) -> None:
     from app.core.email import send_new_order_email
+    from app.services.order_handoff import (
+        customer_wa_link,
+        owner_short_link,
+        with_owner_link,
+    )
+
+    wa_link = customer_wa_link(advertiser, order, contact.phone, total)
 
     asyncio.create_task(
         send_new_order_email(
@@ -163,6 +166,7 @@ async def _notify_owner(advertiser: User, contact: Contact, order: Order, origin
             customer_phone=contact.phone or "",
             delivery_address=where_line(order),
             payment_method=order.payment_method or "",
+            wa_link=wa_link,
         )
     )
 
@@ -180,6 +184,7 @@ async def _notify_owner(advertiser: User, contact: Contact, order: Order, origin
             f"💳 Pago: {order.payment_method}\n"
             f"────────────────"
         )
+        wa_notify = with_owner_link(wa_notify, wa_link and owner_short_link(order))
         try:
             await send_whatsapp(owner_number, wa_notify, advertiser=advertiser)
         except Exception:

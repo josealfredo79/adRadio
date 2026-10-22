@@ -65,7 +65,8 @@ ORDER_STATE_LABELS = {
     "collecting_name": "En proceso",
     "collecting_address": "En proceso",
     "collecting_payment": "En proceso",
-    "confirmed": "Confirmado",
+    # IaRadio no lo confirma: el negocio le escribe al cliente (spec 2026-10-21).
+    "confirmed": "Enviado al negocio",
     "cancelled": "Cancelado",
 }
 

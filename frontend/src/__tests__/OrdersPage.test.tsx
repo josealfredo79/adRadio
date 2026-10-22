@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -12,7 +12,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 
 const mockOrdersPage = {
   items: [
-    { id: '1', order_number: 'ORD-001', state: 'confirmed', items_raw: 'Pizza + Refresco', customer_name: 'Carlos Ruiz', customer_phone: '+521234567890', delivery_address: 'Av. Reforma 123', payment_method: 'tarjeta', confirmed_at: '2025-01-01T12:00:00Z', created_at: '2025-01-01T11:00:00Z' },
+    { id: '1', order_number: 'ORD-001', state: 'confirmed', items_raw: 'Pizza + Refresco', customer_name: 'Carlos Ruiz', customer_phone: '+521234567890', delivery_address: 'Av. Reforma 123', payment_method: 'tarjeta', confirmed_at: '2025-01-01T12:00:00Z', created_at: '2025-01-01T11:00:00Z', customer_wa_link: 'https://wa.me/521234567890?text=Hola' },
     { id: '2', order_number: 'ORD-002', state: 'collecting_payment', items_raw: 'Hamburguesa + Papas', customer_name: 'Ana García', customer_phone: '+529876543210', delivery_address: null, payment_method: null, confirmed_at: null, created_at: '2025-01-02T10:00:00Z' },
   ],
   total: 2,
@@ -111,5 +111,13 @@ describe('OrdersPage — cancelar un pedido ya confirmado', () => {
     fireEvent.click(screen.getByText('#ORD-001'))
     fireEvent.click(screen.getByText('Cancelar pedido'))
     expect(patch).not.toHaveBeenCalled()
+  })
+
+  it('caso4: el pedido enviado trae el botón "Escribirle al cliente" con su link de WhatsApp', () => {
+    renderPage()
+    fireEvent.click(screen.getByText('#ORD-001'))
+    const link = screen.getByRole('link', { name: /Escribirle al cliente/ })
+    expect(link.getAttribute('href')).toBe('https://wa.me/521234567890?text=Hola')
+    expect(link.getAttribute('target')).toBe('_blank')
   })
 })

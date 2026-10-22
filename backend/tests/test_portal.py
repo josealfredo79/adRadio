@@ -211,7 +211,7 @@ class TestGetPortal:
             assert out["past_appointments"][0]["can_cancel"] is False
 
             assert [o["items"] for o in out["orders"]] == ["2 shampoo"]
-            assert out["orders"][0]["state_label"] == "Confirmado"
+            assert out["orders"][0]["state_label"] == "Enviado al negocio"
             # Solo el cupón vigente y sin usar de Ana — ni el vencido, ni el agotado, ni el de Beto.
             assert [c["code"] for c in out["coupons"]] == [f"ANA{s['tag']}"]
 
@@ -445,7 +445,7 @@ class TestOrderStateLabel:
         from app.api.v1.portal import _order_state_label
         now = datetime.now(timezone.utc)
         o = Order(state="confirmed", created_at=now - timedelta(days=200))
-        assert _order_state_label(o, now) == "Confirmado"
+        assert _order_state_label(o, now) == "Enviado al negocio"
 
 
 class TestDashboardPortalLink:

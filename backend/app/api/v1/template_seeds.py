@@ -32,8 +32,8 @@ SEED_TEMPLATES = [
     {"name": "Pedir nombre", "category": "Pedido", "step": "order_name", "content": "¡Excelente! Para completarlo, ¿a qué nombre va el pedido?"},
     {"name": "Pedir dirección", "category": "Pedido", "step": "order_address", "content": "Perfecto, {{primer_nombre}}. ¿Cuál es tu dirección de entrega?"},
     {"name": "Pedir forma de pago", "category": "Pedido", "step": "order_payment", "content": "¡Anotado! ¿Cómo prefieres pagar? Responde: *Efectivo*, *Tarjeta* o *Transferencia*"},
-    {"name": "Pedido confirmado", "category": "Pedido", "step": "order_confirmed", "content": "✅ *Pedido #{{order_number}} confirmado*\n\n🛒 {{items}}\n👤 {{nombre}}\n📍 {{direccion}}\n💳 {{pago}}\n\n¡Gracias! En breve te contactamos para confirmar el tiempo de entrega."},
-    {"name": "Notificar dueño pedido", "category": "Pedido", "step": "order_owner_notify", "content": "📦 *NUEVO PEDIDO #{{order_number}}*\n────────────────\n🛒 {{items}}\n👤 Cliente: {{nombre}}\n📱 WhatsApp: {{telefono}}\n📍 Dirección: {{direccion}}\n💳 Pago: {{pago}}\n────────────────\nResponde a este número para contactar al cliente."},
+    {"name": "Pedido confirmado", "category": "Pedido", "step": "order_confirmed", "content": "📦 *Pedido #{{order_number}} enviado a {{negocio}}*\n🛒 {{items}}\n📍 {{direccion}}\n💳 {{pago}}\n\nTe escriben por WhatsApp para confirmar tu pedido y acordar el pago 🙌"},
+    {"name": "Notificar dueño pedido", "category": "Pedido", "step": "order_owner_notify", "content": "📦 *NUEVO PEDIDO #{{order_number}}*\n────────────────\n🛒 {{items}}\n👤 Cliente: {{nombre}}\n📱 WhatsApp: {{telefono}}\n📍 Dirección: {{direccion}}\n💳 Pago: {{pago}}\n────────────────"},
 
     # ─── Plan ───────────────────────────────────────────────
     {"name": "Confirmar plan", "category": "Plan", "step": "plan_confirm", "content": "¡Excelente elección! ¿Confirmas que quieres el *Plan {{plan}}*? Responde *Sí* o *No*"},

@@ -282,7 +282,7 @@ class TestOrders:
             out = await _say(user_id, ana, "mándame 2 de pastor para llevar", r, claude)
             assert out.confirm is True
             out = await _say(user_id, ana, "Sí, confírmalo", r)
-            assert "Pedido #0001 confirmado" in out.text and "2 Taco al pastor" in out.text
+            assert "Pedido #0001 enviado a Tacos El Primo" in out.text and "2 Taco al pastor" in out.text
             assert "Sumaste un sello" in out.text
             async with AsyncSessionLocal() as db:
                 order = (await db.execute(select(Order).where(Order.contact_id == ana))).scalar_one()
@@ -429,7 +429,7 @@ class TestCouponsAndOrderStatus:
                 resp(text("¿Cancelo tu pedido #0007? ¿Lo confirmo?"), stop="end_turn"),
             )
             out = await _say(user_id, ana, "cancela mi pedido", r, claude)
-            assert tool_results(client)[0]["pedidos"][0]["estado"].startswith("confirmado") and out.confirm is True
+            assert tool_results(client)[0]["pedidos"][0]["estado"] == "enviado al negocio" and out.confirm is True
             async with AsyncSessionLocal() as db:
                 assert (await db.get(Order, order_id)).state == "confirmed"
             out = await _say(user_id, ana, "sí", r)

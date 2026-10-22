@@ -136,7 +136,7 @@ class TestHandleWidgetOrder:
                     user = await db.get(User, user_id)
                     contact = await db.get(Contact, contact_id)
                     reply3 = await handle_widget_order(db, user, contact, "Efectivo")
-                assert "confirmado" in reply3.lower()
+                assert "enviado a tacos el primo" in reply3.lower() and "confirmado" not in reply3.lower()
                 assert "#0001" in reply3
 
                 # asyncio.create_task fires the email in the background — give it a tick

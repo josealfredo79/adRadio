@@ -198,7 +198,7 @@ async def test_caso5_pedido_por_whatsapp_avisa_al_dueno_con_el_canal():
         sent = await _wa(user_id, "quiero pedir una cera para recoger", claude)
         assert sent.buttons.await_count == 1
         sent = await _wa(user_id, "Sí, confírmalo")
-        assert "Pedido #0001 confirmado" in sent.last()
+        assert "Pedido #0001 enviado a" in sent.last()
         assert sent.owner_order.await_args.kwargs["origin"] == "por WhatsApp"
         async with AsyncSessionLocal() as db:
             assert (await db.execute(select(Order).where(Order.contact_id == ana))).scalar_one().state == "confirmed"

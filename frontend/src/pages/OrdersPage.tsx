@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
-import { ShoppingBag, Search, CheckCircle, XCircle, Clock, ChevronDown } from 'lucide-react'
+import { ShoppingBag, Search, CheckCircle, XCircle, Clock, ChevronDown, MessageCircle } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -17,6 +17,8 @@ interface Order {
   items_raw: string | null
   customer_name: string | null
   customer_phone: string | null
+  // WhatsApp del cliente con el mensaje listo: IaRadio no confirma ni cobra (spec 2026-10-21).
+  customer_wa_link?: string | null
   delivery_address: string | null
   payment_method: string | null
   confirmed_at: string | null
@@ -268,7 +270,18 @@ export default function OrdersPage() {
                       )}
                       {/* Ya confirmado: el cliente puede pedir cancelarlo por el chat (el agente le avisa al dueño). */}
                       {order.state === 'confirmed' && (
-                        <div className="mt-4">
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          {order.customer_wa_link && (
+                            <a
+                              href={order.customer_wa_link}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1.5 rounded-lg bg-green-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600 transition-colors"
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              Escribirle al cliente
+                            </a>
+                          )}
                           <button
                             onClick={() => {
                               if (window.confirm(`¿Cancelar el pedido #${order.order_number}?`)) {
