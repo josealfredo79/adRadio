@@ -259,7 +259,9 @@ class TestSuggestLandingTagline:
             await _cleanup([user_id])
 
     @pytest.mark.asyncio
-    async def test_falls_back_to_anthropic_after_2_openrouter_failures(self):
+    async def test_third_attempt_also_uses_the_free_chain(self):
+        # Anthropic sin saldo (decisión del dueño 2026-10-23): ningún intento
+        # se salta los modelos gratis.
         user_id = await _seed_user()
         try:
             async with AsyncSessionLocal() as db:
@@ -269,8 +271,7 @@ class TestSuggestLandingTagline:
                     out = await suggest_landing_tagline(body=TaglineSuggestRequest(), current_user=user)
             assert out.suggestions == ["Frase de respaldo"]
             assert mock.call_count == 3
-            assert mock.call_args_list[2].kwargs["force_anthropic"] is True
-            assert mock.call_args_list[0].kwargs["force_anthropic"] is False
+            assert all("force_anthropic" not in c.kwargs for c in mock.call_args_list)
         finally:
             await _cleanup([user_id])
 

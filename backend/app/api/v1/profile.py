@@ -389,10 +389,9 @@ async def suggest_landing_tagline(
     # Verificado en vivo 2026-08-09: el modelo gratis también puede pegarle
     # a un 429 de rate-limit del pool compartido de OpenRouter, no solo
     # devolver vacío — los 2 intentos gratis fallaron seguidos en una prueba
-    # real. Como este endpoint es de bajo volumen (un dueño de negocio
-    # generando tagline, no tráfico de bot), un 3er intento con Claude
-    # Haiku directo (force_anthropic=True) es un fallback confiable barato
-    # en vez de dejar al usuario con un 502.
+    # real. El 3er intento antes iba directo a Claude Haiku
+    # (force_anthropic=True), pero desde 2026-10-23 Anthropic no tiene saldo
+    # por decisión del dueño: los tres intentos recorren la cadena gratis.
     suggestions: list[str] = []
     last_error: Exception | None = None
     for _attempt in range(3):
@@ -401,7 +400,6 @@ async def suggest_landing_tagline(
                 [{"role": "user", "content": prompt}],
                 max_tokens=600, temperature=0.8,
                 anthropic_model="claude-haiku-4-5-20251001",
-                force_anthropic=(_attempt == 2),
             )
             # Claude (rama Anthropic) a veces envuelve el JSON en un code
             # fence de markdown (```json ... ```) aunque se le pida "solo
