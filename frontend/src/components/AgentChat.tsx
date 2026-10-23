@@ -131,6 +131,7 @@ export default function AgentChat({
   onClose,
   mascot3d = true,
   onEvent,
+  onReply,
   layout = 'sheet',
   onInfo,
   banner,
@@ -154,6 +155,8 @@ export default function AgentChat({
   // encabezado en 3D o en imagen fija, y avisar lo que pasa en la plática.
   mascot3d?: boolean
   onEvent?: (event: 'message' | 'confirmed' | 'whatsapp') => void
+  // El bot contestó: lo que hizo (cita, cupón, sello) puede cambiar la franja de arriba.
+  onReply?: () => void
   onClose: () => void
   // 'screen': el chat ES la pantalla, como una conversación de WhatsApp (app del
   // cliente /mi y su tarjeta /c/...): flecha atrás, ⓘ para la info del negocio
@@ -405,6 +408,7 @@ export default function AgentChat({
           },
         ]
       })
+      onReply?.()
       if (reply.trimStart().startsWith('✅')) {
         react('happy', 2500)
         onEvent?.('confirmed')

@@ -253,8 +253,8 @@ TOOLS = [
     {
         "name": "proponer_pedido",
         "description": "Prepara un pedido de este cliente con productos del catálogo. NO lo confirma: pregunta antes. "
-                       "Pide antes cómo va a pagar y, solo si el negocio entrega a domicilio, si lo quiere a domicilio "
-                       "(con dirección) o para recoger.",
+                       "Solo si el negocio entrega a domicilio, pregunta antes si lo quiere a domicilio (con dirección) "
+                       "o para recoger. No preguntes cómo va a pagar: eso lo acuerda con el negocio.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -272,10 +272,10 @@ TOOLS = [
                 },
                 "entrega": {"type": "string", "description": "'domicilio' o 'recoger'."},
                 "direccion": {"type": "string", "description": "Solo si es a domicilio."},
-                "pago": {"type": "string", "description": "Efectivo, tarjeta o transferencia."},
+                "pago": {"type": "string", "description": "Solo si el cliente ya dijo cómo va a pagar; si no, omítelo."},
                 "notas": {"type": "string"},
             },
-            "required": ["productos", "entrega", "pago"],
+            "required": ["productos", "entrega"],
         },
     },
     {
@@ -574,8 +574,8 @@ def _delivery_rule(advertiser: User) -> str:
     """La regla de pedidos del prompt según si el negocio entrega a domicilio
     (spec 2026-10-20-entrega-a-domicilio: sin definir = solo recoger)."""
     if advertiser.delivers_home:
-        return ("- Para un pedido necesitas: productos del catálogo (buscar_productos), si es a domicilio (con dirección) "
-                "o para recoger, y forma de pago.")
+        return ("- Para un pedido necesitas: productos del catálogo (buscar_productos) y si es a domicilio (con "
+                "dirección) o para recoger. No preguntes cómo va a pagar: lo acuerda con el negocio.")
     if advertiser.delivers_home is False:
         why = ("Este negocio NO entrega a domicilio: si el cliente pide que se lo lleven, dile con amabilidad que es "
                "para recoger en el local y ofrécele el pedido así.")
@@ -583,8 +583,8 @@ def _delivery_rule(advertiser: User) -> str:
         why = ("Este negocio no ha dicho si entrega a domicilio: si el cliente pide que se lo lleven, dile que lo "
                "consultas con el negocio (avisar_al_dueno) y mientras ofrécele el pedido para recoger.")
     return (f"- Todos los pedidos son para recoger en el local (entrega 'recoger'); no preguntes \"¿a domicilio o "
-            f"para recoger?\". {why}\n- Para un pedido necesitas: productos del catálogo (buscar_productos) y forma "
-            "de pago.")
+            f"para recoger?\". {why}\n- Para un pedido necesitas: productos del catálogo (buscar_productos). No "
+            "preguntes cómo va a pagar: lo acuerda con el negocio.")
 
 
 _ASKS_DELIVERY = re.compile(r"\b(domicilio|a mi casa|traen|traes|llevan|llevas|envio|envian|entregan)\b")
@@ -618,13 +618,16 @@ async def _tool_proponer_pedido(ctx: _Ctx, args: dict) -> dict:
     address = " ".join(str(args.get("direccion") or "").split())[:300]
     if delivery == "domicilio" and not address:
         return {"error": "Falta la dirección de entrega. Pregúntasela al cliente."}
-    payment = " ".join(str(args.get("pago") or "").split())[:50] or "Efectivo"
+    # Sin "Efectivo" por defecto: el pago lo acuerdan dueño y cliente (prueba real
+    # 2026-10-23: el modelo lo ponía sin que el cliente lo dijera).
+    payment = " ".join(str(args.get("pago") or "").split())[:50] or None
     ctx.pending = {
         "type": "order", "lines": lines, "delivery": delivery, "address": address, "payment": payment,
         "notes": " ".join(str(args.get("notas") or "").split())[:300], "total": total,
     }
     summary = (", ".join(f"{line['cantidad']} {line['nombre']}" for line in lines)
-               + f", {'a domicilio en ' + address if delivery == 'domicilio' else 'para recoger'}, pago: {payment}"
+               + f", {'a domicilio en ' + address if delivery == 'domicilio' else 'para recoger'}"
+               + (f", pago: {payment}" if payment else "")
                + (f", total aprox. ${total:,.0f}" if total else ""))
     ctx.pending["summary"] = summary
     result = {"listo_para_confirmar": summary,
@@ -1154,7 +1157,6 @@ async def _do_cancel(ctx: _Ctx, pending: dict) -> str:
 
 
 async def _do_order(ctx: _Ctx, pending: dict) -> str:
-    from app.services.loyalty_service import add_stamp, stamp_line
     from app.services.order_handoff import sent_to_business_text
     from app.services.widget_order_service import _notify_owner
 
@@ -1177,12 +1179,11 @@ async def _do_order(ctx: _Ctx, pending: dict) -> str:
                   quantity=line["cantidad"])
         for line in pending["lines"]
     ])
-    stamped = await add_stamp(ctx.db, ctx.advertiser, ctx.contact.id, "order", str(order.id))
+    # Sin sello al pedir: se gana al cobrar ("Cobré $___"), así un pedido de broma no suma.
     await ctx.db.commit()
     await _notify_owner(ctx.advertiser, ctx.contact, order, origin=ctx.origin, total=pending.get("total"))
-    loyalty = await stamp_line(ctx.db, ctx.advertiser, ctx.contact.id) if stamped else ""
     # IaRadio solo entrega el pedido: sin "confirmado" ni datos de pago (spec 2026-10-21).
-    return sent_to_business_text(ctx.advertiser, order, pending.get("total")) + loyalty
+    return sent_to_business_text(ctx.advertiser, order, pending.get("total"))
 
 
 async def _do_redeem(ctx: _Ctx) -> str:

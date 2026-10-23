@@ -985,10 +985,7 @@ async def process_inbound_message(
             pending_order.state = "confirmed"
             pending_order.confirmed_at = datetime.now(timezone.utc)
             await db.flush()
-            from app.services.loyalty_service import add_stamp, stamp_line
-
-            _stamped = await add_stamp(db, advertiser, pending_order.contact_id, "order", str(pending_order.id))
-
+            # Sin sello al pedir: se gana al cobrar ("Cobré $___"), así un pedido de broma no suma.
             from app.services.order_handoff import (
                 OLD_SEED_CONFIRMED,
                 OLD_SEED_OWNER_NOTIFY,
@@ -1018,8 +1015,6 @@ async def process_inbound_message(
             _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_confirmed")
             order_reply = (fill_order_template(_tpl, _values) if _tpl and _tpl.strip() != OLD_SEED_CONFIRMED
                            else sent_to_business_text(advertiser, pending_order, _total))
-            if _stamped:
-                order_reply += await stamp_line(db, advertiser, pending_order.contact_id)
             order_reply += portal_footer(pending_order.contact_id)
 
             _tpl_owner = await get_template(db, str(advertiser.id), "Pedido", "order_owner_notify")

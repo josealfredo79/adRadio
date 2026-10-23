@@ -2,7 +2,8 @@
 
 Es el regalo con valor que hace que el cliente prefiera la web a WhatsApp:
 el dueño define cuántos sellos y qué premio, y los sellos caen solos —
-cita marcada como completada, pedido confirmado. El regalo de bienvenida son
+cita marcada como completada, cobro con cliente ("Cobré $___"; un pedido
+suma al cobrarse, no al pedirse). El regalo de bienvenida son
 dos sellos extra: uno al abrir la tarjeta por primera vez y otro al activar
 los avisos web (que es lo que luego ahorra los WhatsApp cobrados).
 
@@ -195,7 +196,8 @@ async def bot_note(db: AsyncSession, advertiser: User, contact_id: uuid.UUID | N
     note = (
         f"TARJETA DE LEALTAD: {advertiser.business_name or 'el negocio'} tiene tarjeta de sellos en el "
         f"portal web del cliente. Al juntar {cfg['stamps_required']} sellos gana: {cfg['reward']}. "
-        "Se gana un sello por cada cita completada o pedido, y de regalo uno al abrir la tarjeta y otro "
+        "Se gana un sello por cada cita completada o compra (un pedido suma cuando el negocio lo cobra), y "
+        "de regalo uno al abrir la tarjeta y otro "
         "al activar los avisos en la web."
     )
     if contact_id is not None:

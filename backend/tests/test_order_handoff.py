@@ -14,6 +14,7 @@ from app.api.v1.portal import ORDER_STATE_LABELS
 from app.api.v1.template_seeds import SEED_TEMPLATES
 from app.database import AsyncSessionLocal
 from app.models.contact import Contact
+from app.models.loyalty_stamp import LoyaltyStamp
 from app.models.order import Order
 from app.models.template import MessageTemplate
 from app.models.user import User
@@ -176,8 +177,9 @@ class TestLink:
 class TestWhatsApp:
     @pytest.mark.asyncio
     async def test_caso1_caso2_caso3_whatsapp_order(self):
-        user_id, _ = await _seed_advertiser_and_contact(business_name="Pizzas Toño", delivers_home=True,
-                                                        payment_transfer=CLABE, whatsapp_number="+525500000002")
+        user_id, contact_id = await _seed_advertiser_and_contact(
+            business_name="Pizzas Toño", delivers_home=True, payment_transfer=CLABE, whatsapp_number="+525500000002",
+            loyalty_config={"enabled": True, "stamps_required": 5, "reward": "Pizza gratis"})
         await _seed_product(user_id, name="Pizza Pepperoni", price=150)
         try:
             async with AsyncSessionLocal() as db:
@@ -194,6 +196,11 @@ class TestWhatsApp:
             msg = _decoded(await _open(owner))
             assert "Hola Luis" in msg and "(total aprox. $300)" in msg and CLABE in msg
             assert "Responde a este número" not in owner
+            # Sin sello al pedir (2026-10-23): se gana al cobrar.
+            assert "Sumaste un sello" not in customer
+            async with AsyncSessionLocal() as db:
+                stamps = (await db.execute(select(LoyaltyStamp).where(LoyaltyStamp.contact_id == contact_id))).all()
+            assert stamps == []
         finally:
             await _wa_cleanup([user_id])
 
@@ -255,6 +262,28 @@ class TestAgent:
             assert "confirmado" not in out.text.lower() and "CLABE" not in out.text
         finally:
             await _agent_cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_order_without_payment_never_says_none_to_the_owner(self):
+        # Prueba real 2026-10-23: el cliente ya no dice cómo paga; el aviso al
+        # dueño no debe salir con "Pago: None".
+        import uuid
+
+        from app.services.order_handoff import sent_to_business_text
+        from app.services.widget_order_service import _notify_owner
+
+        owner = User(business_name="Tacos El Primo", email="dueno@test.com", whatsapp_number="+525500000001")
+        contact = Contact(name="Ana", phone="+529511234567")
+        order = Order(id=uuid.uuid4(), order_number=1, items_raw="2 Taco al pastor", customer_name="Ana",
+                      delivery_address="Para recoger en el negocio", payment_method=None)
+        with patch("app.core.email.send_new_order_email", new_callable=AsyncMock), \
+                patch("app.services.meta_service.send_whatsapp", new_callable=AsyncMock) as wa:
+            await _notify_owner(owner, contact, order, total=50.0)
+            await asyncio.sleep(0)
+        owner_msg = wa.await_args.args[1]
+        assert "NUEVO PEDIDO #0001" in owner_msg and "None" not in owner_msg and "Pago" not in owner_msg
+        customer = sent_to_business_text(owner, order, 50.0)
+        assert "None" not in customer and "💳" not in customer and "Efectivo" not in customer
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("connected", [False, True])

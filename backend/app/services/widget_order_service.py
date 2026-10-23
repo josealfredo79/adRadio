@@ -124,18 +124,16 @@ async def _advance(
     order.payment_method = message
     order.state = "confirmed"
     order.confirmed_at = datetime.now(timezone.utc)
-    from app.services.loyalty_service import add_stamp, stamp_line
     from app.services.order_handoff import order_total, sent_to_business_text
 
-    stamped = await add_stamp(db, advertiser, contact.id, "order", str(order.id))
+    # Sin sello al pedir: se gana al cobrar ("Cobré $___"), así un pedido de broma no suma.
     await db.commit()
-    loyalty = await stamp_line(db, advertiser, contact.id) if stamped else ""
 
     total = await order_total(db, order)
     await _notify_owner(advertiser, contact, order, total=total)
 
     # IaRadio solo entrega el pedido: sin "confirmado" ni datos de pago (spec 2026-10-21).
-    return sent_to_business_text(advertiser, order, total) + loyalty
+    return sent_to_business_text(advertiser, order, total)
 
 
 def where_line(order: Order, prefix: str = "") -> str:
@@ -181,8 +179,8 @@ async def _notify_owner(
             f"👤 Cliente: {order.customer_name}\n"
             f"📱 Teléfono: {contact.phone}\n"
             f"📍 {where_line(order, 'Dirección: ')}\n"
-            f"💳 Pago: {order.payment_method}\n"
-            f"────────────────"
+            + (f"💳 Pago: {order.payment_method}\n" if order.payment_method else "")
+            + "────────────────"
         )
         wa_notify = with_owner_link(wa_notify, wa_link and owner_short_link(order))
         try:

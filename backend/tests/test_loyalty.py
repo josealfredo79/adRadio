@@ -201,7 +201,8 @@ class TestAutomaticStamps:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
-    async def test_web_chat_order_confirmation_carries_the_stamp_line(self):
+    async def test_web_chat_order_does_not_stamp_until_it_is_paid(self):
+        # El sello llega al cobrar ("Cobré $___"), no al pedir: un pedido de broma no suma.
         from app.services.widget_order_service import _advance
 
         user_id, ana, _ = await _seed()
@@ -214,8 +215,8 @@ class TestAutomaticStamps:
                 user, contact = await db.get(User, user_id), await db.get(Contact, ana)
                 with patch("app.services.widget_order_service._notify_owner", AsyncMock()):
                     reply = await _advance(db, user, contact, order, "Efectivo")
-            assert "⭐ ¡Sumaste un sello! Llevas 1 de 3 para: Un corte gratis" in reply
-            assert await _stamps(ana) == ["order"]
+            assert "Pedido #0001 enviado" in reply and "Sumaste un sello" not in reply
+            assert await _stamps(ana) == []
         finally:
             await _cleanup(user_id)
 

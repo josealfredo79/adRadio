@@ -161,6 +161,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default function PortalPage() {
   const { token, promoId } = useParams<{ token: string; promoId?: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const isDesktop = useIsDesktop()
   const [chatPrefill, setChatPrefill] = useState<string | null>(null)
   // Una promo abre su página; todo lo demás, el chat.
@@ -263,6 +264,7 @@ export default function PortalPage() {
         prefill={chatPrefill}
         onClose={back}
         onInfo={() => setView('info')}
+        onReply={() => queryClient.invalidateQueries({ queryKey: ['portal', token] })}
         banner={<ChatStrip data={data} theme={theme} onOpen={() => setView('info')} />}
       />
     )
@@ -1013,7 +1015,7 @@ function LoyaltyCardView({
             ? `🎁 ¡Tu regalo de bienvenida! Ya tienes tu primer sello. Te faltan ${missing}.`
             : `Te faltan ${missing} ${missing === 1 ? 'sello' : 'sellos'} para tu premio.`}
       </p>
-      <p className="mt-1 text-xs opacity-80">Ganas un sello con cada cita o pedido.</p>
+      <p className="mt-1 text-xs opacity-80">Ganas un sello con cada cita o compra.</p>
     </div>
   )
 }

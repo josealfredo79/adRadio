@@ -47,8 +47,8 @@ export default function LoyaltySettingsCard() {
       </div>
       <p className="text-sm text-muted-foreground">
         Tus clientes juntan sellos en su página personal (la que el bot les manda por WhatsApp) y al llenar la
-        tarjeta ganan el premio que tú elijas. Los sellos caen solos: cada cita que marcas como completada, cada
-        pedido confirmado y cada cobro con cliente (en Cobrar o diciéndole al Copiloto "cobré 200 a Juan"). De regalo de bienvenida reciben uno al abrir su tarjeta y otro al activar los avisos —
+        tarjeta ganan el premio que tú elijas. Los sellos caen solos: cada cita que marcas como completada y
+        cada cobro con cliente (también el de un pedido) (en Cobrar o diciéndole al Copiloto "cobré 200 a Juan"). De regalo de bienvenida reciben uno al abrir su tarjeta y otro al activar los avisos —
         y cada aviso por ahí es un WhatsApp que no pagas.
       </p>
 

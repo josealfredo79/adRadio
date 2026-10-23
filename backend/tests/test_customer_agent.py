@@ -285,25 +285,31 @@ class TestBooking:
 
 class TestOrders:
     @pytest.mark.asyncio
-    async def test_order_with_catalog_products_and_stamp(self):
+    async def test_order_with_catalog_products_no_payment_no_stamp(self):
+        # Prueba real 2026-10-23: el cliente no dijo cómo paga y salía "efectivo";
+        # y el sello llegaba al pedir, antes de pagar. Ahora: sin pago inventado y
+        # el sello hasta que el negocio cobre.
         user_id, ana, pastor, _ = await _seed()
         r = Redis()
         try:
-            claude, _ = fake_claude(
+            claude, client = fake_claude(
                 resp(tool("buscar_productos", texto="pastor")),
                 resp(tool("proponer_pedido", productos=[{"producto_id": str(pastor), "cantidad": 2}],
-                          entrega="recoger", pago="Efectivo")),
+                          entrega="recoger")),
                 resp(text("2 tacos al pastor para recoger, $50. ¿Lo confirmo?"), stop="end_turn"),
             )
             out = await _say(user_id, ana, "mándame 2 de pastor para llevar", r, claude)
             assert out.confirm is True
+            assert "pago" not in tool_results(client)[1]["listo_para_confirmar"]
             out = await _say(user_id, ana, "Sí, confírmalo", r)
             assert "Pedido #0001 enviado a Tacos El Primo" in out.text and "2 Taco al pastor" in out.text
-            assert "Sumaste un sello" in out.text
+            assert "Sumaste un sello" not in out.text and "💳" not in out.text and "Efectivo" not in out.text
             async with AsyncSessionLocal() as db:
                 order = (await db.execute(select(Order).where(Order.contact_id == ana))).scalar_one()
                 items = (await db.execute(select(OrderItem).where(OrderItem.order_id == order.id))).scalars().all()
+                stamps = (await db.execute(select(LoyaltyStamp).where(LoyaltyStamp.contact_id == ana))).scalars().all()
             assert order.state == "confirmed" and [(i.product_id, i.quantity) for i in items] == [(pastor, 2)]
+            assert order.payment_method is None and stamps == []
         finally:
             await _cleanup(user_id)
 

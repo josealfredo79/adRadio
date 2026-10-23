@@ -66,8 +66,8 @@ def sent_to_business_text(advertiser: User, order: Order, total: float | None = 
         f"📦 *Pedido #{order.order_number:04d} enviado a {business_name(advertiser)}*\n"
         f"🛒 {order.items_raw}{total_line}\n"
         f"📍 {where_text(order.delivery_address)}\n"
-        f"💳 {order.payment_method or 'Efectivo'}\n\n"
-        "Te escriben por WhatsApp para confirmar tu pedido y acordar el pago 🙌"
+        + (f"💳 {order.payment_method}\n" if order.payment_method else "")
+        + "\nTe escriben por WhatsApp para confirmar tu pedido y acordar el pago 🙌"
     )
 
 
