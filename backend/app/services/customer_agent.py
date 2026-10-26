@@ -1256,7 +1256,10 @@ async def handle(
 
         answer = parse_spoken_yes_no(message)
         if answer is not None:
-            await redis.delete(key)
+            # Borrar es el candado: si tocó "Sí" dos veces seguidas, solo la
+            # primera lo borra y ejecuta; la otra no crea un segundo pedido.
+            if not await redis.delete(key):
+                return AgentReply("Ya quedó 👍 ¿Te ayudo con algo más?")
             if answer is False:
                 return AgentReply("Va, no lo hago 👍 ¿Te ayudo con algo más?")
             await redis.set(f"{ACTIVE_PREFIX}{contact.id}", "1", ex=ACTIVE_TTL)

@@ -169,9 +169,8 @@ async def _notify_owner(
     )
 
     if get_owner_number(advertiser):
-        from app.services.meta_service import send_whatsapp
+        from app.services.owner_notify import notify_owner
 
-        owner_number = get_owner_number(advertiser)
         wa_notify = (
             f"📦 *NUEVO PEDIDO #{order.order_number:04d}* ({origin})\n"
             f"────────────────\n"
@@ -184,6 +183,6 @@ async def _notify_owner(
         )
         wa_notify = with_owner_link(wa_notify, wa_link and owner_short_link(order))
         try:
-            await send_whatsapp(owner_number, wa_notify, advertiser=advertiser)
+            await notify_owner(advertiser, wa_notify)
         except Exception:
             logger.warning("[WIDGET-ORDER] Failed to notify owner via WhatsApp", exc_info=True)

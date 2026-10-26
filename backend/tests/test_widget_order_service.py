@@ -14,6 +14,7 @@ from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.user import User
 from app.services.widget_order_service import NEEDS_CONTACT_REPLY, handle_widget_order
+from tests.test_owner_notify import central_wa
 
 
 async def _seed_user(**overrides):
@@ -185,12 +186,12 @@ class TestHandleWidgetOrder:
             await _cleanup([user_id])
 
     @pytest.mark.asyncio
-    async def test_notifies_owner_via_whatsapp_only_when_connected(self):
+    async def test_notifies_owner_via_whatsapp(self):
         user_id = await _seed_user(whatsapp_number="+525500001111")
         contact_id = await _seed_contact(user_id)
         try:
             with patch("app.core.email.send_new_order_email", new_callable=AsyncMock), \
-                 patch("app.services.meta_service.send_whatsapp", new_callable=AsyncMock) as mock_wa:
+                 central_wa() as mock_wa:
                 mock_wa.return_value = ("wamid.x", None)
                 async with AsyncSessionLocal() as db:
                     user = await db.get(User, user_id)

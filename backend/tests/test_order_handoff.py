@@ -42,6 +42,7 @@ from tests.test_order_item_whatsapp_integration import (
     _seed_product,
     _send_whatsapp,
 )
+from tests.test_owner_notify import central_wa
 from tests.test_widget_order_service import _cleanup, _seed_contact, _seed_user
 
 CLABE = "BBVA, CLABE 012345678901234567, a nombre de Mary"
@@ -72,7 +73,7 @@ async def _web_order(user_id, contact_id, pay="Transferencia", address="Calle Hi
         user, contact = await db.get(User, user_id), await db.get(Contact, contact_id)
         await handle_widget_order(db, user, contact, "quiero pedir 2 comidas corridas")
     with patch("app.core.email.send_new_order_email", new_callable=AsyncMock) as email, \
-            patch("app.services.meta_service.send_whatsapp", new_callable=AsyncMock) as wa:
+            central_wa() as wa:
         steps = ["Juan Pérez"] + ([address] if address else []) + [pay]
         for step in steps:
             async with AsyncSessionLocal() as db:
@@ -145,7 +146,7 @@ class TestShortLink:
                 await handle_widget_order(db, user, contact, "quiero pedir " + ", ".join(
                     f"{n} órdenes de enchiladas verdes con pollo y crema" for n in range(1, 9)))
             with patch("app.core.email.send_new_order_email", new_callable=AsyncMock), \
-                    patch("app.services.meta_service.send_whatsapp", new_callable=AsyncMock) as wa:
+                    central_wa() as wa:
                 for step in ("Juan Pérez", "Calle Hidalgo 5, Barrio de San Pedro, junto a la tienda", "Transferencia"):
                     async with AsyncSessionLocal() as db:
                         user, contact = await db.get(User, user_id), await db.get(Contact, contact_id)
@@ -277,7 +278,7 @@ class TestAgent:
         order = Order(id=uuid.uuid4(), order_number=1, items_raw="2 Taco al pastor", customer_name="Ana",
                       delivery_address="Para recoger en el negocio", payment_method=None)
         with patch("app.core.email.send_new_order_email", new_callable=AsyncMock), \
-                patch("app.services.meta_service.send_whatsapp", new_callable=AsyncMock) as wa:
+                central_wa() as wa:
             await _notify_owner(owner, contact, order, total=50.0)
             await asyncio.sleep(0)
         owner_msg = wa.await_args.args[1]

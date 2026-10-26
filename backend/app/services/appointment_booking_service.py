@@ -388,9 +388,8 @@ async def _notify_owner(advertiser: User, appointment: Appointment, channel: str
     )
 
     if get_owner_number(advertiser):
-        from app.services.meta_service import send_whatsapp
+        from app.services.owner_notify import notify_owner
 
-        owner_number = get_owner_number(advertiser)
         origen = "desde tu página web" if channel == "widget" else "desde WhatsApp"
         wa_notify = (
             f"📅 *NUEVA CITA* ({origen})\n"
@@ -402,6 +401,6 @@ async def _notify_owner(advertiser: User, appointment: Appointment, channel: str
             f"────────────────"
         )
         try:
-            await send_whatsapp(owner_number, wa_notify, advertiser=advertiser)
+            await notify_owner(advertiser, wa_notify)
         except Exception:
             logger.warning("[APPT-BOOKING] Failed to notify owner via WhatsApp", exc_info=True)

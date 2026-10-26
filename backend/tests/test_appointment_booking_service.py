@@ -18,6 +18,7 @@ from app.services.appointment_booking_service import (
     handle_appointment_booking,
     parse_spanish_date,
 )
+from tests.test_owner_notify import central_wa
 
 
 class TestParseSpanishDate:
@@ -325,7 +326,7 @@ class TestHandleAppointmentBooking:
             await _cleanup([user_id])
 
     @pytest.mark.asyncio
-    async def test_notifies_owner_via_whatsapp_only_when_connected(self, fake_redis):
+    async def test_notifies_owner_via_whatsapp(self, fake_redis):
         user_id = await _seed_user(
             whatsapp_number="+525500001111",
             business_hours={
@@ -337,7 +338,7 @@ class TestHandleAppointmentBooking:
         contact_id = await _seed_contact(user_id)
         try:
             with patch("app.core.email.send_new_appointment_email", new_callable=AsyncMock), \
-                 patch("app.services.meta_service.send_whatsapp", new_callable=AsyncMock) as mock_wa:
+                 central_wa() as mock_wa:
                 mock_wa.return_value = ("wamid.x", None)
                 for msg in ["quiero agendar una cita", "mañana", "1", "Ana"]:
                     async with AsyncSessionLocal() as db:
@@ -368,7 +369,7 @@ class TestHandleAppointmentBooking:
         contact_id = await _seed_contact(user_id)
         try:
             with patch("app.core.email.send_new_appointment_email", new_callable=AsyncMock), \
-                 patch("app.services.meta_service.send_whatsapp", new_callable=AsyncMock) as mock_wa:
+                 central_wa() as mock_wa:
                 mock_wa.return_value = ("wamid.x", None)
                 for msg in ["quiero agendar una cita", "mañana", "1", "Ana"]:
                     async with AsyncSessionLocal() as db:

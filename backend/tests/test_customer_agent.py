@@ -36,8 +36,7 @@ class Redis(_FakeRedis):
         self.store[k] = v
 
     async def delete(self, *keys):
-        for k in keys:
-            self.store.pop(k, None)
+        return sum(self.store.pop(k, None) is not None for k in keys)
 
 
 @pytest.fixture(autouse=True)
@@ -284,6 +283,48 @@ class TestBooking:
 
 
 class TestOrders:
+    @pytest.mark.asyncio
+    async def test_double_yes_creates_one_order(self):
+        # Revisión 2026-10-23: dos "Sí" casi juntos leían la misma confirmación y
+        # creaban dos pedidos (y dos avisos que Meta cobra).
+        import asyncio
+
+        both_read = asyncio.Event()
+        reads = []
+
+        class SlowRedis(Redis):
+            async def get(self, k):
+                value = await super().get(k)
+                if both_read.is_set() is False and k.startswith(agent.PENDING_PREFIX) and value:
+                    # Las dos peticiones leen la confirmación antes de que alguna la borre.
+                    reads.append(k)
+                    if len(reads) == 2:
+                        both_read.set()
+                    await asyncio.wait_for(both_read.wait(), 2)
+                return value
+
+        user_id, ana, pastor, _ = await _seed()
+        r = SlowRedis()
+        try:
+            claude, _ = fake_claude(
+                resp(tool("proponer_pedido", productos=[{"producto_id": str(pastor), "cantidad": 1}],
+                          entrega="recoger")),
+                resp(text("1 taco al pastor para recoger. ¿Lo confirmo?"), stop="end_turn"),
+            )
+            assert (await _say(user_id, ana, "uno de pastor para llevar", r, claude)).confirm is True
+            # Los patch de _say se cruzan al correr en paralelo y alguno quedaría
+            # puesto para las pruebas que siguen; este de afuera deja todo como estaba.
+            with patch("app.services.appointment_booking_service._notify_owner", AsyncMock()), \
+                    patch("app.services.widget_order_service._notify_owner", AsyncMock()), \
+                    patch("app.services.customer_agent._owner_text", AsyncMock()):
+                first, second = await asyncio.gather(_say(user_id, ana, "Sí", r), _say(user_id, ana, "Sí", r))
+            async with AsyncSessionLocal() as db:
+                orders = (await db.execute(select(Order).where(Order.contact_id == ana))).scalars().all()
+            assert len(orders) == 1
+            assert sorted(["Pedido #0001" in first.text, "Pedido #0001" in second.text]) == [False, True]
+        finally:
+            await _cleanup(user_id)
+
     @pytest.mark.asyncio
     async def test_order_with_catalog_products_no_payment_no_stamp(self):
         # Prueba real 2026-10-23: el cliente no dijo cómo paga y salía "efectivo";
