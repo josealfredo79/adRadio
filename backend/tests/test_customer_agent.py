@@ -117,12 +117,12 @@ async def _cleanup(user_id):
     await engine.dispose()
 
 
-async def _say(user_id, contact_id, message, redis, claude=None):
+async def _say(user_id, contact_id, message, redis, claude=None, owner_text=None):
     async with AsyncSessionLocal() as db:
         user, contact = await db.get(User, user_id), await db.get(Contact, contact_id)
         with patch("app.services.appointment_booking_service._notify_owner", AsyncMock()), \
                 patch("app.services.widget_order_service._notify_owner", AsyncMock()), \
-                patch("app.services.customer_agent._owner_text", AsyncMock()):
+                patch("app.services.customer_agent._owner_text", owner_text or AsyncMock()):
             if claude:
                 with claude:
                     return await agent.handle(db, redis, user, contact, message, [])
@@ -257,9 +257,40 @@ class TestBooking:
             )
             out = await _say(user_id, ana, "cancela mi cita", r, claude)
             assert out.confirm is True and client.messages.create.await_count == 4
-            await _say(user_id, ana, "sí", r)
+            owner_text = AsyncMock()
+            await _say(user_id, ana, "sí", r, owner_text=owner_text)
             async with AsyncSessionLocal() as db:
                 assert (await db.get(Appointment, appt_id)).status == "cancelled"
+            # Fuera de 24 h el aviso va con la plantilla de cancelación (2026-10-27)
+            name, params = owner_text.await_args.kwargs["template"]
+            assert name == settings.IARADIO_CANCEL_TEMPLATE_NAME
+            assert params[0] == "Ana López" and params[1].startswith("su cita del ")
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_moved_appointment_notice_says_it_is_not_new(self):
+        # Fuera de 24 h va por cita_nueva_dueno: el detalle debe dejar claro que es un cambio (2026-10-27)
+        user_id, ana, *_ = await _seed()
+        async with AsyncSessionLocal() as db:
+            appt = Appointment(advertiser_id=user_id, contact_id=ana, customer_name="Ana", service="Corte",
+                               scheduled_at=datetime.now(timezone.utc) + timedelta(days=5), status="confirmed")
+            db.add(appt)
+            await db.commit()
+            appt_id = appt.id
+        when = _next_open_day()
+        r = Redis()
+        try:
+            claude, _ = fake_claude(
+                resp(tool("proponer_cambio_cita", cita_id=str(appt_id), fecha_hora=when.strftime("%Y-%m-%dT%H:%M"))),
+                resp(text("¿Muevo tu cita? ¿Lo confirmo?"), stop="end_turn"),
+            )
+            assert (await _say(user_id, ana, "muéveme la cita", r, claude)).confirm is True
+            owner_text = AsyncMock()
+            await _say(user_id, ana, "sí", r, owner_text=owner_text)
+            name, params = owner_text.await_args.kwargs["template"]
+            assert name == settings.IARADIO_APPT_TEMPLATE_NAME
+            assert params[1].startswith("CAMBIO DE HORARIO, no es cita nueva: Ana López")
         finally:
             await _cleanup(user_id)
 
@@ -507,8 +538,11 @@ class TestCouponsAndOrderStatus:
             assert tool_results(client)[0]["pedidos"][0]["estado"] == "enviado al negocio" and out.confirm is True
             async with AsyncSessionLocal() as db:
                 assert (await db.get(Order, order_id)).state == "confirmed"
-            out = await _say(user_id, ana, "sí", r)
+            owner_text = AsyncMock()
+            out = await _say(user_id, ana, "sí", r, owner_text=owner_text)
             assert "cancelé tu pedido #0007" in out.text
+            name, params = owner_text.await_args.kwargs["template"]
+            assert name == settings.IARADIO_CANCEL_TEMPLATE_NAME and params[1].startswith("su pedido #0007 (")
             async with AsyncSessionLocal() as db:
                 assert (await db.get(Order, order_id)).state == "cancelled"
         finally:
@@ -680,3 +714,15 @@ def test_appointment_wording_without_service():
     assert agent._tu_cita("Mesa para 4") == "tu cita de Mesa para 4"
     assert agent._tu_cita("Cita general") == "tu cita"
     assert agent._tu_cita("Cita de valoración") == "tu cita de valoración"
+
+
+
+@pytest.mark.asyncio
+async def test_owner_text_passes_template_to_central(monkeypatch):
+    ctx = SimpleNamespace(advertiser=SimpleNamespace(id=uuid.uuid4()))
+    monkeypatch.setattr("app.services.platform_whatsapp.platform_enabled", lambda: True)
+    monkeypatch.setattr("app.services.owner_question_service.owner_number", lambda _a: "5219530000000")
+    with patch("app.services.platform_whatsapp.send_platform_text", AsyncMock(return_value=("w", None))) as send:
+        await agent._owner_text(ctx, "❌ Cita cancelada", template=("cancelacion_cliente_dueno", ["Ana", "su cita"]))
+    send.assert_awaited_once_with("5219530000000", "❌ Cita cancelada",
+                                  template=("cancelacion_cliente_dueno", ["Ana", "su cita"]))

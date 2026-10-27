@@ -1139,7 +1139,13 @@ async def _do_move(ctx: _Ctx, pending: dict) -> str:
         except Exception:
             logger.warning("[AGENT] Google Calendar update failed", exc_info=True)
     await ctx.db.commit()
-    await _owner_text(ctx, f"🔁 *Cita movida {ctx.origin}*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(when)}")
+    # Fuera de 24 h va como cita nueva en el horario nuevo (no hay plantilla de "cita movida")
+    await _owner_text(ctx, f"🔁 *Cita movida {ctx.origin}*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(when)}",
+                      template=(settings.IARADIO_APPT_TEMPLATE_NAME, [
+                          _spanish_when(when),
+                          f"CAMBIO DE HORARIO, no es cita nueva: {_who(ctx)} movió su cita a esta hora · "
+                          f"Servicio: {appt.service}",
+                      ]))
     return f"✅ Listo, {_tu_cita(appt.service)} quedó el {_spanish_when(when)}."
 
 
@@ -1158,7 +1164,9 @@ async def _do_cancel(ctx: _Ctx, pending: dict) -> str:
         except Exception:
             logger.warning("[AGENT] Google Calendar delete failed", exc_info=True)
     await ctx.db.commit()
-    await _owner_text(ctx, f"❌ *Cita cancelada {ctx.origin}*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(appt.scheduled_at)}")
+    await _owner_text(ctx, f"❌ *Cita cancelada {ctx.origin}*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(appt.scheduled_at)}",
+                      template=(settings.IARADIO_CANCEL_TEMPLATE_NAME, [
+                          _who(ctx), f"su cita del {_spanish_when(appt.scheduled_at)}"]))
     return f"Listo, cancelé {_tu_cita(appt.service)}. Cuando quieras agendamos otra 🙌"
 
 
@@ -1227,18 +1235,27 @@ async def _do_cancel_order(ctx: _Ctx, pending: dict) -> str:
     order.state = "cancelled"
     await remove_stamp(ctx.db, ctx.contact.id, "order", str(order.id))
     await ctx.db.commit()
-    await _owner_text(ctx, f"❌ *Pedido cancelado desde la web*\n👤 {ctx.contact.name}\n🛒 #{order.order_number:04d} {order.items_raw}")
+    await _owner_text(ctx, f"❌ *Pedido cancelado desde la web*\n👤 {ctx.contact.name}\n🛒 #{order.order_number:04d} {order.items_raw}",
+                      template=(settings.IARADIO_CANCEL_TEMPLATE_NAME, [
+                          _who(ctx), f"su pedido #{order.order_number:04d} ({(order.items_raw or 'sin detalle')[:600]})"]))
     return f"Listo, cancelé tu pedido #{order.order_number:04d}. Cuando quieras pedimos otro 🙌"
 
 
-async def _owner_text(ctx: _Ctx, body: str) -> None:
+def _who(ctx: _Ctx) -> str:
+    """Nombre para una variable de plantilla: Meta rechaza las vacías."""
+    return (ctx.contact.name or "").strip() or "Un cliente"
+
+
+async def _owner_text(ctx: _Ctx, body: str, template: tuple[str, list[str]] | None = None) -> None:
+    """Por el central, que sabe si hay ventana de 24 h; fuera de ella va `template`.
+    No por notify_owner: su ruta por el número del negocio no ve la ventana."""
     from app.services.owner_question_service import owner_number
     from app.services.platform_whatsapp import platform_enabled, send_platform_text
 
     to = owner_number(ctx.advertiser)
     if platform_enabled() and to:
         try:
-            await send_platform_text(to, body)
+            await send_platform_text(to, body, template=template)
         except Exception:
             logger.warning("[AGENT] owner notify failed", exc_info=True)
 

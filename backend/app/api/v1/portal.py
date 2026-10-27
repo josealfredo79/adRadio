@@ -234,6 +234,7 @@ async def _notify_owner_cancelled(advertiser: User, appt: Appointment) -> None:
     """Por el número central de IaRadio si está configurado — es el único
     canal hacia el dueño que no depende de que él le haya escrito a su
     propio bot. Sin él, la cancelación se ve igual en el dashboard."""
+    from app.services.customer_agent import _spanish_when
     from app.services.owner_question_service import owner_number
     from app.services.platform_whatsapp import platform_enabled, send_platform_text
 
@@ -245,6 +246,8 @@ async def _notify_owner_cancelled(advertiser: User, appt: Appointment) -> None:
         await send_platform_text(
             to,
             f"❌ *Cita cancelada desde el portal*\n👤 {appt.customer_name}\n📌 {appt.service}\n🕐 {when}",
+            template=(settings.IARADIO_CANCEL_TEMPLATE_NAME, [
+                (appt.customer_name or "").strip() or "Un cliente", f"su cita del {_spanish_when(appt.scheduled_at)}"]),
         )
     except Exception:
         logger.exception("[PORTAL] owner notify failed advertiser=%s", advertiser.id)

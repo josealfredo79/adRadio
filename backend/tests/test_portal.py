@@ -3,6 +3,7 @@
 un link nunca debe mostrar ni dejar cancelar nada de otro contacto."""
 import uuid
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -516,3 +517,19 @@ class TestChatFromPromo:
             assert redis.setex.await_count == 1  # solo el vínculo sesión→contacto
         finally:
             await _cleanup(s["user_id"])
+
+
+@pytest.mark.asyncio
+async def test_cancel_notice_carries_cancel_template(monkeypatch):
+    # Fuera de 24 h la genérica no existe en Meta: va con cancelacion_cliente_dueno (2026-10-27)
+    from app.api.v1.portal import _notify_owner_cancelled
+
+    monkeypatch.setattr("app.services.platform_whatsapp.platform_enabled", lambda: True)
+    monkeypatch.setattr("app.services.owner_question_service.owner_number", lambda _a: "5219530000000")
+    appt = SimpleNamespace(customer_name="Ana", service="Corte",
+                           scheduled_at=datetime(2026, 10, 28, 16, 0, tzinfo=timezone.utc))
+    with patch("app.services.platform_whatsapp.send_platform_text", new=AsyncMock(return_value=("w", None))) as send:
+        await _notify_owner_cancelled(SimpleNamespace(id="x"), appt)
+    name, params = send.await_args.kwargs["template"]
+    assert name == settings.IARADIO_CANCEL_TEMPLATE_NAME
+    assert params == ["Ana", "su cita del miércoles 28 de octubre a las 10:00 am"]
