@@ -25,7 +25,8 @@ _PRODUCT_LINK_RE = re.compile(
 
 
 def _format_price(price) -> str | None:
-    return f"${price:,.2f}" if price is not None else None
+    # $25, no $25.00 (criterio del dueño); los centavos reales se quedan
+    return f"${price:,.2f}".removesuffix(".00") if price is not None else None
 
 
 async def extract_product_cards(reply_text: str, db: AsyncSession, *, limit: int = 5) -> list[dict]:

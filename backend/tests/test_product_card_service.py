@@ -52,7 +52,7 @@ class TestExtractProductCards:
             assert len(out) == 1
             assert out[0]["name"] == "Taco al pastor"
             assert out[0]["photo_url"] == "https://x/taco.jpg"
-            assert out[0]["price"] == "$25.00"
+            assert out[0]["price"] == "$25"
             assert out[0]["url"] == f"/p/{user_id}/{product_id}"
         finally:
             await _cleanup([user_id])

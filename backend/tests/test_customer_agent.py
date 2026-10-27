@@ -678,3 +678,5 @@ def test_appointment_wording_without_service():
     assert agent._tu_cita("") == "tu cita"
     assert agent._tu_cita(None) == "tu cita"
     assert agent._tu_cita("Mesa para 4") == "tu cita de Mesa para 4"
+    assert agent._tu_cita("Cita general") == "tu cita"
+    assert agent._tu_cita("Cita de valoración") == "tu cita de valoración"

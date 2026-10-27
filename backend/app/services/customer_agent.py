@@ -543,9 +543,12 @@ _PRODUCT_STOPWORDS = {
 
 
 def _tu_cita(service: str | None) -> str:
-    """'tu cita de Corte', o solo 'tu cita' si no hay servicio (evita "tu cita de Cita")."""
+    """'tu cita de Corte', o solo 'tu cita' si no hay servicio (evita "tu cita de Cita general")."""
     name = (service or "").strip()
-    return f"tu cita de {name}" if name and name.lower() != "cita" else "tu cita"
+    if name.lower().startswith("cita"):
+        rest = name[4:].strip()  # "Cita de valoración" → "tu cita de valoración"
+        return "tu cita" if not rest or rest.lower() == "general" else f"tu cita {rest}"
+    return f"tu cita de {name}" if name else "tu cita"
 
 
 async def _tool_buscar_productos(ctx: _Ctx, args: dict) -> dict:
@@ -830,7 +833,10 @@ def _stable_system(advertiser: User) -> str:
         "Servicios que se agendan (cada uno aparta su duración): "
         + "; ".join(f"{s['name']} ({s['minutes']} min)" for s in services)
         + ". Si el cliente no dijo cuál, pregúntale antes de buscar horarios.\n"
-        if services else ""
+        if services else
+        # Sin lista, Gemini buscaba en consultar_negocio, no veía "citas" y decía que no se agenda
+        "Este negocio no tiene lista de servicios: cualquier cita se agenda igual. No uses consultar_negocio para "
+        "saber si se puede agendar; pregunta el día y la hora y usa horarios_libres.\n"
     )
     staff = [p for p in (advertiser.staff or []) if isinstance(p, dict) and p.get("name")]
     staff_line = (
