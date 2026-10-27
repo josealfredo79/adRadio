@@ -59,6 +59,12 @@ class TestPromptMode:
         assert OWNER_QUESTION_MARKER not in system
         assert "No tengo ese dato a la mano" in system
 
+    async def test_default_prompt_does_not_promise_to_ask_the_team(self):
+        # En la web nadie le pasa la pregunta al dueño: "lo consulto con el
+        # equipo y te aviso" sería una promesa que no se cumple.
+        assert "ofrece confirmarlo con el equipo" not in await self._system_for(False)
+        assert "ofrece confirmarlo con el equipo" in await self._system_for(True)
+
 
 class TestPlatformSend:
     def _enable(self, monkeypatch):

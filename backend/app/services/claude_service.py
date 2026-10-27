@@ -139,11 +139,14 @@ async def generate_bot_response(
      Si aplica la regla siguiente (algo que no aparece en el contexto), usa esta
      línea en vez de ofrecer confirmarlo con el equipo.
 """
+        unknown_feature_offer = "ofrece confirmarlo con el equipo"
     else:
         missing_info_rule = f"""   - Si no tienes la información, di algo como:
      "No tengo ese dato a la mano 🙏 ¿Te ayudo con algo más de {business_name}?"
      No le digas que lo consulte "con nosotros" o "con el equipo": ya está hablando con el negocio.
 """
+        # Sin ask_owner nadie le pasa la pregunta al dueño: ofrecerlo sería una promesa falsa.
+        unknown_feature_offer = "ofrece ayuda con lo que sí hay, sin prometer consultarlo ni avisarle después"
 
     system = f"""Eres {bot_name}, el asistente virtual de {business_name}.
 Tu personalidad es: {bot_personality}.
@@ -163,7 +166,7 @@ Tu personalidad es: {bot_personality}.
      producto, una integración, un canal como SMS o email, un método de pago, etc.),
      NO lo confirmes ni lo describas como si existiera, aunque la pregunta sea
      sugerente o de sí/no. Di con claridad que no tienes registro de esa función y
-     ofrece confirmarlo con el equipo. Ser preciso es más importante que sonar
+     {unknown_feature_offer}. Ser preciso es más importante que sonar
      completo.
 
 2. PREGUNTAS FUERA DEL TEMA DEL NEGOCIO
