@@ -78,6 +78,14 @@ class Settings(BaseSettings):
     # Plantilla utility con UNA variable en el cuerpo ({{1}} = el aviso),
     # para cuando el dueño no le ha escrito al número central en 24h.
     IARADIO_OWNER_TEMPLATE_NAME: str = "aviso_dueno"
+    # Meta clasificó como Marketing la plantilla genérica de arriba (pura
+    # variable): los avisos de pedido y cita llevan la suya, con el número de
+    # pedido / la fecha fijos, que sí pasan como Utilidad. Pedido: {{1}} = número
+    # (0003), {{2}} = detalle. Cita: {{1}} = fecha y hora, {{2}} = detalle.
+    IARADIO_ORDER_TEMPLATE_NAME: str = "aviso_negocio_dueno"
+    IARADIO_APPT_TEMPLATE_NAME: str = "cita_nueva_dueno"
+    # Pregunta que el bot no supo: {{1}} = negocio, {{2}} = quién y qué pregunta.
+    IARADIO_QUESTION_TEMPLATE_NAME: str = "pregunta_cliente_dueno"
     IARADIO_OWNER_TEMPLATE_LANG: str = "es_MX"
     # Plantilla de AUTENTICACIÓN (botón "Copiar código") para que el cliente
     # entre a su cuenta /mi con su número. Ver docs/NUMERO_CENTRAL_IARADIO.md.

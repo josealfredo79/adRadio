@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.knowledge_base import KnowledgeBase
 from app.models.message import Message
 from app.models.owner_question import OwnerQuestion
@@ -99,6 +100,14 @@ async def escalate_to_owner(
     to = owner_number(advertiser)
     if not to:
         return no_info_reply(business_name)
+    # Tope diario propio (no el de pedidos y citas): fuera de la ventana de
+    # 24h cada pregunta es una plantilla que Meta cobra.
+    from app.services.owner_notify import QUESTION_DAILY_CAP, _count_central
+
+    n = await _count_central(advertiser, "owner_q")
+    if n is not None and n > QUESTION_DAILY_CAP:
+        logger.info("[OWNER Q] advertiser=%s reached the daily cap, not escalating", advertiser.id)
+        return no_info_reply(business_name)
 
     oq = OwnerQuestion(
         advertiser_id=advertiser.id,
@@ -115,7 +124,8 @@ async def escalate_to_owner(
         "Contéstame aquí con la respuesta (texto o nota de voz) y se la paso. "
         "Me la aprendo para la próxima vez 🧠"
     )
-    wamid, err = await send_platform_text(to, notice)
+    template = (settings.IARADIO_QUESTION_TEMPLATE_NAME, [business_name, f"{customer_name} pregunta: {question}"])
+    wamid, err = await send_platform_text(to, notice, template=template)
     if not wamid:
         logger.warning("[OWNER Q] Could not reach owner of advertiser=%s: %s", advertiser.id, err)
         oq.status = "undeliverable"

@@ -38,6 +38,7 @@ from app.services.owner_question_service import (
     is_registered_owner,
 )
 from app.services.platform_whatsapp import (
+    mark_window_open,
     platform_enabled,
     platform_token,
     send_platform_text,
@@ -334,6 +335,8 @@ async def meta_incoming(
                 # manda a su negocio. Cualquier otra persona, si este número
                 # también es el bot de una cuenta (la de IaRadio, que atiende a
                 # interesados), le contesta ese bot como siempre.
+                for msg in messages:
+                    await mark_window_open(msg.get("from", ""), msg.get("timestamp"))
                 bot_owner = (await db.execute(
                     select(User.id).where(User.meta_phone_number_id == phone_number_id)
                 )).first()

@@ -64,6 +64,8 @@ class TestPlatformSend:
     def _enable(self, monkeypatch):
         monkeypatch.setattr(platform_whatsapp.settings, "IARADIO_WA_PHONE_NUMBER_ID", "999")
         monkeypatch.setattr(platform_whatsapp.settings, "IARADIO_WA_TOKEN", "tok")
+        # El dueño escribió en las últimas 24h (sin ventana: test_owner_notify caso 8).
+        monkeypatch.setattr(platform_whatsapp, "_window_open", AsyncMock(return_value=True))
 
     async def test_disabled_without_config(self, monkeypatch):
         monkeypatch.setattr(platform_whatsapp.settings, "IARADIO_WA_PHONE_NUMBER_ID", "")
@@ -127,6 +129,9 @@ class TestEscalate:
         assert isinstance(oq, OwnerQuestion) and oq.owner_wamid == "wamid.owner"
         assert sp.call_args.args[0] == "+5215512345678"
         assert "¿Tienen envío?" in sp.call_args.args[1]
+        # Fuera de la ventana de 24h va su propia plantilla (Utilidad).
+        assert sp.call_args.kwargs["template"] == (
+            "pregunta_cliente_dueno", ["Taquería Don Pepe", "Ana pregunta: ¿Tienen envío?"])
 
     async def test_unreachable_owner_does_not_leave_customer_waiting(self):
         owner, db = _owner(), _db()
@@ -136,6 +141,24 @@ class TestEscalate:
             )
         assert "No tengo ese dato" in reply
         assert db.add.call_args.args[0].status == "undeliverable"
+
+    async def test_daily_cap_stops_escalating(self):
+        """Cada pregunta fuera de 24h es una plantilla cobrada: mismo tope que pedidos y citas."""
+        from app.services import owner_notify
+
+        owner, db = _owner(), _db()
+        with (
+            patch.object(owner_notify, "_count_central",
+                         AsyncMock(return_value=owner_notify.QUESTION_DAILY_CAP + 1)) as count,
+            patch.object(svc, "send_platform_text", AsyncMock()) as sp,
+        ):
+            reply = await svc.escalate_to_owner(
+                db, advertiser=owner, contact_id=None, customer_phone="+52", customer_name="Ana", question="?",
+            )
+        assert "No tengo ese dato" in reply
+        sp.assert_not_awaited()
+        db.add.assert_not_called()
+        assert count.await_args.args[1] == "owner_q"  # no gasta el tope de pedidos y citas
 
 
 class TestOwnerAnswer:

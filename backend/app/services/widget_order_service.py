@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.contact import Contact
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -149,6 +150,7 @@ async def _notify_owner(
     from app.services.order_handoff import (
         customer_wa_link,
         owner_short_link,
+        pesos,
         with_owner_link,
     )
 
@@ -181,8 +183,17 @@ async def _notify_owner(
             + (f"💳 Pago: {order.payment_method}\n" if order.payment_method else "")
             + "────────────────"
         )
-        wa_notify = with_owner_link(wa_notify, wa_link and owner_short_link(order))
+        link = wa_link and owner_short_link(order)
+        wa_notify = with_owner_link(wa_notify, link)
+        detail = " · ".join(filter(None, [
+            order.items_raw, f"total aprox. {pesos(total)}" if total else "", where_line(order),
+            f"Cliente: {order.customer_name}", f"Tel: {contact.phone}",
+            f"Escríbele aquí: {link}" if link else "",
+        ]))
+        if len(detail) > 700:  # Meta también limita el cuerpo completo de la plantilla
+            detail = (f"Escríbele aquí: {link} · " if link else "") + detail[:600] + "…"
+        template = (settings.IARADIO_ORDER_TEMPLATE_NAME, [f"{order.order_number:04d}", detail])
         try:
-            await notify_owner(advertiser, wa_notify)
+            await notify_owner(advertiser, wa_notify, template=template)
         except Exception:
             logger.warning("[WIDGET-ORDER] Failed to notify owner via WhatsApp", exc_info=True)

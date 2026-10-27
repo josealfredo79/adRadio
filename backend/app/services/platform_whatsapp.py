@@ -64,6 +64,50 @@ async def platform_token() -> str | None:
     return token
 
 
+# Meta acepta el texto libre fuera de la ventana de 24h (200 con wamid) y lo
+# rechaza segundos después por webhook (131047), así que no hay error con qué
+# caer a la plantilla. Por eso se anota cuándo nos escribió cada número y se
+# decide antes de mandar. 5 min de margen para no rozar el corte de Meta.
+_WINDOW_KEY = "central_window:{}"
+_WINDOW_SECONDS = 24 * 3600 - 300
+
+
+async def mark_window_open(from_number: str, sent_at: str | int | None = None) -> None:
+    """`from_number` le escribió al central (a la hora `sent_at` de Meta, en
+    segundos): 24h de texto libre contadas desde ahí, no desde que llegó el
+    webhook — Meta reenvía tarde los que no pudimos recibir."""
+    from app.core.redis import get_redis_optional
+
+    ttl = _WINDOW_SECONDS
+    try:
+        ttl -= max(0, int(time.time()) - int(sent_at)) if sent_at else 0
+    except (TypeError, ValueError):
+        pass
+    if ttl <= 0:
+        return
+    redis = await get_redis_optional()
+    if redis is None:
+        return
+    try:
+        await redis.set(_WINDOW_KEY.format(normalize_recipient(from_number)), "1", ex=ttl)
+    except Exception:
+        logger.warning("[PLATFORM WA] Could not record the 24h window", exc_info=True)
+
+
+async def _window_open(recipient: str) -> bool | None:
+    """True/False según si nos escribió en 24h; None si Redis no responde."""
+    from app.core.redis import get_redis_optional
+
+    redis = await get_redis_optional()
+    if redis is None:
+        return None
+    try:
+        return bool(await redis.exists(_WINDOW_KEY.format(recipient)))
+    except Exception:
+        logger.warning("[PLATFORM WA] Could not read the 24h window", exc_info=True)
+        return None
+
+
 def _template_param(body: str) -> str:
     # Meta rechaza parámetros con saltos de línea, tabs o 4+ espacios seguidos.
     flat = " ".join(body.split())
@@ -72,11 +116,15 @@ def _template_param(body: str) -> str:
     return flat
 
 
-async def send_platform_text(to: str, body: str) -> tuple[str | None, str | None]:
-    """Manda `body` al dueño desde el número central. Primero como texto libre
-    (se ve mejor: conserva saltos de línea); si Meta lo rechaza — lo normal
-    cuando el dueño no nos ha escrito en 24h — reintenta con la plantilla
-    utility, que no depende de la ventana. Devuelve (wamid, error)."""
+async def send_platform_text(
+    to: str, body: str, template: tuple[str, list[str]] | None = None
+) -> tuple[str | None, str | None]:
+    """Manda `body` al dueño desde el número central. Si nos escribió en las
+    últimas 24h, como texto libre (se ve mejor: conserva saltos de línea); si
+    no, o si Meta rechaza el texto, con la plantilla utility, que no depende
+    de la ventana. Sin Redis no se sabe: se intenta el texto libre como antes.
+    `template` = (nombre, variables) de una plantilla propia de ese aviso; sin
+    ella va la genérica con todo `body` en {{1}}. Devuelve (wamid, error)."""
     if not platform_enabled():
         return None, "platform_not_configured"
 
@@ -86,21 +134,26 @@ async def send_platform_text(to: str, body: str) -> tuple[str | None, str | None
         return None, "platform_not_configured"
     recipient = normalize_recipient(to)
 
-    try:
-        data = await graph_request(
-            f"{phone_number_id}/messages",
-            token=token,
-            method="POST",
-            body={
-                "messaging_product": "whatsapp",
-                "to": recipient,
-                "type": "text",
-                "text": {"body": body},
-            },
-        )
-        return (data.get("messages") or [{}])[0].get("id"), None
-    except MetaApiError as e:
-        logger.info("[PLATFORM WA] Free-form to %s rejected (%s) — falling back to template", to, e)
+    if await _window_open(recipient) is not False:
+        try:
+            data = await graph_request(
+                f"{phone_number_id}/messages",
+                token=token,
+                method="POST",
+                body={
+                    "messaging_product": "whatsapp",
+                    "to": recipient,
+                    "type": "text",
+                    "text": {"body": body},
+                },
+            )
+            return (data.get("messages") or [{}])[0].get("id"), None
+        except MetaApiError as e:
+            logger.info("[PLATFORM WA] Free-form to %s rejected (%s) — falling back to template", to, e)
+    else:
+        logger.info("[PLATFORM WA] %s has not written in 24h — sending the template", to)
+
+    name, params = template or (settings.IARADIO_OWNER_TEMPLATE_NAME, [body])
 
     try:
         data = await graph_request(
@@ -112,17 +165,17 @@ async def send_platform_text(to: str, body: str) -> tuple[str | None, str | None
                 "to": recipient,
                 "type": "template",
                 "template": {
-                    "name": settings.IARADIO_OWNER_TEMPLATE_NAME,
+                    "name": name,
                     "language": {"code": settings.IARADIO_OWNER_TEMPLATE_LANG},
                     "components": [
-                        {"type": "body", "parameters": [{"type": "text", "text": _template_param(body)}]}
+                        {"type": "body", "parameters": [{"type": "text", "text": _template_param(p)} for p in params]}
                     ],
                 },
             },
         )
         return (data.get("messages") or [{}])[0].get("id"), None
     except MetaApiError as e:
-        logger.error("[PLATFORM WA] Template to %s failed too: %s", to, e)
+        logger.error("[PLATFORM WA] Template %s to %s failed too: %s", name, to, e)
         return None, str(e)[:100]
 
 

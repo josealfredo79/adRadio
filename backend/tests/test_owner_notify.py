@@ -64,6 +64,11 @@ async def test_caso1_order_notice_goes_through_central_without_own_whatsapp():
     to, body = central_wa.await_args.args
     assert to == "+529511112222"
     assert "NUEVO PEDIDO #0002" in body and "👉 Escribirle al cliente" in body
+    # Sin ventana de 24h va la plantilla de pedido (Utilidad), no la genérica.
+    name, (number, detail) = central_wa.await_args.kwargs["template"]
+    assert name == "aviso_negocio_dueno" and number == "0002"
+    assert detail.startswith("1 Cargador marca · total aprox. $120 · Para recoger en el negocio · Cliente: Ana · Tel: +529511234567 · Escríbele aquí: http")
+    assert "\n" not in detail
 
 
 @pytest.mark.asyncio
@@ -78,6 +83,9 @@ async def test_caso2_appointment_notice_goes_through_central():
     own_wa.assert_not_awaited()
     body = central_wa.await_args.args[1]
     assert "NUEVA CITA" in body and "Corte" in body and "Ana" in body
+    name, (when, detail) = central_wa.await_args.kwargs["template"]
+    assert name == "cita_nueva_dueno" and " a las " in when
+    assert detail == "Servicio: Corte · Cliente: Ana · Tel: +529511234567"
 
 
 @pytest.mark.asyncio
@@ -149,3 +157,78 @@ async def test_caso7_email_still_sent():
                             _order(), total=120.0)
         await asyncio.sleep(0.05)
     assert email.await_args.kwargs["to"] == "dueno@citycell.mx" and email.await_args.kwargs["order_number"] == 2
+
+
+def _meta():
+    """graph_request del central simulado; devuelve el mock para ver qué tipo salió."""
+    return patch("app.services.platform_whatsapp.graph_request", new_callable=AsyncMock,
+                 return_value={"messages": [{"id": "wamid.c"}]})
+
+
+def _new_phone() -> str:
+    # Redis de pruebas sobrevive entre corridas: un número nuevo por prueba.
+    return "+52951" + str(uuid.uuid4().int)[:7]
+
+
+@pytest.mark.asyncio
+async def test_caso8_owner_silent_24h_gets_template_not_text(monkeypatch):
+    """Meta acepta el texto libre fuera de la ventana y lo tumba después
+    (131047, pedido #0003 del 2026-10-26): sin ventana va directo la plantilla."""
+    monkeypatch.setattr(platform_whatsapp, "platform_token", AsyncMock(return_value="tok"))
+    with _meta() as meta:
+        assert await platform_whatsapp.send_platform_text(_new_phone(), "📦 *NUEVO PEDIDO*\nCargador") \
+            == ("wamid.c", None)
+    meta.assert_awaited_once()
+    sent = meta.await_args.kwargs["body"]
+    assert sent["type"] == "template"
+    assert sent["template"]["components"][0]["parameters"][0]["text"] == "📦 *NUEVO PEDIDO* Cargador"
+
+
+@pytest.mark.asyncio
+async def test_caso9_owner_wrote_recently_gets_free_text(monkeypatch):
+    """El webhook llega con 521… y se manda a 52…: la ventana debe coincidir."""
+    monkeypatch.setattr(platform_whatsapp, "platform_token", AsyncMock(return_value="tok"))
+    phone = _new_phone()
+    await platform_whatsapp.mark_window_open("521" + phone[3:])
+    with _meta() as meta:
+        await platform_whatsapp.send_platform_text(phone, "📦 *NUEVO PEDIDO*\nCargador")
+    sent = meta.await_args.kwargs["body"]
+    assert sent["type"] == "text" and sent["text"]["body"] == "📦 *NUEVO PEDIDO*\nCargador"
+
+
+@pytest.mark.asyncio
+async def test_caso10_without_redis_tries_text_first(monkeypatch):
+    monkeypatch.setattr(platform_whatsapp, "platform_token", AsyncMock(return_value="tok"))
+    with _meta() as meta, patch("app.core.redis.get_redis_optional", new_callable=AsyncMock, return_value=None):
+        await platform_whatsapp.send_platform_text(_new_phone(), "hola")
+    assert meta.await_args.kwargs["body"]["type"] == "text"
+
+
+@pytest.mark.asyncio
+async def test_caso11_window_counts_from_when_the_owner_wrote(monkeypatch):
+    """Meta reenvía tarde los mensajes que no pudimos recibir (Neon caído):
+    la ventana se cuenta desde que el dueño escribió, no desde que llegó."""
+    import time
+
+    from app.core.redis import get_redis
+
+    monkeypatch.setattr(platform_whatsapp, "platform_token", AsyncMock(return_value="tok"))
+    old, recent = _new_phone(), _new_phone()
+    await platform_whatsapp.mark_window_open(old, str(int(time.time()) - 25 * 3600))
+    await platform_whatsapp.mark_window_open(recent, int(time.time()) - 23 * 3600)
+    with _meta() as meta:
+        await platform_whatsapp.send_platform_text(old, "aviso")
+    assert meta.await_args.kwargs["body"]["type"] == "template"
+    ttl = await (await get_redis()).ttl("central_window:" + recent.lstrip("+"))
+    assert 0 < ttl <= 3600
+
+
+@pytest.mark.asyncio
+async def test_caso12_own_template_goes_with_its_variables(monkeypatch):
+    monkeypatch.setattr(platform_whatsapp, "platform_token", AsyncMock(return_value="tok"))
+    with _meta() as meta:
+        await platform_whatsapp.send_platform_text(
+            _new_phone(), "📦 aviso largo", template=("aviso_negocio_dueno", ["0003", "1 Cargador\nmarca"]))
+    tpl = meta.await_args.kwargs["body"]["template"]
+    assert tpl["name"] == "aviso_negocio_dueno"
+    assert [x["text"] for x in tpl["components"][0]["parameters"]] == ["0003", "1 Cargador marca"]

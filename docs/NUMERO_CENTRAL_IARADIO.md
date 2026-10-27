@@ -38,6 +38,17 @@ Mientras las variables de abajo estén vacías, todo funciona como antes.
      Responde a este mensaje para contestar.
      ```
    - Ejemplo de {{1}}: `Un cliente de Taquería Don Pepe pregunta: ¿tienen servicio a domicilio?`
+   - **Ojo (2026-10-26):** `aviso_dueno` nunca existió en producción, y Meta clasifica como
+     Marketing (o rechaza como Utilidad) un cuerpo que es casi pura variable. Los avisos de
+     pedido y cita usan plantillas propias, ya creadas como Utilidad:
+     - `aviso_negocio_dueno` (pedidos): `Nuevo pedido #{{1}} recibido en tu negocio.` /
+       `{{2}}` / `Revisa y confirma este pedido con tu cliente desde tu panel de IaRadio.`
+     - `cita_nueva_dueno` (citas): `Nueva cita agendada en tu negocio para el {{1}}.` /
+       `{{2}}` / `Revisa los detalles de esta cita en tu panel de IaRadio.`
+     - `pregunta_cliente_dueno` (preguntas que el bot no supo): `Un cliente de tu negocio {{1}} hizo
+       una pregunta que tu asistente no pudo contestar:` / `{{2}}` / `Responde a este mensaje con la
+       respuesta y se la enviamos a tu cliente.`
+     Las alertas y el aviso de tope siguen sin plantilla: fuera de la ventana de 24 h no llegan.
 4. Token: el del usuario del sistema con la app IARadio y ese WABA asignados
    (`whatsapp_business_messaging`).
 5. Suscribe la app IARadio a los webhooks de ese WABA (campo `messages`).

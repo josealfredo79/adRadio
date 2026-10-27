@@ -15,17 +15,20 @@ from app.services.availability_service import TZ
 logger = logging.getLogger(__name__)
 
 DAILY_CAP = 30
+# Preguntas que el bot no supo: contador aparte, para que un cliente insistente
+# no le gaste al dueño el tope de los avisos de pedido y cita.
+QUESTION_DAILY_CAP = 15
 CAP_NOTICE = (
     "📋 Hoy ya te mandé {cap} avisos de pedidos y citas por aquí. Los que sigan llegando "
     "los ves en tu panel de IaRadio (Pedidos y Citas). Mañana te vuelvo a avisar por aquí 🙌"
 )
 
 
-def _key(advertiser: User) -> str:
-    return f"owner_notify:{advertiser.id}:{datetime.now(TZ).date().isoformat()}"
+def _key(advertiser: User, kind: str = "owner_notify") -> str:
+    return f"{kind}:{advertiser.id}:{datetime.now(TZ).date().isoformat()}"
 
 
-async def _count_central(advertiser: User) -> int | None:
+async def _count_central(advertiser: User, kind: str = "owner_notify") -> int | None:
     """Cuántos avisos por el central lleva hoy (contando este). None si Redis
     no responde: el aviso sale igual, perder un pedido cuesta más que un aviso."""
     from app.core.redis import get_redis_optional
@@ -34,7 +37,7 @@ async def _count_central(advertiser: User) -> int | None:
     if redis is None:
         return None
     try:
-        key = _key(advertiser)
+        key = _key(advertiser, kind)
         n = await redis.incr(key)
         if n == 1:
             await redis.expire(key, 2 * 24 * 3600)
@@ -44,9 +47,10 @@ async def _count_central(advertiser: User) -> int | None:
         return None
 
 
-async def notify_owner(advertiser: User, body: str) -> str | None:
-    """Manda `body` al celular del dueño. Devuelve por dónde salió ("own",
-    "central", "cap") o None si no salió."""
+async def notify_owner(advertiser: User, body: str, template: tuple[str, list[str]] | None = None) -> str | None:
+    """Manda `body` al celular del dueño; `template` es la plantilla del central
+    para cuando no hay ventana de 24h (ver send_platform_text). Devuelve por
+    dónde salió ("own", "central", "cap") o None si no salió."""
     from app.services.meta_service import _connection, send_whatsapp
     from app.services.owner_question_service import owner_number
     from app.services.platform_whatsapp import platform_enabled, send_platform_text
@@ -71,7 +75,7 @@ async def notify_owner(advertiser: User, body: str) -> str | None:
     capped = n == DAILY_CAP + 1
     message = CAP_NOTICE.format(cap=DAILY_CAP) if capped else body
     try:
-        wamid, err = await send_platform_text(to, message)
+        wamid, err = await send_platform_text(to, message, template=None if capped else template)
     except Exception as e:
         wamid, err = None, str(e)[:100]
     if not wamid:

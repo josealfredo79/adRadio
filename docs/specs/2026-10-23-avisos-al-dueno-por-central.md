@@ -44,7 +44,12 @@ IaRadio (el mismo que ya le manda las preguntas que el bot no sabe contestar).
 - Mensajes que Meta cobra: plantilla utility ~US$0.0085 (≈16 centavos) solo fuera de la ventana de 24 h.
   Peor caso con el tope: 31 avisos/día por negocio ≈ $5 pesos/día. Lo paga IaRadio, no cuenta en la
   cuota del plan del negocio.
-- La plantilla `aviso_dueno` (es_MX) es la misma que ya usan las preguntas al dueño; no hay que aprobar
+- **Corrección 2026-10-26 (prueba real, pedido #0003):** Meta acepta el texto libre fuera de la
+  ventana y lo tumba después por webhook (131047), así que el respaldo con plantilla nunca corría;
+  ahora se decide antes de mandar, con la ventana anotada en Redis cuando el dueño le escribe al
+  central. Y `aviso_dueno` no existía: pedidos y citas usan `aviso_negocio_dueno` y `cita_nueva_dueno`
+  (Utilidad), ver docs/NUMERO_CENTRAL_IARADIO.md.
+- (Original) La plantilla `aviso_dueno` (es_MX) es la misma que ya usan las preguntas al dueño; no hay que aprobar
   plantillas nuevas. Si no estuviera aprobada en Meta, el aviso falla igual que hoy (se ve en los
   registros como "Template to … failed").
 - Si el dueño contesta el aviso en el central, su mensaje lo toma el Copiloto (como hoy con cualquier

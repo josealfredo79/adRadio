@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.appointment import Appointment
 from app.models.contact import Contact
 from app.models.user import User
@@ -400,7 +401,11 @@ async def _notify_owner(advertiser: User, appointment: Appointment, channel: str
             f"🕐 {fecha} a las {hora}\n"
             f"────────────────"
         )
+        template = (settings.IARADIO_APPT_TEMPLATE_NAME, [
+            f"{fecha} a las {hora}",
+            f"Servicio: {appointment.service} · Cliente: {appointment.customer_name} · Tel: {appointment.customer_phone}",
+        ])
         try:
-            await notify_owner(advertiser, wa_notify)
+            await notify_owner(advertiser, wa_notify, template=template)
         except Exception:
             logger.warning("[APPT-BOOKING] Failed to notify owner via WhatsApp", exc_info=True)

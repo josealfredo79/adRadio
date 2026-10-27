@@ -191,7 +191,8 @@ async def _webhook(monkeypatch, *, bot_on_number: bool, owners: set[str], custom
     payload = {"entry": [{"id": "waba", "changes": [{"field": "messages", "value": {
         "metadata": {"phone_number_id": "999"},
         "messages": [
-            {"from": "5215511111111", "id": "w1", "type": "text", "text": {"body": "¿qué citas tengo?"}},
+            {"from": "5215511111111", "id": "w1", "timestamp": "1761523200", "type": "text",
+             "text": {"body": "¿qué citas tengo?"}},
             {"from": "5215522222222", "id": "w2", "type": "text", "text": {"body": "¿cuánto cuesta IaRadio?"}},
         ],
     }}]}]}
@@ -212,8 +213,12 @@ async def _webhook(monkeypatch, *, bot_on_number: bool, owners: set[str], custom
         patch.object(mi, "_handle_platform_message", AsyncMock()) as hpm,
         patch.object(mi, "customer_redirect_reply", AsyncMock(side_effect=lambda _db, n, **_: customers.get(n))),
         patch.object(mi, "send_platform_text", AsyncMock(return_value=("wamid", None))) as spt,
+        patch.object(mi, "mark_window_open", AsyncMock()) as window,
     ):
         await mi.meta_incoming.__wrapped__(request, db=db)
+    # Todo el que le escribe al central abre su ventana de 24h, con la hora de
+    # Meta: sin esto los avisos al dueño se van siempre por plantilla (cobrada).
+    assert [c.args for c in window.call_args_list] == [("5215511111111", "1761523200"), ("5215522222222", None)]
     return hpm, db, spt
 
 
