@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.message import Message
+from app.models.user import User
 from app.services.availability_service import TZ
 from app.services.web_push import contacts_with_push
 
@@ -73,6 +74,20 @@ def supports_web(campaign: Campaign) -> bool:
     return mode in WEB_MODES and campaign.type != "voces"
 
 
+def whatsapp_connected(advertiser: User | None) -> bool:
+    """Las campañas por WhatsApp salen del número propio del negocio
+    (meta_service.send_whatsapp); sin él no sale ninguna. Mismo criterio que
+    meta_service._connection, sin descifrar la llave."""
+    return bool(
+        advertiser
+        and advertiser.meta_connection_status == "connected"
+        and advertiser.meta_phone_number_id
+        and advertiser.meta_token_cipher
+        and advertiser.meta_token_iv
+        and advertiser.meta_token_tag
+    )
+
+
 def is_web_only(campaign: Campaign) -> bool:
     return bool((campaign.ab_test or {}).get("web_only")) and supports_web(campaign)
 
@@ -82,7 +97,11 @@ async def campaign_reach(db: AsyncSession, campaign: Campaign) -> dict:
     al enviar. Las reglas anti-baneo (pausa de 48 h, sin actividad…) son de
     WhatsApp: a quien tiene avisos web le llega aunque le hayan mandado algo
     hace poco; `web_silent` son los que la reciben sin sonar (ya les sonó una
-    promo hoy)."""
+    promo hoy).
+
+    Sin WhatsApp conectado no se cuenta a nadie por WhatsApp (no les saldría
+    nada): `whatsapp_unreachable` dice a cuántos les llegaría si conecta el
+    número de su chip."""
     from app.workers.task_helpers.campaign_ops import _is_contact_active
 
     contacts = (await db.execute(recipients_query(campaign))).scalars().all()
@@ -91,6 +110,10 @@ async def campaign_reach(db: AsyncSession, campaign: Campaign) -> dict:
     web = sum(1 for c in contacts if c.id in with_push)
     whatsapp = sum(1 for c in contacts if c.id not in with_push and _is_contact_active(c)[0])
     web_silent = len(await rang_today(db, with_push)) if with_push else 0
+    connected = whatsapp_connected(await db.get(User, campaign.advertiser_id))
+    unreachable = 0 if connected else whatsapp
+    if not connected:
+        whatsapp = 0
     return {
         "total": web + whatsapp,
         "web": web,
@@ -98,4 +121,6 @@ async def campaign_reach(db: AsyncSession, campaign: Campaign) -> dict:
         "whatsapp": whatsapp,
         "whatsapp_cost_mxn": round(whatsapp * META_MARKETING_USD_MX * USD_TO_MXN, 2),
         "web_supported": web_ok,
+        "whatsapp_connected": connected,
+        "whatsapp_unreachable": unreachable,
     }

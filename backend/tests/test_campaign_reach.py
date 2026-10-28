@@ -31,7 +31,8 @@ def _request() -> Request:
                     "headers": [], "client": ("test", 1), "query_string": b""})
 
 
-async def _campaign(user_id, mode: str = "regular", messages_remaining: int = 5, type_: str = "promo"):
+async def _campaign(user_id, mode: str = "regular", messages_remaining: int = 5, type_: str = "promo",
+                    connected: bool = True):
     async with AsyncSessionLocal() as db:
         ab = {"campaign_mode": mode}
         if mode == "radio":
@@ -41,6 +42,12 @@ async def _campaign(user_id, mode: str = "regular", messages_remaining: int = 5,
         db.add(camp)
         user = await db.get(User, user_id)
         user.messages_remaining = messages_remaining
+        if connected:  # WhatsApp propio conectado (las campañas por WhatsApp salen de ahí)
+            user.meta_connection_status = "connected"
+            user.meta_phone_number_id = "123456"
+            user.meta_token_cipher = "cifrado"
+            user.meta_token_iv = "iv"
+            user.meta_token_tag = "tag"
         await db.commit()
         return camp.id
 
@@ -85,7 +92,24 @@ class TestCampaignReach:
                 reach = await campaign_reach(db, await db.get(Campaign, camp_id))
             assert reach == {"total": 2, "web": 0, "web_silent": 0, "whatsapp": 2,
                              "whatsapp_cost_mxn": round(2 * META_MARKETING_USD_MX * USD_TO_MXN, 2),
-                             "web_supported": False}
+                             "web_supported": False, "whatsapp_connected": True,
+                             "whatsapp_unreachable": 0}
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_without_own_whatsapp_nobody_counts_by_whatsapp(self):
+        # Sin número propio conectado (como CityCell) no sale ninguna campaña por
+        # WhatsApp: no se promete a nadie ni se cobra; se dice a cuántos llegaría.
+        user_id, (with_push, _, _) = await _seed(3)
+        try:
+            await _add_subs(user_id, with_push, 1)
+            camp_id = await _campaign(user_id, connected=False)
+            async with AsyncSessionLocal() as db:
+                reach = await campaign_reach(db, await db.get(Campaign, camp_id))
+            assert (reach["total"], reach["web"], reach["whatsapp"], reach["whatsapp_cost_mxn"]) == (1, 1, 0, 0)
+            assert reach["whatsapp_connected"] is False
+            assert reach["whatsapp_unreachable"] == 2
         finally:
             await _cleanup(user_id)
 

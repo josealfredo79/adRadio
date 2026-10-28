@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SendCampaignModal } from '@/pages/campaigns/components/SendCampaignModal'
 import type { Campaign } from '@/pages/campaigns/types'
@@ -15,9 +16,11 @@ function renderModal(reach: Record<string, unknown>) {
   get.mockResolvedValue({ data: { total: 0, web: 0, whatsapp: 0, whatsapp_cost_mxn: 0, web_supported: true, ...reach } })
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <QueryClientProvider client={qc}>
-      <SendCampaignModal campaign={CAMPAIGN} sending={false} onSend={() => {}} onClose={() => {}} />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={qc}>
+        <SendCampaignModal campaign={CAMPAIGN} sending={false} onSend={() => {}} onClose={() => {}} />
+      </QueryClientProvider>
+    </MemoryRouter>,
   )
 }
 
@@ -45,5 +48,20 @@ describe('SendCampaignModal', () => {
     renderModal({ total: 3, web: 1, whatsapp: 2, whatsapp_cost_mxn: 1.47 })
     expect(await screen.findByText(/Solo por web — gratis \(1 cliente\)/)).toBeDefined()
     expect(screen.getByText(/Enviar a todos \(3 clientes\)/)).toBeDefined()
+  })
+
+  it('without its own WhatsApp: no WhatsApp count or cost, says who misses it and links to connect the chip', async () => {
+    renderModal({ total: 1, web: 1, whatsapp: 0, whatsapp_connected: false, whatsapp_unreachable: 4 })
+    expect(await screen.findByText(/Solo por web — gratis \(1 cliente\)/)).toBeDefined()
+    expect(screen.getByText(/no tienen avisos web y tu WhatsApp no está conectado/)).toBeDefined()
+    expect(screen.getByRole('link', { name: /Conecta el número de tu chip/ }).getAttribute('href')).toBe('/app/settings')
+    expect(screen.queryByText(/por WhatsApp —/)).toBeNull()
+    expect(screen.queryByText(/Enviar a todos/)).toBeNull()
+  })
+
+  it('with its own WhatsApp the cost goes to the business card, in whole pesos when exact', async () => {
+    renderModal({ total: 16, web: 1, whatsapp: 15, whatsapp_cost_mxn: 11, whatsapp_connected: true })
+    expect(await screen.findByText(/Meta le cobra a tu tarjeta hasta/)).toBeDefined()
+    expect(screen.getByText('≈ $11')).toBeDefined()
   })
 })

@@ -79,13 +79,23 @@ async def generate_campaign_variants(
     campaign_type: str,
     business_name: str,
     intent: str,
+    catalog: str = "",
 ) -> list[str]:
-    """Generate 3 unique WhatsApp ad message variants."""
+    """Generate 3 unique WhatsApp ad message variants.
+
+    `catalog` (rag_service.catalog_context): los productos y precios reales.
+    Antes solo veía el nombre del negocio y la intención, y podía inventar
+    productos o precios en una promo que se manda a todos los clientes."""
+    catalog_block = f"\n{catalog}\n" if catalog else ""
     prompt = f"""Genera exactamente 3 variantes de mensaje publicitario para WhatsApp.
 
 Tipo de campaña: {campaign_type}
 Negocio: {business_name}
 Intención del anunciante: {intent}
+{catalog_block}
+No inventes nada: menciona solo productos, precios, descuentos y fechas que estén
+en la intención del anunciante o en el catálogo de arriba. Si no hay precio, no
+pongas precio. Montos en pesos sin centavos cuando son exactos: $120, no $120.00.
 
 Devuelve solo las 3 variantes, separadas por "---", sin numeración ni explicaciones adicionales."""
 

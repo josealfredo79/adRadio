@@ -567,12 +567,16 @@ async def preview_banner(
 @router.post("/generate-content", response_model=GenerateContentResponse)
 async def generate_content(
     body: GenerateContentRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> GenerateContentResponse:
+    from app.services.rag_service import catalog_context
+
     variants = await generate_campaign_variants(
         campaign_type=body.campaign_type,
         business_name=body.business_name,
         intent=body.intent,
+        catalog=await catalog_context(db, str(current_user.id)),
     )
     capture_event("content_generated", user_id=current_user.id, properties={
         "campaign_type": body.campaign_type,

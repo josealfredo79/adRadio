@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { X, Globe, MessageCircle, Loader2, Send, Info } from 'lucide-react'
 import api from '@/lib/api'
 import { Campaign } from '../types'
@@ -6,6 +7,8 @@ import { Campaign } from '../types'
 // Antes de enviar: a cuántos clientes les llega gratis como notificación web
 // (los que las activaron en su portal) y a cuántos por WhatsApp, con lo que
 // cobraría Meta. Se puede mandar a todos o solo por web (gratis).
+// Por WhatsApp solo sale del número propio del negocio: sin él, se le dice a
+// cuántos no les llega y que conecte el número de su chip.
 
 interface Reach {
   total: number
@@ -15,6 +18,9 @@ interface Reach {
   whatsapp: number
   whatsapp_cost_mxn: number
   web_supported: boolean
+  whatsapp_connected?: boolean
+  // Sin WhatsApp conectado: a cuántos les llegaría por WhatsApp si lo conecta.
+  whatsapp_unreachable?: number
 }
 
 interface SendCampaignModalProps {
@@ -24,7 +30,10 @@ interface SendCampaignModalProps {
   onClose: () => void
 }
 
-const pesos = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+const pesos = (n: number) => {
+  const digits = Number.isInteger(n) ? 0 : 2
+  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: digits, maximumFractionDigits: digits })
+}
 const clientes = (n: number) => `${n.toLocaleString('es-MX')} ${n === 1 ? 'cliente' : 'clientes'}`
 
 export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCampaignModalProps) {
@@ -64,13 +73,27 @@ export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCa
                 )}
               </p>
             </div>
-            <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
-              <MessageCircle className="h-5 w-5 shrink-0 text-green-600" />
-              <p className="text-sm text-foreground">
-                <strong>{clientes(reach.whatsapp)}</strong> por WhatsApp
-                {reach.whatsapp > 0 && <> — Meta cobra hasta <strong>≈ {pesos(reach.whatsapp_cost_mxn)}</strong></>}
-              </p>
-            </div>
+            {reach.whatsapp_connected === false ? (
+              !!reach.whatsapp_unreachable && (
+                <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
+                  <MessageCircle className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <p className="text-sm text-foreground">
+                    A <strong>{clientes(reach.whatsapp_unreachable)}</strong> no les llega: no tienen avisos web y tu WhatsApp no está conectado.{' '}
+                    <Link to="/app/settings" className="font-semibold text-brand-600 hover:underline">
+                      Conecta el número de tu chip
+                    </Link>
+                  </p>
+                </div>
+              )
+            ) : (
+              <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
+                <MessageCircle className="h-5 w-5 shrink-0 text-green-600" />
+                <p className="text-sm text-foreground">
+                  <strong>{clientes(reach.whatsapp)}</strong> por WhatsApp
+                  {reach.whatsapp > 0 && <> — Meta le cobra a tu tarjeta hasta <strong>≈ {pesos(reach.whatsapp_cost_mxn)}</strong></>}
+                </p>
+              </div>
+            )}
             {!reach.web_supported ? (
               <p className="flex gap-2 text-xs text-muted-foreground">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
