@@ -87,7 +87,8 @@ class Settings(BaseSettings):
     # Pregunta que el bot no supo: {{1}} = negocio, {{2}} = quién y qué pregunta.
     IARADIO_QUESTION_TEMPLATE_NAME: str = "pregunta_cliente_dueno"
     # Cita o pedido cancelado: {{1}} = cliente, {{2}} = qué canceló ("su cita del…").
-    IARADIO_CANCEL_TEMPLATE_NAME: str = "cancelacion_cliente_dueno"
+    # Lleva "1" porque Meta no deja reusar el nombre de una plantilla borrada.
+    IARADIO_CANCEL_TEMPLATE_NAME: str = "cancelacion_cliente_dueno1"
     IARADIO_OWNER_TEMPLATE_LANG: str = "es_MX"
     # Plantilla de AUTENTICACIÓN (botón "Copiar código") para que el cliente
     # entre a su cuenta /mi con su número. Ver docs/NUMERO_CENTRAL_IARADIO.md.
