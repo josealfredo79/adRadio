@@ -66,6 +66,11 @@ Lo que falta para encenderlo (ver memoria `project_meta_embedded_signup`):
 2. `generate_campaign_variants`: pasarle productos y precios reales del catálogo (y lo relevante
    de la base de conocimiento) con la regla de no inventar; montos `$120`, no `$120.00`.
 
+Pendiente de Fase 0 (revisor-dinero, bajo): `preflight_campaign_send` no frena "a todos" sin
+WhatsApp conectado. No gasta saldo ni Meta (sin conexión no hay envío), pero en banner genera
+texto/imagen con IA de balde. No se bloqueó porque el Copiloto lanza sin `web_only` y dejaría de
+mandar la parte web: se resuelve en Fase 2 (el Copiloto manda "solo por web" si no hay conexión).
+
 ### Fase 1 — Campaña en 3 toques en la web (≈ 1–2 días)
 1. "¿Qué quieres anunciar?" — un campo (y voz).
 2. La IA arma mensaje (con catálogo real), sugiere cupón si aplica, pone nombre y tipo sola.

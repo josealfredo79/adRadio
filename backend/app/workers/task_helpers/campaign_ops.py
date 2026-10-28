@@ -302,8 +302,10 @@ async def _offer_or_queue(
 
     # Pricing: a send to a closed-window contact consumes 1 message from the
     # advertiser's quota the moment the reopen template goes out — whether or
-    # not the contact ever replies. That template costs AdRadio a real
-    # per-message fee (MARKETING rate) it pays Meta regardless, so charging
+    # not the contact ever replies. That template has a real per-message
+    # fee (MARKETING rate) — billed by Meta to the card on the business's own
+    # WhatsApp account (decided 2026-10-27, docs/PLAN-CAMPANAS-SIMPLES.md);
+    # the quota stays as the anti-ban brake. Charging
     # only on the reply left AdRadio absorbing every non-responder. The
     # deferred content that fires later on a genuine reply is dispatched with
     # charge=False (see inbound_pipeline.py) so it isn't billed twice. The
