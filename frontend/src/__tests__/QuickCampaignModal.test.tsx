@@ -151,7 +151,7 @@ describe('QuickCampaignModal', () => {
     await screen.findByText(/les suena aviso/)
     fireEvent.click(screen.getByText('Mandar gratis por web'))
     await waitFor(() => expect(resumeCall()).toBeDefined())
-    expect((createCall()?.[1] as { ab_test: unknown }).ab_test).toMatchObject({ has_coupon: true, coupon_description: '15% de descuento' })
+    expect((createCall()?.[1] as { ab_test: unknown }).ab_test).toMatchObject({ has_coupon: true, coupon_description: '15% de descuento', coupon_percent: 15 })
   })
 
   it('caso 12: if sending fails, says why, keeps the text and the draft; retry reuses the draft', async () => {

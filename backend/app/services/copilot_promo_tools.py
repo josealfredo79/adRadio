@@ -145,7 +145,7 @@ def keep_asked_whatsapp(args: dict, owner_texts: list[str]) -> dict:
 def _ab_test(discount: int, web_only: bool) -> dict:
     ab: dict = {"enabled": False, "campaign_mode": "regular"}
     if discount:
-        ab.update(has_coupon=True, coupon_description=f"{discount}% de descuento", coupon_hours=72)
+        ab.update(has_coupon=True, coupon_description=f"{discount}% de descuento", coupon_percent=discount, coupon_hours=72)
     if web_only:
         ab["web_only"] = True
     return ab

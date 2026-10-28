@@ -41,7 +41,7 @@ export function buildCampaignBody(intent: string, message: string, audience: Aud
       enabled: false,
       campaign_mode: 'regular',
       // El cupón solo va si el dueño tocó un descuento.
-      ...(discount ? { has_coupon: true, coupon_description: `${discount}% de descuento`, coupon_hours: 72 } : {}),
+      ...(discount ? { has_coupon: true, coupon_description: `${discount}% de descuento`, coupon_percent: discount, coupon_hours: 72 } : {}),
     },
     status: 'draft',
   }

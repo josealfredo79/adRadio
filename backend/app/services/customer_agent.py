@@ -661,11 +661,16 @@ async def _tool_mis_sellos(ctx: _Ctx, args: dict) -> dict:
 
 def _discount(c: Coupon) -> str:
     value = f"{c.discount_value:,.2f}".replace(".00", "")
-    if c.discount_type == "percentage":
+    # Los cupones de campaña traen el descuento solo en la descripción (valor 0):
+    # sin esto el agente le decía al cliente "0% de descuento".
+    has_value = (c.discount_value or 0) > 0
+    if c.discount_type == "percentage" and has_value:
         return f"{value}% de descuento"
-    if c.discount_type == "fixed":
+    if c.discount_type == "fixed" and has_value:
         return f"${value} de descuento"
-    return c.description or "artículo gratis"
+    if c.discount_type == "free_item":
+        return c.description or "artículo gratis"
+    return c.description or "descuento (el negocio te dice cuánto al pagar)"
 
 
 async def _tool_mis_cupones(ctx: _Ctx, args: dict) -> dict:

@@ -435,6 +435,17 @@ async def _push_campaign(db, campaign, advertiser, contact, ab, ring: bool = Tru
     return True
 
 
+def coupon_percent(ab: dict) -> int:
+    """El % del cupón cuando se conoce (campaña en 3 toques y el Copiloto lo
+    guardan en `coupon_percent`); 0 = solo está en la descripción. Sin él, el
+    agente del cliente decía "0% de descuento"."""
+    try:
+        pct = int(ab.get("coupon_percent") or 0)
+    except (TypeError, ValueError):
+        return 0
+    return pct if 0 < pct <= 100 else 0
+
+
 def _web_coupon(db, campaign, contact, ab) -> None:
     from app.models.coupon import Coupon
     from app.services.coupon_service import default_expiry, generate_coupon_code
@@ -443,6 +454,7 @@ def _web_coupon(db, campaign, contact, ab) -> None:
         db.add(Coupon(
             advertiser_id=campaign.advertiser_id, campaign_id=campaign.id, contact_id=contact.id,
             code=generate_coupon_code(), description=ab.get("coupon_description") or None,
+            discount_value=coupon_percent(ab),
             expires_at=default_expiry(hours=ab.get("coupon_hours", 72)),
         ))
 
@@ -842,6 +854,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
                 contact_id=contact.id,
                 code=code,
                 description=coupon_description or None,
+                discount_value=coupon_percent(ab),
                 expires_at=expires_at,
             )
             db.add(coupon)

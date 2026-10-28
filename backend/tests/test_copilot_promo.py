@@ -257,6 +257,7 @@ class TestConfirm:
                 coupons = (await db.execute(select(Coupon).where(Coupon.campaign_id == camp.id))).scalars().all()
             assert sorted(msgs) == ["[WEB] 2x1 en fundas este viernes"] * 2
             assert len(coupons) == 2 and {c.description for c in coupons} == {"15% de descuento"}  # caso 5
+            assert {int(c.discount_value) for c in coupons} == {15}  # el % guardado, no 0
         finally:
             await _cleanup(user_id)
 
@@ -535,3 +536,24 @@ class TestDiscountGuard:
             assert "cupón" not in out["reply"]
         finally:
             await _cleanup(user_id)
+
+
+class TestCouponTheCustomerHears:
+    def test_cupon_de_campana_sin_valor_no_dice_cero_por_ciento(self):
+        from app.models.coupon import Coupon
+        from app.services.customer_agent import _discount
+        old = Coupon(code="A", description="15% de descuento", discount_type="percentage", discount_value=Decimal(0))
+        assert _discount(old) == "15% de descuento"
+        blank = Coupon(code="B", description=None, discount_type="percentage", discount_value=Decimal(0))
+        assert "0%" not in _discount(blank)
+        assert _discount(Coupon(code="C", discount_type="percentage", discount_value=Decimal(15))) == "15% de descuento"
+        assert _discount(Coupon(code="D", discount_type="fixed", discount_value=Decimal(50))) == "$50 de descuento"
+        assert _discount(Coupon(code="E", description="Premio: corte gratis", discount_type="free_item",
+                                discount_value=Decimal(0))) == "Premio: corte gratis"
+
+    def test_coupon_percent_solo_si_es_valido(self):
+        from app.workers.task_helpers.campaign_ops import coupon_percent
+        assert coupon_percent({"coupon_percent": 15}) == 15
+        assert coupon_percent({}) == 0
+        assert coupon_percent({"coupon_percent": "x"}) == 0
+        assert coupon_percent({"coupon_percent": 500}) == 0
