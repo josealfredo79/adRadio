@@ -53,10 +53,16 @@ describe('SendCampaignModal', () => {
   it('without its own WhatsApp: no WhatsApp count or cost, says who misses it and links to connect the chip', async () => {
     renderModal({ total: 1, web: 1, whatsapp: 0, whatsapp_connected: false, whatsapp_unreachable: 4 })
     expect(await screen.findByText(/Solo por web — gratis \(1 cliente\)/)).toBeDefined()
-    expect(screen.getByText(/no tienen avisos web y tu WhatsApp no está conectado/)).toBeDefined()
+    expect(screen.getByText(/no les llega por WhatsApp: tu WhatsApp no está conectado/)).toBeDefined()
     expect(screen.getByRole('link', { name: /Conecta el número de tu chip/ }).getAttribute('href')).toBe('/app/settings')
     expect(screen.queryByText(/por WhatsApp —/)).toBeNull()
     expect(screen.queryByText(/Enviar a todos/)).toBeNull()
+  })
+
+  it('caso 13: "Solo por web" also counts the ones without notifications (it stays in their chat)', async () => {
+    renderModal({ total: 1, web: 0, web_chat: 3, whatsapp: 0, whatsapp_connected: false, whatsapp_unreachable: 3 })
+    expect(await screen.findByText(/Solo por web — gratis \(3 clientes\)/)).toBeDefined()
+    expect(screen.getByText(/a 3 clientes sin avisos les queda en su chat/)).toBeDefined()
   })
 
   it('with its own WhatsApp the cost goes to the business card, in whole pesos when exact', async () => {

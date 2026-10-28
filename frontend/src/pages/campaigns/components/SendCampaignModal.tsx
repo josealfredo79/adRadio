@@ -15,6 +15,8 @@ interface Reach {
   web: number
   // De los de web, a cuántos ya les sonó una promo hoy: les llega sin notificación.
   web_silent?: number
+  // Sin avisos: con "Solo por web" les queda en su chat, sin sonar.
+  web_chat?: number
   whatsapp: number
   whatsapp_cost_mxn: number
   web_supported: boolean
@@ -41,6 +43,8 @@ export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCa
     queryKey: ['campaign-reach', campaign.id],
     queryFn: () => api.get(`/campaigns/${campaign.id}/reach`).then((r) => r.data),
   })
+  const webChat = reach?.web_chat ?? 0
+  const webTotal = (reach?.web ?? 0) + webChat
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 p-4" onClick={onClose}>
@@ -66,6 +70,11 @@ export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCa
               <Globe className="h-5 w-5 shrink-0 text-emerald-600" />
               <p className="text-sm text-foreground">
                 <strong>{clientes(reach.web)}</strong> por notificación web — <strong className="text-emerald-700 dark:text-emerald-400">gratis</strong>
+                {webChat > 0 && (
+                  <span className="block text-xs text-muted-foreground">
+                    Con “Solo por web”, a {clientes(webChat)} sin avisos les queda en su chat: la ven cuando entren.
+                  </span>
+                )}
                 {!!reach.web_silent && (
                   <span className="block text-xs text-muted-foreground">
                     {reach.web_silent === reach.web ? 'Todos' : reach.web_silent} sin sonar: ya tuvieron un aviso hoy. Les llega a su chat.
@@ -78,7 +87,7 @@ export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCa
                 <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
                   <MessageCircle className="h-5 w-5 shrink-0 text-muted-foreground" />
                   <p className="text-sm text-foreground">
-                    A <strong>{clientes(reach.whatsapp_unreachable)}</strong> no les llega: no tienen avisos web y tu WhatsApp no está conectado.{' '}
+                    A <strong>{clientes(reach.whatsapp_unreachable)}</strong> no les llega por WhatsApp: tu WhatsApp no está conectado.{' '}
                     <Link to="/app/settings" className="font-semibold text-brand-600 hover:underline">
                       Conecta el número de tu chip
                     </Link>
@@ -109,22 +118,22 @@ export function SendCampaignModal({ campaign, sending, onSend, onClose }: SendCa
         )}
 
         <div className="mt-6 flex flex-col gap-2">
-          {reach?.web_supported && reach.web > 0 && (
+          {reach?.web_supported && webTotal > 0 && (
             <button
               onClick={() => onSend(true)}
               disabled={sending}
               className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
             >
-              <Globe className="h-4 w-4" /> Solo por web — gratis ({clientes(reach.web)})
+              <Globe className="h-4 w-4" /> Solo por web — gratis ({clientes(webTotal)})
             </button>
           )}
           {/* Nadie por WhatsApp: "a todos" sería lo mismo que solo por web, pero con las reglas de WhatsApp. */}
-          {!(reach?.web_supported && reach.web > 0 && reach.whatsapp === 0) && (
+          {!(reach?.web_supported && webTotal > 0 && reach.whatsapp === 0) && (
           <button
             onClick={() => onSend(false)}
             disabled={sending || reach?.total === 0}
             className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-60 ${
-              reach?.web_supported && reach.web > 0 && reach.whatsapp > 0
+              reach?.web_supported && webTotal > 0 && reach.whatsapp > 0
                 ? 'border border-border text-foreground hover:bg-muted'
                 : 'bg-emerald-600 text-white hover:bg-emerald-700'
             }`}

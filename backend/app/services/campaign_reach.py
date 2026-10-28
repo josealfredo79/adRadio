@@ -7,7 +7,7 @@ WhatsApp, que Meta cobra. El dueño ve el reparto y lo que costaría antes de
 apretar "Enviar", y puede elegir mandarla solo por web.
 """
 import uuid
-from datetime import datetime, time
+from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.message import Message
+from app.models.sale import Sale
 from app.models.user import User
 from app.services.availability_service import TZ
 from app.services.web_push import contacts_with_push
@@ -62,10 +63,22 @@ def recipients_query(campaign: Campaign) -> Select:
     segment = campaign.segment or {}
     specific_ids = segment.get("specific_contacts", [])
     tags = segment.get("tags", [])
+    bought_days = segment.get("bought_days")
     if specific_ids:
         q = q.where(Contact.id.in_([uuid.UUID(str(c)) for c in specific_ids]))
     elif tags:
         q = q.where(Contact.tags.overlap(tags))
+    elif bought_days:
+        # "Los que compraron": un "Cobré" o un pedido cobrado (ambos son Sale)
+        # en los últimos N días.
+        since = datetime.now(timezone.utc) - timedelta(days=int(bought_days))
+        q = q.where(Contact.id.in_(
+            select(Sale.contact_id).where(
+                Sale.advertiser_id == campaign.advertiser_id,
+                Sale.contact_id.is_not(None),
+                Sale.created_at >= since,
+            )
+        ))
     return q
 
 
@@ -101,13 +114,15 @@ async def campaign_reach(db: AsyncSession, campaign: Campaign) -> dict:
 
     Sin WhatsApp conectado no se cuenta a nadie por WhatsApp (no les saldría
     nada): `whatsapp_unreachable` dice a cuántos les llegaría si conecta el
-    número de su chip."""
+    número de su chip. `web_chat` son los que no tienen avisos: si se manda
+    "solo por web" les queda en su chat sin sonar (la ven cuando entren)."""
     from app.workers.task_helpers.campaign_ops import _is_contact_active
 
     contacts = (await db.execute(recipients_query(campaign))).scalars().all()
     web_ok = supports_web(campaign)
     with_push = await contacts_with_push(db, [c.id for c in contacts]) if web_ok else set()
     web = sum(1 for c in contacts if c.id in with_push)
+    web_chat = len(contacts) - web if web_ok else 0
     whatsapp = sum(1 for c in contacts if c.id not in with_push and _is_contact_active(c)[0])
     web_silent = len(await rang_today(db, with_push)) if with_push else 0
     connected = whatsapp_connected(await db.get(User, campaign.advertiser_id))
@@ -118,6 +133,7 @@ async def campaign_reach(db: AsyncSession, campaign: Campaign) -> dict:
         "total": web + whatsapp,
         "web": web,
         "web_silent": web_silent,
+        "web_chat": web_chat,
         "whatsapp": whatsapp,
         "whatsapp_cost_mxn": round(whatsapp * META_MARKETING_USD_MX * USD_TO_MXN, 2),
         "web_supported": web_ok,

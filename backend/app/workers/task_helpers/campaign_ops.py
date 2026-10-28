@@ -44,7 +44,12 @@ def segment_fingerprint(segment: dict) -> str:
     are recognized as "the same list" regardless of campaign identity."""
     specific = sorted(segment.get("specific_contacts") or [])
     tags = sorted(segment.get("tags") or [])
-    canonical = json.dumps({"specific_contacts": specific, "tags": tags}, sort_keys=True)
+    key: dict = {"specific_contacts": specific, "tags": tags}
+    if segment.get("bought_days"):
+        # Solo si está, para no cambiar la huella de los grupos de antes. Sin
+        # los días: cambiarlos no debe dar otra lista para la pausa de 7 días.
+        key["bought"] = True
+    canonical = json.dumps(key, sort_keys=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -495,8 +500,10 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             continue
         if web_only:
             # "Solo por web": quien no tiene notificaciones no recibe nada por
-            # WhatsApp (ni se gasta saldo ni se le cobra al negocio). No es un
-            # fallo: contarlo en skipped_count pausaba sola la campaña.
+            # WhatsApp (ni se gasta saldo ni se le cobra al negocio); le queda
+            # en su chat sin sonar. No es un fallo: contarlo en skipped_count
+            # pausaba sola la campaña.
+            await _push_campaign(db, campaign, advertiser, contact, ab, ring=False)
             continue
         if advertiser.messages_remaining - charged <= 0:
             if push_contacts:
@@ -644,7 +651,9 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
             pushed_count += 1
             continue
         if web_only:
-            continue  # "solo por web": ver send_banner_messages
+            # "solo por web": ver send_banner_messages
+            await _push_campaign(db, campaign, advertiser, contact, ab, ring=False)
+            continue
         if advertiser.messages_remaining - charged <= 0:
             if push_contacts:
                 continue  # sin saldo de WhatsApp, pero las notificaciones siguen siendo gratis
@@ -779,8 +788,10 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             continue
         if web_only:
             # "Solo por web": quien no tiene notificaciones no recibe nada por
-            # WhatsApp (ni se gasta saldo ni se le cobra al negocio). No es un
-            # fallo: contarlo en skipped_count pausaba sola la campaña.
+            # WhatsApp (ni se gasta saldo ni se le cobra al negocio); le queda
+            # en su chat sin sonar. No es un fallo: contarlo en skipped_count
+            # pausaba sola la campaña.
+            await _push_campaign(db, campaign, advertiser, contact, ab, ring=False)
             continue
         if advertiser.messages_remaining - charged <= 0:
             if push_contacts:

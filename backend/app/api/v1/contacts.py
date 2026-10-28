@@ -19,7 +19,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -67,6 +67,7 @@ async def list_contacts(
     page_size: int = Query(20, ge=1, le=100),
     status_filter: str | None = Query(None, alias="status"),
     tag: str | None = None,
+    search: str | None = Query(None, alias="q", max_length=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ContactListResponse:
@@ -75,6 +76,10 @@ async def list_contacts(
         q = q.where(Contact.status == status_filter)
     if tag:
         q = q.where(Contact.tags.any(tag))
+    if search and search.strip():
+        # Buscar por nombre o teléfono (la campaña a "uno" de la web).
+        like = f"%{search.strip()}%"
+        q = q.where(or_(Contact.name.ilike(like), Contact.phone.ilike(like)))
 
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar_one()

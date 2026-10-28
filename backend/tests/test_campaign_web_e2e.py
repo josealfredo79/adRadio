@@ -182,9 +182,15 @@ def test_web_only_campaign_end_to_end(vapid):
 
         status, msgs, coupons = asyncio.run(after_send())
         assert status == "completed"  # no se autopausó por los que no tienen avisos
-        assert [(m.contact_id, m.content, m.status) for m in msgs] == [(ana_id, "[PUSH] 2x1 en fundas", "sent")]
-        assert str(msgs[0].id) == message_id
-        assert [(c.contact_id, c.description) for c in coupons] == [(ana_id, "2x1 en fundas")]
+        # Beto no tiene avisos: le queda en su chat sin sonar, con su cupón.
+        by_contact = {m.contact_id: m for m in msgs}
+        assert {c: (m.content, m.status) for c, m in by_contact.items()} == {
+            ana_id: ("[PUSH] 2x1 en fundas", "sent"), beto_id: ("[WEB] 2x1 en fundas", "sent"),
+        }
+        assert str(by_contact[ana_id].id) == message_id
+        assert sorted((str(c.contact_id), c.description) for c in coupons) == sorted(
+            [(str(ana_id), "2x1 en fundas"), (str(beto_id), "2x1 en fundas")]
+        )
 
         # ── 3. El cliente abre su tarjeta: ve la promo y su cupón ──────────────
         async def customer_opens():
@@ -217,9 +223,10 @@ def test_web_only_campaign_end_to_end(vapid):
         assert opened == {"ok": True}
         chat_context = [v for k, v in redis.store.items() if session["session_id"] in k and "chat" in k]
         assert any("2x1 en fundas" in str(v) and promo["coupon"]["code"] in str(v) for v in chat_context)
-        assert beto_card["promotions"] == []  # a quien no le llegó, no la ve
+        # Sin avisos también la ve cuando entra a su tarjeta (le quedó en el chat).
+        assert [p["title"] for p in beto_card["promotions"]] == ["2x1 en fundas"]
 
-        # ── 4. Estadísticas del dueño: 1 enviada, 1 leída ──────────────────────
+        # ── 4. Estadísticas del dueño: 2 enviadas (aviso + chat), 1 leída ───────
         async def stats():
             from app.api.v1.campaigns import campaign_stats
 
@@ -228,7 +235,7 @@ def test_web_only_campaign_end_to_end(vapid):
                 return await campaign_stats(campaign_id, db=db, current_user=await db.get(User, user_id))
 
         s = asyncio.run(stats())
-        assert s.get("sent") == 1, s
+        assert s.get("sent") == 2, s
         assert s.get("read") == 1, s
     finally:
         asyncio.run(_cleanup(user_id))

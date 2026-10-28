@@ -14,6 +14,7 @@ import { CampaignCard } from './components/CampaignCard'
 import { CampaignListHeader } from './components/CampaignListHeader'
 import { Pagination } from './components/Pagination'
 import { CreateCampaignModal } from './components/CreateCampaignModal'
+import { QuickCampaignModal } from './components/QuickCampaignModal'
 import { ParrillaModal } from './components/ParrillaModal'
 import { AnalyticsModal } from './components/AnalyticsModal'
 import { VocesDetailModal } from './components/VocesDetailModal'
@@ -23,6 +24,8 @@ export default function CampaignsPage() {
   const { user: currentUser } = useAuth()
   const { toast } = useToast()
 
+  // "Nueva campaña" abre la de 3 toques; "Más opciones" el formulario completo.
+  const [showQuick, setShowQuick] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [showParrilla, setShowParrilla] = useState(false)
   const [analyticsId, setAnalyticsId] = useState<string | null>(null)
@@ -115,7 +118,7 @@ export default function CampaignsPage() {
           noCredits={noCredits}
           onExportCsv={handleExportCsv}
           onShowParrilla={() => setShowParrilla(true)}
-          onShowCreate={() => setShowCreate(true)}
+          onShowCreate={() => setShowQuick(true)}
         />
 
         <div className="print-area">
@@ -175,6 +178,17 @@ export default function CampaignsPage() {
           />
         </div>
       </div>
+
+      {showQuick && (
+        <QuickCampaignModal
+          businessName={currentUser?.business_name ?? ''}
+          onClose={() => setShowQuick(false)}
+          onMoreOptions={() => {
+            setShowQuick(false)
+            setShowCreate(true)
+          }}
+        />
+      )}
 
       {showCreate && (
         <CreateCampaignModal

@@ -6,12 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from starlette.requests import Request
 
 from app.api.v1.campaigns import ResumeBody, campaign_reach_preview, resume_campaign
 from app.database import AsyncSessionLocal
 from app.models.campaign import Campaign
 from app.models.contact import Contact
+from app.models.message import Message
 from app.models.user import User
 from app.services.campaign_reach import (
     META_MARKETING_USD_MX,
@@ -90,7 +92,7 @@ class TestCampaignReach:
             camp_id = await _campaign(user_id, mode="radio", type_="voces")
             async with AsyncSessionLocal() as db:
                 reach = await campaign_reach(db, await db.get(Campaign, camp_id))
-            assert reach == {"total": 2, "web": 0, "web_silent": 0, "whatsapp": 2,
+            assert reach == {"total": 2, "web": 0, "web_silent": 0, "web_chat": 0, "whatsapp": 2,
                              "whatsapp_cost_mxn": round(2 * META_MARKETING_USD_MX * USD_TO_MXN, 2),
                              "web_supported": False, "whatsapp_connected": True,
                              "whatsapp_unreachable": 0}
@@ -166,6 +168,9 @@ class TestWebOnlySend:
             assert offer.await_count == 0  # ni siquiera la invitación con plantilla
             async with AsyncSessionLocal() as db:
                 assert (await db.get(User, user_id)).messages_remaining == 5
+                # Al que no tiene avisos le queda en su chat, sin sonar.
+                rows = (await db.execute(select(Message.content).where(Message.contact_id == without))).scalars().all()
+                assert rows == ["[WEB] 2x1 en cortes"]
         finally:
             await _cleanup(user_id)
 
@@ -228,8 +233,8 @@ class TestRadioByWeb:
 
 class TestResumeWebOnly:
     @pytest.mark.asyncio
-    async def test_rejected_when_nobody_has_notifications(self):
-        user_id, _ = await _seed(2)
+    async def test_rejected_when_there_is_nobody_to_send_to(self):
+        user_id, _ = await _seed(0)
         try:
             camp_id = await _campaign(user_id)
             async with AsyncSessionLocal() as db:
@@ -238,7 +243,7 @@ class TestResumeWebOnly:
                     await resume_campaign(camp_id, _request(), ResumeBody(web_only=True), db=db,
                                           current_user=user, _=None, redis=None)
             assert exc.value.status_code == 409
-            assert "notificaciones" in exc.value.detail
+            assert "No hay clientes" in exc.value.detail
         finally:
             await _cleanup(user_id)
 

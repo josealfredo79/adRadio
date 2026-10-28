@@ -8,7 +8,16 @@ import logging
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from redis.asyncio import Redis as AsyncRedis
@@ -125,6 +134,19 @@ async def list_campaigns(
     return {"items": items, "total": total}
 
 
+def _check_segment(segment: dict | None) -> None:
+    """"Los que compraron en los últimos N días": N entero de 1 a 365; "uno":
+    ids válidos. Si no, el envío truena después en recipients_query."""
+    segment = segment or {}
+    days = segment.get("bought_days")
+    if days is not None and (isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= 365):
+        raise HTTPException(status_code=422, detail="Los días de compra deben ser de 1 a 365")
+    try:
+        [uuid.UUID(str(c)) for c in segment.get("specific_contacts") or []]
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Cliente inválido") from None
+
+
 @router.post("", response_model=CampaignOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/minute")
 async def create_campaign(
@@ -153,6 +175,8 @@ async def create_campaign(
 
     if body.status not in ("draft", "scheduled"):
         raise HTTPException(status_code=422, detail="El estado debe ser 'draft' o 'scheduled'")
+
+    _check_segment(body.segment)
 
     try:
         campaign = Campaign(advertiser_id=current_user.id, **body.model_dump())
@@ -203,6 +227,7 @@ async def update_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaña no encontrada")
 
+    _check_segment(body.segment)
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(campaign, field, value)
 
@@ -262,6 +287,43 @@ async def campaign_reach_preview(
     return reach
 
 
+class ReachPreviewBody(BaseModel):
+    segment: dict = {}
+
+
+@router.post("/reach-preview")
+@limiter.limit("30/minute")
+async def campaign_reach_before_create(
+    request: Request,
+    body: ReachPreviewBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """El alcance de una campaña simple (regular, promo) antes de guardarla:
+    la campaña de 3 toques lo enseña mientras el dueño escoge a quién."""
+    from app.services.campaign_reach import campaign_reach
+
+    _check_segment(body.segment)
+    draft = Campaign(advertiser_id=current_user.id, name="", type="promo", message_text="",
+                     segment=body.segment, ab_test={"campaign_mode": "regular"})
+    reach = await campaign_reach(db, draft)
+    await db.rollback()  # no se guarda nada
+    return reach
+
+
+@router.post("/transcribe")
+@limiter.limit("10/minute")
+async def transcribe_intent(
+    request: Request,
+    audio: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """"¿Qué quieres anunciar?" dicho con voz → texto (Whisper)."""
+    from app.api.v1.voice_setup import read_transcript
+
+    return {"transcript": await read_transcript(audio, None, 2 * 1024 * 1024, 500, "1 minuto")}
+
+
 @router.post("/{campaign_id}/resume")
 async def resume_campaign(
     campaign_id: uuid.UUID,
@@ -287,11 +349,10 @@ async def resume_campaign(
     if web_only:
         if not supports_web(campaign):
             raise HTTPException(status_code=400, detail="Las Voces del Barrio solo se pueden mandar por WhatsApp")
-        if (await campaign_reach(db, campaign))["web"] == 0:
-            raise HTTPException(
-                status_code=409,
-                detail="Ninguno de estos clientes tiene activadas las notificaciones en su portal todavía",
-            )
+        reach = await campaign_reach(db, campaign)
+        # Sin avisos también cuenta: le queda en su chat sin sonar.
+        if reach["web"] + reach["web_chat"] == 0:
+            raise HTTPException(status_code=409, detail="No hay clientes a quién mandarle esta campaña")
     mode = (campaign.ab_test or {}).get("campaign_mode", "regular")
     try:
         check_content_complete(campaign)
