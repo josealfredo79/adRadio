@@ -19,12 +19,13 @@ export function CampaignListHeader({
   onShowCreate,
 }: CampaignListHeaderProps) {
   return (
-    <div className="flex items-center justify-between">
+    // En celular los botones bajan a otra fila: antes "Nueva campaña" quedaba fuera de la pantalla.
+    <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Campañas</h1>
         <p className="mt-1 text-sm text-muted-foreground">{totalCampaigns} campañas creadas</p>
       </div>
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-2 sm:gap-3">
         <PrintButton />
         {hasCampaigns && (
           <button
