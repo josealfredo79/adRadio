@@ -1143,8 +1143,8 @@ async def _do_move(ctx: _Ctx, pending: dict) -> str:
     await _owner_text(ctx, f"🔁 *Cita movida {ctx.origin}*\n👤 {ctx.contact.name}\n📌 {appt.service}\n🕐 {_spanish_when(when)}",
                       template=(settings.IARADIO_APPT_TEMPLATE_NAME, [
                           _spanish_when(when),
-                          f"CAMBIO DE HORARIO, no es cita nueva: {_who(ctx)} movió su cita a esta hora · "
-                          f"Servicio: {appt.service}",
+                          (f"CAMBIO DE HORARIO, no es cita nueva: {_who(ctx)} movió su cita a esta hora · "
+                           f"Servicio: {appt.service}"),
                       ]))
     return f"✅ Listo, {_tu_cita(appt.service)} quedó el {_spanish_when(when)}."
 
