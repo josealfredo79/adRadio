@@ -11,6 +11,10 @@ export interface CopilotAction {
   data?: unknown
 }
 
+// Una promo nueva del Copiloto (send_promo) trae "Cambiar": se corrige antes de mandarla.
+export const PROMO_TOOL = 'send_promo'
+export const EDIT_PROMO_PROMPT = '¿Qué le cambio? Dímelo con tus palabras, por ejemplo: más corta, quítale el precio o que diga hasta el domingo.'
+
 export interface PendingConfirmation {
   confirmation_id: string
   tool: string

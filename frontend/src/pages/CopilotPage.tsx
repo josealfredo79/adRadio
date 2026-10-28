@@ -11,7 +11,7 @@ import {
 import api, { getApiError } from '@/lib/api'
 import { cn, formatPesos } from '@/lib/utils'
 import SEO from '@/components/SEO'
-import { useCopilot, type CopilotAction, type PendingConfirmation, type CopilotFormTool } from '@/contexts/CopilotContext'
+import { EDIT_PROMO_PROMPT, PROMO_TOOL, useCopilot, type CopilotAction, type PendingConfirmation, type CopilotFormTool } from '@/contexts/CopilotContext'
 
 // Opciones reales para los selects de las mini-app cards — mismos endpoints
 // que ya usan ContactsPage/CampaignsPage, no algo nuevo.
@@ -557,6 +557,13 @@ export default function CopilotPage() {
     )
   }
 
+  // "Cambiar": la promo no se manda; lo siguiente que escriba la vuelve a armar.
+  const handleEditPromo = () => {
+    setPendingConfirmation(null)
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: EDIT_PROMO_PROMPT }])
+    textareaRef.current?.focus()
+  }
+
   const handleShowModules = () => {
     if (isBusy || pendingConfirmation) return
     setMessages((prev) => [
@@ -742,7 +749,7 @@ export default function CopilotPage() {
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 Confirmación requerida
               </div>
-              <p className="mt-1.5 text-sm text-amber-900 dark:text-amber-200">{pendingConfirmation.summary}</p>
+              <p className="mt-1.5 whitespace-pre-line text-sm text-amber-900 dark:text-amber-200">{pendingConfirmation.summary}</p>
               <div className="mt-3 flex gap-2">
                 <button
                   onClick={() => handleConfirm(true)}
@@ -752,8 +759,17 @@ export default function CopilotPage() {
                   {confirmMutation.isPending && (
                     <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   )}
-                  Confirmar
+                  {pendingConfirmation.tool === PROMO_TOOL ? 'Sí, mándala' : 'Confirmar'}
                 </button>
+                {pendingConfirmation.tool === PROMO_TOOL && (
+                  <button
+                    onClick={handleEditPromo}
+                    disabled={confirmMutation.isPending}
+                    className="rounded-lg border border-amber-300 bg-white px-4 py-1.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700 dark:bg-transparent dark:text-amber-300 dark:hover:bg-amber-900/40"
+                  >
+                    Cambiar
+                  </button>
+                )}
                 <button
                   onClick={() => handleConfirm(false)}
                   disabled={confirmMutation.isPending}

@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from pydantic import ValidationError
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.plans import plan_limit
@@ -44,6 +44,7 @@ from app.models.coupon import Coupon
 from app.models.user import User
 from app.schemas.contact import ContactCreate
 from app.services import copilot_business_tools as biz_tools
+from app.services import copilot_promo_tools as promo_tools
 from app.services import copilot_sales_tools as sales_tools
 from app.services import llm_client
 from app.services.analytics_service import capture_event, compute_analytics_summary
@@ -59,7 +60,10 @@ MAX_ITERATIONS = 5
 CONFIRMATION_TTL_MINUTES = 5
 _MAX_TARGET_CONTACTS = 2000
 
-CONFIRM_TOOLS = {"launch_campaign", "create_coupon", "schedule_appointment"} | biz_tools.CHANGE_TOOLS
+CONFIRM_TOOLS = {"launch_campaign", "create_coupon", "schedule_appointment", promo_tools.NAME} | biz_tools.CHANGE_TOOLS
+# Su vista previa trae el mensaje que se va a mandar: se enseña completa, no lo que el modelo
+# haya escrito antes de llamar la herramienta.
+_SHOW_SUMMARY_TOOLS = {promo_tools.NAME}
 
 
 # ─── System prompt ────────────────────────────────────────────────────────────
@@ -177,6 +181,13 @@ Reglas estrictas:
    cliente y hora). "¿Cuánto llevo/vendí hoy?" → get_sales_today. Fiados o deudas
    ("me debe 50", "apúntale 50") NO son cobros: no llames record_sale; di que por ahora solo registras lo
    que ya te pagaron.
+9. PROMOS: "manda una promo de…", "anuncia que…", "avísales de…" → send_promo con `what` en sus palabras,
+   sin redactar tú el mensaje. audience: "bought" si dice "a los que me compraron"; "one" con `contact`
+   si nombra a un cliente; si no, "all". discount_percent solo si dijo un porcentaje ("15%", "10 por ciento");
+   "2x1" o "3x2" NO son descuento. No lo sugieras.
+   whatsapp=true solo si dijo "por WhatsApp". Si pide cambiar la promo que le enseñaste ("más corta",
+   "sin precio", "agrega que es hasta el domingo"), llama send_promo otra vez con `message` ya corregido
+   y lo demás igual. Si quiere mandar una campaña que ya existe, usa launch_campaign.
 {_loyalty_note(user)}{channel_note}"""
 
 
@@ -264,6 +275,7 @@ TOOLS = [
             "required": ["name", "phone"],
         },
     },
+    promo_tools.TOOL,
     {
         "name": "launch_campaign",
         "description": (
@@ -419,6 +431,8 @@ def _summarize(tool_name: str, data: dict) -> str:
         return f"Contacto \"{data.get('name', '')}\" creado."
     if tool_name == "launch_campaign":
         return f"Campaña \"{data.get('name', '')}\" lanzada a {data.get('recipients', 0)} contacto(s)."
+    if tool_name == promo_tools.NAME:
+        return promo_tools.summarize(data)
     if tool_name == "create_coupon":
         return f"Se creó {data.get('count', 0)} cupón(es) de {data.get('discount_percent')}% de descuento."
     if tool_name == "schedule_appointment":
@@ -581,28 +595,27 @@ async def _execute_immediate_tool(db: AsyncSession, user: User, tool_name: str, 
 
 # ─── Herramientas costosas: preview (confirmación) + ejecución ───────────────
 
-async def _count_campaign_recipients(db: AsyncSession, campaign: Campaign) -> int:
-    """Misma resolución de segmento que tasks.py's schedule_campaign — contactos
-    activos del anunciante, filtrados por specific_contacts o tags si el
-    segmento los especifica."""
-    segment = campaign.segment or {}
-    specific = segment.get("specific_contacts") or []
-    tags = segment.get("tags") or []
-
-    q = select(func.count()).select_from(Contact).where(
-        Contact.advertiser_id == campaign.advertiser_id, Contact.status == "active"
+async def _launch_reach(
+    db: AsyncSession, user: User, campaign: Campaign, signed_web_only: bool = False,
+) -> tuple[int, bool, dict]:
+    """A cuántos les llega y si va solo por web: sin chip conectado no sale
+    nada por WhatsApp, así que se manda solo por web (antes se intentaba
+    WhatsApp y no salía). Misma regla que la web (campaign_reach). Si ya
+    estaba marcada "solo por web", o así la vio el dueño en la vista previa
+    (`signed_web_only`), se queda así aunque conecte el chip a medio camino."""
+    from app.services.campaign_reach import (
+        campaign_reach,
+        is_web_only,
+        supports_web,
+        whatsapp_connected,
     )
-    if specific:
-        try:
-            ids = [uuid.UUID(c) for c in specific]
-        except ValueError:
-            ids = []
-        q = q.where(Contact.id.in_(ids))
-    elif tags:
-        q = q.where(Contact.tags.overlap(tags))
 
-    result = await db.execute(q)
-    return result.scalar_one()
+    reach = await campaign_reach(db, campaign)
+    web_only = supports_web(campaign) and (
+        signed_web_only or is_web_only(campaign) or not whatsapp_connected(user)
+    )
+    recipients = reach["web"] + reach["web_chat"] if web_only else reach["total"]
+    return recipients, web_only, reach
 
 
 async def _preview_launch_campaign(db: AsyncSession, user: User, args: dict) -> tuple[str | None, dict | None, str | None]:
@@ -620,30 +633,32 @@ async def _preview_launch_campaign(db: AsyncSession, user: User, args: dict) -> 
             f"es \"{campaign.status}\"."
         )
 
-    ab = campaign.ab_test or {}
-    mode = ab.get("campaign_mode", "regular")
-    if campaign.status == "draft":
-        if mode in ("radio", "comunitaria") and not ab.get("audio_url"):
-            return None, None, f"La campaña \"{campaign.name}\" aún no tiene el audio generado — complétalo en el dashboard antes de lanzarla."
-        if mode == "banner" and not campaign.image_url:
-            return None, None, f"La campaña \"{campaign.name}\" aún no tiene el banner generado — complétalo en el dashboard antes de lanzarla."
-        if not campaign.message_text and mode == "regular":
-            return None, None, f"La campaña \"{campaign.name}\" no tiene mensaje — agrégalo antes de lanzarla."
+    try:
+        check_content_complete(campaign)
+    except CampaignContentIncompleteError as e:
+        return None, None, f"La campaña \"{campaign.name}\": {e}"
 
-    recipients = await _count_campaign_recipients(db, campaign)
+    recipients, web_only, reach = await _launch_reach(db, user, campaign)
     if recipients == 0:
         return None, None, f"La campaña \"{campaign.name}\" no tiene contactos activos en su segmento — no hay a quién enviarla."
 
-    blocked = await preflight_campaign_send(db, campaign, user)
+    blocked = await preflight_campaign_send(db, campaign, user, web_only=web_only)
     if blocked:
         return None, None, blocked
 
-    summary = (
-        f"Vas a lanzar la campaña \"{campaign.name}\" a {recipients} contacto(s). "
-        f"Tu cuenta tiene {user.messages_remaining} mensajes disponibles en tu plan. "
-        "Esta acción no se puede deshacer una vez enviada."
-    )
-    resolved_args = {"campaign_id": str(campaign.id)}
+    if web_only:
+        summary = (
+            f"Vas a mandar la campaña \"{campaign.name}\" a {recipients} contacto(s): "
+            f"{promo_tools.reach_line(reach, True)}. Va gratis por web (tu WhatsApp no está conectado)."
+        )
+    else:
+        summary = (
+            f"Vas a lanzar la campaña \"{campaign.name}\" a {recipients} contacto(s): "
+            f"{promo_tools.reach_line(reach, False)}. "
+            f"Tu cuenta tiene {user.messages_remaining} mensajes disponibles en tu plan. "
+            "Esta acción no se puede deshacer una vez enviada."
+        )
+    resolved_args = {"campaign_id": str(campaign.id), "web_only": web_only}
     return summary, resolved_args, None
 
 
@@ -662,39 +677,22 @@ async def _execute_launch_campaign(db: AsyncSession, user: User, args: dict) -> 
     if campaign.status not in ("draft", "scheduled", "paused"):
         return None, f"La campaña \"{campaign.name}\" ya no está en un estado que se pueda lanzar (estado actual: {campaign.status})."
 
+    recipients, web_only, _ = await _launch_reach(db, user, campaign, signed_web_only=bool(args.get("web_only")))
     try:
-        check_content_complete(campaign)
-    except CampaignContentIncompleteError as e:
-        return None, str(e)
-
-    blocked = await preflight_campaign_send(db, campaign, user)
-    if blocked:
-        return None, blocked
-
-    recipients = await _count_campaign_recipients(db, campaign)
-
-    campaign.status = "running"
-    try:
-        await db.commit()
+        error = await promo_tools.start_campaign(db, user, campaign, web_only, source="copilot")
     except Exception:
         await db.rollback()
         logger.exception("[COPILOT] Error lanzando campaña %s", cid)
         return None, "Ocurrió un error al lanzar la campaña. Intenta de nuevo."
-
-    from app.workers.tasks import schedule_campaign
-
-    schedule_campaign.delay(str(campaign.id))
-    capture_event(
-        "campaign_sent",
-        user_id=user.id,
-        properties={"campaign_id": str(campaign.id), "type": campaign.type, "source": "copilot"},
-    )
+    if error:
+        return None, error
 
     return {
         "campaign_id": str(campaign.id),
         "name": campaign.name,
         "status": "running",
         "recipients": recipients,
+        "web_only": web_only,
     }, None
 
 
@@ -951,6 +949,8 @@ async def _preview_confirm_tool(db: AsyncSession, user: User, tool_name: str, ar
     try:
         if tool_name == "launch_campaign":
             return await _preview_launch_campaign(db, user, args)
+        if tool_name == promo_tools.NAME:
+            return await promo_tools.preview(db, user, args)
         if tool_name == "create_coupon":
             return await _preview_create_coupon(db, user, args)
         if tool_name == "schedule_appointment":
@@ -967,6 +967,8 @@ async def _execute_confirm_tool(db: AsyncSession, user: User, tool_name: str, ar
     try:
         if tool_name == "launch_campaign":
             return await _execute_launch_campaign(db, user, args)
+        if tool_name == promo_tools.NAME:
+            return await promo_tools.execute(db, user, args)
         if tool_name == "create_coupon":
             return await _execute_create_coupon(db, user, args)
         if tool_name == "schedule_appointment":
@@ -1116,13 +1118,19 @@ async def handle_chat(
             if tool_name in CONFIRM_TOOLS:
                 if attached_photo and tool_name in _PHOTO_TOOLS and not args.get("photo_url"):
                     args = {**args, "photo_url": attached_photo}
+                if tool_name == promo_tools.NAME:
+                    said = [h["content"] for h in history if h.get("role") == "user" and isinstance(h.get("content"), str)]
+                    args = promo_tools.keep_asked_discount(args, [*said, message])
+                    args = promo_tools.keep_asked_whatsapp(args, [*said, message])
                 summary, resolved_args, error = await _preview_confirm_tool(db, user, tool_name, args)
                 if error:
                     tool_results.append(_tool_result_block(block.id, {"error": error}, is_error=True))
                     continue
                 confirmation_id = _create_confirmation_token(user.id, tool_name, resolved_args)
                 pre_text = "\n".join(t.strip() for t in text_parts if t and t.strip())
-                pending_reply = pre_text or _default_confirmation_reply(summary)
+                pending_reply = (
+                    summary if tool_name in _SHOW_SUMMARY_TOOLS else pre_text or _default_confirmation_reply(summary)
+                )
                 pending = {
                     "confirmation_id": confirmation_id,
                     "tool": tool_name,

@@ -41,8 +41,12 @@ _STATE_TTL_SECONDS = 24 * 3600
 _MAX_HISTORY = 12
 
 CONFIRM_BUTTONS = [("copilot_yes", "✅ Sí, hazlo"), ("copilot_no", "❌ Cancelar")]
+# Una promo nueva (send_promo) trae además "Cambiar": el dueño corrige el mensaje antes de mandarlo.
+PROMO_BUTTONS = [("copilot_yes", "✅ Sí, mándala"), ("copilot_edit", "✏️ Cambiar"), ("copilot_no", "❌ Cancelar")]
+_EDIT = {"cambiar", "cambia", "cambiala", "cámbiala", "editar", "corregir"}
+EDIT_PROMPT = "¿Qué le cambio? Dímelo con tus palabras, por ejemplo: *más corta*, *quítale el precio* o *que diga hasta el domingo*."
 
-_YES = {"si", "sí", "si hazlo", "sí hazlo", "hazlo", "ok", "okay", "dale", "va", "confirmo", "claro", "adelante", "de acuerdo"}
+_YES = {"si", "sí", "si hazlo", "sí hazlo", "si mandala", "sí mándala", "sí mandala", "mandala", "mándala", "hazlo", "ok", "okay", "dale", "va", "confirmo", "claro", "adelante", "de acuerdo"}
 _NO = {"no", "cancelar", "cancela", "mejor no", "no gracias", "detente"}
 
 
@@ -165,6 +169,13 @@ async def handle_owner_command(
         return
 
     pending = state.get("pending")
+    if pending and _normalize(text) in _EDIT:
+        # "Cambiar": no se manda nada; lo que diga después vuelve a armar la promo.
+        state["pending"] = None
+        state["history"] += [{"role": "user", "content": text}, {"role": "assistant", "content": EDIT_PROMPT}]
+        await _save(redis, owner, state)
+        await _reply(owner, from_number, EDIT_PROMPT, voice)
+        return
     if pending:
         decision = parse_decision(text)
         if decision is not None:
@@ -208,7 +219,8 @@ async def handle_owner_command(
     if confirmation:
         state["pending"] = confirmation["confirmation_id"]
         await _save(redis, owner, state)
-        await send_platform_buttons(from_number, reply, CONFIRM_BUTTONS)
+        buttons = PROMO_BUTTONS if confirmation.get("tool") == "send_promo" else CONFIRM_BUTTONS
+        await send_platform_buttons(from_number, reply, buttons)
         return
 
     await _save(redis, owner, state)

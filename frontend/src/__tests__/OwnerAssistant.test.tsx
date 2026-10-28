@@ -168,4 +168,21 @@ describe('OwnerAssistant (bot flotante del panel)', () => {
     expect(post).toHaveBeenCalledWith('/copilot/confirm', { confirmation_id: 'tok-1', approve: false })
     expect(get).not.toHaveBeenCalled()
   })
+
+  it('a new promo shows the full preview with "Sí, mándala" / "Cambiar"; "Cambiar" sends nothing and asks what to change', async () => {
+    const summary = 'Promo para todos tus clientes:\n\n«2x1 en fundas»\n\nLe llega: 3 clientes la ven en su chat.'
+    post.mockResolvedValue({
+      data: { reply: summary, actions: [], pending_confirmation: { confirmation_id: 'tok-p', tool: 'send_promo', summary } },
+    })
+    renderAt('/app/dashboard')
+    fireEvent.click(screen.getByLabelText('Abrir asistente IaRadio'))
+    fireEvent.change(screen.getByLabelText('Escribe lo que necesitas'), { target: { value: 'manda una promo de 2x1 en fundas' } })
+    fireEvent.click(screen.getByLabelText('Enviar'))
+    await screen.findByText('Sí, mándala')
+    fireEvent.click(screen.getByText('Cambiar'))
+    await screen.findByText(/¿Qué le cambio\?/)
+    expect(screen.queryByText('Sí, mándala')).toBeNull()
+    expect(post).not.toHaveBeenCalledWith('/copilot/confirm', expect.anything())
+    expect((screen.getByLabelText('Escribe lo que necesitas') as HTMLInputElement).disabled).toBe(false)
+  })
 })

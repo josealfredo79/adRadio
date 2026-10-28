@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Camera, CheckCheck, Mic, Send, Square, Volume2, VolumeX, X } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { useCopilot, type CopilotAction, type PendingConfirmation } from '@/contexts/CopilotContext'
+import { EDIT_PROMO_PROMPT, PROMO_TOOL, useCopilot, type CopilotAction, type PendingConfirmation } from '@/contexts/CopilotContext'
 import MascotSmart from '@/components/MascotSmart'
 import BubbleTail from '@/components/BubbleTail'
 import { chatPalette, wallpaperPattern } from '@/lib/chatLook'
@@ -229,6 +229,13 @@ export default function OwnerAssistant() {
     )
   }
 
+  // "Cambiar": la promo no se manda; lo siguiente que diga la vuelve a armar.
+  const editPromo = () => {
+    setPendingConfirmation(null)
+    addAssistant(EDIT_PROMO_PROMPT)
+  }
+  const isPromo = pendingConfirmation?.tool === PROMO_TOOL
+
   const shown = messages.filter((m) => m.content)
 
   return (
@@ -347,8 +354,8 @@ export default function OwnerAssistant() {
             {pendingConfirmation && (
               <div className="mt-3 rounded-2xl border border-[#25D366]/40 bg-[#151926] p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: GREEN }}>¿Lo hago?</p>
-                <p className="mt-1 text-sm" style={{ color: PAL.text }}>{pendingConfirmation.summary}</p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                <p className="mt-1 whitespace-pre-line text-sm" style={{ color: PAL.text }}>{pendingConfirmation.summary}</p>
+                <div className={`mt-3 grid gap-2 ${isPromo ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   <button
                     type="button"
                     onClick={() => decide(true)}
@@ -356,8 +363,18 @@ export default function OwnerAssistant() {
                     className="rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50"
                     style={{ background: GREEN, color: PAL.onBrand }}
                   >
-                    Sí, hazlo
+                    {isPromo ? 'Sí, mándala' : 'Sí, hazlo'}
                   </button>
+                  {isPromo && (
+                    <button
+                      type="button"
+                      onClick={editPromo}
+                      disabled={busy}
+                      className="rounded-xl border border-white/15 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      Cambiar
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => decide(false)}

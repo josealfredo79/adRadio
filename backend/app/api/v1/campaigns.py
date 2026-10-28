@@ -37,7 +37,10 @@ from app.core.redis import get_redis_optional
 from app.database import get_db
 from app.domain.campaign_actions import (
     CampaignContentIncompleteError,
+    CampaignValidationError,
     check_content_complete,
+    check_segment,
+    validate_new_campaign,
 )
 from app.models.campaign import Campaign
 from app.models.customer_story import CustomerStory
@@ -135,16 +138,10 @@ async def list_campaigns(
 
 
 def _check_segment(segment: dict | None) -> None:
-    """"Los que compraron en los últimos N días": N entero de 1 a 365; "uno":
-    ids válidos. Si no, el envío truena después en recipients_query."""
-    segment = segment or {}
-    days = segment.get("bought_days")
-    if days is not None and (isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= 365):
-        raise HTTPException(status_code=422, detail="Los días de compra deben ser de 1 a 365")
     try:
-        [uuid.UUID(str(c)) for c in segment.get("specific_contacts") or []]
-    except ValueError:
-        raise HTTPException(status_code=422, detail="Cliente inválido") from None
+        check_segment(segment)
+    except CampaignValidationError as e:
+        raise HTTPException(status_code=e.status, detail=e.detail) from None
 
 
 @router.post("", response_model=CampaignOut, status_code=status.HTTP_201_CREATED)
@@ -157,26 +154,14 @@ async def create_campaign(
     _: None = Depends(idempotent_post),
     redis: AsyncRedis | None = Depends(get_redis_optional),
 ) -> CampaignOut:
-    if current_user.subscription_status not in ("active", "trial") or is_paused(current_user):
-        raise HTTPException(status_code=402, detail="Necesitas un plan activo para crear campañas")
-
-    if not body.name or not body.name.strip():
-        raise HTTPException(status_code=422, detail="El nombre de la campaña es obligatorio")
-
-    if not body.message_text or not body.message_text.strip():
-        raise HTTPException(status_code=422, detail="El mensaje de la campaña es obligatorio")
+    try:
+        validate_new_campaign(current_user, name=body.name, message_text=body.message_text, type_=body.type,
+                              status=body.status, segment=body.segment)
+    except CampaignValidationError as e:
+        raise HTTPException(status_code=e.status, detail=e.detail) from None
 
     if (body.ab_test or {}).get("campaign_mode") == "banner" and not check_feature_access(current_user, "banner"):
         raise HTTPException(status_code=402, detail=plan_required_message("banner"))
-
-    valid_types = {"promo", "reminder", "launch", "event", "voces"}
-    if body.type not in valid_types:
-        raise HTTPException(status_code=422, detail=f"Tipo de campaña inválido. Debe ser uno de: {', '.join(sorted(valid_types))}")
-
-    if body.status not in ("draft", "scheduled"):
-        raise HTTPException(status_code=422, detail="El estado debe ser 'draft' o 'scheduled'")
-
-    _check_segment(body.segment)
 
     try:
         campaign = Campaign(advertiser_id=current_user.id, **body.model_dump())
