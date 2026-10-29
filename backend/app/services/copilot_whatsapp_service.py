@@ -45,6 +45,8 @@ _MAX_HISTORY = 12
 CONFIRM_BUTTONS = [("copilot_yes", "✅ Sí, hazlo"), ("copilot_no", "❌ Cancelar")]
 # Una promo nueva (send_promo) trae además "Cambiar": el dueño corrige el mensaje antes de mandarlo.
 PROMO_BUTTONS = [("copilot_yes", "✅ Sí, mándala"), ("copilot_edit", "✏️ Cambiar"), ("copilot_no", "❌ Cancelar")]
+# Confirmaciones que mandan algo a los clientes: con varias cuentas, se dice de cuál.
+CAMPAIGN_TOOLS = {"send_promo", "launch_campaign"}
 _EDIT = {"cambiar", "cambia", "cambiala", "cámbiala", "editar", "corregir"}
 EDIT_PROMPT = "¿Qué le cambio? Dímelo con tus palabras, por ejemplo: *más corta*, *quítale el precio* o *que diga hasta el domingo*."
 
@@ -62,6 +64,10 @@ BUILDER_INPUT_HINT = {
     "contact": "Escribe su nombre o teléfono.",
 }
 BUILDER_PHOTO_HINT = "La foto la usamos cuando lleguemos al paso de la foto 📷."
+
+
+def sent_to(business: str) -> str:
+    return f"🏪 Se manda a los clientes de *{business}*."
 
 
 def _normalize(text: str) -> str:
@@ -253,7 +259,7 @@ async def _note_url(url: str) -> str:
         return url
 
 
-async def _send_question(to: str, step: dict) -> None:
+async def _send_question(to: str, step: dict, business: str | None = None) -> None:
     text = (step.get("text") or "").strip()
     if step.get("input"):
         hint = BUILDER_INPUT_HINT.get(step["input"])
@@ -268,13 +274,15 @@ async def _send_question(to: str, step: dict) -> None:
         for c in choices:
             if c["id"] == "whatsapp" and "(aprox" in c.get("label", ""):
                 text = f"{text}\n{c['label']}."
+        if business:
+            text = f"{text}\n{sent_to(business)}"
     if len(choices) <= 3:
         await send_platform_buttons(to, text, [(c["id"], _wa_title(step, c, 20)) for c in choices])
     else:
         await send_platform_list(to, text, [(c["id"], _wa_title(step, c, 24)) for c in choices[:10]])
 
 
-async def _render_step(owner: User, to: str, step: dict, state: dict, redis) -> None:
+async def _render_step(owner: User, to: str, step: dict, state: dict, redis, business: str | None = None) -> None:
     """Dibuja un paso: primero la vista previa (cuña, imagen o texto) y luego
     la pregunta con botones/lista."""
     text = step.get("text") or ""
@@ -293,7 +301,7 @@ async def _render_step(owner: User, to: str, step: dict, state: dict, redis) -> 
         shown = preview["text"].strip()
         if shown and shown not in text:
             text = f"{shown}\n\n{text}"
-    await _send_question(to, {**step, "text": text})
+    await _send_question(to, {**step, "text": text}, business)
     if step.get("done"):
         state["builder"] = None
     else:
@@ -305,7 +313,7 @@ async def _render_step(owner: User, to: str, step: dict, state: dict, redis) -> 
 
 
 async def _builder_turn(db: AsyncSession, owner: User, to: str, text: str, photo_url: str | None,
-                        *, voice: bool, state: dict, redis) -> None:
+                        *, voice: bool, state: dict, redis, business: str | None = None) -> None:
     """Un mensaje del dueño mientras la plática de campañas está abierta."""
     from app.domain.campaign_builder import handle as build
 
@@ -326,7 +334,7 @@ async def _builder_turn(db: AsyncSession, owner: User, to: str, text: str, photo
             choice, answer = "upload", photo_url
         elif not answer:
             await send_platform_text(to, BUILDER_PHOTO_HINT)
-            await _send_question(to, step)
+            await _send_question(to, step, business)
             return
     if choice is None and answer:
         choice = _choice_for(step, answer)
@@ -336,7 +344,7 @@ async def _builder_turn(db: AsyncSession, owner: User, to: str, text: str, photo
         await send_platform_text(to, "Mándame la foto que quieres usar 📷.")
         return
     if not choice and not answer:
-        await _send_question(to, step)
+        await _send_question(to, step, business)
         return
 
     cid = None if choice == "new" else step.get("campaign_id")
@@ -344,7 +352,7 @@ async def _builder_turn(db: AsyncSession, owner: User, to: str, text: str, photo
     said = "[foto]" if choice == "upload" else (text or "")
     state["history"] += [{"role": "user", "content": said},
                          {"role": "assistant", "content": result.get("text") or ""}]
-    await _render_step(owner, to, result, state, redis)
+    await _render_step(owner, to, result, state, redis, business)
 
 
 async def save_owner_photo(owner: User, content: bytes, mime: str) -> str | None:
@@ -365,14 +373,18 @@ async def handle_owner_command(
     text: str,
     voice: bool = False,
     photo_url: str | None = None,
+    business: str | None = None,
 ) -> None:
+    """`business`: nombre del negocio cuando el celular del dueño está en varias
+    cuentas — se dice antes de mandar una campaña (central_account_picker)."""
     redis = await get_redis_optional()
     state = await _load(redis, owner)
 
     if state.get("builder"):
         # La plática de campañas está abierta: todo lo que escriba es una
         # respuesta (o "salir"). No pasa por la IA.
-        await _builder_turn(db, owner, from_number, text, photo_url, voice=voice, state=state, redis=redis)
+        await _builder_turn(db, owner, from_number, text, photo_url, voice=voice, state=state, redis=redis,
+                            business=business)
         return
 
     if photo_url and not text.strip():
@@ -430,7 +442,7 @@ async def handle_owner_command(
                 "hazlo desde el panel, por favor.",
             )
             return
-        await _render_step(owner, from_number, builder["data"]["builder"], state, redis)
+        await _render_step(owner, from_number, builder["data"]["builder"], state, redis, business)
         return
 
     confirmation = result.get("pending_confirmation")
@@ -447,6 +459,8 @@ async def handle_owner_command(
         state["pending"] = confirmation["confirmation_id"]
         await _save(redis, owner, state)
         buttons = PROMO_BUTTONS if confirmation.get("tool") == "send_promo" else CONFIRM_BUTTONS
+        if business and confirmation.get("tool") in CAMPAIGN_TOOLS:
+            reply = f"{reply}\n\n{sent_to(business)}"
         await send_platform_buttons(from_number, reply, buttons)
         return
 

@@ -17,10 +17,12 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.redis import get_redis_optional
 from app.models.knowledge_base import KnowledgeBase
 from app.models.message import Message
 from app.models.owner_question import OwnerQuestion
 from app.models.user import User
+from app.services import central_account_picker as picker
 from app.services.embedding_service import get_embedding
 from app.services.llm_client import chat_completion
 from app.services.meta_service import send_whatsapp
@@ -206,6 +208,11 @@ async def _answers_question(question: str, message: str) -> bool:
     return not verdict.strip().upper().startswith("NO")
 
 
+def _business(owner: User, several: bool) -> str | None:
+    """Nombre del negocio para "Se manda a los clientes de X" (solo con varias cuentas)."""
+    return (owner.business_name or "tu negocio").strip() if several else None
+
+
 async def handle_owner_message(
     db: AsyncSession,
     *,
@@ -223,6 +230,7 @@ async def handle_owner_message(
     owners = (
         await db.execute(
             select(User).where(or_(User.whatsapp_number.in_(variants), User.phone.in_(variants)))
+            .order_by(User.created_at, User.id)
         )
     ).scalars().all()
     if not owners:
@@ -235,17 +243,82 @@ async def handle_owner_message(
         return
 
     message = text.strip()
+    # Un dueño con varios negocios con el mismo celular escoge para cuál es
+    # (central_account_picker); las preguntas de clientes se contestan en
+    # cualquiera sin preguntar.
+    primary: User | None = owners[0]
+    several = False
+    redis = None
+    if len(owners) > 1:
+        redis = await get_redis_optional()
+        if redis is None:
+            logger.warning("[OWNER] %d accounts share ...%s and Redis is down — using the first", len(owners), from_number[-4:])
+        else:
+            several = True
+            if photo is None and picker.is_switch(message):
+                await picker.forget(redis, from_number)
+                await picker.release(redis, from_number)
+                await picker.hold(redis, from_number, {})  # sin nada pendiente: solo escoger
+                await picker.ask(from_number, owners)
+                return
+            primary = await picker.current(redis, from_number, owners)
+            # Tocó un botón de "¿Para cuál negocio?" (aunque ya haya pasado la hora
+            # en que se guarda lo que había pedido).
+            request = await picker.held(redis, from_number) if primary is None else None
+            # Un botón de "¿Para cuál negocio?" cambia de cuenta aunque ya haya una escogida.
+            picked = (picker.match(owners, message, asking=request is not None)
+                      if photo is None and (primary is None or message.startswith("pick:")) else None)
+            if picked is not None:
+                request = request or {}
+                await picker.choose(redis, from_number, picked)
+                await picker.release(redis, from_number)
+                await send_platform_text(from_number, picker.chosen_text(picked))
+                if request.get("photo"):
+                    await send_platform_text(from_number, "Mándame otra vez la foto 📷")
+                    return
+                if request.get("confirm"):
+                    # Un "Sí" de antes de escoger nunca se aplica solo a la cuenta escogida.
+                    from app.services.copilot_whatsapp_service import (
+                        has_pending_confirmation,
+                    )
+
+                    if await has_pending_confirmation(picked):
+                        await send_platform_text(
+                            from_number, "Para hacerlo en este negocio, toca otra vez *Sí* en el mensaje de confirmación.",
+                        )
+                    return
+                if request.get("builder"):
+                    # Tocó un botón de una campaña a medio armar: nada sale solo al
+                    # escoger; se le vuelve a mostrar ese paso para que lo confirme.
+                    from app.services.copilot_whatsapp_service import (
+                        handle_owner_command,
+                        has_open_builder,
+                    )
+
+                    if await has_open_builder(picked):
+                        await handle_owner_command(db, owner=picked, from_number=from_number, text="",
+                                                   business=_business(picked, True))
+                    return
+                if not request.get("text"):
+                    return
+                primary, message, voice, context_wamid = picked, request["text"], bool(request.get("voice")), None
+
     if photo is not None:
         from app.services.copilot_whatsapp_service import (
             handle_owner_command,
             save_owner_photo,
         )
 
-        photo_url = await save_owner_photo(owners[0], *photo)
+        if primary is None:
+            await picker.hold(redis, from_number, {"photo": True})
+            await picker.ask(from_number, owners)
+            return
+        photo_url = await save_owner_photo(primary, *photo)
         if not photo_url:
             await send_platform_text(from_number, "No pude guardar esa foto 🙏 Mándala de nuevo como foto (JPG o PNG).")
             return
-        await handle_owner_command(db, owner=owners[0], from_number=from_number, text=message, photo_url=photo_url)
+        await handle_owner_command(db, owner=primary, from_number=from_number, text=message, photo_url=photo_url,
+                                   business=_business(primary, several))
         return
     if not message or message.startswith(("[audio", "[media:", "[interactive:")):
         # Nota de voz sin transcripción, sticker, foto… — no hay qué procesar.
@@ -255,9 +328,6 @@ async def handle_owner_message(
         )
         return
 
-    # Un dueño con varios negocios con el mismo celular: el Copiloto opera el
-    # primero; las preguntas de clientes sí se resuelven en cualquiera.
-    primary = owners[0]
     owner_ids = [o.id for o in owners]
     base = select(OwnerQuestion).where(
         OwnerQuestion.advertiser_id.in_(owner_ids), OwnerQuestion.status == "pending"
@@ -275,21 +345,34 @@ async def handle_owner_message(
             parse_decision,
         )
 
+        async def command(builder: bool = False, confirm: bool = False) -> None:
+            if primary is None:
+                # Todavía no escoge negocio: se le pregunta y lo que pidió espera.
+                await picker.hold(redis, from_number,
+                                  {"text": message, "voice": voice, "builder": builder, "confirm": confirm})
+                await picker.ask(from_number, owners)
+                return
+            await handle_owner_command(db, owner=primary, from_number=from_number, text=message, voice=voice,
+                                       business=_business(primary, several))
+
         # La plática de campañas está abierta: "Sí"/"No"/"1" son respuestas del
         # armador, no de un cliente (aunque haya preguntas de clientes pendientes).
-        if await has_open_builder(primary):
-            await handle_owner_command(db, owner=primary, from_number=from_number, text=message, voice=voice)
-            return
+        # Sin negocio escogido se revisan todas: un botón viejo del armador nunca
+        # debe tomarse como respuesta a un cliente; se le pregunta el negocio.
+        for owner in [primary] if primary is not None else owners:
+            if await has_open_builder(owner):
+                await command(builder=True)
+                return
 
-        # "Sí"/"No" a una acción que el Copiloto le pidió confirmar.
-        if parse_decision(message) is not None and await has_pending_confirmation(primary):
-            await handle_owner_command(db, owner=primary, from_number=from_number, text=message, voice=voice)
-            return
+            # "Sí"/"No" a una acción que el Copiloto le pidió confirmar.
+            if parse_decision(message) is not None and await has_pending_confirmation(owner):
+                await command(confirm=True)
+                return
 
         pending = (await db.execute(base.order_by(OwnerQuestion.created_at.desc()))).scalars().all()
         if not pending or not await _answers_question(pending[0].question, message):
             # No contesta a un cliente: es una instrucción para el Copiloto.
-            await handle_owner_command(db, owner=primary, from_number=from_number, text=message, voice=voice)
+            await command()
             return
         if len(pending) > 1:
             await send_platform_text(

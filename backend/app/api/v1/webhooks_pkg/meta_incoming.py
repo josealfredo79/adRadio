@@ -170,10 +170,13 @@ def _extract_body_text(msg: dict) -> tuple[str, str | None]:
     if msg_type == "interactive":
         interactive = msg.get("interactive", {})
         itype = interactive.get("type")
-        if itype == "button_reply":
-            return interactive.get("button_reply", {}).get("title", "").strip(), None
-        if itype == "list_reply":
-            return interactive.get("list_reply", {}).get("title", "").strip(), None
+        if itype in ("button_reply", "list_reply"):
+            reply = interactive.get(itype, {})
+            # "¿Para cuál negocio?" (central_account_picker): el id dice la cuenta
+            # aunque WhatsApp recorte dos nombres parecidos al mismo título.
+            if str(reply.get("id", "")).startswith("pick:"):
+                return reply["id"], None
+            return reply.get("title", "").strip(), None
         return f"[interactive:{itype}]", None
     return f"[media:{msg_type}]", None
 
