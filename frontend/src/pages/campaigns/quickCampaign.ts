@@ -71,7 +71,7 @@ export function webReachLine(r: QuickReach): string {
 /** El % que el texto le promete al cliente ("10% en cargadores" → 10), o null.
  * Sirve para avisar si el texto promete un descuento que el cupón no da. */
 export function promisedPercent(message: string): number | null {
-  const m = message.match(/(\d{1,2})\s?%/)
+  const m = message.match(/(?<!\d)(\d{1,3})\s?%/)
   return m ? Number(m[1]) : null
 }
 

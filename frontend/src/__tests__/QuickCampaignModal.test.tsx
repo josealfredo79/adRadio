@@ -201,5 +201,6 @@ describe('quickCampaign helpers', () => {
     expect(discountMismatch('10% en cargadores', 10)).toBeNull()
     expect(discountMismatch('10 % en cargadores', 20)).toBe('Tu mensaje dice 10%, pero el cupón es de 20%.')
     expect(discountMismatch('25% en todo', 0)).toMatch(/no lleva cupón/)
+    expect(discountMismatch('100% garantizado', 0)).toMatch(/dice 100%/)
   })
 })
