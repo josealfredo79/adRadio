@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { QuickCampaignModal } from '@/pages/campaigns/components/QuickCampaignModal'
-import { buildCampaignBody, campaignName, discountMismatch, webReachLine } from '@/pages/campaigns/quickCampaign'
+import { buildCampaignBody, campaignName, discountMismatch, startsAtLabel, webReachLine } from '@/pages/campaigns/quickCampaign'
 
 // Campaña en 3 toques (docs/specs/2026-10-28-campana-3-toques.md).
 
@@ -18,7 +18,8 @@ vi.mock('@/lib/api', async () => {
     getApiError: actual.getApiError,
   }
 })
-vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ toast: vi.fn() }) }))
+const toast = vi.hoisted(() => vi.fn())
+vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ toast }) }))
 
 const REACH = { total: 4, web: 1, web_silent: 0, web_chat: 3, whatsapp: 0, whatsapp_cost_mxn: 0, whatsapp_connected: false, whatsapp_unreachable: 3 }
 
@@ -165,6 +166,19 @@ describe('QuickCampaignModal', () => {
     expect(screen.getByText(/Cupón: 10% de descuento/)).toBeDefined()
   })
 
+  it('sent at night, says when it goes out instead of "Promo enviada" (prueba real 2026-10-28)', async () => {
+    mockApi()
+    const base = post.getMockImplementation()!
+    post.mockImplementation((url: string, body: unknown) =>
+      url === '/campaigns/camp-1/resume' ? Promise.resolve({ data: { message: 'ok', starts_at: '2026-10-29T14:00:00+00:00' } }) : base(url, body))
+    renderModal()
+    await writeAndGenerate()
+    await screen.findByText(/suena aviso/)
+    fireEvent.click(screen.getByText('Mandar gratis por web'))
+    await waitFor(() => expect(toast).toHaveBeenCalled())
+    expect(toast.mock.calls[0][0].title).toMatch(/^Tu promo sale .* a las 8:00/)
+  })
+
   it('caso 12: if sending fails, says why, keeps the text and the draft; retry reuses the draft', async () => {
     mockApi({}, { resumeFails: true })
     const { onClose } = renderModal()
@@ -202,5 +216,12 @@ describe('quickCampaign helpers', () => {
     expect(discountMismatch('10 % en cargadores', 20)).toBe('Tu mensaje dice 10%, pero el cupón es de 20%.')
     expect(discountMismatch('25% en todo', 0)).toMatch(/no lleva cupón/)
     expect(discountMismatch('100% garantizado', 0)).toMatch(/dice 100%/)
+  })
+
+  it('says when a night promo goes out, in Tlaxiaco time', () => {
+    const night = new Date('2026-10-29T04:34:00Z') // 22:34 del 28 en Tlaxiaco
+    expect(startsAtLabel('2026-10-29T14:00:00+00:00', night)).toMatch(/^mañana a las 8:00/)
+    expect(startsAtLabel('2026-10-29T14:00:00+00:00', new Date('2026-10-29T08:00:00Z'))).toMatch(/^hoy a las 8:00/)
+    expect(startsAtLabel('2026-11-02T14:00:00+00:00', new Date('2026-11-01T04:00:00Z'))).toMatch(/^el lunes a las 8:00/)
   })
 })

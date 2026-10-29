@@ -377,6 +377,11 @@ async def resume_campaign(
         "web_only": web_only,
     })
     out = {"message": "Campaña reanudada"}
+    # De noche o en domingo schedule_campaign la deja para el siguiente horario
+    # humano: la pantalla dice cuándo sale en vez de "enviada" (prueba real 2026-10-28).
+    from app.services.messaging_throttle import is_human_hour, next_human_hour_utc
+    if not is_human_hour(timezone_offset=-6):
+        out["starts_at"] = next_human_hour_utc(timezone_offset=-6).isoformat()
     await store_idempotency_response(request, redis, out)
     return out
 

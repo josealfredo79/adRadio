@@ -17,6 +17,7 @@ import {
   pesos,
   promisedPercent,
   previewText,
+  startsAtLabel,
   webReachLine,
 } from '../quickCampaign'
 
@@ -156,14 +157,21 @@ export function QuickCampaignModal({ businessName, onClose, onMoreOptions }: Qui
         id = (await api.post<{ id: string }>('/campaigns', body)).data.id
         setDraftId(id)
       }
-      await api.post(`/campaigns/${id}/resume`, { web_only: webOnly })
+      const { data } = await api.post<{ starts_at?: string }>(`/campaigns/${id}/resume`, { web_only: webOnly })
       qc.invalidateQueries({ queryKey: ['campaigns'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
-      toast({
-        title: 'Promo enviada',
-        description: webOnly ? 'Va por la web, gratis. No se usa WhatsApp.' : 'Va por la web y por WhatsApp. Puede tardar unos minutos.',
-        variant: 'success',
-      })
+      const channel = webOnly ? 'Va por la web, gratis. No se usa WhatsApp.' : 'Va por la web y por WhatsApp.'
+      toast(data?.starts_at
+        ? {
+            title: `Tu promo sale ${startsAtLabel(data.starts_at)}`,
+            description: `De noche y en domingo no se mandan promos, para no molestar a tus clientes. ${channel}`,
+            variant: 'success',
+          }
+        : {
+            title: 'Promo enviada',
+            description: webOnly ? channel : `${channel} Puede tardar unos minutos.`,
+            variant: 'success',
+          })
       onClose()
     } catch (err) {
       const blocked = err instanceof AxiosError && err.response?.status === 409

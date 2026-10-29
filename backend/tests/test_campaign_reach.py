@@ -283,6 +283,23 @@ class TestResumeWebOnly:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("human", [True, False])
+    async def test_says_when_it_starts_if_it_is_night(self, human):
+        user_id, (cid,) = await _seed(1)
+        try:
+            await _add_subs(user_id, cid, 1)
+            camp_id = await _campaign(user_id)
+            with patch("app.api.v1.campaigns.schedule_campaign.delay", MagicMock()), \
+                 patch("app.services.messaging_throttle.is_human_hour", return_value=human):
+                async with AsyncSessionLocal() as db:
+                    user = await db.get(User, user_id)
+                    out = await resume_campaign(camp_id, _request(), ResumeBody(web_only=True), db=db,
+                                                current_user=user, _=None, redis=None)
+            assert ("starts_at" in out) is not human
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
     async def test_normal_send_clears_an_old_web_only(self):
         user_id, _ = await _seed(1)
         try:

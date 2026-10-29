@@ -69,7 +69,7 @@ Reglas:
 - Tono cercano y conversacional (no robótico)
 - Incluir emoji relevante al inicio
 - Llamada a la acción clara al final
-- No usar mayúsculas en exceso
+- No usar mayúsculas en exceso, pero cada oración empieza con mayúscula
 - No usar signos de exclamación consecutivos
 - Cada variante debe ser única en estructura y palabras clave
 """
@@ -101,7 +101,8 @@ Los precios del catálogo son el precio normal: nunca digas que ya traen descuen
 (p. ej. "10% de descuento en el cargador de $120").
 Escribe todo en español: "descuento", no "off" ni "sale".
 No inventes cómo contactar al negocio ("llama", "visítanos en…"): la llamada a la
-acción invita a contestar este mensaje o a pedirlo aquí.
+acción invita a contestar este mensaje o a pedirlo aquí, con el verbo bien
+conjugado ("Pídelo aquí", no "pedirlo aquí").
 
 Devuelve solo las 3 variantes, separadas por "---", sin numeración ni explicaciones adicionales."""
 
