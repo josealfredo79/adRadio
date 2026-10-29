@@ -254,6 +254,9 @@ export default function PortalPage() {
     const back = () => navigate('/mi')
     const chat = (
       <AgentChat
+        // En computadora se pasa de un negocio a otro sin salir de la página:
+        // sin la llave, el chat nuevo se quedaba con la plática del anterior.
+        key={token}
         layout={isDesktop ? 'pane' : 'screen'}
         voiceBase={`/public/portal/${token}`}
         portalToken={token!}
