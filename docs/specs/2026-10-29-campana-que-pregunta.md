@@ -92,3 +92,8 @@ panel y es lo mismo que usa el Copiloto web. Ver `docs/PLAN-CAMPANAS-SIMPLES.md`
 - revisor-dinero: "Subir". Arreglado antes de subir: candado contra "Mandar" doble (salía doble y Meta
   cobraría doble), estilo/formato/cupón inventados en peticiones a mano.
 - Ojo (no es de esta fase): el estilo "Dato curioso" puede afirmar datos no comprobados.
+- Pruebas finales, 2.ª pasada (2026-10-29): faltaban los caminos que no son el feliz —cartel de
+  colores, subir su propia foto, «100%» (la prueba se perdió al borrar la promo de 3 toques), sin
+  clientes, mandar también por WhatsApp, candado de imagen de Arranque, borrador de más de una
+  semana y que otro dueño no pueda seguir el borrador— y el endpoint `POST /campaigns/builder`.
+  Plática: 27 pruebas. Backend 1913 OK, 1 saltada. Frontend 263 OK; tsc y eslint limpios.

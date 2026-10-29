@@ -193,9 +193,10 @@ _PROMO_RULE = """9. PROMOS: "manda una promo de…", "anuncia que…", "avísale
    "sin precio", "agrega que es hasta el domingo"), llama send_promo otra vez con `message` ya corregido
    y lo demás igual. Si quiere mandar una campaña que ya existe, usa launch_campaign."""
 
-# En el panel web las campañas se arman platicando (campaign_builder): el
-# Copiloto solo abre la plática con lo que ya entendió y los botones siguen
-# solos. Por WhatsApp y voz sigue send_promo hasta la Fase C.
+# En el panel web y en WhatsApp escrito las campañas se arman platicando
+# (campaign_builder): el Copiloto solo abre la plática con lo que ya entendió y
+# los botones siguen solos. Por nota de voz sigue send_promo (una sola vista
+# previa) hasta que la plática se pueda decir en voz alta.
 _PROMO_RULE_PANEL = """9. CAMPAÑAS Y PROMOS: "haz una campaña de…", "manda una promo de…", "anuncia que…", "un audio de…",
    "con la foto de…" → build_campaign con `what` en sus palabras, sin redactar tú el mensaje. Pon `format`
    ("text", "photo", "audio"), `style` (solo audio) y `audience` ("all", "bought", "one" con `contact`)
@@ -204,12 +205,12 @@ _PROMO_RULE_PANEL = """9. CAMPAÑAS Y PROMOS: "haz una campaña de…", "manda u
 
 
 def _promo_rule(channel: str) -> str:
-    return _PROMO_RULE_PANEL if channel == "panel" else _PROMO_RULE
+    return _PROMO_RULE_PANEL if channel in ("panel", "whatsapp") else _PROMO_RULE
 
 
 BUILDER_TOOL = {
     "name": "build_campaign",
-    "description": "Abre la plática para armar una campaña (texto, foto o audio) con botones en el panel.",
+    "description": "Abre la plática para armar una campaña (texto, foto o audio) con botones en el panel o en WhatsApp.",
     "input_schema": {
         "type": "object",
         "properties": {
@@ -226,9 +227,9 @@ BUILDER_TOOL = {
 
 
 def _tools_for(channel: str) -> list[dict]:
-    if channel != "panel":
-        return TOOLS
-    return [t for t in TOOLS if t["name"] != promo_tools.NAME] + [BUILDER_TOOL]
+    if channel in ("panel", "whatsapp"):
+        return [t for t in TOOLS if t["name"] != promo_tools.NAME] + [BUILDER_TOOL]
+    return TOOLS
 
 
 # ─── Definición de herramientas (Anthropic tool-use schema) ──────────────────
@@ -1159,7 +1160,7 @@ async def handle_chat(
             if block.error:
                 tool_results.append(_tool_result_block(block.id, {"error": block.error}, is_error=True))
                 continue
-            if tool_name == BUILDER_TOOL["name"] and channel == "panel":
+            if tool_name == BUILDER_TOOL["name"] and channel in ("panel", "whatsapp"):
                 from app.domain.campaign_builder import handle as build
                 from app.domain.campaign_builder import keep_said
 

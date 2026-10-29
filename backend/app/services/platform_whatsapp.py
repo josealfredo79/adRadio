@@ -215,6 +215,70 @@ async def send_platform_buttons(to: str, body: str, buttons: list[tuple[str, str
         return await send_platform_text(to, f"{body}\n\nResponde: {options}")
 
 
+async def send_platform_list(to: str, body: str, rows: list[tuple[str, str]],
+                             button_text: str = "Ver opciones") -> tuple[str | None, str | None]:
+    """Mensaje con una lista de hasta 10 opciones (título ≤ 24 caracteres).
+    Se usa cuando hay más de 3 opciones (estilos, fotos, descuentos). Si Meta
+    lo rechaza, manda el texto con las opciones numeradas — el dueño puede
+    contestar el número o el texto."""
+    token = await platform_token() if platform_enabled() else None
+    if not token:
+        return None, "platform_not_configured"
+    try:
+        data = await graph_request(
+            f"{settings.IARADIO_WA_PHONE_NUMBER_ID}/messages",
+            token=token,
+            method="POST",
+            body={
+                "messaging_product": "whatsapp",
+                "to": normalize_recipient(to),
+                "type": "interactive",
+                "interactive": {
+                    "type": "list",
+                    "body": {"text": body[:1024]},
+                    "action": {
+                        "button": button_text[:20],
+                        "sections": [{
+                            "rows": [
+                                {"id": rid[:200], "title": title[:24]}
+                                for rid, title in rows[:10]
+                            ],
+                        }],
+                    },
+                },
+            },
+        )
+        return (data.get("messages") or [{}])[0].get("id"), None
+    except MetaApiError as e:
+        logger.warning("[PLATFORM WA] List to %s failed (%s) — sending as text", to, e)
+        options = "\n".join(f"{i}. {title}" for i, (_, title) in enumerate(rows[:10], 1))
+        return await send_platform_text(to, f"{body}\n\n{options}")
+
+
+async def send_platform_image(to: str, link: str, caption: str | None = None) -> tuple[str | None, str | None]:
+    """Imagen al dueño por link público (la vista previa de una campaña con
+    foto). Si Meta la rechaza, manda el link para que la abra."""
+    token = await platform_token() if platform_enabled() else None
+    if not token:
+        return None, "platform_not_configured"
+    try:
+        data = await graph_request(
+            f"{settings.IARADIO_WA_PHONE_NUMBER_ID}/messages",
+            token=token,
+            method="POST",
+            body={
+                "messaging_product": "whatsapp",
+                "to": normalize_recipient(to),
+                "type": "image",
+                "image": {"link": link, **({"caption": caption[:1024]} if caption else {})},
+            },
+        )
+        return (data.get("messages") or [{}])[0].get("id"), None
+    except MetaApiError as e:
+        logger.warning("[PLATFORM WA] Image to %s failed (%s) — sending the link", to, e)
+        return await send_platform_text(to, f"{caption}\n{link}" if caption else link)
+
+
 async def send_platform_audio(to: str, link: str) -> tuple[str | None, str | None]:
     """Nota de voz al dueño (OGG/Opus por link público). Solo se usa
     contestando una nota de voz que el dueño acaba de mandar — siempre dentro

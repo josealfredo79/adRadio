@@ -110,9 +110,10 @@ botones/listas de WhatsApp). Así no se separan (lección de `6d27525`). Reusa `
 `campaign_builder` con las preguntas 1–7 para Texto, Con foto y Audio (7 estilos); "Nueva
 campaña" del panel y el Copiloto web lo usan. La promo de 3 toques de hoy pasa a ser este flujo.
 
-### Fase C — El mismo armador por WhatsApp (≈ 1.5 días) · revisor-dinero
+### Fase C — El mismo armador por WhatsApp (≈ 1.5 días) · revisor-dinero ✅ construida (2026-10-29)
 Botones y listas por el número central; vista previa como nota de voz o imagen
-(`send_platform_image`, `send_platform_list` nuevos); retomar a medias.
+(`send_platform_image`, `send_platform_list` nuevos); retomar a medias. La nota de voz sigue con la
+promo rápida. Ver `docs/specs/2026-10-29-campana-que-pregunta-whatsapp.md`.
 
 ### Fase D — Varios días de verdad (≈ 2 días) · revisor-dinero · probablemente migración
 Secuencia, Saga y Parrilla mandan cada pieza en su día, por web y WhatsApp, con horario humano,

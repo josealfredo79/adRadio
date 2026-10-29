@@ -2,7 +2,8 @@
 
 El dueño arma una campaña de texto, foto o audio platicando: una pregunta a la
 vez, con botones, y se salta lo que ya sabe. Es una sola pieza para todos los
-canales: el panel web y el Copiloto la dibujan (y en la Fase C, WhatsApp).
+canales: el panel web y WhatsApp la dibujan; por nota de voz sigue la promo
+rápida de siempre.
 
 El paso en que va se guarda en el borrador (`Campaign.ab_test["builder"]`),
 así que si cierra a medias, al volver se retoma. Cada respuesta es:

@@ -343,13 +343,15 @@ class TestCopilotFlow:
 
     @pytest.mark.asyncio
     async def test_caso1_el_copiloto_ensena_la_vista_previa_completa_y_pide_confirmar(self):
+        # La promo rápida se queda para las notas de voz (el WhatsApp escrito
+        # pasó a la plática paso a paso, Fase C).
         user_id, _ = await _seed(2)
         try:
             with patch.object(llm_client, "tool_completion", AsyncMock(return_value=self._reply({"what": "2x1 en fundas"}))), \
                  patch(GEN, AsyncMock(return_value=[TEXT])), patch.object(cs, "get_redis_optional", AsyncMock(return_value=None)):
                 async with AsyncSessionLocal() as db:
                     out = await cs.handle_chat(db, await db.get(User, user_id), "manda una promo de 2x1 en fundas", [],
-                                               channel="whatsapp")
+                                               channel="voz")
             pending = out["pending_confirmation"]
             assert pending["tool"] == "send_promo"
             assert TEXT in out["reply"]  # el mensaje que se va a mandar, no el texto del modelo

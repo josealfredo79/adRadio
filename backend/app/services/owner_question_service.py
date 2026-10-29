@@ -217,7 +217,8 @@ async def handle_owner_message(
 ) -> None:
     """Mensaje que un dueño le mandó al número central de IaRadio. `voice`:
     llegó como nota de voz (se le contesta igual). `photo`: (bytes, mime) de
-    una foto que mandó — siempre es para el Copiloto (un producto)."""
+    una foto que mandó — para el Copiloto (un producto) o para la campaña que
+    está armando por WhatsApp (campaign_builder)."""
     variants = _number_variants(from_number)
     owners = (
         await db.execute(
@@ -269,9 +270,16 @@ async def handle_owner_message(
     if oq is None:
         from app.services.copilot_whatsapp_service import (
             handle_owner_command,
+            has_open_builder,
             has_pending_confirmation,
             parse_decision,
         )
+
+        # La plática de campañas está abierta: "Sí"/"No"/"1" son respuestas del
+        # armador, no de un cliente (aunque haya preguntas de clientes pendientes).
+        if await has_open_builder(primary):
+            await handle_owner_command(db, owner=primary, from_number=from_number, text=message, voice=voice)
+            return
 
         # "Sí"/"No" a una acción que el Copiloto le pidió confirmar.
         if parse_decision(message) is not None and await has_pending_confirmation(primary):

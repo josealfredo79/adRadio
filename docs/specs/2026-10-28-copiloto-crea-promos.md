@@ -1,6 +1,8 @@
 # El Copiloto crea y manda promos (Fase 2 de campañas simples)
 
-Fecha: 2026-10-28 · Estado: construida
+Fecha: 2026-10-28 · Estado: construida · Actualizado 2026-10-29: por WhatsApp **escrito** ahora
+se arma con la plática de `docs/specs/2026-10-29-campana-que-pregunta-whatsapp.md`; la promo
+rápida de este documento queda para las **notas de voz**.
 
 ## Qué y para quién
 El dueño le dice al Copiloto (en el panel o por WhatsApp al número de IaRadio) "manda una promo
@@ -16,7 +18,7 @@ existen. Ver `docs/PLAN-CAMPANAS-SIMPLES.md` y `docs/specs/2026-10-28-campana-3-
 ## Casos (cada uno lleva su prueba)
 1. Si el dueño pide "manda una promo de 2x1 en fundas", entonces el Copiloto le enseña el mensaje
    armado con los precios del catálogo, a cuántos les llega y por dónde, y botones para confirmar.
-   En WhatsApp: "✅ Sí, mándala" / "✏️ Cambiar" / "❌ Cancelar". — ✅ `test_caso1_*` (4), OwnerAssistant.test "a new promo shows…"
+   Por nota de voz: "✅ Sí, mándala" / "✏️ Cambiar" / "❌ Cancelar". — ✅ `test_caso1_*` (4), OwnerAssistant.test "a new promo shows…"
 2. Si toca "Sí", entonces se crea la campaña, sale gratis por web (aviso a quien lo tiene, en el
    chat a los demás) y aparece en Campañas; no sale ningún WhatsApp. — ✅ `test_caso2_si_crea_la_campana_y_sale_gratis_por_web`, `test_caso2_el_envio_real_no_toca_whatsapp…`
 3. Si pide "por WhatsApp" y NO tiene chip conectado, entonces le avisa que va solo por web y que

@@ -90,6 +90,55 @@ describe('CampaignBuilderChat', () => {
     expect(post).toHaveBeenCalledWith('/campaigns/builder', { campaign_id: null, choice: 'resume:c9' })
   })
 
+  it('caso 4: "Subir una foto" la sube y luego la elige para la promo', async () => {
+    post.mockImplementation((url: string) => Promise.resolve(url === '/copilot/photo'
+      ? { data: { url: 'https://cdn.test/subida.jpg' } }
+      : { data: step({ step: 'preview', text: 'Así la ve tu cliente.', preview: { kind: 'image', text: '2x1 en micas', image_url: 'https://cdn.test/subida.jpg', audio_url: null } }) }))
+    renderChat(step({ step: 'photo', text: '¿Con qué foto?', input: 'photo', choices: [ch('upload', 'Subir una foto'), ch('poster', 'Cartel de colores')] }))
+    const file = new File(['foto'], 'mica.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByLabelText('Subir una foto'), { target: { files: [file] } })
+    expect(await screen.findByText('Así la ve tu cliente.')).toBeDefined()
+    expect(post).toHaveBeenCalledWith('/copilot/photo', expect.any(FormData))
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/campaigns/builder',
+      { campaign_id: 'c1', choice: 'upload', text: 'https://cdn.test/subida.jpg' }))
+  })
+
+  it('caso 5: el texto se lee y "Otra versión" pide otra', async () => {
+    post.mockResolvedValue({ data: step({
+      step: 'preview', text: 'Así le llega a tu cliente. ¿Así está bien?',
+      preview: { kind: 'text', text: 'Otra versión de micas', image_url: null, audio_url: null },
+      choices: [ch('ok', 'Así está bien'), ch('other', 'Otra versión'), ch('edit', 'Cambiar el texto')],
+    }) })
+    renderChat(step({
+      step: 'preview', text: 'Así le llega a tu cliente. ¿Así está bien?',
+      preview: { kind: 'text', text: '2x1 en micas', image_url: null, audio_url: null },
+      choices: [ch('ok', 'Así está bien'), ch('other', 'Otra versión'), ch('edit', 'Cambiar el texto')],
+    }))
+    expect(screen.getByText('2x1 en micas')).toBeDefined()
+    fireEvent.click(screen.getByText('Otra versión'))
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/campaigns/builder', { campaign_id: 'c1', choice: 'other' }))
+  })
+
+  it('caso 6: buscar a un cliente manda lo que se escribió', async () => {
+    post.mockResolvedValue({ data: step({ step: 'contact', text: '¿Cuál de ellos?', input: 'contact', choices: [ch('c:9', 'Lupe (…3182)')] }) })
+    renderChat(step({ step: 'contact', text: '¿A qué cliente? Escribe su nombre o teléfono.', input: 'contact' }))
+    fireEvent.change(screen.getByLabelText('Tu respuesta'), { target: { value: 'Lupe' } })
+    fireEvent.click(screen.getByLabelText('Enviar'))
+    expect(await screen.findByText('¿Cuál de ellos?')).toBeDefined()
+    expect(post).toHaveBeenCalledWith('/campaigns/builder', { campaign_id: 'c1', text: 'Lupe' })
+  })
+
+  it('caso 7: el cupón se contesta Sí o No con su botón', async () => {
+    post.mockResolvedValue({ data: step({ step: 'send', text: 'Le llega: a 1 cliente le suena aviso.' }) })
+    renderChat(step({
+      step: 'discount', text: 'Tu mensaje dice 10%. ¿Le pongo un cupón de 10% a cada cliente?',
+      choices: [ch('d:10', 'Sí'), ch('d:0', 'No')],
+    }))
+    fireEvent.click(screen.getByText('No'))
+    expect(await screen.findByText('Le llega: a 1 cliente le suena aviso.')).toBeDefined()
+    expect(post).toHaveBeenCalledWith('/campaigns/builder', { campaign_id: 'c1', choice: 'd:0' })
+  })
+
   it('says when a night campaign goes out, in Tlaxiaco time', () => {
     expect(startsAtLabel('2026-10-29T14:00:00+00:00', new Date('2026-10-29T04:34:00Z'))).toMatch(/^mañana a las 8:00/)
     expect(startsAtLabel('2026-11-02T14:00:00+00:00', new Date('2026-11-01T04:00:00Z'))).toMatch(/^el lunes a las 8:00/)

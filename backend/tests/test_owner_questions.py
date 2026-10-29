@@ -245,20 +245,22 @@ class TestRoutingToCopilot:
     """Un mensaje del dueño que no contesta a un cliente es una instrucción
     para el Copiloto."""
 
-    async def _route(self, db, text, classifier="NO"):
+    async def _route(self, db, text, classifier="NO", builder=False):
+        cc = AsyncMock(return_value=classifier)
         with (
             patch.object(svc, "send_platform_text", AsyncMock(return_value=("w", None))),
             patch.object(svc, "send_whatsapp", AsyncMock()) as sw,
-            patch.object(svc, "chat_completion", AsyncMock(return_value=classifier)),
+            patch.object(svc, "chat_completion", cc),
             patch("app.services.copilot_whatsapp_service.has_pending_confirmation", AsyncMock(return_value=False)),
+            patch("app.services.copilot_whatsapp_service.has_open_builder", AsyncMock(return_value=builder)),
             patch("app.services.copilot_whatsapp_service.handle_owner_command", AsyncMock()) as cmd,
         ):
             await svc.handle_owner_message(db, from_number="+5215512345678", text=text, context_wamid=None)
-        return cmd, sw
+        return cmd, sw, cc
 
     async def test_no_pending_questions_goes_to_copilot(self):
         owner = _owner()
-        cmd, sw = await self._route(_db([owner], []), "¿cuántas citas tengo mañana?")
+        cmd, sw, _ = await self._route(_db([owner], []), "¿cuántas citas tengo mañana?")
         cmd.assert_awaited_once()
         assert cmd.call_args.kwargs["owner"] is owner
         sw.assert_not_called()
@@ -266,7 +268,21 @@ class TestRoutingToCopilot:
     async def test_instruction_while_a_question_is_pending_goes_to_copilot(self):
         owner = _owner()
         oq = OwnerQuestion(advertiser_id=owner.id, customer_phone="+52", question="¿Tienen envío?", status="pending")
-        cmd, sw = await self._route(_db([owner], [oq]), "manda la promo 2x1 a todos", classifier="NO")
+        cmd, sw, _ = await self._route(_db([owner], [oq]), "manda la promo 2x1 a todos", classifier="NO")
         cmd.assert_awaited_once()
         sw.assert_not_called()
         assert oq.status == "pending"
+
+    async def test_un_si_del_armador_no_se_le_manda_al_cliente(self):
+        # Con la plática de campañas abierta, "Sí"/"También" contestan el
+        # armador (cupón, mandar): no deben clasificarse como respuesta a una
+        # pregunta de cliente ni gastar una llamada de IA.
+        for said in ("Sí", "También"):
+            owner = _owner()
+            oq = OwnerQuestion(advertiser_id=owner.id, customer_phone="+52",
+                               question="¿Tienen envío?", status="pending")
+            cmd, sw, cc = await self._route(_db([owner], [oq]), said, classifier="SÍ", builder=True)
+            cmd.assert_awaited_once()
+            sw.assert_not_called()
+            cc.assert_not_awaited()
+            assert oq.status == "pending"

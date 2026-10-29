@@ -2,7 +2,7 @@
 Base y Redis reales; la IA, la voz, la subida de archivos y WhatsApp son falsos."""
 import io
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -361,8 +361,12 @@ class TestCampanaQuePregunta:
             completion.assert_awaited_once()  # los botones siguen solos, sin otra vuelta del modelo
             tools = [t["name"] for t in completion.await_args.kwargs["tools"]]
             assert "build_campaign" in tools and "send_promo" not in tools
-            # Por WhatsApp sigue send_promo (Fase C).
-            assert "send_promo" in [t["name"] for t in cs._tools_for("whatsapp")]
+            # En WhatsApp escrito ahora también abre la plática (Fase C); por voz
+            # sigue la promo rápida de send_promo.
+            assert "build_campaign" in [t["name"] for t in cs._tools_for("whatsapp")]
+            assert "send_promo" not in [t["name"] for t in cs._tools_for("whatsapp")]
+            assert "send_promo" in [t["name"] for t in cs._tools_for("voz")]
+            assert "build_campaign" not in [t["name"] for t in cs._tools_for("voz")]
         finally:
             await _clean(user_id)
 
@@ -418,3 +422,184 @@ class TestLoQueVioRevisorDinero:
             assert "has_coupon" not in (await _camp(r["campaign_id"])).ab_test
         finally:
             await _clean(user_id)
+
+
+class TestPruebasFinales:
+    """Lo que faltaba probar de la plática: los caminos que no son el feliz
+    (sin clientes, sin foto, con candado, por WhatsApp) y que nadie más pueda
+    seguir el borrador de otro dueño."""
+
+    @pytest.mark.asyncio
+    async def test_caso4_cartel_de_colores_cuando_no_hay_foto(self, ai):
+        user_id, _ = await _owner()
+        try:
+            r = await _turn(user_id, text="2x1 en micas")
+            r = await _turn(user_id, r["campaign_id"], "f:photo")
+            assert [c["label"] for c in r["choices"]] == ["Subir una foto", "Cartel de colores"]
+            r = await _turn(user_id, r["campaign_id"], "poster")
+            assert r["step"] == "preview" and r["preview"]["kind"] == "image"
+            assert r["preview"]["image_url"].endswith(".png")
+            ai["read"].assert_not_awaited()  # el cartel se dibuja en el servidor
+            assert ai["upload"].await_args.args[0].startswith(b"\x89PNG")
+            camp = await _camp(r["campaign_id"])
+            assert camp.ab_test["photo_fixed"] is True and camp.ab_test["campaign_mode"] == "banner"
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso4_tambien_puede_subir_su_propia_foto(self, ai):
+        user_id, _ = await _owner()
+        try:
+            r = await _turn(user_id, text="2x1 en micas")
+            r = await _turn(user_id, r["campaign_id"], "f:photo")
+            r = await _turn(user_id, r["campaign_id"], "upload", text=PHOTO)
+            assert r["step"] == "preview" and r["preview"]["kind"] == "image"
+            assert r["preview"]["text"] == VARIANTS[0]
+            ai["read"].assert_awaited_with(PHOTO)
+            content = ai["upload"].await_args.args[0]
+            assert Image.open(io.BytesIO(content)).size == (1080, 1080)
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso7_cien_por_ciento_no_se_lee_como_cero(self):
+        # Venía de la promo de 3 toques: "100%" se leía como 0 y avisaba
+        # "Tu mensaje dice 0%". La plática no debe ofrecer un cupón de 100%.
+        user_id, _ = await _owner()
+        try:
+            r = await _turn(user_id, text="100% garantizado en micas")
+            r = await _turn(user_id, r["campaign_id"], "f:text")
+            r = await _turn(user_id, r["campaign_id"], "ok")
+            r = await _turn(user_id, r["campaign_id"], "a:all")
+            assert r["step"] == "discount"
+            assert _ids(r) == ["d:10", "d:15", "d:20", "d:0"]
+            assert "100" not in r["text"] and "0%" not in r["text"]
+            r = await _turn(user_id, r["campaign_id"], "d:10")
+            assert (await _camp(r["campaign_id"])).ab_test["coupon_percent"] == 10
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso8_sin_clientes_regresa_a_la_audiencia(self):
+        user_id, _ = await _owner(n_contacts=0)
+        try:
+            r = await _turn(user_id, text="2x1 en micas")
+            r = await _turn(user_id, r["campaign_id"], "f:text")
+            r = await _turn(user_id, r["campaign_id"], "ok")
+            r = await _turn(user_id, r["campaign_id"], "a:all")
+            assert r["step"] == "audience" and _ids(r) == ["a:all", "a:bought", "a:one"]
+            assert "Todavía no tienes clientes a quién mandarla." in r["text"]
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso8_tambien_por_whatsapp_manda_por_los_dos(self, ai):
+        user_id, _ = await _owner()
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                user.meta_connection_status = "connected"
+                user.meta_phone_number_id = "123456"
+                user.meta_token_cipher = "cifrado"
+                user.meta_token_iv = "iv"
+                user.meta_token_tag = "tag"
+                user.messages_remaining = 10
+                await db.commit()
+            r = await _turn(user_id, text="2x1 en micas")
+            r = await _turn(user_id, r["campaign_id"], "f:text")
+            r = await _turn(user_id, r["campaign_id"], "ok")
+            r = await _turn(user_id, r["campaign_id"], "a:all")
+            assert r["step"] == "send" and _ids(r) == ["web", "whatsapp"]
+            assert "También por WhatsApp (aprox $" in r["choices"][1]["label"]
+            delay = MagicMock()
+            with patch(DELAY, delay):
+                r = await _turn(user_id, r["campaign_id"], "whatsapp")
+            assert r["done"] and r["text"] == "¡Listo! Tu promo va por web y WhatsApp."
+            camp = await _camp(r["campaign_id"])
+            assert camp.status == "running" and camp.ab_test.get("web_only") is not True
+            delay.assert_called_once_with(r["campaign_id"])
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso10_arranque_sin_prueba_de_imagen_ve_candado(self, ai):
+        user_id, _ = await _owner(plan="starter")
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add(Campaign(advertiser_id=user_id, name="Cartel viejo", type="promo", status="completed",
+                                message_text="x", segment={}, ab_test={"campaign_mode": "banner"}))
+                await db.commit()
+            r = await _turn(user_id, text="2x1 en micas")
+            photo = next(c for c in r["choices"] if c["id"] == "f:photo")
+            assert photo == {"id": "f:photo", "label": "🔒 Con foto", "locked": True}
+            r = await _turn(user_id, r["campaign_id"], "f:photo")
+            assert r["step"] == "format" and "imagen de prueba" in r["text"]
+            ai["upload"].assert_not_awaited()
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso11_borrador_de_hace_mas_de_una_semana_no_se_retoma(self):
+        user_id, _ = await _owner()
+        try:
+            r = await _turn(user_id, text="2x1 en micas")
+            cid = r["campaign_id"]
+            await _turn(user_id, cid, "f:text")
+            async with AsyncSessionLocal() as db:
+                camp = await db.get(Campaign, uuid.UUID(cid))
+                camp.created_at = datetime.now(timezone.utc) - timedelta(days=8)
+                await db.commit()
+            r = await _turn(user_id)
+            assert (r["step"], r["text"], r["input"]) == ("what", "¿Qué quieres anunciar?", "what")
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_otro_dueno_no_puede_seguir_este_borrador(self):
+        user_id, _ = await _owner()
+        other_id, _ = await _owner()
+        try:
+            r = await _turn(user_id, text="2x1 en micas")
+            r = await _turn(other_id, campaign_id=r["campaign_id"], choice="f:text")
+            assert (r["campaign_id"], r["step"], r["input"]) == (None, "what", "what")
+            assert r["text"] == "Esa campaña ya no existe. ¿Qué quieres anunciar?"
+        finally:
+            await _clean(user_id)
+            await _clean(other_id)
+
+    @pytest.mark.asyncio
+    async def test_el_endpoint_del_panel_abre_y_contesta_la_platica(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from app.api.deps import get_current_user
+        from app.main import app
+
+        user_id, _ = await _owner()
+
+        async def _current_user():
+            async with AsyncSessionLocal() as db:
+                return await db.get(User, user_id)
+
+        app.dependency_overrides[get_current_user] = _current_user
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post("/api/v1/campaigns/builder", json={"text": "2x1 en micas"})
+                assert r.status_code == 200
+                body = r.json()
+                assert body["step"] == "format" and body["campaign_id"]
+                r = await client.post("/api/v1/campaigns/builder",
+                                      json={"campaign_id": body["campaign_id"], "choice": "f:text"})
+                assert r.status_code == 200 and r.json()["step"] == "preview"
+        finally:
+            app.dependency_overrides.clear()
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_el_endpoint_sin_sesion_no_abre_nada(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from app.main import app
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post("/api/v1/campaigns/builder", json={"text": "2x1 en micas"})
+        assert r.status_code == 401
