@@ -425,6 +425,7 @@ def schedule_campaign(self, campaign_id: str):
         from sqlalchemy import select
 
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
+        from app.domain.campaign_actions import RADIO_MODES
         from app.models.campaign import Campaign
         from app.models.user import User
         from app.services.campaign_reach import is_web_only, recipients_query
@@ -503,7 +504,7 @@ def schedule_campaign(self, campaign_id: str):
 
             if mode == "banner":
                 await send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay=0)
-            elif mode in ("radio", "comunitaria"):
+            elif mode in RADIO_MODES:
                 audio_url = ab.get("audio_url", "")
                 if not audio_url:
                     campaign.status = "paused"

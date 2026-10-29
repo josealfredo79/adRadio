@@ -386,7 +386,7 @@ export function QuickCampaignModal({ businessName, onClose, onMoreOptions }: Qui
         )}
 
         <button onClick={onMoreOptions} className="mt-4 w-full text-center text-xs font-medium text-muted-foreground hover:text-foreground hover:underline">
-          Más opciones (radio, banner, secuencia, programar…)
+          Más opciones (radio, banner, programar…)
         </button>
       </div>
     </div>

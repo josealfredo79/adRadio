@@ -97,6 +97,13 @@ async def preflight_campaign_send(
     and Meta's recipient cap — they exist so Meta doesn't ban the number, and
     the web has no number to ban (the web limit is one notification a day per
     customer, campaign_reach.rang_today)."""
+    from app.services.campaign_quota import kind_of, quota_block
+
+    # Audio e imagen tienen tope al mes también por web (Arranque: 1 de prueba).
+    blocked = await quota_block(db, advertiser, kind_of((campaign.ab_test or {}).get("campaign_mode")),
+                                exclude=campaign.id)
+    if blocked:
+        return blocked
     if web_only:
         return None
     if advertiser.messages_remaining is not None and advertiser.messages_remaining <= 0:

@@ -1,4 +1,4 @@
-import { Plus, Download, CalendarRange } from 'lucide-react'
+import { Plus, Download } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
 
 interface CampaignListHeaderProps {
@@ -6,7 +6,6 @@ interface CampaignListHeaderProps {
   hasCampaigns: boolean
   noCredits: boolean
   onExportCsv: () => void
-  onShowParrilla: () => void
   onShowCreate: () => void
 }
 
@@ -15,7 +14,6 @@ export function CampaignListHeader({
   hasCampaigns,
   noCredits,
   onExportCsv,
-  onShowParrilla,
   onShowCreate,
 }: CampaignListHeaderProps) {
   return (
@@ -35,12 +33,7 @@ export function CampaignListHeader({
             <Download className="h-4 w-4" /> Exportar CSV
           </button>
         )}
-        <button
-          onClick={onShowParrilla}
-          className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-gray-700 hover:bg-muted transition-colors dark:text-gray-300 dark:hover:bg-gray-800"
-        >
-          <CalendarRange className="h-4 w-4 text-brand-500" /> Parrilla Semanal
-        </button>
+        {/* "Parrilla Semanal" oculta hasta que mande por días también por web (spec 2026-10-28-campanas-fase-a). */}
         <button
           onClick={onShowCreate}
           disabled={noCredits}

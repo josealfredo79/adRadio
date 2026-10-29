@@ -16,6 +16,7 @@ from app.core.bot_guard import is_honeypot_hit
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
+from app.domain.campaign_actions import RADIO_MODES
 from app.models.appointment import Appointment
 from app.models.campaign import Campaign
 from app.models.contact import Contact
@@ -125,7 +126,7 @@ async def _last_message(db: AsyncSession, contact_id) -> dict | None:
     )).all()
     for m, campaign in rows:
         if campaign is not None:
-            audio = (campaign.ab_test or {}).get("campaign_mode") in ("radio", "comunitaria")
+            audio = (campaign.ab_test or {}).get("campaign_mode") in RADIO_MODES
             text = f"{'🔊' if audio else '📣'} {campaign.name or 'Promoción'}"
         elif m.content and not _INTERNAL_MESSAGE.match(m.content):
             text = " ".join(m.content.split())

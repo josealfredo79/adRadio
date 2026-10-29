@@ -14,6 +14,11 @@ import uuid
 from app.models.campaign import Campaign
 from app.models.user import User
 
+# Los 7 estilos de cuña: todos se mandan como el audio que el dueño escuchó
+# (campaign_ops.send_radio_messages). Antes solo radio/comunitaria; los otros
+# 5 caían al envío de texto y no llegaban por web (2026-10-28).
+RADIO_MODES = ("radio", "comunitaria", "capsula", "trivia", "historia", "alerta", "estacional")
+
 
 class CampaignContentIncompleteError(Exception):
     """La campaña no tiene el contenido requerido por su modo para lanzarse."""
@@ -28,7 +33,7 @@ def check_content_complete(campaign: Campaign) -> None:
 
     mode = (campaign.ab_test or {}).get("campaign_mode", "regular")
 
-    if mode in ("radio", "comunitaria") and not (campaign.ab_test or {}).get("audio_url"):
+    if mode in RADIO_MODES and not (campaign.ab_test or {}).get("audio_url"):
         raise CampaignContentIncompleteError("Completa la generación de audio antes de enviar la campaña")
     if mode == "banner" and not campaign.image_url:
         raise CampaignContentIncompleteError("Completa la generación del banner antes de enviar la campaña")

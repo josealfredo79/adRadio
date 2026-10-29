@@ -399,7 +399,23 @@ async def bulk_send_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaña no encontrada")
 
+    from app.domain.campaign_actions import (
+        CampaignContentIncompleteError,
+        check_content_complete,
+    )
+    from app.services.campaign_reach import is_web_only
+    from app.services.send_block_explain import preflight_campaign_send
     from app.workers.tasks import schedule_campaign
+
+    # Mismas revisiones que POST /campaigns/{id}/resume: contenido completo,
+    # tope de audio/imagen del plan y reglas anti-baneo.
+    try:
+        check_content_complete(campaign)
+    except CampaignContentIncompleteError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+    blocked = await preflight_campaign_send(db, campaign, current_user, web_only=is_web_only(campaign))
+    if blocked:
+        raise HTTPException(status_code=409, detail=blocked)
     campaign.segment = {
         **campaign.segment,
         "specific_contacts": body.contact_ids,

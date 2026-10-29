@@ -12,6 +12,7 @@ from datetime import datetime, time, timedelta, timezone
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.campaign_actions import RADIO_MODES
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.message import Message
@@ -26,10 +27,11 @@ from app.services.web_push import contacts_with_push
 META_MARKETING_USD_MX = 0.0397
 USD_TO_MXN = 18.5
 
-# Modos que sí se mandan como notificación web. La radio también: el aviso
-# abre la promo en la tarjeta del cliente, que trae el audio para escucharlo
-# ahí (2026-10-05). Las Voces del Barrio siguen solo por WhatsApp.
-WEB_MODES = ("regular", "banner", "radio", "comunitaria")
+# Modos que sí se mandan como notificación web. La radio también (los 7
+# estilos): el aviso abre la promo en la tarjeta del cliente, que trae el
+# audio para escucharlo ahí (2026-10-05). Las Voces del Barrio siguen solo
+# por WhatsApp.
+WEB_MODES = ("regular", "banner", *RADIO_MODES)
 
 
 async def rang_today(db: AsyncSession, contact_ids) -> set[uuid.UUID]:

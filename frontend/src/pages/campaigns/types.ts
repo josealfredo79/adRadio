@@ -106,6 +106,10 @@ export const MODE_BADGE: Record<string, string> = {
   voces: '🎤 Voces del Barrio',
 }
 
+// Secuencia y Saga mandan hoy un solo mensaje al azar, no por días: ocultas
+// hasta que la Fase D las mande de verdad (spec 2026-10-28-campanas-fase-a).
+export const HIDDEN_MODES: CampaignMode[] = ['sequence', 'saga']
+
 export const AUDIO_MODES: CampaignMode[] = [
   'radio', 'comunitaria', 'capsula', 'trivia', 'historia', 'alerta', 'estacional',
 ]

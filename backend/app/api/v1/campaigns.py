@@ -28,7 +28,6 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import (
     check_feature_access,
     get_current_user,
-    get_radio_limit,
     plan_required_message,
 )
 from app.api.idempotency import idempotent_post, store_idempotency_response
@@ -160,8 +159,16 @@ async def create_campaign(
     except CampaignValidationError as e:
         raise HTTPException(status_code=e.status, detail=e.detail) from None
 
-    if (body.ab_test or {}).get("campaign_mode") == "banner" and not check_feature_access(current_user, "banner"):
-        raise HTTPException(status_code=402, detail=plan_required_message("banner"))
+    from app.services.campaign_quota import kind_of, quota_block
+
+    # Tope de audio e imagen al mes (Arranque: 1 de prueba; spec
+    # 2026-10-28-campanas-fase-a). La imagen se frena ya al crearla; el audio,
+    # si la campaña nace programada (schedule_campaign no pasa por preflight).
+    kind = kind_of((body.ab_test or {}).get("campaign_mode"))
+    if kind == "image" or (kind == "audio" and body.status != "draft"):
+        blocked = await quota_block(db, current_user, kind)
+        if blocked:
+            raise HTTPException(status_code=402, detail=blocked)
 
     try:
         campaign = Campaign(advertiser_id=current_user.id, **body.model_dump())
@@ -274,6 +281,17 @@ async def campaign_reach_preview(
 
 class ReachPreviewBody(BaseModel):
     segment: dict = {}
+
+
+@router.get("/quota")
+async def campaign_quota_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Cuántos audios e imágenes le quedan este mes (Arranque: 1 de prueba)."""
+    from app.services.campaign_quota import quota_summary
+
+    return await quota_summary(db, current_user)
 
 
 @router.post("/reach-preview")
@@ -596,9 +614,9 @@ async def preview_banner(
     body: BannerPreviewRequest,
     current_user: User = Depends(get_current_user),
 ) -> Response:
-    """Generate and return a preview PNG banner (no R2 upload, no DB write)."""
-    if not check_feature_access(current_user, "banner"):
-        raise HTTPException(status_code=402, detail=plan_required_message("banner"))
+    """Generate and return a preview PNG banner (no R2 upload, no DB write).
+    La vista previa siempre se puede ver (dibujada en el servidor, gratis):
+    el tope de imágenes del plan frena al crear y al mandar."""
     from fastapi.responses import Response as FastAPIResponse
 
     design = select_design(body.business_category or current_user.business_category, None)
@@ -695,28 +713,11 @@ async def generate_radio_ad_endpoint(
     Claude escribe el guión → edge-tts pone voz de locutor → sube a R2.
     Retorna URL del audio .ogg listo para enviar como nota de voz por WhatsApp.
     """
-    limit = get_radio_limit(current_user)
-    if limit == 0:
-        raise HTTPException(status_code=402, detail=plan_required_message("radio_cuna"))
-    if limit > 0:
-        from datetime import datetime, timedelta, timezone
+    from app.services.campaign_quota import quota_block
 
-        from app.models.campaign import Campaign
-        period_start = datetime.now(timezone.utc) - timedelta(days=30)
-        count_result = await db.execute(
-            select(func.count()).select_from(Campaign).where(
-                Campaign.advertiser_id == current_user.id,
-                Campaign.created_at >= period_start,
-                Campaign.type.in_(["radio", "comunitaria", "capsula", "trivia", "historia", "alerta", "estacional"]),
-            )
-        )
-        used = count_result.scalar() or 0
-        if used >= limit:
-            raise HTTPException(
-                status_code=402,
-                detail=f"Ya usaste las {limit} cuñas de radio de tu plan este mes. "
-                       "Sube de plan para tener más (Negocio: 4, Crecimiento: 15).",
-            )
+    blocked = await quota_block(db, current_user, "audio")
+    if blocked:
+        raise HTTPException(status_code=402, detail=blocked)
     from app.services.radio.scripts import radio_business
 
     # El nombre y el contacto salen de la cuenta, no del formulario: el panel

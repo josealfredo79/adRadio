@@ -15,7 +15,6 @@ import { CampaignListHeader } from './components/CampaignListHeader'
 import { Pagination } from './components/Pagination'
 import { CreateCampaignModal } from './components/CreateCampaignModal'
 import { QuickCampaignModal } from './components/QuickCampaignModal'
-import { ParrillaModal } from './components/ParrillaModal'
 import { AnalyticsModal } from './components/AnalyticsModal'
 import { VocesDetailModal } from './components/VocesDetailModal'
 import { SendCampaignModal } from './components/SendCampaignModal'
@@ -27,7 +26,6 @@ export default function CampaignsPage() {
   // "Nueva campaña" abre la de 3 toques; "Más opciones" el formulario completo.
   const [showQuick, setShowQuick] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
-  const [showParrilla, setShowParrilla] = useState(false)
   const [analyticsId, setAnalyticsId] = useState<string | null>(null)
   const [vocesDetailId, setVocesDetailId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
@@ -123,7 +121,6 @@ export default function CampaignsPage() {
           hasCampaigns={(campaigns?.length ?? 0) > 0}
           noCredits={noCredits}
           onExportCsv={handleExportCsv}
-          onShowParrilla={() => setShowParrilla(true)}
           onShowCreate={() => setShowQuick(true)}
         />
 
@@ -212,10 +209,6 @@ export default function CampaignsPage() {
           currentUser={currentUser}
           utilityTemplateStatus={utilityTemplateStatus}
         />
-      )}
-
-      {showParrilla && (
-        <ParrillaModal onClose={() => setShowParrilla(false)} />
       )}
 
       {analyticsTarget && (

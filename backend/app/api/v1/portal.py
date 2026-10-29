@@ -35,6 +35,7 @@ from app.config import settings
 from app.core.rate_limiter import limiter
 from app.core.redis import get_redis_optional
 from app.database import get_db
+from app.domain.campaign_actions import RADIO_MODES
 from app.models.appointment import Appointment
 from app.models.campaign import Campaign
 from app.models.contact import Contact
@@ -456,7 +457,7 @@ def _coupon_out(c: Coupon | None) -> dict | None:
 
 def _promo_audio(campaign: Campaign) -> str:
     ab = campaign.ab_test or {}
-    if ab.get("campaign_mode") in ("radio", "comunitaria"):
+    if ab.get("campaign_mode") in RADIO_MODES:
         return str(ab.get("audio_url") or "")
     return ""
 
