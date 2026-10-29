@@ -2,6 +2,7 @@ import { AxiosError } from 'axios'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useToast } from '@/contexts/ToastContext'
+import { startsAtLabel } from '../quickCampaign'
 
 interface MutationCallbacks {
   onSuccessCreate?: () => void
@@ -53,17 +54,25 @@ export function useCampaignMutations(callbacks?: MutationCallbacks) {
   const resumeMutation = useMutation({
     // webOnly: solo como notificación web (gratis), sin WhatsApp.
     mutationFn: ({ id, webOnly = false }: { id: string; webOnly?: boolean }) =>
-      api.post(`/campaigns/${id}/resume`, { web_only: webOnly }),
-    onSuccess: (_data, { webOnly }) => {
+      api.post<{ starts_at?: string }>(`/campaigns/${id}/resume`, { web_only: webOnly }),
+    onSuccess: (res, { webOnly }) => {
       qc.invalidateQueries({ queryKey: ['campaigns'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
-      toast({
-        title: 'Campaña iniciada',
-        description: webOnly
-          ? 'Se está mandando como notificación web, gratis. No se usa WhatsApp.'
-          : 'El envío ha comenzado. Puede tomar varios minutos en completarse.',
-        variant: 'success',
-      })
+      // De noche o en domingo espera al horario humano: decir cuándo sale.
+      const startsAt = res?.data?.starts_at
+      toast(startsAt
+        ? {
+            title: `Tu campaña sale ${startsAtLabel(startsAt)}`,
+            description: 'De noche y en domingo no se mandan campañas, para no molestar a tus clientes.',
+            variant: 'success',
+          }
+        : {
+            title: 'Campaña iniciada',
+            description: webOnly
+              ? 'Se está mandando como notificación web, gratis. No se usa WhatsApp.'
+              : 'El envío ha comenzado. Puede tomar varios minutos en completarse.',
+            variant: 'success',
+          })
     },
     onError: (err: unknown) => {
       // 409 = an anti-ban gate blocked the send (segment cooldown, recipient

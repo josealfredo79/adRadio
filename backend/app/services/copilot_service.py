@@ -430,6 +430,8 @@ def _summarize(tool_name: str, data: dict) -> str:
     if tool_name == "create_contact":
         return f"Contacto \"{data.get('name', '')}\" creado."
     if tool_name == "launch_campaign":
+        if data.get("sale"):
+            return f"Campaña \"{data.get('name', '')}\" lista para {data.get('recipients', 0)} contacto(s): sale {data['sale']}."
         return f"Campaña \"{data.get('name', '')}\" lanzada a {data.get('recipients', 0)} contacto(s)."
     if tool_name == promo_tools.NAME:
         return promo_tools.summarize(data)
@@ -693,6 +695,7 @@ async def _execute_launch_campaign(db: AsyncSession, user: User, args: dict) -> 
         "status": "running",
         "recipients": recipients,
         "web_only": web_only,
+        **promo_tools.starts_later(),
     }, None
 
 
@@ -1001,7 +1004,8 @@ async def _phrase_confirmed_result(user: User, tool_name: str, data: dict, chann
                     "content": (
                         f"Se acaba de ejecutar la acción '{tool_name}' con este resultado real: "
                         f"{json.dumps(data, default=str, ensure_ascii=False)}. Confírmaselo al "
-                        "usuario en una o dos oraciones, en español, sin inventar datos adicionales."
+                        "usuario en una o dos oraciones, en español, sin inventar datos adicionales. "
+                        "Si el resultado trae \"sale\", la promo todavía no se manda: di cuándo sale, no que ya se envió."
                     ),
                 },
             ],

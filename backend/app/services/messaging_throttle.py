@@ -44,6 +44,25 @@ def _next_human_hour_after(now_local: datetime) -> datetime:
     return candidate
 
 
+_WEEKDAYS_ES = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+
+
+def send_starts_label(timezone_offset: int = -6, now_local: datetime | None = None) -> str | None:
+    """Cuándo sale una campaña mandada ahora: None si sale ya; si no (de
+    noche o en domingo espera al horario humano), "mañana a las 8:00 a. m.".
+    Para que el dueño no lea "enviada" cuando sale hasta mañana (prueba real
+    2026-10-28)."""
+    tz = timezone(timedelta(hours=timezone_offset))
+    now_local = now_local or datetime.now(tz)
+    if _is_human_hour_at(now_local):
+        return None
+    at = _next_human_hour_after(now_local)
+    days = (at.date() - now_local.date()).days
+    when = "hoy" if days == 0 else "mañana" if days == 1 else f"el {_WEEKDAYS_ES[at.weekday()]}"
+    hour = at.hour % 12 or 12
+    return f"{when} a las {hour}:{at.minute:02d} {'a. m.' if at.hour < 12 else 'p. m.'}"
+
+
 def is_human_hour(timezone_offset: int = -6) -> bool:
     """Check if current time is within human sending hours: Mon-Sat,
     8am-9pm in given UTC offset. Sunday is blocked outright regardless of

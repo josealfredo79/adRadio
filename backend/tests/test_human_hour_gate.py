@@ -9,6 +9,7 @@ from app.services.messaging_throttle import (
     _next_human_hour_after,
     is_human_hour,
     next_human_hour_utc,
+    send_starts_label,
 )
 
 _MX = timezone(timedelta(hours=-6))
@@ -85,3 +86,19 @@ class TestPublicWrappers:
         result = next_human_hour_utc()
         assert result.tzinfo is not None
         assert result >= now
+
+
+class TestSendStartsLabel:
+    """Lo que lee el dueño cuando manda de noche o en domingo (prueba real 2026-10-28)."""
+
+    def test_in_human_hours_it_goes_now(self):
+        assert send_starts_label(now_local=_mx(2026, 10, 28, 17)) is None
+
+    def test_wednesday_night_goes_tomorrow_at_8(self):
+        assert send_starts_label(now_local=_mx(2026, 10, 28, 22, 34)) == "mañana a las 8:00 a. m."
+
+    def test_before_8_goes_today(self):
+        assert send_starts_label(now_local=_mx(2026, 10, 29, 6)) == "hoy a las 8:00 a. m."
+
+    def test_saturday_night_goes_monday(self):
+        assert send_starts_label(now_local=_mx(2026, 10, 31, 22)) == "el lunes a las 8:00 a. m."

@@ -26,7 +26,8 @@ export function audienceSegment(audience: Audience, contactId: string | null): R
 
 // Nombre corto para la lista de campañas, sacado de lo que pidió el dueño.
 export function campaignName(intent: string): string {
-  const clean = intent.trim().replace(/\s+/g, ' ')
+  // Sin las comillas que se cuelan al copiar un ejemplo ("2x1 en micas").
+  const clean = intent.replace(/["“”«»]/g, '').trim().replace(/\s+/g, ' ')
   const name = clean.charAt(0).toUpperCase() + clean.slice(1)
   return name.length > 60 ? `${name.slice(0, 57).trimEnd()}…` : name
 }

@@ -315,10 +315,22 @@ async def execute(db: AsyncSession, user: User, args: dict) -> tuple[dict | None
     if error:
         await db.commit()  # queda como borrador en Campañas, para mandarla después
         return None, f"{error} La promo quedó guardada como borrador en Campañas."
-    return {"campaign_id": str(campaign.id), "name": name, "web_only": web_only, "status": "running"}, None
+    return {"campaign_id": str(campaign.id), "name": name, "web_only": web_only, "status": "running", **starts_later()}, None
+
+
+def starts_later() -> dict:
+    """{"sale": "mañana a las 8:00 a. m. …"} si de noche o en domingo el envío
+    espera al horario humano; {} si sale ya. Va en el resultado para que el
+    Copiloto no diga "enviada" cuando sale hasta mañana."""
+    from app.services.messaging_throttle import send_starts_label
+
+    label = send_starts_label()
+    return {"sale": f"{label} (de noche y en domingo no se mandan promos)"} if label else {}
 
 
 def summarize(data: dict) -> str:
     how = "gratis por web" if data.get("web_only") else "por web y WhatsApp"
+    if data.get("sale"):
+        return f"Promo \"{data.get('name', '')}\" lista {how}: sale {data['sale']}."
     return f"Promo \"{data.get('name', '')}\" enviada {how}."
 

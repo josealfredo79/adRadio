@@ -233,6 +233,23 @@ class TestConfirm:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("label", [None, "mañana a las 8:00 a. m."])
+    async def test_de_noche_dice_cuando_sale_en_vez_de_enviada(self, label):
+        user_id, _ = await _seed(2)
+        try:
+            _, resolved, _, _ = await _preview(user_id)
+            with patch("app.services.messaging_throttle.send_starts_label", return_value=label):
+                data, error, _ = await _confirm(user_id, resolved)
+            assert error is None
+            if label:
+                assert data["sale"].startswith("mañana a las 8:00 a. m.")
+                assert "sale mañana a las 8:00" in promo.summarize(data)
+            else:
+                assert "sale" not in data and "enviada" in promo.summarize(data)
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
     async def test_caso2_el_envio_real_no_toca_whatsapp_y_deja_la_promo_en_el_chat(self):
         from app.models.message import Message
         from app.workers.task_helpers.campaign_ops import send_regular_messages

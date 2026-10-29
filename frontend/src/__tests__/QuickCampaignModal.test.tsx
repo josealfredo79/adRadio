@@ -200,6 +200,7 @@ describe('quickCampaign helpers', () => {
   it('names the campaign from what the owner asked, short', () => {
     expect(campaignName('  2x1   en tacos ')).toBe('2x1 en tacos')
     expect(campaignName('a'.repeat(80)).length).toBe(58)
+    expect(campaignName('"2x1 en micas"')).toBe('2x1 en micas')
   })
 
   it('reach line counts those who already rang today as "in their chat"', () => {
