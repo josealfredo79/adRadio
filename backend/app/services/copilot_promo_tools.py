@@ -165,9 +165,9 @@ def reach_line(reach: dict, web_only: bool) -> str:
     ring = reach["web"] - reach.get("web_silent", 0)
     chat = reach.get("web_silent", 0) + (reach.get("web_chat", 0) if web_only else 0)
     if ring > 0:
-        parts.append(f"a {_clientes(ring)} les suena aviso")
+        parts.append(f"a {_clientes(ring)} {'le' if ring == 1 else 'les'} suena aviso")
     if chat > 0:
-        parts.append(f"{_clientes(chat)} la ven en su chat")
+        parts.append(f"{_clientes(chat)} {'la ve' if chat == 1 else 'la ven'} en su chat")
     if not web_only and reach["whatsapp"] > 0:
         parts.append(f"{_clientes(reach['whatsapp'])} por WhatsApp (Meta te cobra aprox {_pesos(reach['whatsapp_cost_mxn'])})")
     return " · ".join(parts)

@@ -159,7 +159,7 @@ class TestPreview:
                             created_at=datetime.now(timezone.utc) - timedelta(days=5)))
                 await db.commit()
             summary, resolved, _, _ = await _preview(user_id, audience="bought")
-            assert resolved["segment"] == {"bought_days": 90} and "1 cliente la ven" in summary
+            assert resolved["segment"] == {"bought_days": 90} and "1 cliente la ve en su chat" in summary
             summary, resolved, _, _ = await _preview(user_id, audience="one", contact="Pedro")
             assert resolved["segment"] == {"specific_contacts": [str(pedro)]} and "Pedro Ramírez" in summary
             # Nombre exacto gana aunque otro lo contenga ("Lupita Cruz").

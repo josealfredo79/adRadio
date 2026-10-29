@@ -95,7 +95,7 @@ async def test_free_model_answers_without_claude(anthropic_mock):
     anthropic_mock.assert_not_called()
     sent = groq.chat.completions.create.await_args.kwargs
     assert sent["messages"][0]["role"] == "system"
-    assert {t["function"]["name"] for t in sent["tools"]} == {t["name"] for t in copilot_service.TOOLS}
+    assert {t["function"]["name"] for t in sent["tools"]} == {t["name"] for t in copilot_service._tools_for("panel")}
 
 
 @pytest.mark.asyncio

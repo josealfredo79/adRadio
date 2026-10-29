@@ -880,3 +880,45 @@ Responde ÚNICAMENTE con un JSON con estas claves (sin texto extra):
             contact_name=contact_name,
             business_name=business_name,
         )
+
+
+# ── Foto real del producto con la promo encima (campaña que pregunta) ──────────
+
+def photo_banner_png(photo: bytes, headline: str, price: str = "", business_name: str = "") -> bytes:
+    """La foto del producto del dueño, cuadrada, con una franja abajo con la
+    promo y el precio. Nada inventado: la foto es la suya y el texto sale de
+    su catálogo (spec docs/specs/2026-10-29-campana-que-pregunta.md)."""
+    size = 1080
+    img = Image.open(io.BytesIO(photo)).convert("RGB")
+    side = min(img.size)
+    left, top = (img.width - side) // 2, (img.height - side) // 2
+    img = img.crop((left, top, left + side, top + side)).resize((size, size))
+
+    band_h = 330 if price else 260
+    overlay = Image.new("RGBA", (size, band_h), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    for y in range(band_h):  # degradado: transparente arriba, oscuro abajo
+        od.line([(0, y), (size, y)], fill=(0, 0, 0, int(40 + 190 * y / band_h)))
+    img.paste(overlay, (0, size - band_h), overlay)
+
+    draw = ImageDraw.Draw(img)
+    font = _load_font(_FONT_BOLD, 64)
+    lines = _wrap_text(headline.strip(), font, size - 120)[:3]
+    y = size - band_h + 40
+    for line in lines:
+        draw.text((60, y), line, font=font, fill=(255, 255, 255))
+        y += 76
+    if price:
+        pf = _load_font(_FONT_BOLD, 72)
+        bbox = draw.textbbox((0, 0), price, font=pf)
+        pw, ph = bbox[2] - bbox[0] + 48, bbox[3] - bbox[1] + 36
+        _draw_rounded_rect(draw, (60, y + 6, 60 + pw, y + 6 + ph), 20, (230, 57, 70))
+        draw.text((84, y + 14), price, font=pf, fill=(255, 255, 255))
+    if business_name:
+        bf = _load_font(_FONT_REGULAR, 34)
+        bbox = draw.textbbox((0, 0), business_name, font=bf)
+        draw.text((size - 60 - (bbox[2] - bbox[0]), size - 60), business_name, font=bf, fill=(230, 230, 230))
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=88)
+    return buf.getvalue()

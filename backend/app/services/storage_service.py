@@ -81,3 +81,35 @@ async def _upload_to_r2(content: bytes, key: str, content_type: str):
 
 
 
+
+
+async def read_bytes(url: str) -> bytes | None:
+    """Los bytes de un archivo guardado con upload_bytes (local, si no R2) o
+    de una URL pública. Para dibujar la foto del producto en una campaña."""
+    marker = "/api/v1/radio/audio/"
+    if marker in url:
+        key = url.split(marker, 1)[1]
+        if ".." in key or key.startswith("/"):
+            return None
+        local_path = os.path.join(_LOCAL_AUDIO_DIR, key)
+        if os.path.exists(local_path):
+            return await asyncio.to_thread(lambda: open(local_path, "rb").read())
+        if settings.CF_R2_ACCESS_KEY:
+            try:
+                def _get() -> bytes:
+                    return _get_client().get_object(Bucket=settings.CF_R2_BUCKET, Key=key)["Body"].read()
+                return await asyncio.to_thread(_get)
+            except Exception:
+                logger.warning("[STORAGE] read failed for %s", key, exc_info=True)
+                return None
+        return None
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(url)
+            res.raise_for_status()
+            return res.content
+    except Exception:
+        logger.warning("[STORAGE] read failed for %s", url, exc_info=True)
+        return None

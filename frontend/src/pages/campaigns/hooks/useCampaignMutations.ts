@@ -2,7 +2,7 @@ import { AxiosError } from 'axios'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { useToast } from '@/contexts/ToastContext'
-import { startsAtLabel } from '../quickCampaign'
+import { startsAtLabel } from '../campaignTime'
 
 interface MutationCallbacks {
   onSuccessCreate?: () => void

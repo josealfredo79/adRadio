@@ -181,14 +181,54 @@ Reglas estrictas:
    cliente y hora). "¿Cuánto llevo/vendí hoy?" → get_sales_today. Fiados o deudas
    ("me debe 50", "apúntale 50") NO son cobros: no llames record_sale; di que por ahora solo registras lo
    que ya te pagaron.
-9. PROMOS: "manda una promo de…", "anuncia que…", "avísales de…" → send_promo con `what` en sus palabras,
+{_promo_rule(channel)}
+{_loyalty_note(user)}{channel_note}"""
+
+
+_PROMO_RULE = """9. PROMOS: "manda una promo de…", "anuncia que…", "avísales de…" → send_promo con `what` en sus palabras,
    sin redactar tú el mensaje. audience: "bought" si dice "a los que me compraron"; "one" con `contact`
    si nombra a un cliente; si no, "all". discount_percent solo si dijo un porcentaje ("15%", "10 por ciento");
    "2x1" o "3x2" NO son descuento. No lo sugieras.
    whatsapp=true solo si dijo "por WhatsApp". Si pide cambiar la promo que le enseñaste ("más corta",
    "sin precio", "agrega que es hasta el domingo"), llama send_promo otra vez con `message` ya corregido
-   y lo demás igual. Si quiere mandar una campaña que ya existe, usa launch_campaign.
-{_loyalty_note(user)}{channel_note}"""
+   y lo demás igual. Si quiere mandar una campaña que ya existe, usa launch_campaign."""
+
+# En el panel web las campañas se arman platicando (campaign_builder): el
+# Copiloto solo abre la plática con lo que ya entendió y los botones siguen
+# solos. Por WhatsApp y voz sigue send_promo hasta la Fase C.
+_PROMO_RULE_PANEL = """9. CAMPAÑAS Y PROMOS: "haz una campaña de…", "manda una promo de…", "anuncia que…", "un audio de…",
+   "con la foto de…" → build_campaign con `what` en sus palabras, sin redactar tú el mensaje. Pon `format`
+   ("text", "photo", "audio"), `style` (solo audio) y `audience` ("all", "bought", "one" con `contact`)
+   SOLO si el dueño lo dijo; lo demás lo pregunta la plática con botones. No pidas confirmación tú.
+   Si quiere mandar una campaña que ya existe, usa launch_campaign."""
+
+
+def _promo_rule(channel: str) -> str:
+    return _PROMO_RULE_PANEL if channel == "panel" else _PROMO_RULE
+
+
+BUILDER_TOOL = {
+    "name": "build_campaign",
+    "description": "Abre la plática para armar una campaña (texto, foto o audio) con botones en el panel.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "what": {"type": "string", "description": "Lo que el dueño quiere anunciar, en sus palabras."},
+            "format": {"type": "string", "enum": ["text", "photo", "audio"]},
+            "style": {"type": "string", "enum": ["radio", "comunitaria", "capsula", "trivia", "historia", "alerta",
+                                                  "estacional"]},
+            "audience": {"type": "string", "enum": ["all", "bought", "one"]},
+            "contact": {"type": "string", "description": "Nombre o teléfono, solo si audience es one."},
+        },
+        "required": ["what"],
+    },
+}
+
+
+def _tools_for(channel: str) -> list[dict]:
+    if channel != "panel":
+        return TOOLS
+    return [t for t in TOOLS if t["name"] != promo_tools.NAME] + [BUILDER_TOOL]
 
 
 # ─── Definición de herramientas (Anthropic tool-use schema) ──────────────────
@@ -1089,7 +1129,7 @@ async def handle_chat(
     for _ in range(MAX_ITERATIONS):
         try:
             response = await llm_client.tool_completion(
-                messages, system=system, tools=TOOLS, max_tokens=1024, temperature=0.2,
+                messages, system=system, tools=_tools_for(channel), max_tokens=1024, temperature=0.2,
             )
         except Exception as e:
             logger.warning("[COPILOT] every model failed: %s", e, exc_info=True)
@@ -1119,6 +1159,15 @@ async def handle_chat(
             if block.error:
                 tool_results.append(_tool_result_block(block.id, {"error": block.error}, is_error=True))
                 continue
+            if tool_name == BUILDER_TOOL["name"] and channel == "panel":
+                from app.domain.campaign_builder import handle as build
+                from app.domain.campaign_builder import keep_said
+
+                said = [h["content"] for h in history if h.get("role") == "user" and isinstance(h.get("content"), str)]
+                step = await build(db, user, prefill=keep_said(args, [*said, message]))
+                actions.append({"tool": tool_name, "summary": step["text"], "data": {"builder": step}})
+                # Lo que sigue son botones de la plática, no otra vuelta del modelo.
+                return {"reply": step["text"], "actions": actions, "pending_confirmation": None}
             if tool_name in CONFIRM_TOOLS:
                 if attached_photo and tool_name in _PHOTO_TOOLS and not args.get("photo_url"):
                     args = {**args, "photo_url": attached_photo}

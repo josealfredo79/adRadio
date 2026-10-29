@@ -14,7 +14,7 @@ import { CampaignCard } from './components/CampaignCard'
 import { CampaignListHeader } from './components/CampaignListHeader'
 import { Pagination } from './components/Pagination'
 import { CreateCampaignModal } from './components/CreateCampaignModal'
-import { QuickCampaignModal } from './components/QuickCampaignModal'
+import { CampaignBuilderModal } from './components/CampaignBuilderModal'
 import { AnalyticsModal } from './components/AnalyticsModal'
 import { VocesDetailModal } from './components/VocesDetailModal'
 import { SendCampaignModal } from './components/SendCampaignModal'
@@ -183,8 +183,7 @@ export default function CampaignsPage() {
       </div>
 
       {showQuick && (
-        <QuickCampaignModal
-          businessName={currentUser?.business_name ?? ''}
+        <CampaignBuilderModal
           onClose={() => setShowQuick(false)}
           onMoreOptions={() => {
             setShowQuick(false)

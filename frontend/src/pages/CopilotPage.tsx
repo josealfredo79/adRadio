@@ -11,6 +11,7 @@ import {
 import api, { getApiError } from '@/lib/api'
 import { cn, formatPesos } from '@/lib/utils'
 import SEO from '@/components/SEO'
+import { CampaignBuilderChat, type BuilderStep } from '@/pages/campaigns/components/CampaignBuilderChat'
 import { EDIT_PROMO_PROMPT, PROMO_TOOL, useCopilot, type CopilotAction, type PendingConfirmation, type CopilotFormTool } from '@/contexts/CopilotContext'
 
 // Opciones reales para los selects de las mini-app cards — mismos endpoints
@@ -672,7 +673,19 @@ export default function CopilotPage() {
                 </div>
               </div>
             ) : (
-              messages.map((msg) => (
+              messages.map((msg) => {
+                // "Haz una campaña de…": la misma plática con botones de Campañas.
+                const builder = (msg.actions?.find((a) => a.tool === 'build_campaign')?.data as { builder?: BuilderStep } | undefined)?.builder
+                if (builder) {
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="w-full max-w-2xl rounded-2xl border border-border p-3">
+                        <CampaignBuilderChat initial={builder} />
+                      </div>
+                    </div>
+                  )
+                }
+                return (
                 <div key={msg.id} className={cn('flex', msg.role === 'assistant' ? 'justify-start' : 'justify-end')}>
                   <div className={msg.moduleGrid || msg.formTool ? 'w-full max-w-2xl' : 'max-w-[75%]'}>
                     {!msg.moduleGrid && !msg.formTool && (
@@ -727,7 +740,8 @@ export default function CopilotPage() {
                     )}
                   </div>
                 </div>
-              ))
+                )
+              })
             )}
 
             {chatMutation.isPending && (

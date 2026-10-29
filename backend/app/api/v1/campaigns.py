@@ -283,6 +283,27 @@ class ReachPreviewBody(BaseModel):
     segment: dict = {}
 
 
+class BuilderBody(BaseModel):
+    campaign_id: str | None = None
+    choice: str | None = None
+    text: str | None = None
+
+
+@router.post("/builder")
+@limiter.limit("60/minute")
+async def campaign_builder_endpoint(
+    request: Request,
+    body: BuilderBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """La campaña que pregunta: una vuelta de la plática (empezar, retomar o
+    contestar). Spec docs/specs/2026-10-29-campana-que-pregunta.md."""
+    from app.domain.campaign_builder import handle
+
+    return await handle(db, current_user, body.campaign_id, body.choice, body.text)
+
+
 @router.get("/quota")
 async def campaign_quota_endpoint(
     db: AsyncSession = Depends(get_db),

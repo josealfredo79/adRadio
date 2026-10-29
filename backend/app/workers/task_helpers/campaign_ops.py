@@ -544,19 +544,22 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             continue
 
         contact_name = (contact.name or "").split()[0] if contact.name else "Cliente"
+        if ab.get("photo_fixed") and campaign.image_url:
+            # Campaña que pregunta: la misma imagen que el dueño vio, para todos.
+            banner_url = campaign.image_url
+        else:
+            copy = await generate_banner_copy_with_claude(
+                business_name=advertiser.business_name or "Tu negocio",
+                contact_name=contact_name,
+                promo_description=promo_description,
+                business_category=advertiser.business_category,
+                campaign_type=campaign.type,
+            )
 
-        copy = await generate_banner_copy_with_claude(
-            business_name=advertiser.business_name or "Tu negocio",
-            contact_name=contact_name,
-            promo_description=promo_description,
-            business_category=advertiser.business_category,
-            campaign_type=campaign.type,
-        )
+            png_bytes = generate_banner_png(copy, palette, layout, contact_id=str(contact.id))
 
-        png_bytes = generate_banner_png(copy, palette, layout, contact_id=str(contact.id))
-
-        key = f"banners/{campaign.id}/{contact.id}_{uuid.uuid4().hex[:8]}.png"
-        banner_url = await upload_bytes(png_bytes, key, "image/png")
+            key = f"banners/{campaign.id}/{contact.id}_{uuid.uuid4().hex[:8]}.png"
+            banner_url = await upload_bytes(png_bytes, key, "image/png")
 
         if not banner_url:
             logger.error("[BANNER] Upload failed for contact %s", contact.id)
