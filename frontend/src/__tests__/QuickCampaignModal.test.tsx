@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { QuickCampaignModal } from '@/pages/campaigns/components/QuickCampaignModal'
-import { buildCampaignBody, campaignName, webReachLine } from '@/pages/campaigns/quickCampaign'
+import { buildCampaignBody, campaignName, discountMismatch, webReachLine } from '@/pages/campaigns/quickCampaign'
 
 // Campaña en 3 toques (docs/specs/2026-10-28-campana-3-toques.md).
 
@@ -90,7 +90,7 @@ describe('QuickCampaignModal', () => {
     mockApi()
     renderModal()
     await writeAndGenerate()
-    expect(await screen.findByText(/A 1 cliente les suena aviso · 3 clientes la ven en su chat cuando entren/)).toBeDefined()
+    expect(await screen.findByText(/A 1 cliente le suena aviso · 3 clientes la ven en su chat cuando entren/)).toBeDefined()
     expect(screen.getByText('Mandar gratis por web')).toBeDefined()
     expect(screen.queryByText(/Mandar también por WhatsApp/)).toBeNull()
     expect(screen.getByRole('link', { name: 'Conecta tu chip' }).getAttribute('href')).toBe('/app/settings')
@@ -123,7 +123,7 @@ describe('QuickCampaignModal', () => {
     fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'lupe' } })
     fireEvent.click(await screen.findByText('Doña Lupe'))
     expect(get).toHaveBeenCalledWith('/contacts', { params: { q: 'lupe', status: 'active', page_size: 8 } })
-    await screen.findByText(/les suena aviso/)
+    await screen.findByText(/suena aviso/)
     fireEvent.click(screen.getByText('Mandar gratis por web'))
     await waitFor(() => expect(resumeCall()).toBeDefined())
     expect((createCall()?.[1] as { segment: unknown }).segment).toEqual({ specific_contacts: ['ct-9'] })
@@ -133,7 +133,7 @@ describe('QuickCampaignModal', () => {
     mockApi()
     const { onClose } = renderModal()
     await writeAndGenerate()
-    await screen.findByText(/les suena aviso/)
+    await screen.findByText(/suena aviso/)
     fireEvent.click(screen.getByText('Mandar gratis por web'))
     await waitFor(() => expect(onClose).toHaveBeenCalled())
     expect(resumeCall()?.[1]).toEqual({ web_only: true })
@@ -148,17 +148,28 @@ describe('QuickCampaignModal', () => {
     await writeAndGenerate()
     fireEvent.click(screen.getByText('15%'))
     expect(screen.getByText(/Cupón: 15% de descuento/)).toBeDefined()
-    await screen.findByText(/les suena aviso/)
+    await screen.findByText(/suena aviso/)
     fireEvent.click(screen.getByText('Mandar gratis por web'))
     await waitFor(() => expect(resumeCall()).toBeDefined())
     expect((createCall()?.[1] as { ab_test: unknown }).ab_test).toMatchObject({ has_coupon: true, coupon_description: '15% de descuento', coupon_percent: 15 })
+  })
+
+  it('if the text promises 10% without a coupon, warns and one tap adds the 10% coupon (prueba real 2026-10-28)', async () => {
+    mockApi()
+    renderModal()
+    await writeAndGenerate()
+    fireEvent.change(screen.getByLabelText('Texto del mensaje'), { target: { value: '10% en cargadores este fin de semana' } })
+    expect(screen.getByRole('status').textContent).toMatch(/Tu mensaje dice 10%, pero no lleva cupón/)
+    fireEvent.click(screen.getByText('Ponerle cupón de 10%'))
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByText(/Cupón: 10% de descuento/)).toBeDefined()
   })
 
   it('caso 12: if sending fails, says why, keeps the text and the draft; retry reuses the draft', async () => {
     mockApi({}, { resumeFails: true })
     const { onClose } = renderModal()
     await writeAndGenerate()
-    await screen.findByText(/les suena aviso/)
+    await screen.findByText(/suena aviso/)
     fireEvent.click(screen.getByText('Mandar gratis por web'))
     expect(await screen.findByRole('alert')).toBeDefined()
     expect(screen.getByRole('alert').textContent).toMatch(/hace poco\. La promo quedó guardada como borrador\./)
@@ -178,10 +189,17 @@ describe('quickCampaign helpers', () => {
   })
 
   it('reach line counts those who already rang today as "in their chat"', () => {
-    expect(webReachLine({ ...REACH, web: 2, web_silent: 1, web_chat: 0 })).toBe('A 1 cliente les suena aviso · 1 cliente la ven en su chat cuando entren')
+    expect(webReachLine({ ...REACH, web: 2, web_silent: 1, web_chat: 0 })).toBe('A 1 cliente le suena aviso · 1 cliente la ve en su chat cuando entre')
   })
 
   it('without discount the body has no coupon', () => {
     expect(buildCampaignBody('x', 'y', 'all', null, 0).ab_test).toEqual({ enabled: false, campaign_mode: 'regular' })
+  })
+
+  it('warns when the text and the coupon do not match', () => {
+    expect(discountMismatch('2x1 en tacos', 0)).toBeNull()
+    expect(discountMismatch('10% en cargadores', 10)).toBeNull()
+    expect(discountMismatch('10 % en cargadores', 20)).toBe('Tu mensaje dice 10%, pero el cupón es de 20%.')
+    expect(discountMismatch('25% en todo', 0)).toMatch(/no lleva cupón/)
   })
 })

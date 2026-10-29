@@ -13,7 +13,9 @@ import {
   audienceEmptyReason,
   audienceSegment,
   buildCampaignBody,
+  discountMismatch,
   pesos,
+  promisedPercent,
   previewText,
   webReachLine,
 } from '../quickCampaign'
@@ -178,6 +180,9 @@ export function QuickCampaignModal({ businessName, onClose, onMoreOptions }: Qui
   const canSend = hasMessage && !emptyReason && !!reach && !reachLoading && !sending
   const showWhatsApp = !!reach?.whatsapp_connected && reach.whatsapp > 0
   const busyIntent = generating || transcribing
+  const mismatch = discountMismatch(message, discount)
+  const promised = promisedPercent(message)
+  const fixDiscount = DISCOUNTS.find((d) => d === promised)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 p-4" onClick={onClose}>
@@ -260,6 +265,18 @@ export function QuickCampaignModal({ businessName, onClose, onMoreOptions }: Qui
                   <Chip key={d} active={discount === d} disabled={!!draftId} onClick={() => setDiscount(d)}>{d}%</Chip>
                 ))}
               </div>
+              {mismatch && !draftId && (
+                <div role="status" className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                  <p>{mismatch}</p>
+                  {fixDiscount ? (
+                    <button onClick={() => setDiscount(fixDiscount)} className="mt-1.5 rounded-full bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700">
+                      Ponerle cupón de {fixDiscount}%
+                    </button>
+                  ) : (
+                    <p className="mt-1 text-xs">Los cupones son de 10, 15 o 20%: elige uno o cambia el texto.</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 3. ¿A quién? y mandar */}

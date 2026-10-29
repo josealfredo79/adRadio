@@ -52,6 +52,12 @@ export default function CampaignsPage() {
   const { data: campaignsData, isLoading } = useQuery<{ items: Campaign[]; total: number }>({
     queryKey: ['campaigns', page],
     queryFn: () => api.get('/campaigns', { params: { page, page_size: 20 } }).then((r) => r.data),
+    // Recién mandada, el envío corre en el worker: se refresca para que "enviados"
+    // no se quede en 0 (prueba real 2026-10-28) hasta que termine.
+    refetchInterval: (query) =>
+      query.state.data?.items.some(
+        (c) => c.status === 'active' && Date.now() - new Date(c.created_at).getTime() < 10 * 60_000,
+      ) ? 5000 : false,
   })
 
   const campaigns = campaignsData?.items

@@ -96,6 +96,12 @@ Intención del anunciante: {intent}
 No inventes nada: menciona solo productos, precios, descuentos y fechas que estén
 en la intención del anunciante o en el catálogo de arriba. Si no hay precio, no
 pongas precio. Montos en pesos sin centavos cuando son exactos: $120, no $120.00.
+Los precios del catálogo son el precio normal: nunca digas que ya traen descuento
+("$120 con descuento", "rebajado a $120"); si hay descuento, di el % sobre su precio
+(p. ej. "10% de descuento en el cargador de $120").
+Escribe todo en español: "descuento", no "off" ni "sale".
+No inventes cómo contactar al negocio ("llama", "visítanos en…"): la llamada a la
+acción invita a contestar este mensaje o a pedirlo aquí.
 
 Devuelve solo las 3 variantes, separadas por "---", sin numeración ni explicaciones adicionales."""
 

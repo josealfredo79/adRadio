@@ -58,14 +58,30 @@ export function previewText(message: string, businessName: string): string {
 
 const clientes = (n: number) => `${n.toLocaleString('es-MX')} ${n === 1 ? 'cliente' : 'clientes'}`
 
-/** "A 3 les suena aviso · 12 la ven en su chat cuando entren", para "Mandar gratis por web". */
+/** "A 3 clientes les suena aviso · 12 clientes la ven en su chat cuando entren", para "Mandar gratis por web". */
 export function webReachLine(r: QuickReach): string {
   const ring = r.web - r.web_silent
   const chat = r.web_silent + r.web_chat
   const parts: string[] = []
-  if (ring > 0) parts.push(`A ${clientes(ring)} les suena aviso`)
-  if (chat > 0) parts.push(`${clientes(chat)} la ven en su chat cuando entren`)
+  if (ring > 0) parts.push(`A ${clientes(ring)} ${ring === 1 ? 'le' : 'les'} suena aviso`)
+  if (chat > 0) parts.push(`${clientes(chat)} ${chat === 1 ? 'la ve en su chat cuando entre' : 'la ven en su chat cuando entren'}`)
   return parts.join(' · ')
+}
+
+/** El % que el texto le promete al cliente ("10% en cargadores" → 10), o null.
+ * Sirve para avisar si el texto promete un descuento que el cupón no da. */
+export function promisedPercent(message: string): number | null {
+  const m = message.match(/(\d{1,2})\s?%/)
+  return m ? Number(m[1]) : null
+}
+
+/** Aviso cuando el texto y el cupón no cuadran (prueba real 2026-10-28: el
+ * texto decía "10%" y salió sin cupón), o null si cuadran. */
+export function discountMismatch(message: string, discount: Discount): string | null {
+  const promised = promisedPercent(message)
+  if (promised === null || promised === discount) return null
+  if (!discount) return `Tu mensaje dice ${promised}%, pero no lleva cupón: el cliente no tendrá con qué cobrarlo.`
+  return `Tu mensaje dice ${promised}%, pero el cupón es de ${discount}%.`
 }
 
 export function pesos(n: number): string {
