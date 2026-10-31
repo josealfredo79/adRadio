@@ -25,6 +25,10 @@ celery_app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,  # prevent duplicate processing
+    # Tareas con espera (promo de noche, mensajes espaciados por hora): por
+    # defecto Redis las reentrega cada hora y cada copia volvía a salir. A
+    # cambio, una tarea a medias tras una caída dura tarda hasta 2 días en volver.
+    broker_transport_options={"visibility_timeout": 48 * 3600},
     task_soft_time_limit=300,    # 5 min soft limit
     task_time_limit=600,         # 10 min hard limit
     worker_max_tasks_per_child=1000,  # prevent memory leak

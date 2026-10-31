@@ -31,6 +31,9 @@ from app.workers.task_helpers.common import suppress_contact_on_error
 
 logger = logging.getLogger(__name__)
 
+CAMPAIGN_CLAIM_KEY = "campaign_sending:{campaign_id}"
+CAMPAIGN_CLAIM_SECONDS = 2 * 3600
+
 # Meta WhatsApp Cloud API codes for rate-limit/throughput errors — worth a
 # retry, unlike a permanent failure. Source: Meta's official error code
 # reference (developers.facebook.com/.../whatsapp/support/error-codes).
@@ -520,8 +523,29 @@ def schedule_campaign(self, campaign_id: str):
             campaign.status = "running" if campaign.type == "voces" else "completed"
             await db.commit()
 
+    async def _once():
+        # Solo una copia a la vez: Redis reentrega las tareas que esperan, y el
+        # 29-oct 16 copias de 2 promos corrieron juntas al llegar las 8:00. Al
+        # terminar, el status de la campaña frena a las copias que lleguen tarde.
+        import redis.asyncio as aioredis
+
+        from app.config import settings
+
+        client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        key = CAMPAIGN_CLAIM_KEY.format(campaign_id=campaign_id)
+        try:
+            if not await client.set(key, "1", nx=True, ex=CAMPAIGN_CLAIM_SECONDS):
+                logger.info("[CAMPAIGN] %s already being sent — skipping this copy", campaign_id)
+                return
+            try:
+                await _process()
+            finally:
+                await client.delete(key)
+        finally:
+            await client.aclose()
+
     try:
-        run_async(_process())
+        run_async(_once())
     except Exception as exc:
         from app.workers.task_helpers.campaign_ops import notify_campaign_failed
         run_async(notify_campaign_failed(campaign_id, exc))
