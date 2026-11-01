@@ -60,8 +60,15 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str, charge: boo
         from app.services.meta_service import send_whatsapp
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
+            # Row lock: a redelivered copy waits here, then sees the wamid below.
+            result = await db.execute(
+                select(Message).where(Message.id == uuid.UUID(message_id)).with_for_update()
+            )
             msg = result.scalar_one_or_none()
+
+            if msg and msg.wa_message_id:
+                logger.info("[SEND-ONCE] message %s already sent, skipping copy", message_id)
+                return
 
             advertiser = None
             if msg:
@@ -133,8 +140,15 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
         from app.services.meta_service import send_whatsapp_media
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
+            # Row lock: a redelivered copy waits here, then sees the wamid below.
+            result = await db.execute(
+                select(Message).where(Message.id == uuid.UUID(message_id)).with_for_update()
+            )
             msg = result.scalar_one_or_none()
+
+            if msg and msg.wa_message_id:
+                logger.info("[SEND-ONCE] message %s already sent, skipping copy", message_id)
+                return
 
             advertiser = None
             if msg:
@@ -206,8 +220,15 @@ def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, 
         from app.services.meta_service import send_whatsapp_image
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
+            # Row lock: a redelivered copy waits here, then sees the wamid below.
+            result = await db.execute(
+                select(Message).where(Message.id == uuid.UUID(message_id)).with_for_update()
+            )
             msg = result.scalar_one_or_none()
+
+            if msg and msg.wa_message_id:
+                logger.info("[SEND-ONCE] message %s already sent, skipping copy", message_id)
+                return
 
             advertiser = None
             if msg:
