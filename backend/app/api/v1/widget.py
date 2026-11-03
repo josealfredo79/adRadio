@@ -30,6 +30,7 @@ router = APIRouter(prefix="/widget", tags=["widget"])
 CHAT_REDIS_PREFIX = "widget_chat:"
 CHAT_REDIS_TTL = 1800
 CHAT_MAX_HISTORY = 20
+WEB_STOP_WORDS = {"baja", "stop"}
 # Links a widget session to the Contact created via POST /widget/lead, so a
 # later /widget/chat call in the same session (same session_id) knows a real
 # Contact already exists and can hand off to widget_order_service.
@@ -200,6 +201,23 @@ async def widget_chat(
         from app.services.web_conversation import log_turns, open_conversation
 
         conv = await open_conversation(db, user.id, contact.id)
+        # BAJA por la web, igual que por WhatsApp (aunque el dueño esté atendiendo).
+        # Solo "baja"/"stop": aquí "no quiero" o "salir" suelen contestar algo del chat.
+        # Solo el cliente verificado: nadie da de baja un número ajeno tecleándolo.
+        if not unverified and message.lower().rstrip(".!¡¿? ") in WEB_STOP_WORDS:
+            from app.services.inbound_pipeline import UNSUBSCRIBED_REPLY, unsubscribe
+
+            await unsubscribe(db, contact)
+            asked_at = datetime.now(timezone.utc)
+            db.add(Message(advertiser_id=user.id, contact_id=contact.id, direction="inbound",
+                           content=message, status="delivered", channel="web", created_at=asked_at))
+            db.add(Message(advertiser_id=user.id, contact_id=contact.id, direction="outbound",
+                           content=UNSUBSCRIBED_REPLY, status="delivered", channel="web",
+                           created_at=asked_at + timedelta(milliseconds=1)))
+            log_turns(conv, {"role": "user", "content": message, "channel": "web"},
+                      {"role": "assistant", "content": UNSUBSCRIBED_REPLY, "channel": "web"})
+            await db.commit()
+            return {"reply": UNSUBSCRIBED_REPLY, "session_id": session_id, "cards": []}
         # Cliente conocido: la memoria es su plática completa (WhatsApp + web),
         # igual que en WhatsApp. Si no, el bot no sabía lo que ya contestó por
         # WhatsApp y lo repetía en la web.

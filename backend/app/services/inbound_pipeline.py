@@ -124,6 +124,31 @@ def _phone_candidates(from_number: str) -> list[str]:
     return candidates
 
 
+UNSUBSCRIBED_REPLY = (
+    "Listo, no volverás a recibir mensajes nuestros. "
+    "Si cambias de opinión, escríbenos cuando quieras 🙏"
+)
+
+
+async def unsubscribe(db, contact) -> None:
+    """BAJA del cliente, por WhatsApp o por la web. Sin commit.
+
+    Las campañas solo salen a contactos "active" y la cola que ya esperaba la
+    frena _campaign_send_stop. Lo que esperaba su respuesta tampoco debe salir:
+    un "gracias" después de BAJA dispararía la promo con charge=False."""
+    contact.status = "unsubscribed"
+    contact.engagement_score = 0
+    await db.execute(
+        update(Message)
+        .where(
+            Message.contact_id == contact.id,
+            Message.status == "queued",
+            Message.content.like("[PENDING:%"),
+        )
+        .values(status="failed", error_code="contact_unsubscribed")
+    )
+
+
 async def process_inbound_message(
     db: AsyncSession,
     msg: InboundMessage,
@@ -244,26 +269,10 @@ async def process_inbound_message(
         )
         contact = contact_result.scalar_one_or_none()
         if contact:
-            contact.status = "unsubscribed"
-            contact.engagement_score = 0
-            # Lo que esperaba su respuesta ya no debe salir: un "gracias" después
-            # de BAJA dispararía la promo con charge=False.
-            await db.execute(
-                update(Message)
-                .where(
-                    Message.contact_id == contact.id,
-                    Message.status == "queued",
-                    Message.content.like("[PENDING:%"),
-                )
-                .values(status="failed", error_code="contact_unsubscribed")
-            )
+            await unsubscribe(db, contact)
             await db.commit()
             try:
-                await send(
-                    from_number,
-                    "Listo, no volverás a recibir mensajes nuestros. "
-                    "Si cambias de opinión, escríbenos cuando quieras 🙏",
-                )
+                await send(from_number, UNSUBSCRIBED_REPLY)
             except Exception:
                 logger.warning("[STOP] Failed to send opt-out confirmation to %s", from_number, exc_info=True)
         return {"message": "ok"}

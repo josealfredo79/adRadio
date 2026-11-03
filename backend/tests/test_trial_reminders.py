@@ -19,12 +19,13 @@ from app.workers import tasks
 def seed():
     created = []
 
-    def make(hours_left, status="trial", exempt=False):
+    def make(hours_left, status="trial", exempt=False, email=None, phone=None):
         async def run():
             await engine.dispose()
             async with AsyncSessionLocal() as db:
                 user = User(
-                    email=f"{uuid.uuid4()}@test.com", password_hash="x", business_name="Test",
+                    email=email or f"{uuid.uuid4()}@test.com", password_hash="x", business_name="Test",
+                    phone=phone,
                     subscription_status=status, billing_exempt=exempt,
                     plan_expires_at=datetime.now(timezone.utc) + timedelta(hours=hours_left),
                     whatsapp_number="+525500000001",
@@ -97,3 +98,35 @@ def test_not_after_it_ended_nor_too_early(seed):
     seed(-5)
     seed(80)
     assert _run() == []
+
+
+def _run_central(result):
+    """Cuenta dada de alta por WhatsApp (sin correo): regresa a quién le mandó el central."""
+    central = AsyncMock(return_value=result)
+    whatsapp = AsyncMock(return_value=("wamid.1", None))
+    with patch("app.core.email.send_trial_expiring_email", AsyncMock()), \
+            patch("app.services.meta_service.send_whatsapp", whatsapp), \
+            patch("app.services.platform_whatsapp.platform_enabled", return_value=True), \
+            patch("app.services.platform_whatsapp.send_platform_text", central):
+        tasks.send_trial_expiry_reminders()
+    assert whatsapp.await_count == 0, "nunca por el bot de su propio negocio"
+    return [c.args[0] for c in central.await_args_list]
+
+
+def _no_inbox(seed):
+    from app.core.email import NO_INBOX_DOMAIN
+    return seed(20, email=f"{uuid.uuid4().hex[:10]}@{NO_INBOX_DOMAIN}", phone="+529531112233")
+
+
+def test_without_email_it_goes_by_the_central_even_with_a_public_number(seed):
+    _no_inbox(seed)  # el seed le pone whatsapp_number (número público del negocio)
+    assert _run_central(("wamid.c", None)) == ["+529531112233"]
+    assert _run_central(("wamid.c", None)) == []
+
+
+def test_without_email_a_failed_central_send_is_tried_again(seed):
+    """Es su único aviso: si Meta falla, la siguiente vuelta lo intenta otra vez."""
+    _no_inbox(seed)
+    assert _run_central((None, "(#131000) algo falló")) == ["+529531112233"]
+    assert _run_central(("wamid.c", None)) == ["+529531112233"]
+    assert _run_central(("wamid.c", None)) == []

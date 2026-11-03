@@ -943,12 +943,7 @@ def send_trial_expiry_reminders():
                         f"⏰ Hola {biz_name}, tu prueba gratuita termina en {days_left} día{'s' if days_left != 1 else ''}. "
                         f"👉 {settings.FRONTEND_PUBLIC_URL or 'https://app.iaradio.app'}/app/plans"
                     )
-                    if user.whatsapp_number:
-                        try:
-                            await send_whatsapp(to=user.whatsapp_number, body=msg, advertiser=user)
-                        except Exception as e:
-                            logger.error("[TRIAL REMINDER] WhatsApp failed for %s: %s", user.email, e)
-                    elif user.email.endswith("@" + NO_INBOX_DOMAIN):
+                    if user.email.endswith("@" + NO_INBOX_DOMAIN):
                         # Alta en el chat con su WhatsApp, sin correo: el aviso le llega
                         # por el número central de IaRadio (con plantilla si hace falta).
                         from app.services.owner_question_service import owner_number
@@ -960,9 +955,22 @@ def send_trial_expiry_reminders():
                         to = owner_number(user)
                         if to and platform_enabled():
                             try:
-                                await send_platform_text(to, msg)
+                                _, error = await send_platform_text(to, msg)
                             except Exception as e:
-                                logger.error("[TRIAL REMINDER] central WhatsApp failed for %s: %s", user.id, e)
+                                error = str(e)[:100]
+                            if error:
+                                # Es su único aviso (no tiene correo): se suelta la llave
+                                # para que la siguiente vuelta del beat lo intente otra vez.
+                                logger.error("[TRIAL REMINDER] central WhatsApp failed for %s: %s", user.id, error)
+                                await redis.delete(key)
+                            else:
+                                logger.info("[TRIAL REMINDER] Central WhatsApp sent to %s — %d day(s) left",
+                                            user.id, days_left)
+                    elif user.whatsapp_number:
+                        try:
+                            await send_whatsapp(to=user.whatsapp_number, body=msg, advertiser=user)
+                        except Exception as e:
+                            logger.error("[TRIAL REMINDER] WhatsApp failed for %s: %s", user.email, e)
         await redis.aclose()
 
     run_async(_remind())
