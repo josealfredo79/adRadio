@@ -398,3 +398,32 @@ def test_copilot_card_titles_drop_trailing_zeros():
     assert summarize("record_sale", {"saved": True, "amount": 20.5, "customer": {"name": "Ana"}}) == "Cobro de $20.50 a Ana guardado."
     assert summarize("get_sales_today", {"today_total": 1250, "today_count": 3}) == "Hoy: $1,250 en 3 venta(s)."
     assert summarize("undo_sale", {"undone": True, "amount": 85.0}) == "Cobro de $85 borrado."
+
+
+async def test_copiloto_voice_name_without_accents_or_signs_finds_the_customer(seeded):
+    # Prueba real 2026-11-03: por voz "tu prueba" no hallaba a "Tú (prueba)".
+    async with AsyncSessionLocal() as db:
+        db.add(Contact(advertiser_id=seeded["lupe"], name="Tú (prueba)", phone=f"+52955{seeded['tail']}3182"))
+        db.add(Contact(advertiser_id=seeded["lupe"], name="María José Pérez", phone=f"+52955{seeded['tail']}0003"))
+        await db.commit()
+    out = await _copilot(seeded["lupe"], "record_sale", amount=150, customer="tu prueba")
+    assert out["saved"] and out["customer"]["name"] == "Tú (prueba)"
+    out = await _copilot(seeded["lupe"], "record_sale", amount=80, customer="maria perez")
+    assert out["saved"] and out["customer"]["name"] == "María José Pérez"
+    out = await _copilot(seeded["lupe"], "record_sale", amount=80, customer="lopez ana")
+    assert out["saved"] and out["customer"]["name"] == "Ana López"
+
+
+async def test_copiloto_words_must_start_a_name_word_and_short_digits_are_not_dropped(seeded):
+    # revisor-dinero 2026-11-03: el Copiloto guarda sin preguntar si sale uno solo.
+    async with AsyncSessionLocal() as db:
+        db.add(Contact(advertiser_id=seeded["lupe"], name="Juana Cruz Ruiz", phone=f"+52956{seeded['tail']}0004"))
+        db.add(Contact(advertiser_id=seeded["lupe"], name="Ángel Soto", phone=f"+52956{seeded['tail']}0005"))
+        await db.commit()
+    wrong = await _copilot(seeded["lupe"], "record_sale", amount=90, customer="ana ruiz")
+    assert wrong["saved"] is False
+    short_digits = await _copilot(seeded["lupe"], "record_sale", amount=90, customer="beto 12")
+    assert short_digits["saved"] is False
+    assert await _sales(seeded["lupe"]) == []
+    angel = await _copilot(seeded["lupe"], "record_sale", amount=40, customer="angel")
+    assert angel["saved"] and angel["customer"]["name"] == "Ángel Soto"

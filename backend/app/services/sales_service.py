@@ -7,11 +7,13 @@ cobro se lo quita. Cualquier cobro del mostrador de hoy se puede borrar.
 
 Nada aquí hace commit: le toca al que llama, igual que loyalty_service.py.
 """
+import re
+import unicodedata
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
@@ -53,6 +55,15 @@ async def own_contact(db: AsyncSession, owner: User, contact_id: uuid.UUID) -> C
     return contact
 
 
+_ACCENTED = "áéíóúüñàèìòùÁÉÍÓÚÜÑÀÈÌÒÙ"
+_UNACCENTED = "aeiouunaeiouaeiouunaeiou"
+
+
+def _plain(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text.lower())
+    return "".join(c for c in text if not unicodedata.combining(c))
+
+
 async def find_customers(db: AsyncSession, owner: User, query: str, limit: int = 8) -> list[Contact]:
     """Por nombre o por los últimos dígitos del teléfono (lo que el dueño
     recuerda en el mostrador)."""
@@ -60,9 +71,22 @@ async def find_customers(db: AsyncSession, owner: User, query: str, limit: int =
     if not q:
         return []
     digits = "".join(ch for ch in q if ch.isdigit())
-    match = Contact.name.ilike(f"%{q}%")
-    if len(digits) >= 3:
-        match = or_(match, contact_phone_canonical().endswith(digits))
+    # Sin acentos ni signos y palabra por palabra: por voz "tu prueba" no hallaba a
+    # "Tú (prueba)" ni "maria" a "María" (prueba real 2026-11-03).
+    # "Ana 1234" = esa Ana con ese teléfono.
+    # Cada palabra al INICIO de una palabra del nombre: "ana ruiz" no es "Juana Cruz Ruiz"
+    # (el Copiloto guarda el cobro sin preguntar si sale uno solo). 1-2 dígitos sueltos se
+    # quedan como palabra: "juan 12" no le cobra a cualquier Juan.
+    words = [w for w in re.findall(r"\w+", _plain(q[:60])) if not (w.isdigit() and len(w) >= 3)]
+    plain_name = func.translate(func.lower(Contact.name), _ACCENTED, _UNACCENTED)
+    by_name = and_(*[plain_name.op("~")(rf"\m{w}") for w in words]) if words else None
+    by_phone = contact_phone_canonical().endswith(digits) if len(digits) >= 3 else None
+    if by_name is not None and by_phone is not None:
+        match = or_(and_(by_name, by_phone), Contact.name.ilike(f"%{q}%"))
+    elif by_name is not None or by_phone is not None:
+        match = by_name if by_name is not None else by_phone
+    else:
+        match = Contact.name.ilike(f"%{q}%")
     rows = await db.execute(
         select(Contact)
         .where(Contact.advertiser_id == owner.id, Contact.status != "blocked", match)
