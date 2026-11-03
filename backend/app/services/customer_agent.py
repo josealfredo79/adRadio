@@ -86,6 +86,10 @@ _ACTION_STEMS = (
     "me das un", "me mandas", "mandame", "quiero comprar",
     "promo", "oferta", "descuent", "mi pedido", "mis pedidos", "donde viene", "llega mi", "canje", "canjea",
     "para recoger", "pago con", "pagar con",
+    # Falla C (sim 2026-10-31 y 2026-11-03): "paso a recogerla", "una funda pa recoger", "me guardas
+    # una mica?", "paso por ella mañana" no entraban; el bot de respaldo pedía "sí, haz el pedido" y
+    # luego el agente volvía a preguntar "¿Lo confirmo?" (doble confirmación).
+    "recog", "recoj", "pa llevar", "guard", "paso por", "pasar por", "voy por",
 )
 
 

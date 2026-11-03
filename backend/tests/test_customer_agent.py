@@ -132,7 +132,12 @@ async def _say(user_id, contact_id, message, redis, claude=None, owner_text=None
 class TestRouting:
     @pytest.mark.parametrize("msg", ["¿tienes lugar el viernes en la tarde?", "quiero agendar una cita",
                                      "cámbiame la cita, quiero cancelar mi cita", "¿cuántos sellos llevo?",
-                                     "mándame 2 de pastor para llevar", "quiero hacer un pedido"])
+                                     "mándame 2 de pastor para llevar", "quiero hacer un pedido",
+                                     # Falla C: así lo dice la gente.
+                                     "hola, me guardas una mica hidrogel? paso a recogerla en la tarde",
+                                     "una funda de silicón pa recoger", "la recojo al rato",
+                                     "quiero una mica, paso por ella mañana", "ahorita voy por una funda",
+                                     "guárdame dos tlayudas", "unos tacos pa llevar"])
     def test_actions_go_to_the_agent(self, msg):
         assert agent.wants_action(msg) is True
 
