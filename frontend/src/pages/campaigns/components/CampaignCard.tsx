@@ -65,6 +65,8 @@ export function CampaignCard({
   const sentTotal = campaign.stats.sent ?? 0
   const hasSentMessages = sentTotal > 0
   const isRunning = campaign.status === 'running'
+  // "Completada" solo dice que ya se encoló: los envíos pueden tardar horas.
+  const canPause = isRunning || (campaign.status === 'completed' && (campaign.queue_count ?? 0) > 0)
 
   // Rates are clamped: WhatsApp status receipts can still momentarily
   // outrun the sent count, and a bar/label over 100% reads as a bug.
@@ -268,7 +270,7 @@ export function CampaignCard({
             </button>
           )}
 
-          {campaign.status === 'running' && (
+          {canPause && (
             <button
               onClick={() => onPause(campaign.id)}
               disabled={pausingId === campaign.id}

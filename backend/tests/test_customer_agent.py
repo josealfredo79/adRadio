@@ -674,7 +674,7 @@ class TestProductSearch:
         try:
             out = await self._search(user_id, ana, "pizza hawaiana")
             assert [p["nombre"] for p in out["productos"]] == ["Taco al pastor"]
-            assert "todo lo que hay" in out["nota"]
+            assert "sin asegurar que el negocio no lo maneja" in out["nota"]
             assert (await self._search(user_id, ana, "pastor"))["productos"][0]["nombre"] == "Taco al pastor"
         finally:
             await _cleanup(user_id)

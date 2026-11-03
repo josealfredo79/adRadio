@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 
 CAMPAIGN_CLAIM_KEY = "campaign_sending:{campaign_id}"
 CAMPAIGN_CLAIM_SECONDS = 2 * 3600
+TRIAL_REMINDER_KEY = "trial_reminder:{user_id}:{days}:{ends}"
+TRIAL_REMINDER_SECONDS = 4 * 86400
 
 # Meta WhatsApp Cloud API codes for rate-limit/throughput errors — worth a
 # retry, unlike a permanent failure. Source: Meta's official error code
@@ -41,6 +43,33 @@ CAMPAIGN_CLAIM_SECONDS = 2 * 3600
 # parenthesized form, not the bare digits, since a bare "4" would false-match
 # almost any error string.
 _RATE_LIMIT_ERROR_CODES = ("(#4)", "80007", "130429", "131048", "131056", "131064", "rate")
+
+
+async def _campaign_send_stop(db, msg, charge: bool) -> str | None:
+    """Why a queued campaign message must no longer go out, or None.
+
+    Campaign sends wait minutes behind anti-ban delays and retries; meanwhile
+    the owner may pause the campaign or the contact may write BAJA. Owner
+    replies have no campaign_id, and charge=False sends answer the contact's
+    own reply, so neither is stopped here."""
+    from app.models.campaign import Campaign
+    from app.models.contact import Contact
+    from app.services.campaign_reach import is_web_only
+
+    if not msg.campaign_id or not charge:
+        return None
+    contact = await db.get(Contact, msg.contact_id) if msg.contact_id else None
+    if contact and contact.status != "active":
+        return "contact_not_active"
+    if contact and contact.suppressed_until and contact.suppressed_until > datetime.now(timezone.utc):
+        return "contact_suppressed"
+    campaign = await db.get(Campaign, msg.campaign_id)
+    if campaign and campaign.status == "paused":
+        return "campaign_paused"
+    # Reanudada "solo por web": el dueño eligió no pagar WhatsApp.
+    if campaign and is_web_only(campaign):
+        return "campaign_web_only"
+    return None
 
 
 @celery_app.task(bind=True, max_retries=5, default_retry_delay=120)
@@ -68,6 +97,15 @@ def send_whatsapp_message(self, message_id: str, to: str, body: str, charge: boo
 
             if msg and msg.wa_message_id:
                 logger.info("[SEND-ONCE] message %s already sent, skipping copy", message_id)
+                return
+
+            stop = await _campaign_send_stop(db, msg, charge) if msg else None
+            if stop:
+                msg.status = "failed"
+                msg.error_code = stop
+                msg.sent_at = None
+                await db.commit()
+                logger.info("[SEND-STOP] message %s not sent: %s", message_id, stop)
                 return
 
             advertiser = None
@@ -150,6 +188,15 @@ def send_whatsapp_voice_note(self, message_id: str, to: str, audio_url: str, cap
                 logger.info("[SEND-ONCE] message %s already sent, skipping copy", message_id)
                 return
 
+            stop = await _campaign_send_stop(db, msg, charge) if msg else None
+            if stop:
+                msg.status = "failed"
+                msg.error_code = stop
+                msg.sent_at = None
+                await db.commit()
+                logger.info("[SEND-STOP] message %s not sent: %s", message_id, stop)
+                return
+
             advertiser = None
             if msg:
                 adv_res = await db.execute(select(User).where(User.id == msg.advertiser_id))
@@ -228,6 +275,15 @@ def send_whatsapp_image_message(self, message_id: str, to: str, image_url: str, 
 
             if msg and msg.wa_message_id:
                 logger.info("[SEND-ONCE] message %s already sent, skipping copy", message_id)
+                return
+
+            stop = await _campaign_send_stop(db, msg, charge) if msg else None
+            if stop:
+                msg.status = "failed"
+                msg.error_code = stop
+                msg.sent_at = None
+                await db.commit()
+                logger.info("[SEND-STOP] message %s not sent: %s", message_id, stop)
                 return
 
             advertiser = None
@@ -446,11 +502,12 @@ def notify_story_published(self, story_id: str):
 def schedule_campaign(self, campaign_id: str):
     """Process and send all messages for a scheduled campaign."""
     async def _process():
-        from sqlalchemy import select
+        from sqlalchemy import or_, select, update
 
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
         from app.domain.campaign_actions import RADIO_MODES
         from app.models.campaign import Campaign
+        from app.models.message import Message
         from app.models.user import User
         from app.services.campaign_reach import is_web_only, recipients_query
         from app.services.messaging_throttle import is_human_hour, next_human_hour_utc
@@ -520,6 +577,26 @@ def schedule_campaign(self, campaign_id: str):
 
             contacts_result = await db.execute(recipients_query(campaign))
             contacts = contacts_result.scalars().all()
+            if ab.get("queue_paused"):
+                # Solo por web, lo que sigue en cola también falta: _campaign_send_stop
+                # lo frena con "campaign_web_only" y esa persona solo lo recibe por web.
+                from app.services.meta_quality_service import live_queue
+                stopped_rows = or_(
+                    Message.error_code.in_(("campaign_paused", "campaign_web_only")),
+                    live_queue(),
+                ) if web_only else Message.error_code == "campaign_paused"
+                stopped = set((await db.execute(
+                    select(Message.contact_id).where(Message.campaign_id == campaign.id, stopped_rows)
+                )).scalars().all())
+                contacts = [c for c in contacts if c.id in stopped]
+            # Al reanudar solo falta a quien no le salió: no se repite ni se cobra
+            # otra vez ni genera otro cupón. Solo por web, lo que sigue en cola no
+            # cuenta: _campaign_send_stop lo frena y esa persona lo recibe por web.
+            arrived = ("sent", "delivered", "read") if web_only else ("queued", "sent", "delivered", "read")
+            done = set((await db.execute(
+                select(Message.contact_id).where(Message.campaign_id == campaign.id, Message.status.in_(arrived))
+            )).scalars().all())
+            contacts = [c for c in contacts if c.id not in done]
 
             campaign.status = "running"
             if not web_only:
@@ -541,8 +618,15 @@ def schedule_campaign(self, campaign_id: str):
             # Voces del Barrio: la invitación ya se envió, pero la campaña sigue
             # "running" para recolectar las notas de voz que lleguen (ver
             # inbound_pipeline.py). El dueño la cierra pausándola.
-            campaign.status = "running" if campaign.type == "voces" else "completed"
-            await db.commit()
+            # Solo si sigue "running": una pausa de Meta, del dueño o por fallas
+            # que llegó durante el envío no se pisa, o la cola seguiría saliendo.
+            if campaign.type != "voces":
+                await db.execute(
+                    update(Campaign)
+                    .where(Campaign.id == campaign.id, Campaign.status == "running")
+                    .values(status="completed")
+                )
+                await db.commit()
 
     async def _once():
         # Solo una copia a la vez: Redis reentrega las tareas que esperan, y el
@@ -819,6 +903,7 @@ def replenish_annual_message_quota():
 def send_trial_expiry_reminders():
     """Celery Beat: send reminders to expiring users."""
     async def _remind():
+        import redis.asyncio as aioredis
         from sqlalchemy import select
 
         from app.config import settings
@@ -828,17 +913,25 @@ def send_trial_expiry_reminders():
         from app.services.meta_service import send_whatsapp
 
         now = datetime.now(timezone.utc)
+        redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
         async with AsyncSessionLocal() as db:
             for days_left in (1, 3):
-                window_start = now + timedelta(days=days_left)
+                # A full day wide, so the 12 h beat can't step over a trial;
+                # the Redis key keeps it to one reminder per trial end.
                 result = await db.execute(
                     select(User).where(
-                        User.subscription_status.in_(["trial", "active"]),
-                        User.plan_expires_at >= window_start,
-                        User.plan_expires_at < window_start + timedelta(hours=2),
+                        User.subscription_status == "trial",
+                        User.billing_exempt.is_(False),
+                        User.plan_expires_at >= now + timedelta(days=days_left - 1),
+                        User.plan_expires_at < now + timedelta(days=days_left),
                     )
                 )
                 for user in result.scalars().all():
+                    key = TRIAL_REMINDER_KEY.format(
+                        user_id=user.id, days=days_left, ends=user.plan_expires_at.date().isoformat(),
+                    )
+                    if not await redis.set(key, "1", nx=True, ex=TRIAL_REMINDER_SECONDS):
+                        continue
                     biz_name = user.business_name or user.email
                     try:
                         await send_trial_expiring_email(to=user.email, business_name=biz_name, days_left=days_left)
@@ -870,6 +963,7 @@ def send_trial_expiry_reminders():
                                 await send_platform_text(to, msg)
                             except Exception as e:
                                 logger.error("[TRIAL REMINDER] central WhatsApp failed for %s: %s", user.id, e)
+        await redis.aclose()
 
     run_async(_remind())
 

@@ -168,6 +168,7 @@ class _Ctx:
     providers: list[str] = field(default_factory=list)  # qué modelos contestaron en el turno
     channel: str = "web"  # "web" | "whatsapp": solo cambia cómo se le avisa al dueño
     message: str = ""  # lo que escribió el cliente en este turno
+    customer_text: str = ""  # todo lo que ha escrito en esta plática, sin acentos
 
     @property
     def origin(self) -> str:
@@ -271,7 +272,8 @@ TOOLS = [
                     "minItems": 1,
                 },
                 "entrega": {"type": "string", "description": "'domicilio' o 'recoger'."},
-                "direccion": {"type": "string", "description": "Solo si es a domicilio."},
+                "direccion": {"type": "string", "description": "Solo si es a domicilio: las palabras exactas del "
+                                                               "cliente, sin agregar ciudad ni colonia."},
                 "pago": {"type": "string", "description": "Solo si el cliente ya dijo cómo va a pagar; si no, omítelo."},
                 "notas": {"type": "string"},
             },
@@ -427,6 +429,9 @@ async def _tool_consultar_negocio(ctx: _Ctx, args: dict) -> dict:
     info = await search_knowledge(ctx.db, str(ctx.advertiser.id), str(args.get("pregunta") or ""))
     if ctx.advertiser.bot_instructions:
         info = f"{ctx.advertiser.bot_instructions}\n\n{info}".strip()
+    # Sin esto el modelo toma "no dice nada de entregas" como "no entrega".
+    if _ASKS_DELIVERY.search(_plain(ctx.message)) or _ASKS_DELIVERY.search(_plain(str(args.get("pregunta") or ""))):
+        info = f"{delivery_fact(ctx.advertiser)}\n\n{info}".strip()
     return {"informacion": info[:4000] or "No hay información sobre eso. Dilo y ofrece avisar al dueño."}
 
 
@@ -564,13 +569,23 @@ async def _tool_buscar_productos(ctx: _Ctx, args: dict) -> dict:
     if not rows and words:
         # Sin coincidencia: mejor enseñar lo que sí hay que decir "no tenemos productos".
         rows = (await ctx.db.execute(base.order_by(Product.name).limit(10))).scalars().all()
-        nota = "No hay nada con eso exacto; esto es todo lo que hay en el catálogo."
+        # "No contamos con eso" sería afirmar de más: quizá solo no está cargado.
+        nota = ("Eso no aparece en el catálogo. Di que no lo ves en el catálogo, sin asegurar que el negocio no lo "
+                "maneja, ofrece avisar al dueño y enseña lo que sí hay.")
     if not rows:
         return {"productos": [], "nota": "El catálogo de este negocio está vacío."}
     out = {"productos": [{"producto_id": str(p.id), "nombre": p.name, "precio": _price(p)} for p in rows]}
     if nota:
         out["nota"] = nota
     return out
+
+
+def delivery_fact(advertiser: User) -> str:
+    if advertiser.delivers_home:
+        return "Este negocio SÍ entrega a domicilio."
+    if advertiser.delivers_home is False:
+        return "Este negocio NO entrega a domicilio: es para recoger en el local."
+    return "Usa lo que diga la información del negocio sobre entregas; si no dice nada, ofrece avisar al dueño."
 
 
 def _delivery_rule(advertiser: User) -> str:
@@ -591,6 +606,18 @@ def _delivery_rule(advertiser: User) -> str:
 
 
 _ASKS_DELIVERY = re.compile(r"\b(domicilio|a mi casa|traen|traes|llevan|llevas|envio|envian|entregan)\b")
+
+
+def _customer_wrote(ctx: _Ctx, address: str) -> bool:
+    """¿La dirección salió del cliente? La simulación del 2026-10-31 preparó un
+    pedido a domicilio mientras el bot todavía se la estaba pidiendo."""
+    words = [w for w in re.findall(r"\w+", _plain(address)) if len(w) >= 3 or w.isdigit()]
+    if not words:
+        return False
+    said = ctx.customer_text.split()
+    hits = sum(w in said for w in words)
+    # Con dos palabras suyas basta: el modelo suele agregar colonia y ciudad a "hidalgo 25".
+    return hits >= 2 or hits * 2 >= len(words)
 
 
 async def _tool_proponer_pedido(ctx: _Ctx, args: dict) -> dict:
@@ -619,8 +646,9 @@ async def _tool_proponer_pedido(ctx: _Ctx, args: dict) -> dict:
         return {"error": "El pedido está vacío."}
     delivery = "domicilio" if "domic" in str(args.get("entrega") or "").lower() else "recoger"
     address = " ".join(str(args.get("direccion") or "").split())[:300]
-    if delivery == "domicilio" and not address:
-        return {"error": "Falta la dirección de entrega. Pregúntasela al cliente."}
+    if delivery == "domicilio" and not _customer_wrote(ctx, address):
+        return {"error": "Falta la dirección de entrega. Si el cliente ya la escribió, usa sus palabras exactas, sin "
+                         "agregar ciudad ni colonia; si no, pregúntasela y no propongas el pedido hasta que la escriba."}
     # Sin "Efectivo" por defecto: el pago lo acuerdan dueño y cliente (prueba real
     # 2026-10-23: el modelo lo ponía sin que el cliente lo dijera).
     payment = " ".join(str(args.get("pago") or "").split())[:50] or None
@@ -870,6 +898,11 @@ Cómo trabajas:
   que pidió está en horarios_libres, propónla directo con proponer_cita; solo ofrece otras si esa no está.
 - Para cancelar o cambiar: si solo hay una cita (o un pedido) que encaje, usa proponer_* de una vez; la
   pregunta de confirmación ya sirve para que el cliente diga si es esa. Solo pregunta cuál si hay varias.
+- Si el cliente pregunta algo (dónde están, horario, cómo paga, cuánto tarda, si entregan), contéstalo primero y no
+  uses proponer_* en esa vuelta. Del pago y el tiempo de un pedido: el negocio se pone en contacto para acordarlos.
+- Solo propón lo que el cliente eligió con sus palabras: nunca escojas tú el producto. Si dudas entre dos, pregúntale.
+- No digas que el negocio "no tiene" o "no hace" algo porque no aparezca en la información, ni inventes políticas como
+  "precios fijos": di que no tienes ese dato. Si regatea, el precio es el del catálogo.
 - Si el cliente pide varias cosas (cita y pedido), resuélvelas una por una: primero una, y cuando se confirme, la otra.
 - Si pregunta qué productos o qué venden, usa buscar_productos con texto vacío y enséñale la lista; no le preguntes
   antes qué tipo busca.
@@ -1267,6 +1300,43 @@ async def _owner_text(ctx: _Ctx, body: str, template: tuple[str, list[str]] | No
 
 # ─── Entrada ──────────────────────────────────────────────────────────────────
 
+_ONLY_YES = {"si", "sip", "sii", "claro", "dale", "hazlo", "hazla", "adelante", "va", "vale", "ok", "okay", "sale",
+             "orale", "andale", "simon", "confirmo", "confirmalo", "confirmala", "confirma", "confirmado", "correcto",
+             "perfecto", "listo", "yes", "mandalo", "mandala"}
+_YES_PHRASES = ("esta bien", "de acuerdo", "por favor")
+_YES_FILLER = {"por", "favor", "porfa", "gracias", "que", "esta", "bien", "de", "acuerdo", "eso", "asi", "lo", "la", "ya"}
+_CANCEL_WORDS = {"cancela", "cancelalo", "cancelala"}
+_ONLY_NO = {"no", "nel", "espera", "detente", "alto"} | _CANCEL_WORDS
+_NO_FILLER = {"mejor", "todavia", "aun", "gracias", "ya", "asi", "lo", "la"}
+
+
+def _clean_yes_no(message: str, cancelling: bool = False) -> bool | None:
+    """¿El cliente dijo solo sí o solo no? "ok pero son 2" no es un sí: mandaría
+    el pedido viejo sin su cambio (simulación del 2026-10-31). None = sigue la
+    plática y el agente vuelve a proponer con lo que pidió.
+
+    Con una cancelación esperando su sí (cancelling), "cancélalo" es un sí."""
+    if "?" in message or "¿" in message:
+        return None
+    found = re.findall(r"\w+", _plain(message))
+    words = set(found)
+    text = " ".join(found)
+    yes, no = (_ONLY_YES | _CANCEL_WORDS, _ONLY_NO - _CANCEL_WORDS) if cancelling else (_ONLY_YES, _ONLY_NO)
+    said_yes = bool(words & yes) or any(phrase in text for phrase in _YES_PHRASES)
+    if said_yes and not words & no and words <= yes | _YES_FILLER:
+        return True
+    if words & no and not words & yes and words <= no | _NO_FILLER:
+        return False
+    return None
+
+
+def _is_cancelling(raw: str) -> bool:
+    try:
+        return json.loads(raw).get("type") in ("cancel", "cancel_order")
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
 async def handle(
     db: AsyncSession, redis, advertiser: User, contact: Contact, message: str, history: list[dict],
     channel: str = "web",
@@ -1276,13 +1346,14 @@ async def handle(
     if not agent_available(advertiser, contact) or redis is None:
         return None
     key = f"{PENDING_PREFIX}{contact.id}"
-    ctx = _Ctx(db=db, redis=redis, advertiser=advertiser, contact=contact, channel=channel, message=message)
+    said = [m.get("content") for m in history if m.get("role") == "user"]
+    customer_text = " ".join(re.findall(r"\w+", _plain(" ".join(str(t) for t in [*said, message] if t))))
+    ctx = _Ctx(db=db, redis=redis, advertiser=advertiser, contact=contact, channel=channel, message=message,
+               customer_text=customer_text)
 
     raw = await redis.get(key)
     if raw:
-        from app.services.copilot_service import parse_spoken_yes_no
-
-        answer = parse_spoken_yes_no(message)
+        answer = _clean_yes_no(message, _is_cancelling(raw))
         if answer is not None:
             # Borrar es el candado: si tocó "Sí" dos veces seguidas, solo la
             # primera lo borra y ejecuta; la otra no crea un segundo pedido.

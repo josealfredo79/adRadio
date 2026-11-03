@@ -14,7 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -246,6 +246,17 @@ async def process_inbound_message(
         if contact:
             contact.status = "unsubscribed"
             contact.engagement_score = 0
+            # Lo que esperaba su respuesta ya no debe salir: un "gracias" después
+            # de BAJA dispararía la promo con charge=False.
+            await db.execute(
+                update(Message)
+                .where(
+                    Message.contact_id == contact.id,
+                    Message.status == "queued",
+                    Message.content.like("[PENDING:%"),
+                )
+                .values(status="failed", error_code="contact_unsubscribed")
+            )
             await db.commit()
             try:
                 await send(
@@ -440,7 +451,7 @@ async def process_inbound_message(
         )
     )
     pending_contact = pending_contact_result.scalar_one_or_none()
-    if pending_contact:
+    if pending_contact and pending_contact.status == "active":
         pending_result = await db.execute(
             select(Message).where(
                 Message.advertiser_id == advertiser.id,

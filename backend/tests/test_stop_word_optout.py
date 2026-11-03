@@ -109,7 +109,8 @@ class TestStopWordOptOut:
 
         assert contact.status == "unsubscribed"
         # The lookup must have used the candidate list (.in_), not a bare ==.
-        stop_lookup_call = mock_db.execute.call_args_list[-1]
+        # (the last call is the UPDATE that cancels their pending sends)
+        stop_lookup_call = mock_db.execute.call_args_list[-2]
         compiled = str(stop_lookup_call.args[0])
         assert "IN" in compiled.upper()
 

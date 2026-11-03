@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
 
+from app.models.campaign import Campaign
 from app.models.send_block_log import (
     REASON_CONSENT_UNCONFIRMED,
     REASON_HIGH_FAILURE_RATE,
@@ -459,6 +460,16 @@ def _web_coupon(db, campaign, contact, ab) -> None:
         ))
 
 
+async def _paused_now(db, campaign) -> bool:
+    """La plantilla sale al momento y se cobra: sin esto, una pausa de Meta o del
+    dueño a media corrida no detenía a los contactos que faltaban."""
+    campaign_id = getattr(campaign, "id", None)
+    if not isinstance(campaign_id, uuid.UUID):
+        return False
+    status = (await db.execute(select(Campaign.status).where(Campaign.id == campaign_id))).scalar()
+    return status == "paused"
+
+
 async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay):
     """Send banner-style campaign messages."""
     from app.models.message import Message
@@ -534,6 +545,10 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
 
         if idx_b > 0 and idx_b % MAX_PER_HOUR == 0:
             ban_delay = int(idx_b / MAX_PER_HOUR) * 3600
+
+        if await _paused_now(db, campaign):
+            logger.info("[CAMPAIGN] %s paused mid-send, stopping the loop", campaign.id)
+            break
 
         outcome, _err = await _offer_or_queue(
             db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),
@@ -687,6 +702,10 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         if idx_r > 0 and idx_r % MAX_PER_HOUR == 0:
             ban_delay = int(idx_r / MAX_PER_HOUR) * 3600
 
+        if await _paused_now(db, campaign):
+            logger.info("[CAMPAIGN] %s paused mid-send, stopping the loop", campaign.id)
+            break
+
         outcome, _err = await _offer_or_queue(
             db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),
         )
@@ -825,6 +844,10 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
 
         if i > 0 and i % MAX_PER_HOUR == 0:
             ban_delay = int(i / MAX_PER_HOUR) * 3600
+
+        if await _paused_now(db, campaign):
+            logger.info("[CAMPAIGN] %s paused mid-send, stopping the loop", campaign.id)
+            break
 
         outcome, _err = await _offer_or_queue(
             db, advertiser, contact, _convs=_convs, _cap=_cap, _campaign_id=getattr(campaign, "id", None),

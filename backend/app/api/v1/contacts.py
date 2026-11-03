@@ -420,6 +420,9 @@ async def bulk_send_campaign(
         **campaign.segment,
         "specific_contacts": body.contact_ids,
     }
+    # Lista nueva elegida a mano: ya no es "reintentar solo lo frenado".
+    if (campaign.ab_test or {}).get("queue_paused"):
+        campaign.ab_test = {k: v for k, v in campaign.ab_test.items() if k != "queue_paused"}
     campaign.status = "scheduled"
     await db.commit()
 

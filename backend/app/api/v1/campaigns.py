@@ -21,7 +21,7 @@ from fastapi import (
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from redis.asyncio import Redis as AsyncRedis
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -117,6 +117,12 @@ async def list_campaigns(
     for row in counts_raw:
         cid, status, cnt = row
         counts.setdefault(cid, {})[status] = cnt
+    from app.services.meta_quality_service import live_queue
+    queues = dict((await db.execute(
+        select(Message.campaign_id, func.count(Message.id))
+        .where(Message.campaign_id.in_(campaign_ids), live_queue())
+        .group_by(Message.campaign_id)
+    )).all())
 
     # Engagement stats derived live from messages/coupons — the stored
     # Campaign.stats JSON counters drift (see campaign_stats_service).
@@ -128,6 +134,7 @@ async def list_campaigns(
     for c in campaigns:
         out = CampaignOut.model_validate(c)
         out.message_counts = counts.get(c.id, {})
+        out.queue_count = queues.get(c.id, 0)
         out.stats = merge_stats(c.stats, derived.get(c.id))
         if c.status == "paused":
             out.pause_reason = await explain_campaign_pause(db, c)
@@ -246,7 +253,14 @@ async def pause_campaign(
     campaign = result.scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaña no encontrada")
-    campaign.status = "paused"
+    from app.models.message import Message
+    from app.services.meta_quality_service import live_queue, mark_paused
+
+    if campaign.status == "completed" and not await db.scalar(
+        select(exists().where(Message.campaign_id == campaign.id, live_queue()))
+    ):
+        raise HTTPException(status_code=409, detail="Esta campaña ya salió: no hay nada que pausar")
+    mark_paused(campaign)
     await db.commit()
     out = {"message": "Campaña pausada"}
     await store_idempotency_response(request, redis, out)

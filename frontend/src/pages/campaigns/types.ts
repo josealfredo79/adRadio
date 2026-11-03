@@ -36,6 +36,7 @@ export interface Campaign {
   status: string
   stats: Record<string, number>
   message_counts: Record<string, number>
+  queue_count?: number
   pause_reason?: CampaignPauseReason | null
   ab_test: CampaignAbTest
   created_at: string

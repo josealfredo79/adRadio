@@ -45,6 +45,7 @@ class CampaignOut(BaseModel):
     status: str
     stats: dict
     message_counts: dict = {}
+    queue_count: int = 0
     pause_reason: dict | None = None
     created_at: datetime
 

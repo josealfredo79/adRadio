@@ -348,3 +348,33 @@ class TestPendingTextConfirm:
             assert pending_msg.content == "Hola, tenemos una promo para ti"
         finally:
             await _cleanup(advertiser_id)
+
+
+class TestPendingAfterBaja:
+    @pytest.mark.asyncio
+    async def test_baja_cancels_the_pending_send(self):
+        """Quien escribe BAJA y luego "gracias" ya no recibe la promo pendiente."""
+        run_id = uuid.uuid4().hex[:8]
+        advertiser_id, contact_id, pending_msg_id, phone = await _seed_with_pending(
+            f"9{run_id[:6]}", "text", {"body": "Promo 2x1"},
+        )
+
+        async with AsyncSessionLocal() as db:
+            advertiser = await db.get(User, advertiser_id)
+            send = AsyncMock(return_value=(f"sid.{run_id}.out", None))
+            send_owner = AsyncMock(return_value=(f"sid.{run_id}.owner", None))
+
+            with patch(_TEXT_TASK) as mock_task, patch(_RAG_PATCH, new=AsyncMock(return_value=_RAG_REPLY)):
+                for number, text in enumerate(("BAJA", "gracias")):
+                    msg = InboundMessage(
+                        advertiser=advertiser, from_number=phone,
+                        body_text=text, external_message_id=f"wamid.{run_id}.{number}",
+                    )
+                    await process_inbound_message(db, msg, send=send, send_owner=send_owner)
+
+        pending = await _get_message(pending_msg_id)
+        contact = await _get_contact(contact_id)
+        await _cleanup(advertiser_id)
+        mock_task.assert_not_called()
+        assert (pending.status, pending.error_code) == ("failed", "contact_unsubscribed")
+        assert contact.status == "unsubscribed"

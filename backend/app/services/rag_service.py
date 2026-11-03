@@ -168,6 +168,11 @@ async def answer_with_rag(
     # ask_owner, also with neither: a brand-new business with nothing loaded
     # yet is exactly when the bot must ask the owner instead of greeting.
     if bot_instructions or context or ask_owner or customer_note:
+        # Sin definir no se agrega nada: manda lo que diga el negocio en su información.
+        if user and user.delivers_home is not None:
+            from app.services.customer_agent import delivery_fact
+
+            bot_instructions = f"{bot_instructions or ''}\n{delivery_fact(user)}".strip()
         # Horario y ciudad van siempre que se llama a la IA, pero no la disparan
         # solos: un negocio sin nada cargado sigue con el saludo fijo, gratis.
         if user:

@@ -6,12 +6,14 @@ import asyncio
 import threading
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import delete
 
 from app.database import AsyncSessionLocal, engine
+from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.message import Message
 from app.models.user import User
@@ -53,6 +55,7 @@ def seeded():
         await engine.dispose()
         async with AsyncSessionLocal() as db:
             await db.execute(delete(Message).where(Message.advertiser_id == user_id))
+            await db.execute(delete(Campaign).where(Campaign.advertiser_id == user_id))
             await db.execute(delete(Contact).where(Contact.advertiser_id == user_id))
             await db.execute(delete(User).where(User.id == user_id))
             await db.commit()
@@ -121,3 +124,107 @@ def test_a_failed_send_can_still_retry(seeded):
 
     assert meta.await_count == 2
     assert _state(user_id, message_id) == (9, "wamid.2")
+
+
+def _campaign_message(user_id, message_id, campaign_status="running", contact_status="active", until=None):
+    async def setup():
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            campaign = Campaign(
+                advertiser_id=user_id, name="Promo", type="promo", message_text="hola", status=campaign_status,
+            )
+            db.add(campaign)
+            await db.flush()
+            msg = await db.get(Message, message_id)
+            msg.campaign_id = campaign.id
+            contact = await db.get(Contact, msg.contact_id)
+            contact.status = contact_status
+            contact.suppressed_until = until
+            await db.commit()
+        await engine.dispose()
+    asyncio.run(setup())
+
+
+def _message(message_id):
+    async def read():
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            msg = await db.get(Message, message_id)
+            result = msg.status, msg.error_code
+        await engine.dispose()
+        return result
+    return asyncio.run(read())
+
+
+FUTURE = datetime.now(timezone.utc) + timedelta(days=30)
+
+
+@pytest.mark.parametrize("sender,task,extra", CASES, ids=[c[0] for c in CASES])
+@pytest.mark.parametrize("setup,reason", [
+    ({"campaign_status": "paused"}, "campaign_paused"),
+    ({"contact_status": "unsubscribed"}, "contact_not_active"),
+    ({"contact_status": "blocked"}, "contact_not_active"),
+    ({"until": FUTURE}, "contact_suppressed"),
+], ids=["pausada", "baja", "bloqueado", "suprimido"])
+def test_a_queued_campaign_message_stops_in_time(seeded, sender, task, extra, setup, reason):
+    user_id, message_id = seeded
+    _campaign_message(user_id, message_id, **setup)
+    meta = AsyncMock(return_value=("wamid.1", None))
+    with patch(f"app.services.meta_service.{sender}", meta):
+        task(str(message_id), PHONE, *extra)
+
+    assert meta.await_count == 0
+    assert _message(message_id) == ("failed", reason)
+    assert _state(user_id, message_id) == (10, None)
+
+
+def test_a_running_campaign_still_sends(seeded):
+    user_id, message_id = seeded
+    _campaign_message(user_id, message_id)
+    meta = AsyncMock(return_value=("wamid.1", None))
+    with patch("app.services.meta_service.send_whatsapp", meta):
+        tasks.send_whatsapp_message(str(message_id), PHONE, "hola")
+
+    assert meta.await_count == 1
+
+
+def test_a_completed_campaign_finishes_its_queue(seeded):
+    """La campaña se marca terminada antes de que salgan los mensajes con retraso."""
+    user_id, message_id = seeded
+    _campaign_message(user_id, message_id, campaign_status="completed")
+    meta = AsyncMock(return_value=("wamid.1", None))
+    with patch("app.services.meta_service.send_whatsapp", meta):
+        tasks.send_whatsapp_message(str(message_id), PHONE, "hola")
+
+    assert meta.await_count == 1
+
+
+def test_a_reply_to_the_contact_is_not_stopped(seeded):
+    """charge=False: el cliente contestó y la plantilla ya se cobró."""
+    user_id, message_id = seeded
+    _campaign_message(user_id, message_id, campaign_status="paused")
+    meta = AsyncMock(return_value=("wamid.1", None))
+    with patch("app.services.meta_service.send_whatsapp", meta):
+        tasks.send_whatsapp_message(str(message_id), PHONE, "hola", charge=False)
+
+    assert meta.await_count == 1
+
+
+def test_the_owner_can_still_answer_someone_unsubscribed(seeded):
+    """Respuesta del dueño desde el Inbox: no es campaña."""
+    _user_id, message_id = seeded
+
+    async def unsubscribe():
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            msg = await db.get(Message, message_id)
+            (await db.get(Contact, msg.contact_id)).status = "unsubscribed"
+            await db.commit()
+        await engine.dispose()
+    asyncio.run(unsubscribe())
+
+    meta = AsyncMock(return_value=("wamid.1", None))
+    with patch("app.services.meta_service.send_whatsapp", meta):
+        tasks.send_whatsapp_message(str(message_id), PHONE, "hola")
+
+    assert meta.await_count == 1

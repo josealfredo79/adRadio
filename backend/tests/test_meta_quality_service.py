@@ -73,7 +73,7 @@ class TestApplyQualitySignal:
 class TestPauseActiveCampaigns:
     @pytest.mark.asyncio
     async def test_only_pauses_running_and_scheduled(self, test_user):
-        completed = MagicMock(status="completed")
+        completed = MagicMock(status="completed", ab_test=None)
         db = _db_with_campaigns([completed])
 
         await pause_active_campaigns(db, test_user.id)

@@ -6,13 +6,17 @@ Graph API (tasks.poll_meta_quality_ratings), which is the only source for
 the real GREEN/YELLOW/RED rating.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import and_, exists, or_, select
 
 from app.models.campaign import Campaign
+from app.models.message import Message
 
 logger = logging.getLogger(__name__)
+
+# Más viejo que esto ya no es cola: la tarea se perdió y nunca va a salir.
+_QUEUE_HOURS = 48
 
 _BASELINE_PER_HOUR = 60
 _THROTTLED_PER_HOUR = _BASELINE_PER_HOUR // 2
@@ -128,16 +132,40 @@ def is_ban_risk_error(error: str | None) -> bool:
     return any(code in error for code in _BAN_RISK_ERROR_CODES)
 
 
+def live_queue():
+    """Mensajes de campaña que de verdad esperan salir. Las filas [PENDING:
+    esperan la respuesta del cliente, no son cola de envío."""
+    return and_(
+        Message.status == "queued",
+        Message.created_at >= datetime.now(timezone.utc) - timedelta(hours=_QUEUE_HOURS),
+        ~Message.content.like("[PENDING:%"),
+    )
+
+
+def mark_paused(campaign: Campaign) -> None:
+    """Una "completada" ya salió a toda su lista: al reanudarla solo se reintenta
+    lo frenado, no una tanda nueva a quien se haya agregado después."""
+    if campaign.status == "completed":
+        campaign.ab_test = {**(campaign.ab_test or {}), "queue_paused": True}
+    campaign.status = "paused"
+
+
 async def pause_active_campaigns(db, advertiser_id) -> None:
+    # "completed" solo dice que ya se encoló todo: sin esto un aviso de Meta no
+    # frenaría la cola que espera horas por el anti-baneo.
+    still_queued = exists().where(Message.campaign_id == Campaign.id, live_queue())
     result = await db.execute(
         select(Campaign).where(
             Campaign.advertiser_id == advertiser_id,
-            Campaign.status.in_(("scheduled", "running")),
+            or_(
+                Campaign.status.in_(("scheduled", "running")),
+                and_(Campaign.status == "completed", still_queued),
+            ),
         )
     )
     campaigns = result.scalars().all()
     for campaign in campaigns:
-        campaign.status = "paused"
+        mark_paused(campaign)
     if campaigns:
         logger.warning(
             "[META QUALITY] Auto-paused %d campaign(s) for advertiser=%s — number flagged by Meta",
