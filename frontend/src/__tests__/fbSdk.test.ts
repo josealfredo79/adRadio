@@ -17,7 +17,7 @@ function installFb(login: Login) {
 describe('launchEmbeddedSignup', () => {
   beforeEach(() => vi.resetModules())
 
-  it('caso 1: uses Embedded Signup v4 (empty setup extras, no v2 feature flags)', async () => {
+  it('caso 1: uses Embedded Signup v4 with the business app (coexistence) option, no sessionInfoVersion', async () => {
     let options: Record<string, unknown> = {}
     installFb((cb, opts) => {
       options = opts
@@ -26,7 +26,7 @@ describe('launchEmbeddedSignup', () => {
     const { launchEmbeddedSignup } = await import('@/lib/fbSdk')
     await launchEmbeddedSignup('app', 'cfg')
     expect(options.config_id).toBe('cfg')
-    expect(options.extras).toEqual({ setup: {} })
+    expect(options.extras).toEqual({ setup: {}, featureType: 'whatsapp_business_app_onboarding' })
   })
 
   it('caso 2: business app onboarding (via window.postMessage) is reported as coexistence', async () => {

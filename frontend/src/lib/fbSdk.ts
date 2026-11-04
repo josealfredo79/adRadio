@@ -20,6 +20,7 @@ export interface FbLoginOptions {
   // "Inicio de sesión con Facebook para empresas", no aquí.
   extras: {
     setup: Record<string, unknown>
+    featureType?: string
   }
 }
 
@@ -155,7 +156,9 @@ export function launchEmbeddedSignup(appId: string, configId: string): Promise<E
             response_type: 'code',
             override_default_response_type: true,
             // v4: la v2 (feature + sessionInfoVersion) se retira el 15-oct-2026.
-            extras: { setup: {} },
+            // En v4 la opción "conectar mi app WhatsApp Business" (coexistencia)
+            // solo aparece con este featureType; sin él Meta solo ofrece número nuevo.
+            extras: { setup: {}, featureType: 'whatsapp_business_app_onboarding' },
           },
         )
       })
