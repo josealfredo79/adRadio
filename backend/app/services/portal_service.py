@@ -14,6 +14,7 @@ import base64
 import hashlib
 import hmac
 import logging
+import re
 import uuid
 
 from app.config import settings
@@ -112,6 +113,17 @@ def portal_gift_line(contact_id: uuid.UUID) -> str:
     return f"\n\n🎁 Tienes un regalo de bienvenida en tu tarjeta de cliente: {portal_url(contact_id)}"
 
 
+_WEB_INVITE_LINE = re.compile(
+    r"\n*(?:💬 ¿Seguimos por aquí\? Platica conmigo en la web[^\n]*|🎁 Tienes un regalo de bienvenida en tu tarjeta de cliente:[^\n]*)"
+)
+
+
+def strip_web_invite(text: str) -> str:
+    """La respuesta sin la invitación a la web: en el chat web el cliente ya
+    está ahí, y verla con su link confundía (prueba CityCell 2026-11-04)."""
+    return _WEB_INVITE_LINE.sub("", text or "").rstrip()
+
+
 async def maybe_portal_invite(
     redis, contact_id: uuid.UUID | None, customer_text: str, reply: str, gift: bool = False
 ) -> str:
@@ -133,7 +145,10 @@ async def maybe_portal_invite(
         if count == 1:
             await redis.expire(f"portal_invite_count:{contact_id}:{today}", _INVITE_TTL_SECONDS)
         text = (customer_text or "").lower()
-        if not gift and count < INVITE_AFTER_MESSAGES and not any(w in text for w in _SHOPPING_WORDS):
+        # Si el bot ya le mostró un producto (link /p/…), el cliente está comprando
+        # aunque no haya dicho "precio": es el mejor momento para invitarlo.
+        shopping = any(w in text for w in _SHOPPING_WORDS) or "/p/" in (reply or "")
+        if not gift and count < INVITE_AFTER_MESSAGES and not shopping:
             return ""
         first_today = await redis.set(f"portal_invited:{contact_id}:{today}", "1", nx=True, ex=_INVITE_TTL_SECONDS)
     except Exception:

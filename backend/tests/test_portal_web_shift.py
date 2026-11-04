@@ -63,6 +63,20 @@ class TestDailyInvite:
         assert "💬" in out
 
     @pytest.mark.asyncio
+    async def test_a_reply_showing_a_product_invites_on_the_first_message(self):
+        # Prueba CityCell 2026-11-04: "Hola tienen cargadores" → ficha del cargador, sin invitación.
+        reply = "Tenemos el cargador por $120.\n\n📷 Cargador, fotos y detalles: https://www.iaradio.online/p/a/b"
+        out = await ps.maybe_portal_invite(FakeRedis(), uuid.uuid4(), "Hola tienen cargadores", reply)
+        assert "💬" in out
+
+    def test_the_web_chat_does_not_show_the_invite_to_the_web(self):
+        cid = uuid.uuid4()
+        reply = "Tenemos el Poco 65 por $3,000." + ps.portal_invite_line(cid)
+        assert ps.strip_web_invite(reply) == "Tenemos el Poco 65 por $3,000."
+        assert ps.strip_web_invite("Hola" + ps.portal_gift_line(cid)) == "Hola"
+        assert ps.strip_web_invite("Sin invitación: ¿te lo aparto?") == "Sin invitación: ¿te lo aparto?"
+
+    @pytest.mark.asyncio
     async def test_no_invite_when_the_reply_already_has_the_link_or_no_redis(self):
         cid = uuid.uuid4()
         assert await ps.maybe_portal_invite(FakeRedis(), cid, "precio", f"Listo {ps.portal_url(cid)}") == ""

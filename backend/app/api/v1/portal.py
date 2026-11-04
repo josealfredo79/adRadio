@@ -45,10 +45,10 @@ from app.models.order import Order
 from app.models.push_subscription import PushSubscription
 from app.models.user import User
 from app.services.availability_service import TZ
-from app.services.chat_quick_asks import chat_quick_asks
+from app.services.chat_quick_asks import chat_quick_asks_for
 from app.services.claude_service import personalize_message
 from app.services.loyalty_service import add_stamp, get_card
-from app.services.portal_service import read_portal_token
+from app.services.portal_service import read_portal_token, strip_web_invite
 from app.services.referral_service import make_ref_code
 from app.services.web_push import push_enabled
 from app.services.widget_order_service import ORDER_RESUME_WINDOW
@@ -176,7 +176,7 @@ async def get_portal(request: Request, token: str, db: AsyncSession = Depends(ge
             "agent": advertiser.bot_name or "Asistente",
             "greeting": advertiser.widget_greeting or "",
             "whatsapp_number": _public_whatsapp_number(advertiser),
-            "quick_asks": chat_quick_asks(advertiser),
+            "quick_asks": await chat_quick_asks_for(db, advertiser),
         },
         # El contacto de "Probar como cliente" se llama "Tú (prueba)": sin nombre
         # para que el saludo no diga "¡Hola, Tú!".
@@ -342,7 +342,7 @@ async def get_messages(
         {
             "id": str(m.id),
             "role": "user" if m.direction == "inbound" else "assistant",
-            "content": m.content,
+            "content": strip_web_invite(m.content) if m.direction == "outbound" else m.content,
             "channel": m.channel or "whatsapp",
             "from_owner": m.sender == "owner",
             "at": m.created_at.isoformat() if m.created_at else None,

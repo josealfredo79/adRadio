@@ -4,6 +4,11 @@ Los de siempre ("¿Qué productos tienen?", "Quiero agendar una cita"…) los po
 el frontend. La cuenta de IaRadio no es un negocio con clientes: su chat es el
 de ventas de IaRadio, y ahí esos botones confundían a los interesados.
 """
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.appointment import Appointment
+from app.models.product import Product
 from app.models.user import User
 
 # La cuenta que vende IaRadio (también guarda los planes como productos, ver
@@ -25,3 +30,45 @@ def chat_quick_asks(user: User) -> list[dict] | None:
     if (user.email or "").lower() == IARADIO_ACCOUNT_EMAIL:
         return SALES_QUICK_ASKS
     return None
+
+
+# Giros que viven de citas aunque el dueño no haya llenado sus servicios.
+_BOOKING_WORDS = (
+    "estetic", "estétic", "salon", "salón", "barber", "uñas", "spa", "belleza", "consultorio", "doctor",
+    "medic", "médic", "dental", "dentist", "clinica", "clínica", "veterin", "psicolog", "nutri",
+    "fisio", "masaj", "tatu", "abogad", "notar", "taller", "clases", "academ",
+)
+
+ASK_PRODUCTS = {"icon": "🛍️", "text": "¿Qué productos tienen?"}
+ASK_HOURS = {"icon": "🕒", "text": "¿Cuál es su horario?"}
+ASK_APPOINTMENT = {"icon": "📅", "text": "Quiero agendar una cita"}
+ASK_ORDER = {"icon": "🛒", "text": "Quiero hacer un pedido"}
+ASK_DELIVERY = {"icon": "🛵", "text": "¿Hacen entregas a domicilio?"}
+ASK_WHERE = {"icon": "📍", "text": "¿Dónde están?"}
+
+
+async def chat_quick_asks_for(db: AsyncSession, user: User) -> list[dict]:
+    """Los botones de arranque que le sirven a ESTE negocio: "agendar una
+    cita" solo si da citas y "hacer un pedido" solo si tiene productos (una
+    tienda de celulares mostraba "agendar una cita", prueba CityCell 2026-11-04)."""
+    sales = chat_quick_asks(user)
+    if sales:
+        return sales
+    has_products = await db.scalar(
+        select(Product.id).where(Product.advertiser_id == user.id, Product.active.is_(True)).limit(1)
+    ) is not None
+    category = (user.business_category or "").lower()
+    takes_appointments = bool(user.appointment_services) or any(w in category for w in _BOOKING_WORDS)
+    if not takes_appointments:
+        takes_appointments = await db.scalar(
+            select(Appointment.id).where(Appointment.advertiser_id == user.id).limit(1)
+        ) is not None
+    asks = [ASK_PRODUCTS, ASK_HOURS]
+    if takes_appointments:
+        asks.append(ASK_APPOINTMENT)
+    if has_products:
+        asks.append(ASK_ORDER)
+    for extra in ([ASK_DELIVERY] if user.delivers_home else []) + [ASK_WHERE]:
+        if len(asks) < 4:
+            asks.append(extra)
+    return asks
