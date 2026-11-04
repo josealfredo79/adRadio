@@ -64,6 +64,7 @@ export default function WhatsappWizard() {
     enabled: boolean
     free_service_messages?: number
     service_price_mxn?: number
+    prefill?: Record<string, unknown> | null
   }>({
     queryKey: ['whatsapp-embedded-config'],
     queryFn: () => api.get('/me/whatsapp-embedded-config').then((r) => r.data),
@@ -98,7 +99,7 @@ export default function WhatsappWizard() {
       return
     }
     try {
-      const result = await launchEmbeddedSignup(embeddedConfig.app_id, embeddedConfig.config_id)
+      const result = await launchEmbeddedSignup(embeddedConfig.app_id, embeddedConfig.config_id, embeddedConfig.prefill)
       await embeddedMutation.mutateAsync(result)
     } catch (err) {
       setConnectError(err instanceof Error ? err.message : 'No se pudo completar la conexión con Meta')
@@ -267,8 +268,15 @@ export default function WhatsappWizard() {
             <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-muted-foreground">
               <li>Tu cuenta de Facebook (correo y contraseña).</li>
               <li>Tu celular con el número que vas a conectar.</li>
-              <li>Una tarjeta: Meta la pide para cobrar sus mensajes; IaRadio no la ve.</li>
+              <li>No necesitas tarjeta para empezar.</li>
             </ul>
+            <p className="mt-2.5 font-semibold">Lo que vas a ver en la ventana de Meta:</p>
+            <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-muted-foreground">
+              <li>Entra con tu Facebook.</li>
+              <li>Crea tu empresa: ya va llenada con tus datos de IaRadio, solo revísalos.</li>
+              <li>Pon tu número y el código que te llega por SMS o llamada.</li>
+              <li>Si te pide método de pago, toca <strong>"Omitir y finalizar"</strong>: contestar a tus clientes no lo necesita.</li>
+            </ol>
           </div>
           <button
             type="button"
@@ -305,9 +313,10 @@ export default function WhatsappWizard() {
               SMS o llamada para confirmarlo.
             </li>
             <li>
-              Meta puede pedirte una tarjeta en tu cuenta de Meta. Las primeras {freeReplies} respuestas a tus
-              clientes de cada mes son gratis; después Meta cobra unos {replyPrice} por respuesta, y los mensajes de
-              promoción aparte. Lo cobra Meta directamente, no entra en tu plan de IaRadio.
+              Meta puede pedirte una tarjeta en tu cuenta de Meta, y la puedes agregar después. Las primeras
+              {' '}{freeReplies} respuestas a tus clientes de cada mes son gratis; después Meta cobra unos {replyPrice} por
+              respuesta, y los mensajes de promoción aparte (esos sí necesitan tarjeta). Lo cobra Meta directamente, no
+              entra en tu plan de IaRadio.
             </li>
           </ul>
           {connectError && (

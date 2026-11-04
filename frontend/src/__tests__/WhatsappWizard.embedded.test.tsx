@@ -45,6 +45,11 @@ describe('WhatsappWizard — Conectar con Meta', () => {
     expect(screen.getByText(/Antes de empezar ten a la mano/)).toBeDefined()
     expect(screen.getByText(/Tu cuenta de Facebook/)).toBeDefined()
     expect(screen.getByText(/Meta puede pedirte una tarjeta/)).toBeDefined()
+    // La tarjeta no es requisito: se omite en la ventana de Meta.
+    expect(screen.getByText(/No necesitas tarjeta para empezar/)).toBeDefined()
+    expect(screen.getByText(/Omitir y finalizar/)).toBeDefined()
+    expect(screen.getByText(/ya va llenada con tus datos/)).toBeDefined()
+    expect(screen.queryByText(/Una tarjeta: Meta la pide/)).toBeNull()
     expect(screen.getByText(/primeras 1,000 respuestas/)).toBeDefined()
     expect(screen.getByText(/\$0\.16 por respuesta/)).toBeDefined()
     expect(screen.queryByText(/Contestar a tus clientes es gratis/)).toBeNull()

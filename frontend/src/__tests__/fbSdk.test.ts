@@ -29,6 +29,18 @@ describe('launchEmbeddedSignup', () => {
     expect(options.extras).toEqual({ version: 'v5' })
   })
 
+  it('sends the business data IaRadio already has so the Meta window comes prefilled', async () => {
+    let options: Record<string, unknown> = {}
+    installFb((cb, opts) => {
+      options = opts
+      cb({ authResponse: { code: 'c3' } })
+    })
+    const { launchEmbeddedSignup } = await import('@/lib/fbSdk')
+    const prefill = { business: { name: 'City Cell' }, phone: { displayName: 'City Cell', category: 'RETAIL', description: 'x' } }
+    await launchEmbeddedSignup('app', 'cfg', prefill)
+    expect(options.extras).toEqual({ version: 'v5', setup: prefill })
+  })
+
   it('caso 2: business app onboarding (via window.postMessage) is reported as coexistence', async () => {
     installFb((cb) => {
       window.dispatchEvent(new MessageEvent('message', {

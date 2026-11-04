@@ -182,6 +182,49 @@ class MetaEmbeddedConfigOut(BaseModel):
     # Para el aviso de cobro: respuestas gratis al mes y lo que cobra Meta después.
     free_service_messages: int
     service_price_mxn: float
+    # Datos que IaRadio ya tiene, para que la ventana de Meta salga llenada
+    # (extras.setup): el dueño solo revisa y toca Siguiente. Meta los usa al
+    # crear una empresa nueva; si no le sirven, la ventana sale vacía.
+    prefill: dict | None = None
+
+
+# Giro libre del negocio → categoría de WhatsApp de Meta (si no encaja, OTHER).
+_META_CATEGORIES = (
+    (("restaur", "comida", "cocina", "taco", "pizz", "cafe", "café", "panader", "tlayud", "antojit", "fonda"), "RESTAURANT"),
+    (("abarrot", "tiendita", "super", "miscel", "fruter", "carnicer"), "GROCERY"),
+    (("estetic", "estétic", "salon", "salón", "barber", "uñas", "spa", "belleza"), "BEAUTY"),
+    (("ropa", "boutique", "zapat", "calzado", "moda"), "APPAREL"),
+    (("doctor", "medic", "médic", "dental", "dentist", "consultorio", "clinica", "clínica", "farmac", "veterin"), "HEALTH"),
+    (("escuela", "academ", "curso", "clases", "colegio"), "EDU"),
+    (("hotel", "hostal", "posada", "cabaña"), "HOTEL"),
+    (("taller", "mecanic", "mecánic", "auto", "llanter", "refacc"), "AUTO"),
+    (("tienda", "celular", "electr", "papeler", "ferreter", "regal", "accesori", "venta"), "RETAIL"),
+    (("abogad", "contador", "contab", "inmobil", "notar", "despacho", "servicio"), "PROF_SERVICES"),
+    (("evento", "fiesta", "banquet", "salon de eventos"), "EVENT_PLAN"),
+)
+
+
+def _meta_category(category: str | None) -> str:
+    text = (category or "").lower()
+    for words, meta in _META_CATEGORIES:
+        if any(w in text for w in words):
+            return meta
+    return "OTHER"
+
+
+def _signup_prefill(user: User) -> dict | None:
+    name = (user.business_name or "").strip()[:100]
+    if not name:
+        return None
+    business: dict = {"name": name, "email": user.email, "country": (user.country or "MX")[:2].upper()}
+    if user.slug and settings.FRONTEND_URL.startswith("https://"):
+        business["website"] = f"{settings.FRONTEND_URL.rstrip('/')}/sitio/{user.slug}"
+    city = (user.city or "").strip()
+    description = f"{name}{f' en {city}' if city else ''}. Escríbenos y te atendemos al momento."[:512]
+    return {
+        "business": business,
+        "phone": {"displayName": name, "category": _meta_category(user.business_category), "description": description},
+    }
 
 
 @router.get("/me/whatsapp-embedded-config", response_model=MetaEmbeddedConfigOut)
@@ -198,6 +241,7 @@ async def get_whatsapp_embedded_config(current_user: User = Depends(get_current_
         enabled=_embedded_enabled_for(current_user),
         free_service_messages=free_messages,
         service_price_mxn=price_mxn,
+        prefill=_signup_prefill(current_user),
     )
 
 

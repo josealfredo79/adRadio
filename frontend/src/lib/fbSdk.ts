@@ -20,6 +20,7 @@ export interface FbLoginOptions {
   // "Inicio de sesión con Facebook para empresas", no aquí.
   extras: {
     version: string
+    setup?: Record<string, unknown>
   }
 }
 
@@ -68,7 +69,15 @@ export async function initFbSdk(appId: string): Promise<void> {
   }
 }
 
-export function launchEmbeddedSignup(appId: string, configId: string): Promise<EmbeddedSignupResult> {
+// Datos que IaRadio ya tiene (nombre, correo, sitio, categoría) para que la
+// ventana de Meta salga llenada al crear la empresa; los arma el servidor.
+export type SignupPrefill = Record<string, unknown>
+
+export function launchEmbeddedSignup(
+  appId: string,
+  configId: string,
+  prefill?: SignupPrefill | null,
+): Promise<EmbeddedSignupResult> {
   return new Promise((resolve, reject) => {
     loadFbSdk()
       .then(() => {
@@ -158,7 +167,7 @@ export function launchEmbeddedSignup(appId: string, configId: string): Promise<E
             // viene encendida. En v4 con featureType Meta igual solo ofreció
             // número nuevo (prueba real CityCell 2026-11-03). Los productos salen
             // de la configuración "Registro WhatsApp v4" (registro insertado).
-            extras: { version: 'v5' },
+            extras: prefill ? { version: 'v5', setup: prefill } : { version: 'v5' },
           },
         )
       })

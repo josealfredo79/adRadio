@@ -687,6 +687,30 @@ class TestMetaSinFriccion:
         assert data["free_service_messages"] == settings.META_FREE_SERVICE_MESSAGES
         assert data["service_price_mxn"] == settings.META_SERVICE_PRICE_MXN
 
+    def test_meta_window_comes_prefilled_with_the_business_data(self, client, test_user, monkeypatch):
+        from app.config import settings
+        monkeypatch.setattr(settings, "FRONTEND_URL", "https://www.iaradio.online")
+        test_user.business_name = "City Cell"
+        test_user.email = "dueno@citycell.mx"
+        test_user.city = "Tlaxiaco"
+        test_user.country = "MX"
+        test_user.slug = "citycell"
+        test_user.business_category = "Tienda de celulares"
+        prefill = client.get("/api/v1/me/whatsapp-embedded-config").json()["prefill"]
+        assert prefill["business"] == {
+            "name": "City Cell", "email": "dueno@citycell.mx", "country": "MX",
+            "website": "https://www.iaradio.online/sitio/citycell",
+        }
+        assert prefill["phone"]["displayName"] == "City Cell"
+        assert prefill["phone"]["category"] == "RETAIL"
+        assert "Tlaxiaco" in prefill["phone"]["description"]
+
+    def test_meta_prefill_unknown_category_is_other_and_no_name_means_no_prefill(self, client, test_user):
+        test_user.business_category = "algo raro"
+        assert client.get("/api/v1/me/whatsapp-embedded-config").json()["prefill"]["phone"]["category"] == "OTHER"
+        test_user.business_name = None
+        assert client.get("/api/v1/me/whatsapp-embedded-config").json()["prefill"] is None
+
     def test_caso2_help_endpoint_saves_the_request(self, client, test_user):
         with patch("app.services.meta_help_request.request_whatsapp_help", new=AsyncMock(return_value=True)) as req:
             r = client.post("/api/v1/me/whatsapp-connection/help")
