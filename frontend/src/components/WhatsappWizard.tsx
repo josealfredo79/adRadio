@@ -163,6 +163,73 @@ export default function WhatsappWizard() {
   // Sin botón y sin poder conectar a mano: le toca pedir ayuda.
   const needsHelp = !isConnected && !embeddedConfig?.enabled && !isAdmin
 
+  const connectBox = (
+      <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+        <p className="text-sm font-medium text-foreground">
+          Conecta tu WhatsApp para que el bot conteste también ahí.
+        </p>
+        <div className="rounded-md border border-border bg-card px-3 py-2.5 text-xs text-foreground">
+          <p className="font-semibold">Antes de empezar ten a la mano (son unos 10 minutos):</p>
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-muted-foreground">
+            <li>Tu cuenta de Facebook (correo y contraseña).</li>
+            <li>Tu celular con el número que vas a conectar.</li>
+            <li>No necesitas tarjeta para empezar.</li>
+          </ul>
+          <p className="mt-2.5 font-semibold">Lo que vas a ver en la ventana de Meta:</p>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-muted-foreground">
+            <li>Entra con tu Facebook.</li>
+            <li>Crea tu empresa: ya va llenada con tus datos de IaRadio, solo revísalos.</li>
+            <li>Pon tu número y el código que te llega por SMS o llamada.</li>
+            <li>Si te pide método de pago, toca <strong>"Omitir y finalizar"</strong>: contestar a tus clientes no lo necesita.</li>
+          </ol>
+        </div>
+        <button
+          type="button"
+          onClick={handleConnectWithMeta}
+          disabled={embeddedMutation.isPending}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#1877F2] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0f68d9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {embeddedMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+            </svg>
+          )}
+          {embeddedMutation.isPending ? 'Conectando con Meta…' : 'Conectar con Meta'}
+        </button>
+        <p className="text-xs text-muted-foreground">
+          Se abrirá una ventana de Meta: inicia sesión, elige tu negocio y tu número. El token y la
+          configuración se hacen solos — no necesitas pegar nada.
+        </p>
+        <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+          <li>
+            <strong>Puedes usar tu número de siempre</strong> si está en la app <strong>WhatsApp Business</strong>{' '}
+            (versión 2.24.17 o más nueva): en la ventana de Meta elige conectar tu app existente y lo sigues
+            usando en tu celular. Lo que contestes desde ahí aparece en tu Inbox y el bot no se te encima.
+          </li>
+          <li>
+            Con tu app conectada dejan de funcionar en el celular: grupos, mensajes temporales, listas de
+            difusión, catálogo y respuestas rápidas de la app, y llamadas. WhatsApp Web se desvincula (lo vuelves
+            a vincular; WhatsApp para Windows ya no).
+          </li>
+          <li>
+            O usa un número nuevo que <strong>no</strong> esté en ninguna app de WhatsApp: te llega un código por
+            SMS o llamada para confirmarlo.
+          </li>
+          <li>
+            Meta puede pedirte una tarjeta en tu cuenta de Meta, y la puedes agregar después. Las primeras
+            {' '}{freeReplies} respuestas a tus clientes de cada mes son gratis; después Meta cobra unos {replyPrice} por
+            respuesta, y los mensajes de promoción aparte (esos sí necesitan tarjeta). Lo cobra Meta directamente, no
+            entra en tu plan de IaRadio.
+          </li>
+        </ul>
+        {connectError && (
+          <p className="text-sm text-red-600">{connectError}</p>
+        )}
+      </div>
+  )
+
   return (
     <div id="whatsapp" ref={sectionRef} className="scroll-mt-20 rounded-xl bg-card p-6 shadow-sm border border-border space-y-5">
       <div className="flex items-center gap-2">
@@ -177,9 +244,10 @@ export default function WhatsappWizard() {
             <span className="font-medium">{connection?.display_phone_number}</span>
             {connection?.verified_name ? ` — ${connection.verified_name}` : ''}
             {connection?.coexistence && <span className="text-green-700"> · también en tu app WhatsApp Business</span>}
-            {connection?.token_last4 && (
+            {isAdmin && connection?.token_last4 && (
               <span className="text-green-600"> · token termina en {connection.token_last4}</span>
             )}
+            <span className="block text-green-700">Conectado: tu bot ya contesta en este WhatsApp.</span>
           </div>
         </div>
       )}
@@ -258,72 +326,17 @@ export default function WhatsappWizard() {
         </div>
       )}
 
-      {embeddedConfig?.enabled && (
-        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-          <p className="text-sm font-medium text-foreground">
-            Conecta tu WhatsApp para que el bot conteste también ahí.
-          </p>
-          <div className="rounded-md border border-border bg-card px-3 py-2.5 text-xs text-foreground">
-            <p className="font-semibold">Antes de empezar ten a la mano (son unos 10 minutos):</p>
-            <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-muted-foreground">
-              <li>Tu cuenta de Facebook (correo y contraseña).</li>
-              <li>Tu celular con el número que vas a conectar.</li>
-              <li>No necesitas tarjeta para empezar.</li>
-            </ul>
-            <p className="mt-2.5 font-semibold">Lo que vas a ver en la ventana de Meta:</p>
-            <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-muted-foreground">
-              <li>Entra con tu Facebook.</li>
-              <li>Crea tu empresa: ya va llenada con tus datos de IaRadio, solo revísalos.</li>
-              <li>Pon tu número y el código que te llega por SMS o llamada.</li>
-              <li>Si te pide método de pago, toca <strong>"Omitir y finalizar"</strong>: contestar a tus clientes no lo necesita.</li>
-            </ol>
-          </div>
-          <button
-            type="button"
-            onClick={handleConnectWithMeta}
-            disabled={embeddedMutation.isPending}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#1877F2] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0f68d9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {embeddedMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-              </svg>
-            )}
-            {embeddedMutation.isPending ? 'Conectando con Meta…' : 'Conectar con Meta'}
-          </button>
-          <p className="text-xs text-muted-foreground">
-            Se abrirá una ventana de Meta: inicia sesión, elige tu negocio y tu número. El token y la
-            configuración se hacen solos — no necesitas pegar nada.
-          </p>
-          <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
-            <li>
-              <strong>Puedes usar tu número de siempre</strong> si está en la app <strong>WhatsApp Business</strong>{' '}
-              (versión 2.24.17 o más nueva): en la ventana de Meta elige conectar tu app existente y lo sigues
-              usando en tu celular. Lo que contestes desde ahí aparece en tu Inbox y el bot no se te encima.
-            </li>
-            <li>
-              Con tu app conectada dejan de funcionar en el celular: grupos, mensajes temporales, listas de
-              difusión, catálogo y respuestas rápidas de la app, y llamadas. WhatsApp Web se desvincula (lo vuelves
-              a vincular; WhatsApp para Windows ya no).
-            </li>
-            <li>
-              O usa un número nuevo que <strong>no</strong> esté en ninguna app de WhatsApp: te llega un código por
-              SMS o llamada para confirmarlo.
-            </li>
-            <li>
-              Meta puede pedirte una tarjeta en tu cuenta de Meta, y la puedes agregar después. Las primeras
-              {' '}{freeReplies} respuestas a tus clientes de cada mes son gratis; después Meta cobra unos {replyPrice} por
-              respuesta, y los mensajes de promoción aparte (esos sí necesitan tarjeta). Lo cobra Meta directamente, no
-              entra en tu plan de IaRadio.
-            </li>
-          </ul>
-          {connectError && (
-            <p className="text-sm text-red-600">{connectError}</p>
-          )}
-        </div>
-      )}
+      {embeddedConfig?.enabled &&
+        (isConnected ? (
+          // Ya conectado: el cuadro de conectar confundía ("¿lo vuelvo a conectar?");
+          // queda escondido para quien de verdad quiera cambiar de número.
+          <details className="rounded-lg border border-border px-4 py-3 text-sm">
+            <summary className="cursor-pointer text-muted-foreground">¿Quieres cambiar a otro número?</summary>
+            <div className="mt-3">{connectBox}</div>
+          </details>
+        ) : (
+          connectBox
+        ))}
 
       {isAdmin && (
         <div className="space-y-5">

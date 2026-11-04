@@ -13,9 +13,9 @@ vi.mock('@/lib/api', () => ({
 const auth = vi.hoisted(() => ({ role: 'advertiser' }))
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { role: auth.role } }) }))
 
-function renderWizard(enabled: boolean, status = 'not_connected') {
+function renderWizard(enabled: boolean, status = 'not_connected', extra: Record<string, unknown> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
-  qc.setQueryData(['whatsapp-connection'], { status })
+  qc.setQueryData(['whatsapp-connection'], { status, ...extra })
   qc.setQueryData(['whatsapp-embedded-config'], {
     app_id: '1', config_id: 'c', enabled, free_service_messages: 1000, service_price_mxn: 0.16,
   })
@@ -94,6 +94,15 @@ describe('WhatsappWizard — Meta sin fricción', () => {
     renderWizard(true)
     expect(screen.queryByText('Quiero conectar mi WhatsApp')).toBeNull()
     expect(screen.queryByText(/Conectar a mano/)).toBeNull()
+  })
+
+  it('a connected owner sees "Conectado", no token, and the connect box tucked away', () => {
+    renderWizard(true, 'connected', { display_phone_number: '+52 1 953 172 4341', verified_name: 'City Cell', token_last4: 'yoZD' })
+    expect(screen.getByText(/Conectado: tu bot ya contesta en este WhatsApp/)).toBeDefined()
+    expect(screen.queryByText(/token termina en/)).toBeNull()
+    const summary = screen.getByText('¿Quieres cambiar a otro número?')
+    expect(summary.closest('details')?.open).toBe(false)
+    expect(summary.closest('details')?.textContent).toContain('Conectar con Meta')
   })
 
   it('an owner already connected is not asked to connect', () => {
