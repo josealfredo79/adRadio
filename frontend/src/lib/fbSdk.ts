@@ -16,11 +16,10 @@ export interface FbLoginOptions {
   config_id: string
   response_type: 'code'
   override_default_response_type: boolean
-  // Embedded Signup v4: los productos se eligen en la configuración de
+  // Embedded Signup v5: los productos se eligen en la configuración de
   // "Inicio de sesión con Facebook para empresas", no aquí.
   extras: {
-    setup: Record<string, unknown>
-    featureType?: string
+    version: string
   }
 }
 
@@ -155,10 +154,11 @@ export function launchEmbeddedSignup(appId: string, configId: string): Promise<E
             config_id: configId,
             response_type: 'code',
             override_default_response_type: true,
-            // v4: la v2 (feature + sessionInfoVersion) se retira el 15-oct-2026.
-            // En v4 la opción "conectar mi app WhatsApp Business" (coexistencia)
-            // solo aparece con este featureType; sin él Meta solo ofrece número nuevo.
-            extras: { setup: {}, featureType: 'whatsapp_business_app_onboarding' },
+            // v5: la opción "conectar mi app WhatsApp Business" (coexistencia)
+            // viene encendida. En v4 con featureType Meta igual solo ofreció
+            // número nuevo (prueba real CityCell 2026-11-03). Los productos salen
+            // de la configuración "Registro WhatsApp v4" (registro insertado).
+            extras: { version: 'v5' },
           },
         )
       })
