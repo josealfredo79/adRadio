@@ -56,6 +56,7 @@ from app.api.v1 import (
     widget,
 )
 from app.config import settings
+from app.core.log_redaction import redact_http_client_logs
 from app.core.rate_limiter import limiter
 from app.core.redis import close_redis
 from app.services.analytics_service import flush as analytics_flush
@@ -68,6 +69,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
+redact_http_client_logs()
 logger = logging.getLogger(__name__)
 
 

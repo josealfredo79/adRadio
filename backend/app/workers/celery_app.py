@@ -7,6 +7,9 @@ from celery.schedules import crontab
 # Force model loading so SQLAlchemy mappers resolve all relationships (e.g. User → KnowledgeBase)
 import app.models  # noqa: F401
 from app.config import settings
+from app.core.log_redaction import redact_http_client_logs
+
+redact_http_client_logs()
 
 celery_app = Celery(
     "iaradio",
