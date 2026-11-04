@@ -1,4 +1,5 @@
 """Tests for /me/whatsapp-connection* endpoints."""
+import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -27,6 +28,7 @@ def client(test_user):
 
     async def _fake_db():
         db = AsyncMock()
+        db.scalar = AsyncMock(return_value=None)  # ningún otro negocio tiene el número
         yield db
 
     main_module.app.dependency_overrides[get_current_user] = _fake_user
@@ -349,6 +351,34 @@ class TestEmbeddedSignup:
                 patch("app.api.v1.meta_whatsapp.register_phone_number", new=AsyncMock(return_value=registration)):
             r = client.post("/api/v1/me/whatsapp-connection/embedded", json=body)
         return r, mock_exchange, mock_subscribe
+
+    def test_never_attaches_the_central_iaradio_number(self, client, test_user, monkeypatch):
+        # El Facebook del dueño de IaRadio tiene el número central: si Meta se
+        # salta los pasos de registro, el token lo trae y no debe pegarse.
+        from app.config import settings
+        monkeypatch.setattr(settings, "IARADIO_WA_PHONE_NUMBER_ID", "central-1")
+        with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(
+            ok=True, token="tok", waba_id="waba-central", phone_number_id="central-1",
+        ))), patch("app.api.v1.meta_whatsapp.register_phone_number", new=AsyncMock()) as mock_register, \
+                patch("app.api.v1.meta_whatsapp.subscribe_app_to_waba", new=AsyncMock()) as mock_subscribe:
+            r = client.post("/api/v1/me/whatsapp-connection/embedded", json={"code": "abc123"})
+        assert r.status_code == 409
+        assert mock_register.await_count == 0 and mock_subscribe.await_count == 0
+        assert test_user.meta_phone_number_id is None
+
+    def test_never_attaches_a_number_another_account_already_has(self, client, test_user):
+        async def _db_with_owner():
+            db = AsyncMock()
+            db.scalar = AsyncMock(return_value=uuid.uuid4())
+            yield db
+        main_module.app.dependency_overrides[get_db] = _db_with_owner
+        with patch("app.api.v1.meta_whatsapp.exchange_embedded_code", new=AsyncMock(return_value=OAuthResult(
+            ok=True, token="tok", waba_id="waba-x", phone_number_id="phone-x",
+        ))), patch("app.api.v1.meta_whatsapp.register_phone_number", new=AsyncMock()) as mock_register:
+            r = client.post("/api/v1/me/whatsapp-connection/embedded", json={"code": "abc123"})
+        assert r.status_code == 409
+        assert mock_register.await_count == 0
+        assert test_user.meta_phone_number_id is None
 
     def test_missing_ids_use_the_ones_resolved_from_the_token(self, client, test_user):
         r, mock_exchange, mock_subscribe = self._signup(

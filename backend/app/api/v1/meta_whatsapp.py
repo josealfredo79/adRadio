@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -243,6 +244,15 @@ def _is_central_account(user: User) -> bool:
     return bool(central) and user.meta_phone_number_id == central
 
 
+async def _number_taken(db: AsyncSession, phone_number_id: str, user: User) -> bool:
+    if phone_number_id and phone_number_id == settings.IARADIO_WA_PHONE_NUMBER_ID:
+        return True
+    other = await db.scalar(
+        select(User.id).where(User.meta_phone_number_id == phone_number_id, User.id != user.id).limit(1)
+    )
+    return other is not None
+
+
 class MetaEmbeddedSignupBody(BaseModel):
     """Payload from the "Conectar con Meta" flow: the OAuth code plus the
     WABA/phone the customer picked in Meta's own signup window. The IDs may
@@ -273,6 +283,15 @@ async def connect_whatsapp_embedded(
     if not result.ok or not result.token:
         status_code = 503 if result.code == "meta_unavailable" else 422
         raise HTTPException(status_code=status_code, detail=result.message)
+    # Candado: si Meta no mandó los pasos de registro, el número sale del
+    # token, y el Facebook del dueño de IaRadio también tiene el número
+    # central. Nunca se pega (ni se re-registra) un número que ya es de otra
+    # cuenta, empezando por el central.
+    if await _number_taken(db, result.phone_number_id, current_user):
+        raise HTTPException(
+            status_code=409,
+            detail="Ese número ya está conectado a otra cuenta de IaRadio. Vuelve a conectar y elige el número de tu negocio.",
+        )
 
     from app.services.coexistence_service import is_on_business_app
 
