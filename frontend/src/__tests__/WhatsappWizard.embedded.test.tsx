@@ -105,6 +105,17 @@ describe('WhatsappWizard — Meta sin fricción', () => {
     expect(summary.closest('details')?.textContent).toContain('Conectar con Meta')
   })
 
+  it('a connected owner does not see the Meta template sections; an admin does', () => {
+    const { unmount } = renderWizard(true, 'connected')
+    expect(screen.queryByText('Tus plantillas de WhatsApp')).toBeNull()
+    expect(screen.queryByText(/Qué plantilla usar para cada aviso/)).toBeNull()
+    unmount()
+    auth.role = 'admin'
+    renderWizard(true, 'connected')
+    expect(screen.getByText('Tus plantillas de WhatsApp')).toBeDefined()
+    expect(screen.getByText(/Qué plantilla usar para cada aviso/)).toBeDefined()
+  })
+
   it('an owner already connected is not asked to connect', () => {
     renderWizard(false, 'connected')
     expect(screen.queryByText('Quiero conectar mi WhatsApp')).toBeNull()

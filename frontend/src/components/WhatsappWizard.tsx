@@ -156,7 +156,7 @@ export default function WhatsappWizard() {
   const [apptTemplate, setApptTemplate] = useState(connection?.appointment_template_name ?? '')
 
   const isConnected = connection?.status === 'connected'
-  const { data: metaTemplates } = useMetaTemplates(isConnected)
+  const { data: metaTemplates } = useMetaTemplates(isConnected && isAdmin)
   const approvedTemplates = (metaTemplates ?? []).filter((t) => t.status === 'APPROVED')
   const freeReplies = (embeddedConfig?.free_service_messages ?? 1000).toLocaleString('es-MX')
   const replyPrice = (embeddedConfig?.service_price_mxn ?? 0.16).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -584,9 +584,11 @@ export default function WhatsappWizard() {
         </div>
       )}
 
-      {isConnected && <WhatsappTemplates />}
+      {/* Plantillas: cosa técnica de Meta, solo para admins (prueba CityCell
+          2026-11-04: el dueño no sabe qué es "reapertura" ni "UTILITY"). */}
+      {isConnected && isAdmin && <WhatsappTemplates />}
 
-      {isConnected && (
+      {isConnected && isAdmin && (
         <div className="border-t border-border pt-4 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">¿Qué plantilla usar para cada aviso? (opcional)</h3>
           <p className="text-xs text-muted-foreground">
