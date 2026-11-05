@@ -45,6 +45,11 @@ logger = logging.getLogger(__name__)
 # Marcador que el modelo emite (solo con ask_owner=True) cuando el cliente
 # pregunta algo que no está en el contexto — ver generate_bot_response().
 OWNER_QUESTION_MARKER = "[[PREGUNTAR_AL_DUENO]]"
+_PROMISED_TO_ASK_RE = re.compile(
+    r"\b(?:consult|confirm|pregunt)\w*\s+(?:lo\s+)?(?:con|al|a)\s+(?:el\s+|la\s+|nuestro\s+)?(?:equipo|negocio|due[nñ]|encargad)"
+    r"|\bavisarte\b|\bte\s+(?:aviso|avisar[eé]|aviso\s+en\s+cuanto)\b",
+    re.IGNORECASE,
+)
 _OWNER_QUESTION_RE = re.compile(r"\[\[\s*PREGUNTAR_AL_DUE[NÑ]O\s*\]\]\s*:?\s*(.*)", re.IGNORECASE | re.DOTALL)
 
 
@@ -56,7 +61,10 @@ def parse_owner_question(reply: str | None, fallback_question: str) -> str | Non
         return None
     m = _OWNER_QUESTION_RE.search(reply)
     if not m:
-        return None
+        # Red de seguridad: el modelo prometió consultarlo sin el marcador
+        # ("Puedo consultar con el equipo y avisarte", prueba CityCell
+        # 2026-11-04). Sin esto nadie se lo pasa al dueño: promesa falsa.
+        return fallback_question if _PROMISED_TO_ASK_RE.search(reply) else None
     question = " ".join(m.group(1).split())
     return question or fallback_question
 
@@ -156,7 +164,13 @@ async def generate_bot_response(
      Si aplica la regla siguiente (algo que no aparece en el contexto), usa esta
      línea en vez de ofrecer confirmarlo con el equipo.
 """
-        unknown_feature_offer = "ofrece confirmarlo con el equipo"
+        # Antes decía "ofrece confirmarlo con el equipo": el modelo de producción
+        # ofrecía ("Puedo consultar con el equipo y avisarte") sin el marcador y
+        # nadie se lo pasaba al dueño (prueba CityCell 2026-11-04, "Tienen fundas").
+        unknown_feature_offer = (
+            f"NO ofrezcas consultarlo ni avisarle después: responde ÚNICAMENTE con la línea "
+            f"{OWNER_QUESTION_MARKER} <su pregunta>, así se la pasamos al negocio"
+        )
     else:
         missing_info_rule = f"""   - Si no tienes la información, di algo como:
      "No tengo ese dato a la mano 🙏 ¿Te ayudo con algo más de {business_name}?"

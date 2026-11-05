@@ -36,6 +36,18 @@ class TestParseOwnerQuestion:
         assert parse_owner_question("Abrimos de 9 a 6 😊", "x") is None
         assert parse_owner_question(None, "x") is None
 
+    def test_a_promise_to_ask_without_the_marker_still_reaches_the_owner(self):
+        # Prueba CityCell 2026-11-04: el modelo de producción ofreció y no puso el marcador.
+        reply = "No tengo registro de fundas en nuestro catálogo. 🙏 Puedo consultar con el equipo y avisarte."
+        assert parse_owner_question(reply, "Tienen fundas") == "Tienen fundas"
+        assert parse_owner_question("Déjame confirmarlo con el negocio 🙌", "¿abren hoy?") == "¿abren hoy?"
+        assert parse_owner_question("Lo pregunto al encargado y te aviso", "x") == "x"
+
+    def test_normal_replies_that_mention_asking_are_not_promises(self):
+        assert parse_owner_question("Consulta nuestro catálogo en la web 😊", "x") is None
+        assert parse_owner_question("¿Te confirmo el pedido?", "x") is None
+        assert parse_owner_question("Si tienes dudas, pregúntame lo que quieras", "x") is None
+
 
 class TestPromptMode:
     async def _system_for(self, ask_owner: bool) -> str:
@@ -63,7 +75,11 @@ class TestPromptMode:
         # En la web nadie le pasa la pregunta al dueño: "lo consulto con el
         # equipo y te aviso" sería una promesa que no se cumple.
         assert "ofrece confirmarlo con el equipo" not in await self._system_for(False)
-        assert "ofrece confirmarlo con el equipo" in await self._system_for(True)
+        # Por WhatsApp tampoco se ofrece: se pasa la pregunta con el marcador
+        # (ofrecerlo dejaba la pregunta sin llegarle al dueño, prueba CityCell 2026-11-04).
+        with_owner = await self._system_for(True)
+        assert "ofrece confirmarlo con el equipo" not in with_owner
+        assert "NO ofrezcas consultarlo" in with_owner
 
 
 class TestPlatformSend:
