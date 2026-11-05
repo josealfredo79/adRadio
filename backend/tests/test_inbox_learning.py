@@ -134,6 +134,28 @@ class TestBotLearnsFromInbox:
             await _cleanup(user_id)
 
     @pytest.mark.asyncio
+    async def test_caso1_owner_answers_the_last_question_not_the_earlier_ones(self):
+        """Prueba real CityCell 4-nov: el cliente preguntó por varios productos y al
+        final '¿tiene micas?'; la tarjeta salió como '¿Qué productos venden?'."""
+        user_id, contact_id, conv_id, msg_id = await _seed(question="¿tiene micas?", owner_reply="Sí, a $50")
+        async with AsyncSessionLocal() as db:
+            db.add(Message(advertiser_id=user_id, contact_id=contact_id, direction="inbound",
+                           content="¿cuánto el Redmi Note 15?", status="delivered",
+                           created_at=datetime.now(timezone.utc) - timedelta(minutes=5)))
+            await db.commit()
+        try:
+            with _ai(USEFUL) as ai, patch.object(inbox_learning, "get_embedding", AsyncMock(return_value=ENVIOS)):
+                async with AsyncSessionLocal() as db:
+                    user = await db.get(User, user_id)
+                    await learn_suggestion(conv_id, LearnSuggestionBody(msg_id=msg_id), db=db, current_user=user)
+            prompt = ai.await_args_list[0].args[0][0]["content"]
+            assert "Antes el cliente dijo:\n¿cuánto el Redmi Note 15?" in prompt
+            assert "Cliente: ¿tiene micas?\nDueño: Sí, a $50" in prompt
+            assert "LO MISMO que el cliente preguntó al final" in ai.await_args_list[0].kwargs["system"]
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
     async def test_caso2_personal_reply_gets_no_suggestion(self):
         user_id, _, conv_id, msg_id = await _seed("¿ya viene mi pedido?", "Ya va en camino, 10 min")
         try:

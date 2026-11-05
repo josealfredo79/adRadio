@@ -54,6 +54,9 @@ _SUGGEST_SYSTEM = (
     "Si es información del negocio, redáctala como una pregunta general y su respuesta, en "
     "español, breve y clara, SIN nombres, teléfonos, direcciones ni datos del cliente, y sin "
     "inventar nada que el dueño no dijo.\n"
+    "La pregunta es sobre LO MISMO que el cliente preguntó al final (la línea 'Cliente:'), con "
+    "sus palabras: si preguntó '¿tiene micas?', la pregunta es '¿Tienen micas?', nunca una más "
+    "amplia como '¿Qué productos venden?'. Lo que dijo antes solo sirve para entender.\n"
     'Responde solo JSON: {"useful": true|false, "question": str, "answer": str}'
 )
 
@@ -90,7 +93,8 @@ def _mentions_customer(text_: str, contact: Contact | None) -> bool:
     )
 
 
-async def _customer_question(db: AsyncSession, owner_msg: Message) -> str:
+async def _customer_question(db: AsyncSession, owner_msg: Message) -> tuple[str, str]:
+    """(lo que dijo antes, lo último que preguntó) — el dueño contesta a lo último."""
     rows = (await db.execute(
         select(Message.content)
         .where(
@@ -103,7 +107,10 @@ async def _customer_question(db: AsyncSession, owner_msg: Message) -> str:
         .order_by(Message.created_at.desc())
         .limit(_MAX_CUSTOMER_MESSAGES)
     )).scalars().all()
-    return "\n".join(c for c in reversed(rows) if c and not _INTERNAL_MESSAGE.match(c))
+    said = [c for c in reversed(rows) if c and not _INTERNAL_MESSAGE.match(c)]
+    if not said:
+        return "", ""
+    return "\n".join(said[:-1]), said[-1]
 
 
 async def _similar(db: AsyncSession, advertiser_id: uuid.UUID, query: str) -> list[dict]:
@@ -138,12 +145,13 @@ async def _contradicted(question: str, answer: str, similar: list[dict]) -> list
 
 async def suggest(db: AsyncSession, owner_msg: Message) -> dict | None:
     """La sugerencia para la tarjeta del Inbox, o None si no sirve o la IA falló."""
-    asked = await _customer_question(db, owner_msg)
+    before, asked = await _customer_question(db, owner_msg)
     if not asked or not owner_msg.content:
         return None
+    context = f"Antes el cliente dijo:\n{before}\n\n" if before else ""
     try:
         raw = await chat_completion(
-            [{"role": "user", "content": f"Cliente: {asked}\nDueño: {owner_msg.content}"}],
+            [{"role": "user", "content": f"{context}Cliente: {asked}\nDueño: {owner_msg.content}"}],
             system=_SUGGEST_SYSTEM, max_tokens=300, temperature=0,
         )
         data = _parse_json(raw)
