@@ -151,7 +151,8 @@ async def unsubscribe(db, contact) -> None:
 
 # Un "??" o "..." que llega pegado al mensaje anterior no lleva respuesta propia.
 _PUNCTUATION_WINDOW_S = 90
-_PUNCTUATION_ONLY = re.compile(r"[\s?¿!¡.…,]+")
+# Comillas incluidas: en la prueba real llegó '"??"' y el bot lo contestó.
+_PUNCTUATION_ONLY = re.compile(r"[\s?¿!¡.…,\"'“”‘’«»]+")
 
 
 def _just_punctuation(text_: str | None) -> bool:

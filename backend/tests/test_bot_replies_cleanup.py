@@ -16,9 +16,9 @@ from tests.test_customer_agent_whatsapp import _cleanup, _seed, _wa
 
 
 def test_only_punctuation_counts_as_a_bare_follow_up():
-    for t in ("??", "?", "¿?", "...", "…", "!!", " ? ? "):
+    for t in ("??", "?", "¿?", "...", "…", "!!", " ? ? ", '"??"', "“??”", "'?'", "??\""):
         assert _just_punctuation(t), t
-    for t in ("", None, "ok", "?? hola", "2", "👍"):
+    for t in ("", None, "ok", "?? hola", "2", "👍", '"hola"'):
         assert not _just_punctuation(t), t
 
 
