@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.models.product import Product
 from app.models.user import User
+from app.services.catalog_reminder import retire_no_answers
 from app.services.storage_service import upload_bytes
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -46,6 +47,8 @@ class ProductOut(BaseModel):
     photo_url: str | None
     active: bool
     created_at: datetime
+    # Respuestas "¿Tienen X? → No…" que se quitaron al dar de alta este producto.
+    retired_answers: list[str] = []
 
     class Config:
         from_attributes = True
@@ -89,9 +92,10 @@ async def create_product(
         active=body.active,
     )
     db.add(product)
+    retired = await retire_no_answers(db, current_user.id, product.name) if product.active else []
     await db.commit()
     await db.refresh(product)
-    return product
+    return ProductOut.model_validate(product).model_copy(update={"retired_answers": retired})
 
 
 @router.patch("/{product_id}", response_model=ProductOut)
@@ -108,12 +112,17 @@ async def update_product(
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
+    was = (product.name, product.active)
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(product, field, value)
 
+    # Encendido o con otro nombre: es como darlo de alta.
+    retired = []
+    if product.active and (product.name, product.active) != was:
+        retired = await retire_no_answers(db, current_user.id, product.name)
     await db.commit()
     await db.refresh(product)
-    return product
+    return ProductOut.model_validate(product).model_copy(update={"retired_answers": retired})
 
 
 @router.delete("/{product_id}", status_code=204)

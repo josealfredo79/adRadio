@@ -37,6 +37,9 @@ from app.services.voice_setup import (
 
 logger = logging.getLogger(__name__)
 
+# Texto fijo para el dueño que va tal cual al final de la confirmación (no lo redacta la IA).
+OWNER_NOTICE = "_aviso_dueno"
+
 _HOUR_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 _MAX_LIST = 25
 
@@ -760,11 +763,17 @@ async def execute_change(db: AsyncSession, user: User, tool_name: str, args: dic
             active=True,
         )
         db.add(product)
+        from app.services.catalog_reminder import retire_no_answers, retired_notice
+
+        notice = retired_notice(await retire_no_answers(db, user.id, product.name))
         await db.commit()
         await db.refresh(product)
         logger.info("[COPILOT] product created %s by %s", product.id, user.id)
-        return {"product_id": str(product.id), "name": product.name, "price": float(price) if price is not None else None,
-                "has_photo": bool(product.photo_url)}, None
+        out = {"product_id": str(product.id), "name": product.name, "price": float(price) if price is not None else None,
+               "has_photo": bool(product.photo_url)}
+        if notice:
+            out[OWNER_NOTICE] = notice
+        return out, None
 
     if tool_name == "update_product":
         try:
@@ -791,11 +800,19 @@ async def execute_change(db: AsyncSession, user: User, tool_name: str, args: dic
         if "price" in changes or "name" in changes:
             _sync_instructions_product(user, old_name, product.name, product.price)
             db.add(user)
+        notice = ""
+        if product.active and ("active" in changes or "name" in changes):
+            from app.services.catalog_reminder import retire_no_answers, retired_notice
+
+            notice = retired_notice(await retire_no_answers(db, user.id, product.name))
         await db.commit()
         logger.info("[COPILOT] product %s updated by %s: %s", product.id, user.id, sorted(changes))
-        return {"product_id": str(product.id), "name": product.name,
-                "price": float(product.price) if product.price is not None else None,
-                "active": product.active, "changed": sorted(changes)}, None
+        out = {"product_id": str(product.id), "name": product.name,
+               "price": float(product.price) if product.price is not None else None,
+               "active": product.active, "changed": sorted(changes)}
+        if notice:
+            out[OWNER_NOTICE] = notice
+        return out, None
 
     if tool_name == "update_business_hours":
         hours = _clean_hours(args.get("hours"))

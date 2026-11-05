@@ -223,7 +223,7 @@ class TestApply:
                 u = await db.get(User, uid)
                 out = await apply(body=ApplyBody(profile=MODEL_JSON), db=db, current_user=u)
             assert out == {"instructions_chars": out["instructions_chars"], "hours_set": True,
-                           "products_created": 1, "products_updated": 1}
+                           "products_created": 1, "products_updated": 1, "retired_answers": []}
             async with AsyncSessionLocal() as db:
                 u = await db.get(User, uid)
                 prods = {p.name: float(p.price) for p in

@@ -27,6 +27,7 @@ from app.core.rate_limiter import limiter
 from app.database import get_db
 from app.models.product import Product
 from app.models.user import User
+from app.services.catalog_reminder import retire_no_answers
 from app.services.voice_setup import (
     QUESTION_TEXT,
     extract_profile,
@@ -192,6 +193,7 @@ async def apply(
         for prod in (await db.execute(select(Product).where(Product.advertiser_id == current_user.id))).scalars().all()
     }
     created = updated = 0
+    retired: list[str] = []
     for s in p["services"]:
         prod = existing.get(s["name"].lower())
         if prod is None:
@@ -200,6 +202,7 @@ async def apply(
                 description=s["description"], active=True,
             ))
             created += 1
+            retired += await retire_no_answers(db, current_user.id, s["name"])
         elif s["price"] is not None and (prod.price is None or float(prod.price) != s["price"]):
             prod.price = s["price"]
             updated += 1
@@ -211,4 +214,5 @@ async def apply(
         "hours_set": bool(p["business_hours"]),
         "products_created": created,
         "products_updated": updated,
+        "retired_answers": retired,
     }

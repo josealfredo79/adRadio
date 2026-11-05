@@ -1261,8 +1261,11 @@ async def handle_confirm(
     if error:
         return {"reply": error, "actions": [], "pending_confirmation": None}
 
+    notice = data.pop(biz_tools.OWNER_NOTICE, None) if isinstance(data, dict) else None
     action = {"tool": tool_name, "summary": _summarize(tool_name, data), "data": data}
     reply = await _phrase_confirmed_result(user, tool_name, data, channel)
+    if notice:
+        reply = f"{reply}\n\n{notice}"
     return {"reply": reply, "actions": [action], "pending_confirmation": None}
 
 

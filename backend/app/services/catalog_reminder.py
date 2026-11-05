@@ -2,12 +2,14 @@
 
 Cuando el dueño contesta "¿Tienen fundas?" (por el central o guardando la
 tarjeta del Inbox) y las fundas no están en su Catálogo, se le recuerda darlas
-de alta. Si contestó que NO hay, también que borre esa respuesta cuando ya
-tenga, porque si no el bot seguirá diciendo que no hay (prueba con IA real
-2026-11-05: con "Funda $120" en el catálogo y "no tenemos fundas" guardado,
-el bot dijo "no tenemos" 3 de 3 veces).
+de alta.
 
-Solo texto, sin IA: si no reconoce la pregunta, no dice nada.
+Y cuando el dueño da de alta un producto, retire_no_answers() quita las
+respuestas guardadas "¿Tienen fundas? → No…" de ese producto: con "Funda $120"
+en el catálogo y "no tenemos fundas" guardado, el bot decía "no tenemos" 3 de
+3 veces (prueba con IA real 2026-11-05).
+
+Solo texto, sin IA: si no reconoce la pregunta, no hace nada.
 """
 import logging
 import re
@@ -17,6 +19,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.knowledge_base import KnowledgeBase
 from app.models.product import Product
 
 logger = logging.getLogger(__name__)
@@ -33,6 +36,11 @@ _NOT_PRODUCTS = re.compile(
     r"credito|meses|apartado|horario|abierto|lugar|sucursal|sucursales|wifi|bano|cambio|cambios|devolucion)\b"
 )
 _MAX_WORDS = 4
+# "No…", "Por ahora no…", "Todavía no…", "Lo siento, no…"
+_SAYS_NO = re.compile(
+    r"^\W*(?:lo siento,?\s+|lamentablemente,?\s+|por ahora,?\s+|de momento,?\s+|todavia\s+|aun\s+|ya\s+)?no\b"
+)
+_SAVED = re.compile(r"Pregunta:\s*(.*?)\s*\nRespuesta:\s*(.*)", re.DOTALL)
 
 
 def _plain(text: str) -> str:
@@ -83,10 +91,10 @@ async def catalog_reminder(db: AsyncSession, advertiser_id: uuid.UUID, question:
         )).scalars().all()
         if _in_catalog(item, list(names)):
             return ""
-        if re.match(r"\s*no\b", _plain(answer)):
+        if _SAYS_NO.match(_plain(answer)):
             return (
-                f"📌 Cuando ya tengas {item}, da de alta el producto en Catálogo con precio y foto, y borra "
-                "esta respuesta en Base de conocimiento; si no, el bot seguirá diciendo que no hay."
+                f"📌 Cuando ya tengas {item}, da de alta el producto en Catálogo con precio y foto: "
+                "en ese momento el bot deja de decir que no hay."
             )
         return (
             f"📌 Da de alta {item} en Catálogo con precio y foto: así el bot muestra la foto y el precio, "
@@ -95,3 +103,42 @@ async def catalog_reminder(db: AsyncSession, advertiser_id: uuid.UUID, question:
     except Exception:
         logger.warning("[CATALOG REMINDER] failed", exc_info=True)
         return ""
+
+
+async def retire_no_answers(db: AsyncSession, advertiser_id: uuid.UUID, product_name: str) -> list[str]:
+    """Desactiva las respuestas del dueño "¿Tienen X? → No…" cuyo X es este
+    producto (mismas palabras que el nombre). No hace commit: va en la misma
+    transacción que el producto. Regresa lo que decían, para avisarle al dueño."""
+    from app.services.owner_question_service import OWNER_ANSWERS_FILENAME
+
+    retired: list[str] = []
+    try:
+        rows = (await db.execute(
+            select(KnowledgeBase).where(
+                KnowledgeBase.advertiser_id == advertiser_id,
+                KnowledgeBase.filename == OWNER_ANSWERS_FILENAME,
+                KnowledgeBase.is_active.is_(True),
+            )
+        )).scalars().all()
+        for kb in rows:
+            m = _SAVED.match(kb.chunk_text or "")
+            if not m or not _SAYS_NO.match(_plain(m.group(2))):
+                continue
+            item = asked_item(m.group(1))
+            if item and _in_catalog(item, [product_name]):
+                kb.is_active = False
+                retired.append(m.group(2).strip())
+    except Exception:
+        logger.warning("[CATALOG REMINDER] retire failed", exc_info=True)
+        return []
+    if retired:
+        logger.info("[CATALOG REMINDER] retired %s 'no' answers for product %r", len(retired), product_name)
+    return retired
+
+
+def retired_notice(retired: list[str]) -> str:
+    """El aviso para el dueño, o "" si no se quitó nada."""
+    if not retired:
+        return ""
+    quoted = "; ".join(f"“{r[:120]}”" for r in retired)
+    return f"🧹 Quité la respuesta vieja {quoted}: ahora el bot ofrece el producto del catálogo."

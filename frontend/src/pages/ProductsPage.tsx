@@ -55,12 +55,25 @@ export default function ProductsPage() {
     setForm(EMPTY_FORM)
   }
 
+  // Al dar de alta (o encender) un producto, el servidor quita las respuestas
+  // guardadas "¿Tienen X? → No…" de ese producto; se le avisa al dueño.
+  const notifyRetired = (retired?: string[]) => {
+    if (retired?.length) {
+      toast({
+        title: 'Quité una respuesta vieja',
+        description: `El bot tenía guardado ${retired.map((r) => `“${r}”`).join('; ')}. Ahora ofrece este producto del catálogo.`,
+        variant: 'success',
+      })
+    }
+  }
+
   const createMutation = useMutation({
     mutationFn: (data: typeof form) =>
       api.post('/products', { ...data, price: data.price ? Number(data.price) : null, category: data.category || null }),
-    onSuccess: () => {
+    onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['products'] })
       resetForm()
+      notifyRetired(r.data?.retired_answers)
     },
     onError: (err: unknown) => toast({ title: 'Error', description: getApiError(err, 'No se pudo crear el producto'), variant: 'error' }),
   })
@@ -68,9 +81,10 @@ export default function ProductsPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: typeof form }) =>
       api.patch(`/products/${id}`, { ...data, price: data.price ? Number(data.price) : null, category: data.category || null }),
-    onSuccess: () => {
+    onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['products'] })
       resetForm()
+      notifyRetired(r.data?.retired_answers)
     },
     onError: (err: unknown) => toast({ title: 'Error', description: getApiError(err, 'No se pudo editar el producto'), variant: 'error' }),
   })
