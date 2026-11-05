@@ -190,7 +190,7 @@ class TestBotLearnsFromInbox:
         user_id, _, conv_id, _ = await _seed()
         try:
             out = await _save(user_id, conv_id, "¿Hacen envíos?", "Sí, a todo Tlaxiaco por $35 (corregido).")
-            assert out == {"saved": True, "replaced": 0}
+            assert out == {"saved": True, "replaced": 0, "reminder": ""}
             [kb] = await _owner_answers(user_id)
             assert kb.chunk_text == "Pregunta: ¿Hacen envíos?\nRespuesta: Sí, a todo Tlaxiaco por $35 (corregido)."
             assert kb.is_active

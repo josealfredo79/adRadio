@@ -418,4 +418,10 @@ async def handle_owner_message(
             "probablemente ya pasaron más de 24 horas desde su último mensaje. "
             f"Escríbele tú directamente al {oq.customer_phone}."
         )
+    from app.services.catalog_reminder import catalog_reminder
+
+    # "¿Tienen fundas?" y las fundas no están en el Catálogo: que las suba (mismo mensaje).
+    reminder = await catalog_reminder(db, advertiser.id, oq.question, answer)
+    if reminder:
+        confirm = f"{confirm}\n\n{reminder}"
     await send_platform_text(from_number, confirm)

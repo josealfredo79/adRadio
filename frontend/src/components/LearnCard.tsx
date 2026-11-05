@@ -54,7 +54,10 @@ export default function LearnCard({ conversationId, msgId }: { conversationId: s
   if (save.isSuccess) {
     return (
       <div className="mx-4 mb-2 flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-        <span>✓ Listo, el bot ya lo sabe. Puedes verlo en Base de conocimiento → respuestas del dueño.</span>
+        <span>
+          ✓ Listo, el bot ya lo sabe. Puedes verlo en Base de conocimiento → respuestas del dueño.
+          {save.data?.data?.reminder && <span className="mt-1 block font-medium">{save.data.data.reminder}</span>}
+        </span>
         <button onClick={() => setClosed(true)} aria-label="Cerrar" className="ml-2 shrink-0">
           <X className="h-3.5 w-3.5" />
         </button>

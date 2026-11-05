@@ -442,4 +442,7 @@ async def learn_from_reply(
     if len(question) > MAX_FIELD * 2 or len(answer) > MAX_FIELD * 2:
         raise HTTPException(status_code=400, detail="Texto demasiado largo")
     replaced = await save(db, current_user.id, question, answer, body.replace_ids[:10])
-    return {"saved": True, "replaced": replaced}
+    from app.services.catalog_reminder import catalog_reminder
+
+    reminder = await catalog_reminder(db, current_user.id, question, answer)
+    return {"saved": True, "replaced": replaced, "reminder": reminder}

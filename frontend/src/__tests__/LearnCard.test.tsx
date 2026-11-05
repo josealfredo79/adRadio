@@ -34,6 +34,18 @@ function renderCard() {
 describe('LearnCard', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('reminds the owner to add the item to the Catálogo after saving', async () => {
+    const reminder = '📌 Da de alta fundas en Catálogo con precio y foto'
+    post.mockImplementation((url: string) =>
+      url.endsWith('/learn-suggestion')
+        ? Promise.resolve({ data: { suggestion: SUGGESTION } })
+        : Promise.resolve({ data: { saved: true, replaced: 0, reminder } }),
+    )
+    renderCard()
+    fireEvent.click(await screen.findByText('Guardar'))
+    expect(await screen.findByText(reminder)).toBeDefined()
+  })
+
   it('caso 1: shows the generalized question and answer, editable', async () => {
     respond(SUGGESTION)
     renderCard()
