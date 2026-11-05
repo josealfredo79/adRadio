@@ -101,8 +101,9 @@ TOOLS = [
         "name": "get_bot_status",
         "description": (
             "Revisa qué sabe el bot del cliente y qué le falta: instrucciones, productos con precio, "
-            "horario, documentos, página publicada, WhatsApp y premio de lealtad. Úsalo para '¿mi bot está "
-            "listo?', '¿qué le falta a mi bot?', '¿ya tengo página?'."
+            "horario, si entrega a domicilio, documentos, página publicada, WhatsApp y premio de lealtad. "
+            "Úsalo para '¿mi bot está listo?', '¿qué le falta a mi bot?', '¿ya tengo página?', "
+            "'¿entrego a domicilio?', '¿tengo puesto que entrego a domicilio?'."
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
