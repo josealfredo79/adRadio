@@ -67,9 +67,22 @@ async def test_a_salon_keeps_offering_appointments():
     assert rag_service.NO_APPOINTMENTS_FACT not in await _instructions_for(salon)
 
 
-def test_the_bot_is_told_not_to_invent_an_order():
-    import inspect
+def test_add_to_an_order_is_rewritten_when_there_is_no_order():
+    # Prod 2026-11-04 23:33 (Groq): "¿Te gustaría agregarlo a un pedido o necesitas más información?"
+    from app.services.claude_service import fix_order_wording
 
+    assert fix_order_wording("¿Te gustaría agregarlo a un pedido o necesitas más información?") == (
+        "¿Te gustaría pedirlo o necesitas más información?")
+    assert fix_order_wording("¿Quieres agregarla a tu pedido?") == "¿Quieres pedirla?"
+    assert fix_order_wording("Agregarlos a tu pedido es fácil") == "Pedirlos es fácil"
+    assert fix_order_wording("Tu pedido #3 va en camino") == "Tu pedido #3 va en camino"
+
+
+@pytest.mark.asyncio
+async def test_the_bot_reply_goes_through_the_fix():
     from app.services import claude_service
 
-    assert "agregarlo a tu pedido" in inspect.getsource(claude_service.generate_bot_response)
+    with patch.object(claude_service, "chat_completion",
+                      AsyncMock(return_value="El Poco 65 cuesta $3,000. ¿Te gustaría agregarlo a un pedido?")):
+        out = await claude_service.generate_bot_response("ctx", [], "¿cuánto el poco?", "CityCell")
+    assert out == "El Poco 65 cuesta $3,000. ¿Te gustaría pedirlo?"

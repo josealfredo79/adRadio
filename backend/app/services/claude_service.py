@@ -124,6 +124,15 @@ Devuelve solo las 3 variantes, separadas por "---", sin numeración ni explicaci
     return variants[:3]
 
 
+# "¿Te gustaría agregarlo a un pedido?" sin pedido abierto: los modelos
+# gratis lo dicen aunque el prompt lo prohíba (prueba CityCell 2026-11-04).
+_ADD_TO_ORDER = re.compile(r"\b(?:agregarl|añadirl)([oa]s?) a (?:un|tu|su) pedido\b", re.IGNORECASE)
+
+
+def fix_order_wording(reply: str) -> str:
+    return _ADD_TO_ORDER.sub(lambda m: ("P" if m.group(0)[0].isupper() else "p") + f"edirl{m.group(1)}", reply or "")
+
+
 # Lo que contesta el bot si ningún modelo respondió (ver generate_bot_response).
 BOT_BUSY_REPLY = "Dame un momento, ahorita te contesto 🙏"
 
@@ -233,8 +242,8 @@ Tu personalidad es: {bot_personality}.
      cita; no des tiempos de entrega, zonas de reparto ni pidas comprobantes de pago
      que no estén en el contexto. Si ya te dio todo, dile que te confirme con
      "sí, haz el pedido" (o "sí, aparta la cita").
-   - No digas «tu pedido» ni «agregarlo a tu pedido» si el cliente todavía no ha
-     empezado uno: pregúntale si quiere pedirlo o que se lo aparten.
+   - No hay carrito: nunca digas «agregarlo a un pedido» ni «a tu pedido». Para
+     ofrecer la compra pregunta si quiere pedirlo o que se lo aparten.
 
 ═══ ESTILO ═══
 - Máximo 3 oraciones por respuesta.
@@ -257,10 +266,10 @@ Tu personalidad es: {bot_personality}.
         # chat_completion() ya encadena Groq → OpenRouter → Anthropic
         # internamente (ver llm_client.py) — un solo call site cubre los 3
         # proveedores, cayendo al pagado solo si ambos gratis fallan.
-        return await chat_completion(
+        return fix_order_wording(await chat_completion(
             messages, system=system, max_tokens=500, temperature=0.3,
             anthropic_model="claude-haiku-4-5-20251001", economy=economy,
-        )
+        ))
     except Exception:
         # Todos los modelos fallaron (gratis y Claude). Antes se repetía el
         # saludo a cada mensaje; ahora se pide un momento y rag_service le
