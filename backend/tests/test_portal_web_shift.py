@@ -55,7 +55,16 @@ class TestDailyInvite:
         out = [await ps.maybe_portal_invite(r, cid, "hola", "¡Hola!") for _ in range(5)]
         assert out[:2] == ["", ""]
         assert out[2].startswith("\n\n💬") and f"/c/{ps.make_portal_token(cid)}" in out[2]
-        assert out[3:] == ["", ""]  # una sola vez al día
+        assert out[3:] == ["", ""]  # la 2.ª no sale enseguida
+
+    @pytest.mark.asyncio
+    async def test_a_second_invite_five_messages_later_and_no_third(self):
+        # Decisión del dueño 2026-11-04: hasta 2 veces al día.
+        r, cid = FakeRedis(), uuid.uuid4()
+        out = [await ps.maybe_portal_invite(r, cid, "hola", "¡Hola!") for _ in range(20)]
+        invited = [i + 1 for i, o in enumerate(out) if o]
+        assert invited == [3, 8]
+        assert all(o.startswith("\n\n💬") for o in out if o)
 
     @pytest.mark.asyncio
     async def test_asking_prices_invites_right_away(self):

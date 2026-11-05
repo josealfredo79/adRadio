@@ -149,6 +149,22 @@ async def unsubscribe(db, contact) -> None:
     )
 
 
+async def _web_invite(db: AsyncSession, advertiser: User, contact: Contact, customer_text: str, reply: str) -> str:
+    """La invitación a seguir en la web para el final de una respuesta del bot,
+    o "" (todavía no toca, ya van 2 hoy, o el negocio no va cerca de lo gratis
+    de Meta). Nunca frena la respuesta."""
+    _redis = await get_redis_optional()
+    try:
+        if await whatsapp_near_free_limit(db, _redis, advertiser.id):
+            from app.services.loyalty_service import has_unopened_gift
+
+            gift = await has_unopened_gift(db, advertiser, contact.id)
+            return await maybe_portal_invite(_redis, contact.id, customer_text, reply, gift=gift)
+    except Exception:
+        logger.warning("[PIPELINE] portal invite check failed", exc_info=True)
+    return ""
+
+
 async def process_inbound_message(
     db: AsyncSession,
     msg: InboundMessage,
@@ -831,6 +847,8 @@ async def process_inbound_message(
             agent_text = agent_reply.text if agent_reply else None
             agent_confirm = bool(agent_reply and agent_reply.confirm)
         if agent_text is not None:
+            if not agent_confirm:
+                agent_text += await _web_invite(db, advertiser, contact, body_text, agent_text)
             conv.messages = (conv.messages + [
                 {"role": "user", "content": body_text},
                 {"role": "assistant", "content": agent_text},
@@ -861,6 +879,9 @@ async def process_inbound_message(
     # with the appointment/order state machines below.
     catalog_reply = await handle_catalog_query(db, advertiser, body_text, channel="whatsapp")
     if catalog_reply is not None:
+        # El catálogo es justo cuando más conviene seguir en la web (fotos y
+        # precios), y por este camino la invitación no salía nunca.
+        catalog_reply += await _web_invite(db, advertiser, contact, body_text, catalog_reply)
         updated_msgs = conv.messages + [
             {"role": "user", "content": body_text},
             {"role": "assistant", "content": catalog_reply},
@@ -1372,15 +1393,7 @@ async def process_inbound_message(
     # final de una respuesta real del bot — mismo mensaje, sin costo extra —
     # y solo si el negocio ya va cerca de los mensajes gratis de Meta.
     if reply and conv.status != "escalated" and not story_ack_reply and not pending_resume and not asked_owner:
-        _redis = await get_redis_optional()
-        try:
-            if await whatsapp_near_free_limit(db, _redis, advertiser.id):
-                from app.services.loyalty_service import has_unopened_gift
-
-                gift = await has_unopened_gift(db, advertiser, contact.id)
-                reply += await maybe_portal_invite(_redis, contact.id, audio_transcription or body_text, reply, gift=gift)
-        except Exception:
-            logger.warning("[PIPELINE] portal invite check failed", exc_info=True)
+        reply += await _web_invite(db, advertiser, contact, audio_transcription or body_text, reply)
 
     updated_msgs = conv.messages + [
         {"role": "user", "content": body_text},

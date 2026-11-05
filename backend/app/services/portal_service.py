@@ -91,12 +91,14 @@ def promo_footer(contact_id: uuid.UUID | None, campaign_id: uuid.UUID | None) ->
 
 # ─── Invitación a seguir la plática en la web ────────────────────────────────
 # En la plática normal (precios, catálogo, horario) es donde más mensajes de
-# WhatsApp se gastan, y ahí el link no salía nunca. Una vez al día por
+# WhatsApp se gastan, y ahí el link no salía nunca. Hasta 2 veces al día por
 # cliente, al final de una respuesta del bot (mismo mensaje, sin costo extra):
-# en su 3er mensaje del día, o antes si pregunta precios o el catálogo.
+# la 1.ª en su 3er mensaje del día, o antes si pregunta precios o el catálogo;
+# la 2.ª si sigue en WhatsApp 5 mensajes después (decisión del dueño 2026-11-04).
 # Solo cuando el negocio ya va cerca de lo gratis de Meta
 # (whatsapp_near_free_limit): antes de eso no ahorra nada y es un paso extra.
 INVITE_AFTER_MESSAGES = 3
+SECOND_INVITE_GAP = 5
 _INVITE_TTL_SECONDS = 2 * 24 * 3600
 _SHOPPING_WORDS = (
     "precio", "precios", "cuanto", "cuánto", "cuesta", "cuestan", "catalogo", "catálogo",
@@ -127,8 +129,8 @@ def strip_web_invite(text: str) -> str:
 async def maybe_portal_invite(
     redis, contact_id: uuid.UUID | None, customer_text: str, reply: str, gift: bool = False
 ) -> str:
-    """La línea de invitación, o "" si hoy ya se le mandó, todavía no toca, o
-    la respuesta ya trae su link (confirmaciones de cita/pedido).
+    """La línea de invitación, o "" si hoy ya se le mandaron las 2, todavía no
+    toca, o la respuesta ya trae su link (confirmaciones de cita/pedido).
 
     `gift` (el negocio tiene tarjeta de lealtad y este cliente aún no la
     abre): la invitación es el regalo de bienvenida y sale desde el primer
@@ -144,16 +146,29 @@ async def maybe_portal_invite(
         count = await redis.incr(f"portal_invite_count:{contact_id}:{today}")
         if count == 1:
             await redis.expire(f"portal_invite_count:{contact_id}:{today}", _INVITE_TTL_SECONDS)
-        text = (customer_text or "").lower()
-        # Si el bot ya le mostró un producto (link /p/…), el cliente está comprando
-        # aunque no haya dicho "precio": es el mejor momento para invitarlo.
-        shopping = any(w in text for w in _SHOPPING_WORDS) or "/p/" in (reply or "")
-        if not gift and count < INVITE_AFTER_MESSAGES and not shopping:
-            return ""
-        first_today = await redis.set(f"portal_invited:{contact_id}:{today}", "1", nx=True, ex=_INVITE_TTL_SECONDS)
+        # En qué mensaje del día salió la 1.ª invitación (vacío = todavía no).
+        first_at = await redis.get(f"portal_invited:{contact_id}:{today}")
+        if first_at is None:
+            text = (customer_text or "").lower()
+            # Si el bot ya le mostró un producto (link /p/…), el cliente está comprando
+            # aunque no haya dicho "precio": es el mejor momento para invitarlo.
+            shopping = any(w in text for w in _SHOPPING_WORDS) or "/p/" in (reply or "")
+            if not gift and count < INVITE_AFTER_MESSAGES and not shopping:
+                return ""
+            claimed = await redis.set(f"portal_invited:{contact_id}:{today}", str(count), nx=True,
+                                      ex=_INVITE_TTL_SECONDS)
+        else:
+            try:
+                first_at_n = int(first_at)
+            except (TypeError, ValueError):
+                first_at_n = count  # valor viejo ("1" sin número): cuenta desde ahora
+            if count - first_at_n < SECOND_INVITE_GAP:
+                return ""
+            claimed = await redis.set(f"portal_invited2:{contact_id}:{today}", "1", nx=True,
+                                      ex=_INVITE_TTL_SECONDS)
     except Exception:
         return ""
-    if not first_today:
+    if not claimed:
         return ""
     return portal_gift_line(contact_id) if gift else portal_invite_line(contact_id)
 
