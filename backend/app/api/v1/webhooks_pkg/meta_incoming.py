@@ -48,6 +48,15 @@ from app.services.whisper_service import transcribe_audio_bytes
 
 logger = logging.getLogger(__name__)
 
+# Cuentas oficiales de WhatsApp/Meta que le escriben al número recién conectado
+# ("Continue setting up your account"). No son clientes: el bot les contestaba
+# y hasta les daba seguimiento (CityCell, 4-nov-2026).
+OFFICIAL_WHATSAPP_NUMBERS = {"16465894168"}
+
+
+def is_official_whatsapp(from_wa_id: str) -> bool:
+    return "".join(ch for ch in from_wa_id if ch.isdigit()) in OFFICIAL_WHATSAPP_NUMBERS
+
 router = APIRouter()
 
 
@@ -328,6 +337,10 @@ async def meta_incoming(
                     logger.warning("[META WEBHOOK] Failed to apply status update", exc_info=True)
 
             messages = value.get("messages", [])
+            official = [m for m in messages if is_official_whatsapp(m.get("from", ""))]
+            if official:
+                logger.info("[META WEBHOOK] ignoring %d message(s) from an official WhatsApp account", len(official))
+                messages = [m for m in messages if m not in official]
             if not messages:
                 continue
 

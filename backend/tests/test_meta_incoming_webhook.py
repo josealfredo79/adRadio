@@ -379,3 +379,60 @@ class TestExtractBodyText:
         body, media_id = _extract_body_text({"type": "sticker"})
         assert body == "[media:sticker]"
         assert media_id is None
+
+
+class TestOfficialWhatsappAccount:
+    """CityCell 4-nov-2026: la cuenta oficial de WhatsApp Business (+1 646 589 4168)
+    escribió "Continue setting up your account" al conectar el número; el bot le
+    contestó y al día siguiente le mandó seguimiento."""
+
+    @pytest.mark.asyncio
+    async def test_official_account_never_reaches_the_bot(self):
+        import uuid
+
+        import httpx
+        from sqlalchemy import delete
+
+        from app.database import AsyncSessionLocal, engine
+        from app.models.user import User
+
+        phone_id = f"pnid-{uuid.uuid4().hex[:10]}"
+        await engine.dispose()
+        async with AsyncSessionLocal() as db:
+            user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x", business_name="CityCell",
+                        meta_phone_number_id=phone_id)
+            db.add(user)
+            await db.commit()
+            user_id = user.id
+        payload = {"entry": [{"changes": [{"field": "messages", "value": {
+            "metadata": {"phone_number_id": phone_id},
+            "contacts": [{"wa_id": "16465894168", "profile": {"name": "WhatsApp Business"}},
+                         {"wa_id": "5219531234567", "profile": {"name": "Ana"}}],
+            "messages": [
+                {"from": "16465894168", "id": "wamid.official", "type": "text",
+                 "text": {"body": "*Continue setting up your account*"}},
+                {"from": "5219531234567", "id": "wamid.cliente", "type": "text", "text": {"body": "tienen micas?"}},
+            ],
+        }}]}]}
+        mod = "app.api.v1.webhooks_pkg.meta_incoming"
+        try:
+            with patch(f"{mod}.settings") as mock_settings, \
+                 patch(f"{mod}.platform_enabled", return_value=False), \
+                 patch(f"{mod}.send_typing_indicator", new=AsyncMock()) as typing, \
+                 patch(f"{mod}.process_inbound_message", new=AsyncMock()) as pipeline:
+                mock_settings.META_APP_SECRET = ""
+                await engine.dispose()
+                transport = httpx.ASGITransport(app=main_module.app)
+                async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+                    r = await ac.post("/api/v1/webhooks/meta", json=payload)
+            assert r.status_code == 200
+            assert pipeline.await_count == 1
+            assert pipeline.await_args.args[1].from_number == "+5219531234567"
+            typing.assert_awaited_once()
+            assert typing.await_args.args[0] == "wamid.cliente"
+        finally:
+            await engine.dispose()
+            async with AsyncSessionLocal() as db:
+                await db.execute(delete(User).where(User.id == user_id))
+                await db.commit()
+            await engine.dispose()
