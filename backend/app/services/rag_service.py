@@ -13,6 +13,12 @@ from app.models.user import User
 from app.services.claude_service import generate_bot_response
 from app.services.embedding_service import get_embedding
 
+# Para negocios que no dan citas (chat_quick_asks.takes_appointments).
+NO_APPOINTMENTS_FACT = (
+    "Este negocio NO da citas: nunca ofrezcas agendar una cita ni preguntes qué día le acomoda. "
+    "Ofrece los productos, apartarlos o hacer un pedido."
+)
+
 
 async def _fetch_user(
     advertiser_id: str, db: AsyncSession
@@ -173,6 +179,16 @@ async def answer_with_rag(
             from app.services.customer_agent import delivery_fact
 
             bot_instructions = f"{bot_instructions or ''}\n{delivery_fact(user)}".strip()
+        # Una tienda de celulares ofrecía "¿Te gustaría agendar una cita?" al
+        # preguntar el horario (prueba CityCell 2026-11-04).
+        if user:
+            from app.services.chat_quick_asks import takes_appointments
+
+            try:
+                if not await takes_appointments(db, user):
+                    bot_instructions = f"{bot_instructions or ''}\n{NO_APPOINTMENTS_FACT}".strip()
+            except Exception:
+                logger.warning("[RAG] appointments check failed", exc_info=True)
         # Horario y ciudad van siempre que se llama a la IA, pero no la disparan
         # solos: un negocio sin nada cargado sigue con el saludo fijo, gratis.
         if user:

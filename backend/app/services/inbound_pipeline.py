@@ -149,6 +149,31 @@ async def unsubscribe(db, contact) -> None:
     )
 
 
+# Un "??" o "..." que llega pegado al mensaje anterior no lleva respuesta propia.
+_PUNCTUATION_WINDOW_S = 90
+_PUNCTUATION_ONLY = re.compile(r"[\s?¿!¡.…,]+")
+
+
+def _just_punctuation(text_: str | None) -> bool:
+    return bool(text_) and _PUNCTUATION_ONLY.fullmatch(text_) is not None
+
+
+async def _said_something_just_now(contact_id: uuid.UUID) -> bool:
+    """¿El cliente mandó otro mensaje hace menos de _PUNCTUATION_WINDOW_S?
+    Con Redis y no con la base: el mensaje anterior no se guarda en la base
+    hasta que el bot termina de contestarlo, y el "??" llega antes."""
+    redis = await get_redis_optional()
+    if redis is None:
+        return False
+    key = f"inbound_recent:{contact_id}"
+    try:
+        recent = await redis.get(key)
+        await redis.set(key, "1", ex=_PUNCTUATION_WINDOW_S)
+    except Exception:
+        return False
+    return recent is not None
+
+
 async def _web_invite(db: AsyncSession, advertiser: User, contact: Contact, customer_text: str, reply: str) -> str:
     """La invitación a seguir en la web para el final de una respuesta del bot,
     o "" (todavía no toca, ya van 2 hoy, o el negocio no va cerca de lo gratis
@@ -753,6 +778,8 @@ async def process_inbound_message(
         logger.info("[PIPELINE] Duplicate webhook ignored (external_message_id=%s)", external_message_id)
         return {"message": "ok"}
 
+    recent_inbound = await _said_something_just_now(contact.id)
+
     # Get or create conversation
     conv_result = await db.execute(
         select(Conversation).where(
@@ -779,6 +806,13 @@ async def process_inbound_message(
         )
         db.add(conv)
         await db.flush()
+    elif _just_punctuation(body_text) and recent_inbound:
+        # "Dónde están" + "??" al mismo tiempo: el bot contestaba los dos, y el
+        # segundo era un "¿Hay algo específico…?" de más (prueba CityCell
+        # 2026-11-04). El mensaje queda guardado; la respuesta ya va en camino.
+        await db.commit()
+        logger.info("[PIPELINE] punctuation-only follow-up from ...%s not answered", from_number[-4:])
+        return {"message": "ok"}
     else:
         msg_count = len(conv.messages) if conv.messages else 0
         new_score = calculate_lead_score(body_text, msg_count)

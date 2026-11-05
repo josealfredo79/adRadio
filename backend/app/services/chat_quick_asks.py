@@ -75,6 +75,15 @@ async def _has_real_appointment(db: AsyncSession, user: User) -> bool:
     return False
 
 
+async def takes_appointments(db: AsyncSession, user: User) -> bool:
+    """¿El negocio da citas? Servicios de cita, giro de citas o una cita real
+    de un cliente. Lo usan los botones del chat y las instrucciones del bot."""
+    category = (user.business_category or "").lower()
+    if user.appointment_services or any(w in category for w in _BOOKING_WORDS):
+        return True
+    return await _has_real_appointment(db, user)
+
+
 async def chat_quick_asks_for(db: AsyncSession, user: User) -> list[dict]:
     """Los botones de arranque que le sirven a ESTE negocio: "agendar una
     cita" solo si da citas y "hacer un pedido" solo si tiene productos (una
@@ -85,12 +94,8 @@ async def chat_quick_asks_for(db: AsyncSession, user: User) -> list[dict]:
     has_products = await db.scalar(
         select(Product.id).where(Product.advertiser_id == user.id, Product.active.is_(True)).limit(1)
     ) is not None
-    category = (user.business_category or "").lower()
-    takes_appointments = bool(user.appointment_services) or any(w in category for w in _BOOKING_WORDS)
-    if not takes_appointments:
-        takes_appointments = await _has_real_appointment(db, user)
     asks = [ASK_PRODUCTS, ASK_HOURS]
-    if takes_appointments:
+    if await takes_appointments(db, user):
         asks.append(ASK_APPOINTMENT)
     if has_products:
         asks.append(ASK_ORDER)
