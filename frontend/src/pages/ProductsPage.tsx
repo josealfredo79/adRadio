@@ -61,7 +61,7 @@ export default function ProductsPage() {
     if (retired?.length) {
       toast({
         title: 'Quité una respuesta vieja',
-        description: `El bot tenía guardado ${retired.map((r) => `“${r}”`).join('; ')}. Ahora ofrece este producto del catálogo.`,
+        description: `El bot tenía guardado ${retired.map((r) => `“${r.replace(/[.\s]+$/, '')}”`).join('; ')}. Ahora ofrece este producto del catálogo.`,
         variant: 'success',
       })
     }
