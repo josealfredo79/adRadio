@@ -9,11 +9,14 @@
    el bot redacta la respuesta en su tono, se la manda al cliente desde el
    número del negocio y la guarda en la base de conocimiento, así la
    siguiente vez ya no pregunta.
+4. Si el dueño mejor le contesta al cliente desde el Inbox,
+   close_for_inbox_reply() cierra sus preguntas pendientes (status "inbox"):
+   así el central no toma su siguiente mensaje como respuesta a ese cliente.
 """
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -34,6 +37,12 @@ logger = logging.getLogger(__name__)
 # filename de los chunks que salen de respuestas del dueño — así se ven
 # agrupados en la Base de conocimiento y se pueden revisar o borrar.
 OWNER_ANSWERS_FILENAME = "respuestas-del-dueño"
+# Pregunta que el dueño contestó desde el Inbox (no por el central).
+ANSWERED_IN_INBOX = "inbox"
+ALREADY_ANSWERED_IN_INBOX = (
+    "Esa pregunta ya la contestaste desde el Inbox ✅ "
+    "Si quieres agregarle algo, escríbele al cliente desde ahí."
+)
 
 
 def _last10(number: str) -> str:
@@ -160,6 +169,21 @@ async def _compose_customer_reply(advertiser: User, question: str, owner_answer:
     except Exception:
         logger.warning("[OWNER Q] compose failed — sending owner's answer verbatim", exc_info=True)
         return owner_answer
+
+
+async def close_for_inbox_reply(db: AsyncSession, advertiser_id, contact_id, text: str) -> int:
+    """El dueño le contestó a este cliente desde el Inbox: sus preguntas
+    pendientes del central quedan cerradas. No hace commit (va con la respuesta)."""
+    result = await db.execute(
+        update(OwnerQuestion)
+        .where(
+            OwnerQuestion.advertiser_id == advertiser_id,
+            OwnerQuestion.contact_id == contact_id,
+            OwnerQuestion.status == "pending",
+        )
+        .values(status=ANSWERED_IN_INBOX, answer=text, answered_at=datetime.now(timezone.utc))
+    )
+    return result.rowcount or 0
 
 
 async def learn_answer(db: AsyncSession, advertiser_id, question: str, answer: str) -> None:
@@ -336,6 +360,19 @@ async def handle_owner_message(
     if context_wamid:
         # Respondió citando el aviso: sabemos exactamente a qué pregunta contesta.
         oq = (await db.execute(base.where(OwnerQuestion.owner_wamid == context_wamid))).scalar_one_or_none()
+        if oq is None:
+            # Citó el aviso de una pregunta que ya contestó desde el Inbox: no
+            # se le vuelve a mandar nada al cliente ni va al Copiloto.
+            closed = (await db.execute(
+                select(OwnerQuestion.id).where(
+                    OwnerQuestion.advertiser_id.in_(owner_ids),
+                    OwnerQuestion.owner_wamid == context_wamid,
+                    OwnerQuestion.status == ANSWERED_IN_INBOX,
+                )
+            )).first()
+            if closed is not None:
+                await send_platform_text(from_number, ALREADY_ANSWERED_IN_INBOX)
+                return
 
     if oq is None:
         from app.services.copilot_whatsapp_service import (

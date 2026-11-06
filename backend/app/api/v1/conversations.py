@@ -367,6 +367,11 @@ async def reply_to_conversation(
     conv.messages = messages
     conv.last_activity = datetime.now(timezone.utc)
 
+    # Si el bot le había preguntado al dueño por el central lo de este cliente,
+    # esa pregunta queda contestada: el central ya no la espera.
+    from app.services.owner_question_service import close_for_inbox_reply
+    await close_for_inbox_reply(db, current_user.id, contact.id, text)
+
     await db.commit()
     await db.refresh(msg)
 
