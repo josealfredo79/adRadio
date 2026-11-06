@@ -69,7 +69,8 @@ interface ConvSummary {
 
 interface ConvDetail extends ConvSummary {
   // channel "web" = chat del portal del cliente; sender "owner" = tú desde aquí.
-  messages: { role: string; content: string; channel?: string; sender?: string }[]
+  // unanswered: "??" que el bot dejó pasar a propósito (ya venía contestando).
+  messages: { role: string; content: string; channel?: string; sender?: string; unanswered?: boolean }[]
   active_closer_offer: { code: string; expires_at: string } | null
 }
 
@@ -446,6 +447,9 @@ export default function InboxPage() {
                     )}
                   >
                     <div className="max-w-[70%]">
+                      {msg.unanswered && (
+                        <p className="mb-0.5 text-right text-[11px] text-gray-400">Sin respuesta del bot</p>
+                      )}
                       {(msg.channel === 'web' || msg.sender === 'owner') && (
                         <p
                           className={cn(
@@ -463,7 +467,9 @@ export default function InboxPage() {
                           'rounded-2xl px-4 py-2.5 text-sm',
                           msg.role === 'assistant'
                             ? 'rounded-tl-sm bg-white text-gray-800 shadow-sm dark:bg-gray-800 dark:text-gray-200'
-                            : 'rounded-tr-sm bg-brand-500 text-white'
+                            : msg.unanswered
+                              ? 'rounded-tr-sm bg-brand-500/60 text-white'
+                              : 'rounded-tr-sm bg-brand-500 text-white'
                         )}
                       >
                         <MediaMessage content={msg.content} />

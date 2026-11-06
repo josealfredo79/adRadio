@@ -155,6 +155,55 @@ _PUNCTUATION_WINDOW_S = 90
 _PUNCTUATION_ONLY = re.compile(r"[\s?¿!¡.…,\"'“”‘’«»]+")
 
 
+_UNANSWERED_KEY = "unanswered_followups:{}"
+
+
+def _unanswered_turn(text_: str) -> dict:
+    return {"role": "user", "content": text_, "unanswered": True}
+
+
+async def _keep_unanswered(db: AsyncSession, conv: Conversation, text_: str) -> None:
+    """Agrega a la plática el "??" que el bot dejó pasar, para que se vea en el
+    Inbox. Si la plática está ocupada (el bot está armando la respuesta del
+    mensaje anterior, que la tiene bloqueada), no se espera: se deja en Redis y
+    esa respuesta lo recoge al guardarse (_late_followups)."""
+    try:
+        free = (await db.execute(
+            select(Conversation.id).where(Conversation.id == conv.id).with_for_update(skip_locked=True)
+        )).scalar_one_or_none()
+        if free is not None:
+            await db.execute(
+                update(Conversation).where(Conversation.id == conv.id)
+                .values(messages=Conversation.messages.op("||")(func.jsonb_build_array(
+                    func.jsonb_build_object("role", "user", "content", text_, "unanswered", True)
+                )))
+            )
+            return
+        redis = await get_redis_optional()
+        if redis is not None:
+            key = _UNANSWERED_KEY.format(conv.id)
+            await redis.rpush(key, text_)
+            await redis.expire(key, 600)
+    except Exception:
+        logger.warning("[PIPELINE] could not keep unanswered follow-up for %s", conv.id, exc_info=True)
+
+
+async def _late_followups(conv: Conversation) -> list[dict]:
+    """Los "??" sin respuesta que llegaron mientras el bot armaba esta respuesta."""
+    try:
+        redis = await get_redis_optional()
+        if redis is None:
+            return []
+        key = _UNANSWERED_KEY.format(conv.id)
+        texts = await redis.lrange(key, 0, -1)
+        if texts:
+            await redis.delete(key)
+        return [_unanswered_turn(t.decode() if isinstance(t, bytes) else t) for t in texts]
+    except Exception:
+        logger.warning("[PIPELINE] could not read unanswered follow-ups for %s", conv.id, exc_info=True)
+        return []
+
+
 def _just_punctuation(text_: str | None) -> bool:
     return bool(text_) and _PUNCTUATION_ONLY.fullmatch(text_) is not None
 
@@ -811,8 +860,12 @@ async def process_inbound_message(
         # "Dónde están" + "??" al mismo tiempo: el bot contestaba los dos, y el
         # segundo era un "¿Hay algo específico…?" de más (prueba CityCell
         # 2026-11-04). El mensaje queda guardado; la respuesta ya va en camino.
+        # En el Inbox sí se ve (marcado "sin respuesta del bot"): se agrega a la
+        # plática sin esperar ni pisar la respuesta que se está armando.
+        await _keep_unanswered(db, conv, body_text)
         await db.commit()
         logger.info("[PIPELINE] punctuation-only follow-up from ...%s not answered", from_number[-4:])
+        await publish_conversation_event(advertiser.id, {"type": "message", "contact_id": str(contact.id)})
         return {"message": "ok"}
     else:
         msg_count = len(conv.messages) if conv.messages else 0
@@ -1430,10 +1483,8 @@ async def process_inbound_message(
     if reply and conv.status != "escalated" and not story_ack_reply and not pending_resume and not asked_owner:
         reply += await _web_invite(db, advertiser, contact, audio_transcription or body_text, reply)
 
-    updated_msgs = conv.messages + [
-        {"role": "user", "content": body_text},
-        {"role": "assistant", "content": reply},
-    ]
+    late = await _late_followups(conv)
+    updated_msgs = conv.messages + [{"role": "user", "content": body_text}, *late, {"role": "assistant", "content": reply}]
     conv.messages = updated_msgs[-40:]
     conv.last_activity = func.now()
 

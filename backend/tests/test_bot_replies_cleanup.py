@@ -6,9 +6,13 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy import select
 
 from app.config import settings
+from app.core.redis import close_redis, get_redis_optional
 from app.database import AsyncSessionLocal
+from app.models.contact import Contact
+from app.models.conversation import Conversation
 from app.models.user import User
 from app.services import rag_service
 from app.services.inbound_pipeline import _just_punctuation
@@ -37,6 +41,69 @@ async def test_a_bare_question_mark_right_after_a_message_gets_no_second_reply(m
     finally:
         await _cleanup(user_id)
 
+
+
+async def _forget_recent(user_id) -> None:
+    redis = await get_redis_optional()
+    async with AsyncSessionLocal() as db:
+        for cid in (await db.execute(select(Contact.id).where(Contact.advertiser_id == user_id))).scalars():
+            await redis.delete(f"inbound_recent:{cid}")
+
+
+async def _turns(user_id) -> list[dict]:
+    async with AsyncSessionLocal() as db:
+        return (await db.execute(select(Conversation.messages).where(Conversation.advertiser_id == user_id))
+                ).scalar_one_or_none() or []
+
+
+@pytest.mark.asyncio
+async def test_the_ignored_question_mark_shows_in_the_inbox(monkeypatch):
+    monkeypatch.setattr(settings, "CUSTOMER_AGENT_WHATSAPP", "")
+    user_id, *_ = await _seed()
+    try:
+        with patch("app.services.inbound_pipeline.answer_with_rag",
+                   AsyncMock(return_value="Estamos en Calle 5 de Mayo.")):
+            await _wa(user_id, "Dónde están")
+            await _wa(user_id, "??")
+        assert [(t["role"], t["content"], t.get("unanswered")) for t in await _turns(user_id)] == [
+            ("user", "Dónde están", None),
+            ("assistant", "Estamos en Calle 5 de Mayo.", None),
+            ("user", "??", True),
+        ]
+    finally:
+        await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_a_question_mark_sent_while_the_bot_thinks_is_not_lost(monkeypatch):
+    """El "??" llega mientras el bot arma la respuesta a "Dónde están": al
+    guardar esa respuesta no se pisa el "??" (queda entre la pregunta y la respuesta)."""
+    monkeypatch.setattr(settings, "CUSTOMER_AGENT_WHATSAPP", "")
+    user_id, *_ = await _seed()
+    seconds: list = []
+
+    async def slow_answer(*a, **k):
+        if not seconds and len(await _turns(user_id)) == 2:  # ya contestó "hola"; ahora "Dónde están"
+            seconds.append(await _wa(user_id, "??"))
+            return "Estamos en Calle 5 de Mayo."
+        return "¡Hola! ¿En qué te ayudo?"
+
+    try:
+        with patch("app.services.inbound_pipeline.answer_with_rag", AsyncMock(side_effect=slow_answer)):
+            await _wa(user_id, "hola")
+            await close_redis()  # que "Dónde están" no cuente como "recién escribió"
+            await _forget_recent(user_id)
+            await _wa(user_id, "Dónde están")
+        assert seconds[0].text.await_count == 0  # el "??" no se contestó
+        assert [(t["role"], t["content"], t.get("unanswered")) for t in await _turns(user_id)] == [
+            ("user", "hola", None),
+            ("assistant", "¡Hola! ¿En qué te ayudo?", None),
+            ("user", "Dónde están", None),
+            ("user", "??", True),
+            ("assistant", "Estamos en Calle 5 de Mayo.", None),
+        ]
+    finally:
+        await _cleanup(user_id)
 
 async def _instructions_for(user: User) -> str:
     """Las instrucciones que answer_with_rag le pasa al bot."""
