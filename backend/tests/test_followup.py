@@ -227,7 +227,8 @@ async def test_caso9_no_se_le_escribe(why):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("ai", [RuntimeError("Groq caído"), "", "x" * 500])
+@pytest.mark.parametrize("ai", [RuntimeError("Groq caído"), "", "x" * 500,
+                                "Hola, respecto a tu consulta sobre fundas y bocinas, aún no las tenemos, pero"])
 async def test_caso11_si_la_ia_falla_se_manda_el_mensaje_fijo(ai):
     user_id, ana = await _seed()
     try:
@@ -253,3 +254,11 @@ async def test_si_el_aviso_web_no_llega_cae_a_whatsapp_si_esta_abierto():
                                         ("Ana López", "Ana"), (None, "")])
 def test_nombre_para_saludar(name, first):
     assert fu._first_name(Contact(name=name)) == first
+
+
+@pytest.mark.parametrize("text,cut", [
+    ("¿Te aparto la funda? 🙂", False), ("¡Te esperamos!", False), ("Aquí estoy para ayudarte 😊", False),
+    ("Te la aparto ❤️", False), ("Aún no las tenemos, pero", True), ("Hola Ana, la funda", True),
+])
+def test_mensaje_cortado_por_la_ia(text, cut):
+    assert fu._looks_cut(text) is cut

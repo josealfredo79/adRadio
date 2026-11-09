@@ -12,6 +12,7 @@ y el dueño lo apaga en Configuración (users.followup_enabled).
 """
 import logging
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import or_, select
@@ -104,14 +105,22 @@ async def write_message(advertiser: User, contact: Contact, conv: Conversation) 
     )
     try:
         text = await chat_completion([{"role": "user", "content": f"La plática:\n{transcript}"}],
-                                     system=system, max_tokens=150, temperature=0.5)
+                                     system=system, max_tokens=400, temperature=0.5)
     except Exception:
         logger.warning("[FOLLOWUP] AI failed advertiser=%s — fixed message", advertiser.id, exc_info=True)
         return fallback
     text = re.sub(r"^\s*(mensaje|negocio)\s*:\s*", "", (text or "").strip(), flags=re.IGNORECASE).strip().strip('"')
-    if not text or len(text) > 400 or "{" in text:
+    if not text or len(text) > 400 or "{" in text or _looks_cut(text):
         return fallback
     return text
+
+
+def _looks_cut(text: str) -> bool:
+    """¿Se quedó a medias? Un mensaje terminado acaba en signo o emoji; uno
+    cortado por el tope de tokens acaba en palabra o coma. Con 150 tokens un
+    modelo que razona dejó "…aún no las tenemos, pero" (CityCell, 2026-11)."""
+    last = text.rstrip().rstrip("\ufe0f\u200d")[-1:]
+    return not last or not (last in ".!?…)»\"'" or unicodedata.category(last).startswith("S"))
 
 
 async def _send_web(db: AsyncSession, advertiser: User, contact: Contact, text: str) -> bool:
