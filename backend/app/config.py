@@ -174,6 +174,7 @@ class Settings(BaseSettings):
     # antes de OpenRouter y de Anthropic. Vacío = comportamiento anterior sin
     # cambios (salta directo a OpenRouter/Anthropic).
     GROQ_CHAT_BASE_URL: str = "https://api.groq.com/openai/v1"
+    # Uno o varios separados por coma; cada modelo tiene su propia cuota gratis.
     GROQ_CHAT_MODEL: str = ""
 
     # Más proveedores con plan GRATIS y API compatible con OpenAI (ver

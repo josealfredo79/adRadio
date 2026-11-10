@@ -477,3 +477,46 @@ def test_cloudflare_url_uses_the_account():
         client = llm_client._get_cloudflare_client()
         llm_client._openai_clients.pop("cloudflare", None)
     assert str(client.base_url).rstrip("/") == "https://api.cloudflare.com/client/v4/accounts/acc123/ai/v1"
+
+
+class TestGroqSeveralModels:
+    """2026-11-10: Groq da 1,000 al día por modelo; con varios en la lista,
+    cuando uno se acaba contesta el siguiente sin salir de Groq."""
+
+    def _settings(self, models):
+        s = _base_settings()
+        s.GROQ_API_KEY, s.GROQ_CHAT_MODEL = "g", models
+        s.OPENROUTER_API_KEY, s.OPENROUTER_MODEL = "", ""
+        s.ANTHROPIC_MODEL = "claude-haiku-4-5"
+        return s
+
+    @pytest.mark.asyncio
+    async def test_next_groq_model_answers_when_first_is_out_of_quota(self):
+        groq = MagicMock()
+        groq.chat.completions.create = AsyncMock(side_effect=[
+            RuntimeError("429 rate limit"),
+            MagicMock(choices=[MagicMock(message=MagicMock(content="hola desde qwen"))]),
+        ])
+        with patch("app.services.llm_client.settings", new=self._settings("openai/gpt-oss-120b, qwen/qwen3.8-27b")), \
+             patch("app.services.llm_client._get_groq_client", return_value=groq):
+            out = await chat_completion([{"role": "user", "content": "hola"}])
+        assert out == "hola desde qwen"
+        assert [c.kwargs["model"] for c in groq.chat.completions.create.call_args_list] == [
+            "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
+
+    @pytest.mark.asyncio
+    async def test_groq_down_skips_its_other_models(self):
+        import httpx
+        from openai import APIConnectionError
+
+        groq = MagicMock()
+        groq.chat.completions.create = AsyncMock(
+            side_effect=APIConnectionError(request=httpx.Request("POST", "https://api.groq.com")))
+        anthropic_client = MagicMock()
+        anthropic_client.messages.create = AsyncMock(return_value=MagicMock(content=[MagicMock(text="respaldo")]))
+        with patch("app.services.llm_client.settings", new=self._settings("a,b,c")), \
+             patch("app.services.llm_client._get_groq_client", return_value=groq), \
+             patch("app.services.llm_client._get_anthropic_client", return_value=anthropic_client):
+            out = await chat_completion([{"role": "user", "content": "hola"}])
+        assert out == "respaldo"
+        assert groq.chat.completions.create.await_count == 1

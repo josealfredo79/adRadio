@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import anthropic
-from openai import AsyncOpenAI
+from openai import APIConnectionError, AsyncOpenAI
 
 from app.config import settings
 
@@ -125,6 +125,12 @@ async def _openai_compatible_completion(
     return text
 
 
+def _provider_down(e: Exception) -> bool:
+    """Sin conexión o se atoró: los demás modelos del mismo proveedor van al
+    mismo servidor, así que se pasa directo al siguiente proveedor."""
+    return isinstance(e, (APIConnectionError, TimeoutError))
+
+
 def free_chain(judge: bool = False, economy: bool = False) -> list[tuple[str, Callable[[], bool], Callable]]:
     """Los proveedores gratis en orden: (nombre, ¿configurado?, fábrica de
     llamada). La fábrica recibe (messages, system, max_tokens, temperature)."""
@@ -138,6 +144,8 @@ def free_chain(judge: bool = False, economy: bool = False) -> list[tuple[str, Ca
                                                                max_tokens, temperature)
                 except Exception as e:  # el siguiente modelo del mismo proveedor
                     last = e
+                    if _provider_down(e):
+                        break
             raise last or EmptyReply("sin modelo")
         return call
 
@@ -152,7 +160,8 @@ def _free_providers(judge: bool = False, economy: bool = False) -> list[tuple]:
         else (lambda: _models(settings.OPENROUTER_MODEL))
     )
     chain = [
-        ("Groq", is_groq_configured, _get_groq_client, lambda: [settings.GROQ_CHAT_MODEL]),
+        # Varios modelos separados por coma: Groq da 1,000 al día POR MODELO (2026-11-10).
+        ("Groq", is_groq_configured, _get_groq_client, lambda: _models(settings.GROQ_CHAT_MODEL)),
         ("Cloudflare", is_cloudflare_configured, _get_cloudflare_client, lambda: [settings.CLOUDFLARE_MODEL]),
         ("Gemini", is_gemini_configured, _get_gemini_client, lambda: [settings.GEMINI_MODEL]),
         ("Mistral", is_mistral_configured, _get_mistral_client, lambda: [settings.MISTRAL_MODEL]),
@@ -371,6 +380,8 @@ async def tool_completion(
                 return reply
             except Exception as e:
                 logger.warning("[LLM] %s (%s) con herramientas falló, probando siguiente: %s", name, model, e)
+                if _provider_down(e):
+                    break
 
     # Las herramientas no cambian entre llamadas: con la marca de caché en la
     # última, Anthropic cobra ~10% por ellas en cada vuelta.
