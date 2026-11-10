@@ -70,7 +70,8 @@ logger = logging.getLogger(__name__)
 # (external_id, error) — same shape meta_service already returns.
 SendFn = Callable[[str, str], Awaitable[tuple[str | None, str | None]]]
 # (to, body, botones) — mensaje con botones de respuesta (meta_service.send_whatsapp_reply_buttons).
-ButtonsFn = Callable[[str, str, list[str]], Awaitable[tuple[str | None, str | None]]]
+# Acepta header_image_url= opcional (foto del producto arriba del texto).
+ButtonsFn = Callable[..., Awaitable[tuple[str | None, str | None]]]
 
 
 @dataclass
@@ -258,7 +259,11 @@ async def process_inbound_message(
     """
     advertiser = msg.advertiser
     from_number = msg.from_number
-    body_text = msg.body_text
+    # "🛒 Lo quiero" llega como "want:<producto>" (product_buttons): desde aquí
+    # es su título, y el producto queda aparte.
+    from app.services.product_buttons import parse_tap
+
+    body_text, tapped_product_id = parse_tap(msg.body_text)
     audio_transcription = msg.audio_transcription
     media_url = msg.media_url
     external_message_id = msg.external_message_id
@@ -642,8 +647,11 @@ async def process_inbound_message(
             # cambió (o status != "queued" en decline / kind desconocido).
             await db.commit()
 
-    # Coupon redemption intent
-    if is_redeem_intent(body_text):
+    # Coupon redemption intent. "lo quiero" escrito canjea un cupón; el botón
+    # "🛒 Lo quiero" de un producto llega con su dibujito y es un pedido.
+    from app.services import product_buttons as _pb
+
+    if is_redeem_intent(body_text) and not _pb.is_button_tap(body_text, _pb.WANT):
         contact_result = await db.execute(
             select(Contact).where(
                 Contact.advertiser_id == advertiser.id,
@@ -1059,10 +1067,50 @@ async def process_inbound_message(
     pending_order = pending_order_result.scalars().first()
 
     order_reply: str | None = None
+    order_buttons: list[str] = []  # botones del paso del pedido (solo número propio)
 
-    if pending_order:
+    # Botones de producto (product_buttons.py): "Lo quiero" arranca el pedido
+    # con el producto que se le mostró; "Otra pregunta" solo lo invita a
+    # preguntar. Antes que el pedido a medias: "🛒 Lo quiero" no es un nombre.
+    from app.services import product_buttons as pb
+
+    tapped_product = None
+    if pb.is_button_tap(body_text, pb.OTHER):
+        order_reply = pb.OTHER_REPLY
+    elif pb.is_button_tap(body_text, pb.WANT):
+        tapped_product = (await pb.product_by_id(db, advertiser.id, tapped_product_id) if tapped_product_id
+                          else await pb.offered_product(db, advertiser.id, conv.messages or []))
+        if tapped_product is not None and not tapped_product.active:
+            order_reply, tapped_product = pb.GONE_REPLY, None
+
+    if order_reply is not None:
+        pass
+    elif tapped_product is not None:
+        # Solo un pedido de productos a medias; nunca la compra de un plan.
+        if pending_order and pending_order.state in pb.ORDER_IN_PROGRESS:
+            pending_order.state = "cancelled"
+        order_count = (await db.execute(
+            select(func.count()).select_from(Order).where(Order.advertiser_id == advertiser.id)
+        )).scalar() or 0
+        pending_order = Order(
+            advertiser_id=advertiser.id, contact_id=contact.id, items_raw=tapped_product.name,
+            state="collecting_name", order_number=order_count + 1,
+        )
+        db.add(pending_order)
+        await db.flush()
+        db.add(OrderItem(order_id=pending_order.id, product_id=tapped_product.id,
+                         product_name_snapshot=tapped_product.name, quantity=1))
+        await db.flush()
+        from app.services.order_handoff import pesos
+
+        _price = f" — {pesos(float(tapped_product.price))}" if tapped_product.price is not None else ""
+        order_reply = f"¡Va! 🛒 *{tapped_product.name}*{_price}\n¿A nombre de quién va el pedido?"
+        order_buttons = pb.name_buttons(contact)
+        if order_buttons:
+            order_reply += " Toca tu nombre o escríbelo 👇"
+    elif pending_order:
         if pending_order.state == "pending_confirmation":
-            normalized_msg = body_text.lower().strip()
+            normalized_msg = pb.plain(body_text).lower().strip()
             affirm_words = {"sí", "si", "s", "yes", "y", "ok", "dale", "claro", "adelante", "por supuesto"}
             is_affirmative = (
                 normalized_msg in affirm_words
@@ -1070,6 +1118,7 @@ async def process_inbound_message(
             )
             if is_affirmative:
                 pending_order.state = "collecting_name"
+                order_buttons = pb.name_buttons(contact)
                 _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_name")
                 contact_data = {"name": contact.name or "amigo", "city": ""}
                 adv_data = {"business_name": advertiser.business_name or "nuestro negocio", "city": ""}
@@ -1083,34 +1132,50 @@ async def process_inbound_message(
 
         elif pending_order.state == "collecting_name" and not advertiser.delivers_home:
             # Sin entrega a domicilio (o sin definir): no se pide dirección.
-            pending_order.customer_name = body_text.strip()
+            pending_order.customer_name = pb.plain(body_text) or body_text.strip()
             pending_order.state = "collecting_payment"
+            order_buttons = pb.PAYMENT_BUTTONS
             _first = (pending_order.customer_name.split() or ["👋"])[0]
             order_reply = (
                 f"Perfecto, {_first} 👍 Tu pedido es para recoger en el local 🏪\n"
                 "¿Cómo prefieres pagar?\nResponde: *Efectivo*, *Tarjeta* o *Transferencia* 💳"
             )
         elif pending_order.state == "collecting_name":
-            pending_order.customer_name = body_text.strip()
+            # Con domicilio: primero si se lo llevan o pasa por él (botones);
+            # si escribe su dirección de una vez, también sirve.
+            pending_order.customer_name = pb.plain(body_text) or body_text.strip()
             pending_order.state = "collecting_address"
+            order_buttons = pb.DELIVERY_BUTTONS
+            _first = (pending_order.customer_name.split() or ["👋"])[0]
+            order_reply = (
+                f"Perfecto, {_first} 👍 ¿Te lo llevamos o pasas por él?\n"
+                "Responde *A domicilio* o *Recojo en tienda*, o escribe tu dirección 📍"
+            )
+        elif pending_order.state == "collecting_address" and pb.delivery_choice(body_text) == "home":
             _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_address")
-            _first = pending_order.customer_name.split()[0]
-            contact_data = {"name": _first, "city": ""}
-            adv_data = {"business_name": "", "city": ""}
-            order_reply = personalize_message(_tpl, contact_data, adv_data) if _tpl else (
-                f"Perfecto, {_first} 👍\n"
-                "¿Cuál es tu dirección de entrega? 📍"
+            _first = ((pending_order.customer_name or "").split() or [""])[0]
+            order_reply = personalize_message(_tpl, {"name": _first, "city": ""}, {"business_name": "", "city": ""}) if _tpl else (
+                "¡Va! ¿Cuál es tu dirección de entrega? 📍"
+            )
+        elif pending_order.state == "collecting_address" and pb.delivery_choice(body_text) == "pickup":
+            pending_order.delivery_address = None
+            pending_order.state = "collecting_payment"
+            order_buttons = pb.PAYMENT_BUTTONS
+            order_reply = (
+                "Va, para recoger en el local 🏪\n"
+                "¿Cómo prefieres pagar?\nResponde: *Efectivo*, *Tarjeta* o *Transferencia* 💳"
             )
         elif pending_order.state == "collecting_address":
             pending_order.delivery_address = body_text.strip()
             pending_order.state = "collecting_payment"
+            order_buttons = pb.PAYMENT_BUTTONS
             _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_payment")
             order_reply = personalize_message(_tpl, {"name": "", "city": ""}, {"business_name": "", "city": ""}) if _tpl else (
                 "¡Anotado! 📝 ¿Cómo prefieres pagar?\n"
                 "Responde: *Efectivo*, *Tarjeta* o *Transferencia* 💳"
             )
         elif pending_order.state == "collecting_payment":
-            pending_order.payment_method = body_text.strip()
+            pending_order.payment_method = pb.plain(body_text) or body_text.strip()
             pending_order.state = "confirmed"
             pending_order.confirmed_at = datetime.now(timezone.utc)
             await db.flush()
@@ -1321,6 +1386,7 @@ async def process_inbound_message(
                     await db.flush()
 
                 pending_order = new_order
+                order_buttons = pb.CONFIRM_BUTTONS
 
                 _tpl = await get_template(db, str(advertiser.id), "Pedido", "order_confirm")
                 order_reply = personalize_message(_tpl, {"name": "", "city": ""}, {"business_name": "", "city": ""}) if _tpl else (
@@ -1349,7 +1415,10 @@ async def process_inbound_message(
 
         from app.workers.tasks import update_contact_engagement_score
 
-        sid_o, err_o = await send(from_number, order_reply)
+        if order_buttons and send_buttons is not None:
+            sid_o, err_o = await send_buttons(from_number, order_reply, order_buttons)
+        else:
+            sid_o, err_o = await send(from_number, order_reply)
         if sid_o:
             out_msg.status = "sent"
             out_msg.wa_message_id = sid_o
@@ -1443,6 +1512,9 @@ async def process_inbound_message(
 
     # Si se habla de UN producto, su link: WhatsApp lo muestra con foto, nombre
     # y precio en el mismo mensaje (sin costo extra) y al tocarlo sigue en la web.
+    # Y con número propio, botones "Lo quiero" / "Otra pregunta" en ese mismo
+    # mensaje (product_buttons.py); no si se le pasó la pregunta al dueño.
+    button_product = None
     if reply and conv.status != "escalated" and not story_ack_reply and not pending_resume:
         try:
             from app.services.product_link_service import (
@@ -1454,6 +1526,8 @@ async def process_inbound_message(
             product = await mentioned_product(db, advertiser.id, audio_transcription or body_text, reply)
             if product and not link_sent_recently(product, conv.messages or []):
                 reply = with_product_link(reply, product)
+            if product and send_buttons is not None and not asked_owner:
+                button_product = product
         except Exception:
             logger.warning("[PIPELINE] product link failed", exc_info=True)
 
@@ -1506,7 +1580,13 @@ async def process_inbound_message(
         update_contact_engagement_score,
     )
 
-    sid, err = await send(from_number, reply)
+    if button_product is not None:
+        from app.services import product_buttons as pb
+
+        sid, err = await send_buttons(from_number, reply, pb.product_buttons(button_product),
+                                      header_image_url=pb.photo_for_header(button_product))
+    else:
+        sid, err = await send(from_number, reply)
     if sid:
         out_msg.status = "sent"
         out_msg.wa_message_id = sid

@@ -183,7 +183,8 @@ def _extract_body_text(msg: dict) -> tuple[str, str | None]:
             reply = interactive.get(itype, {})
             # "¿Para cuál negocio?" (central_account_picker): el id dice la cuenta
             # aunque WhatsApp recorte dos nombres parecidos al mismo título.
-            if str(reply.get("id", "")).startswith("pick:"):
+            # "🛒 Lo quiero" (product_buttons): el id dice cuál producto.
+            if str(reply.get("id", "")).startswith(("pick:", "want:")):
                 return reply["id"], None
             return reply.get("title", "").strip(), None
         return f"[interactive:{itype}]", None
@@ -461,9 +462,10 @@ async def meta_incoming(
                 # nunca (el celular del dueño ES el número del negocio).
                 _send_owner = _send_platform_owner if platform_enabled() else _send
 
-                async def _send_buttons(to: str, body: str, buttons: list[str],
-                                        advertiser=advertiser) -> tuple[str | None, str | None]:
-                    return await send_whatsapp_reply_buttons(to, body, buttons, advertiser=advertiser)
+                async def _send_buttons(to: str, body: str, buttons: list[str], advertiser=advertiser,
+                                        header_image_url: str | None = None) -> tuple[str | None, str | None]:
+                    return await send_whatsapp_reply_buttons(to, body, buttons, advertiser=advertiser,
+                                                             header_image_url=header_image_url)
 
                 # El agente del cliente (botones Sí/No) solo en el número propio
                 # del negocio; el central de IaRadio sigue con su bot de ventas.
