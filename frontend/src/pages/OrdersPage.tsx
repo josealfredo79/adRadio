@@ -225,7 +225,7 @@ export default function OrdersPage() {
                           <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Método de pago</dt>
                           <dd className="mt-1 text-sm text-foreground">{order.payment_method ?? '—'}</dd>
                         </div>
-                        {order.confirmed_at && (
+                        {order.confirmed_at && order.state !== 'cancelled' && (
                           <div>
                             <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Confirmado el</dt>
                             <dd className="mt-1 text-sm text-foreground">{formatDate(order.confirmed_at)}</dd>
