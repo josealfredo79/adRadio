@@ -194,6 +194,7 @@ class TestWhatsApp:
             owner = next(t for t in texts if "NUEVO PEDIDO" in t)
             assert "enviado a Pizzas Toño" in customer and "confirmado" not in customer.lower()
             assert "total aprox. $300" in customer and "CLABE" not in customer
+            assert "total aprox. $300" in owner  # el dueño también ve el total (prueba real 2026-11-10)
             msg = _decoded(await _open(owner))
             assert "Hola Luis" in msg and "(total aprox. $300)" in msg and CLABE in msg
             assert "Responde a este número" not in owner
@@ -283,6 +284,7 @@ class TestAgent:
             await asyncio.sleep(0)
         owner_msg = wa.await_args.args[1]
         assert "NUEVO PEDIDO #0001" in owner_msg and "None" not in owner_msg and "Pago" not in owner_msg
+        assert "total aprox. $50" in owner_msg
         customer = sent_to_business_text(owner, order, 50.0)
         assert "None" not in customer and "💳" not in customer and "Efectivo" not in customer
 

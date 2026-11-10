@@ -1187,6 +1187,7 @@ async def process_inbound_message(
                 fill_order_template,
                 order_total,
                 owner_short_link,
+                pesos,
                 sent_to_business_text,
                 with_owner_link,
             )
@@ -1203,6 +1204,7 @@ async def process_inbound_message(
                 "negocio": advertiser.business_name or "",
                 "primer_nombre": (pending_order.customer_name or "Cliente").split()[0],
                 "ciudad": advertiser.city or "",
+                "total": pesos(_total) if _total else "",
             }
             # IaRadio solo entrega el pedido: sin "confirmado" ni datos de pago
             # (spec 2026-10-21). La plantilla de ejemplo sin cambios usa el texto nuevo.
@@ -1216,7 +1218,7 @@ async def process_inbound_message(
                          if _tpl_owner and _tpl_owner.strip() != OLD_SEED_OWNER_NOTIFY else (
                 f"📦 *NUEVO PEDIDO #{pending_order.order_number:04d}*\n"
                 f"────────────────\n"
-                f"🛒 {pending_order.items_raw}\n"
+                f"🛒 {pending_order.items_raw}{f' · total aprox. {pesos(_total)}' if _total else ''}\n"
                 f"👤 Cliente: {pending_order.customer_name}\n"
                 f"📱 WhatsApp: {from_number}\n"
                 f"📍 {where_line(pending_order, 'Dirección: ')}\n"

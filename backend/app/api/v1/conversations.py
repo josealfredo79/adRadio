@@ -440,13 +440,24 @@ async def learn_from_reply(
     """El dueño tocó Guardar: se guarda lo que dejó escrito en la tarjeta."""
     from app.services.inbox_learning import MAX_FIELD, save
 
-    await _own_conversation(db, conversation_id, current_user)
+    conv = await _own_conversation(db, conversation_id, current_user)
     question, answer = body.question.strip(), body.answer.strip()
     if not question or not answer:
         raise HTTPException(status_code=400, detail="Falta la pregunta o la respuesta")
     if len(question) > MAX_FIELD * 2 or len(answer) > MAX_FIELD * 2:
         raise HTTPException(status_code=400, detail="Texto demasiado largo")
     replaced = await save(db, current_user.id, question, answer, body.replace_ids[:10])
+    # Si el cliente volvió a preguntar lo mismo mientras tanto, esa pregunta
+    # ya no se queda esperando en el central. Nunca frena el Guardar.
+    from app.services.owner_question_service import close_for_learned_answer
+    from app.services.realtime import publish_conversation_event
+    try:
+        if await close_for_learned_answer(db, current_user, conv.contact_id, question, answer):
+            await db.commit()
+            await publish_conversation_event(current_user.id, {"type": "message", "contact_id": str(conv.contact_id)})
+    except Exception:
+        await db.rollback()
+        logger.warning("[INBOX LEARN] closing pending questions failed conv=%s", conv.id, exc_info=True)
     from app.services.catalog_reminder import catalog_reminder
 
     reminder = await catalog_reminder(db, current_user.id, question, answer)

@@ -21,6 +21,7 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.knowledge_base import KnowledgeBase
 from app.models.message import Message
+from app.models.owner_question import OwnerQuestion
 from app.models.user import User
 from app.services import inbox_learning
 from app.services.owner_question_service import OWNER_ANSWERS_FILENAME
@@ -71,7 +72,7 @@ async def _cleanup(*user_ids):
     await engine.dispose()
     async with AsyncSessionLocal() as db:
         for uid in user_ids:
-            for model in (KnowledgeBase, Message, Conversation, Contact):
+            for model in (OwnerQuestion, KnowledgeBase, Message, Conversation, Contact):
                 await db.execute(delete(model).where(model.advertiser_id == uid))
             await db.execute(delete(User).where(User.id == uid))
         await db.commit()
@@ -304,5 +305,131 @@ class TestBotLearnsFromInbox:
                 user = await db.get(User, user_id)
                 with pytest.raises(HTTPException):
                     await learn_suggestion(conv_id, LearnSuggestionBody(msg_id=bot_msg.id), db=db, current_user=user)
+        finally:
+            await _cleanup(user_id)
+
+
+# ─── Guardar en la tarjeta cierra la pregunta repetida del central (2026-11-10) ─
+# Prueba real con CityCell: el cliente volvió a preguntar "¿Reparan pantallas??"
+# justo después de que el dueño contestó en el Inbox; esa pregunta se quedaba
+# pendiente en el central aunque el dueño luego tocó Guardar.
+
+async def _pending(user_id, contact_id, question, minutes_ago=1, customer_wrote_after=False):
+    async with AsyncSessionLocal() as db:
+        contact = await db.get(Contact, contact_id)
+        now = datetime.now(timezone.utc)
+        oq = OwnerQuestion(advertiser_id=user_id, contact_id=contact_id, customer_phone=contact.phone,
+                           question=question, created_at=now - timedelta(minutes=minutes_ago))
+        db.add(oq)
+        if customer_wrote_after:
+            db.add(Message(advertiser_id=user_id, contact_id=contact_id, direction="inbound",
+                           content="Reparan pantallas", status="delivered", created_at=now))
+        await db.commit()
+        return oq.id
+
+
+async def _save_closing(user_id, conv_id, question, answer, verdict="SI", llm_error=False):
+    llm = AsyncMock(side_effect=RuntimeError("caída")) if llm_error else AsyncMock(return_value=verdict)
+    sent = AsyncMock(return_value=("wamid.X", None))
+    with patch("app.services.owner_question_service.chat_completion", llm), \
+         patch("app.services.owner_question_service.send_whatsapp", sent), \
+         patch("app.services.owner_question_service._compose_customer_reply",
+               AsyncMock(side_effect=lambda adv, q, a: a)), \
+         patch("app.services.realtime.publish_conversation_event", AsyncMock()):
+        out = await _save(user_id, conv_id, question, answer)
+    return out, sent
+
+
+async def _status(oq_id):
+    async with AsyncSessionLocal() as db:
+        return (await db.get(OwnerQuestion, oq_id)).status
+
+
+async def _outbound(user_id, contact_id):
+    async with AsyncSessionLocal() as db:
+        return (await db.execute(select(Message.content).where(
+            Message.advertiser_id == user_id, Message.contact_id == contact_id,
+            Message.direction == "outbound", Message.sender.is_(None),
+        ))).scalars().all()
+
+
+class TestSavingClosesRepeatedQuestion:
+    @pytest.mark.asyncio
+    async def test_matching_pending_question_is_closed_and_customer_gets_the_answer(self):
+        user_id, contact_id, conv_id, _ = await _seed("¿Reparan pantallas?", "Si reparamos pantallas")
+        try:
+            oq = await _pending(user_id, contact_id, "Reparan pantallas??")
+            out, sent = await _save_closing(user_id, conv_id, "¿Reparan pantallas?", "Sí, reparamos pantallas.")
+            assert out["saved"] is True
+            assert await _status(oq) == "inbox"
+            sent.assert_awaited_once()
+            assert sent.await_args.args[1] == "Sí, reparamos pantallas."
+            assert await _outbound(user_id, contact_id) == ["Sí, reparamos pantallas."]
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_customer_wrote_again_closes_without_repeating(self):
+        # Como en la prueba real: el cliente volvió a preguntar y el bot ya le contestó.
+        user_id, contact_id, conv_id, _ = await _seed("¿Reparan pantallas?", "Si reparamos pantallas")
+        try:
+            oq = await _pending(user_id, contact_id, "Reparan pantallas??", customer_wrote_after=True)
+            _, sent = await _save_closing(user_id, conv_id, "¿Reparan pantallas?", "Sí, reparamos pantallas.")
+            assert await _status(oq) == "inbox"
+            sent.assert_not_awaited()
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_other_question_stays_pending(self):
+        user_id, contact_id, conv_id, _ = await _seed("¿Reparan pantallas?", "Si reparamos pantallas")
+        try:
+            oq = await _pending(user_id, contact_id, "¿Tienen micas?")
+            _, sent = await _save_closing(user_id, conv_id, "¿Reparan pantallas?", "Sí, reparamos pantallas.",
+                                          verdict="NO")
+            assert await _status(oq) == "pending"
+            sent.assert_not_awaited()
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_ai_failure_leaves_it_pending_and_still_saves(self):
+        user_id, contact_id, conv_id, _ = await _seed("¿Reparan pantallas?", "Si reparamos pantallas")
+        try:
+            oq = await _pending(user_id, contact_id, "Reparan pantallas??")
+            out, sent = await _save_closing(user_id, conv_id, "¿Reparan pantallas?", "Sí, reparamos pantallas.",
+                                            llm_error=True)
+            assert out["saved"] is True
+            assert await _status(oq) == "pending"
+            sent.assert_not_awaited()
+            assert len(await _owner_answers(user_id)) == 1
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_old_question_outside_24h_is_closed_without_sending(self):
+        # Fuera de la ventana sería una plantilla que Meta cobra.
+        user_id, contact_id, conv_id, _ = await _seed("¿Reparan pantallas?", "Si reparamos pantallas")
+        try:
+            oq = await _pending(user_id, contact_id, "Reparan pantallas??", minutes_ago=24 * 60)
+            _, sent = await _save_closing(user_id, conv_id, "¿Reparan pantallas?", "Sí, reparamos pantallas.")
+            assert await _status(oq) == "inbox"
+            sent.assert_not_awaited()
+        finally:
+            await _cleanup(user_id)
+
+    @pytest.mark.asyncio
+    async def test_other_customers_questions_are_not_touched(self):
+        user_id, contact_id, conv_id, _ = await _seed("¿Reparan pantallas?", "Si reparamos pantallas")
+        try:
+            async with AsyncSessionLocal() as db:
+                other = Contact(advertiser_id=user_id, name="Otro", phone="+5215511112222")
+                db.add(other)
+                await db.commit()
+                other_id = other.id
+            oq = await _pending(user_id, other_id, "Reparan pantallas??")
+            _, sent = await _save_closing(user_id, conv_id, "¿Reparan pantallas?", "Sí, reparamos pantallas.")
+            assert await _status(oq) == "pending"
+            sent.assert_not_awaited()
         finally:
             await _cleanup(user_id)

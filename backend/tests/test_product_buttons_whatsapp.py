@@ -298,7 +298,8 @@ async def test_caso8_pago_con_botones_cierra_el_pedido_y_avisa_al_dueno():
         await phone.says(user_id, "💵 Efectivo")
         order, _ = await _order(user_id)
         assert order.state == "confirmed" and order.payment_method == "Efectivo"
-        assert any("NUEVO PEDIDO" in c.args[1] for c in phone.owner.await_args_list)
+        owner = next(c.args[1] for c in phone.owner.await_args_list if "NUEVO PEDIDO" in c.args[1])
+        assert "Bocina · total aprox. $350" in owner  # el dueño ve el total, como el cliente
     finally:
         await _cleanup(user_id)
 

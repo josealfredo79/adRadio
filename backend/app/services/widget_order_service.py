@@ -176,7 +176,7 @@ async def _notify_owner(
         wa_notify = (
             f"📦 *NUEVO PEDIDO #{order.order_number:04d}* ({origin})\n"
             f"────────────────\n"
-            f"🛒 {order.items_raw}\n"
+            f"🛒 {order.items_raw}{f' · total aprox. {pesos(total)}' if total else ''}\n"
             f"👤 Cliente: {order.customer_name}\n"
             f"📱 Teléfono: {contact.phone}\n"
             f"📍 {where_line(order, 'Dirección: ')}\n"

@@ -12,9 +12,12 @@
 4. Si el dueño mejor le contesta al cliente desde el Inbox,
    close_for_inbox_reply() cierra sus preguntas pendientes (status "inbox"):
    así el central no toma su siguiente mensaje como respuesta a ese cliente.
+5. Si el dueño guarda en la tarjeta "¿Guardo esto?" una respuesta que contesta
+   una pregunta que el cliente hizo después, close_for_learned_answer() la
+   cierra y, si el cliente no ha vuelto a escribir, le manda la respuesta.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -186,6 +189,57 @@ async def close_for_inbox_reply(db: AsyncSession, advertiser_id, contact_id, tex
     return result.rowcount or 0
 
 
+async def close_for_learned_answer(
+    db: AsyncSession, advertiser: User, contact_id, question: str, answer: str
+) -> int:
+    """El dueño tocó Guardar en la tarjeta del Inbox. Las preguntas de este
+    cliente que siguen pendientes en el central y que esa respuesta contesta
+    se cierran; si el cliente no volvió a escribir después de preguntar, se le
+    manda la respuesta (siempre dentro de la ventana de 24 h, sin plantilla).
+    No hace commit. Regresa cuántas cerró."""
+    pending = (await db.execute(
+        select(OwnerQuestion).where(
+            OwnerQuestion.advertiser_id == advertiser.id,
+            OwnerQuestion.contact_id == contact_id,
+            OwnerQuestion.status == "pending",
+        ).order_by(OwnerQuestion.created_at)
+        # Dos Guardar seguidos: el segundo no ve las que el primero está cerrando.
+        .with_for_update(skip_locked=True)
+    )).scalars().all()
+    closed = 0
+    for oq in pending:
+        if not await _learned_answers(oq.question, question, answer):
+            continue
+        now = datetime.now(timezone.utc)
+        oq.status, oq.answer, oq.answered_at = ANSWERED_IN_INBOX, answer, now
+        closed += 1
+        wrote_again = (await db.execute(
+            select(Message.id).where(
+                Message.advertiser_id == advertiser.id,
+                Message.contact_id == contact_id,
+                Message.direction == "inbound",
+                Message.created_at > oq.created_at,
+            ).limit(1)
+        )).first()
+        # Si el cliente siguió platicando, quizá ya tuvo respuesta: no se repite.
+        # Más de 23 h: fuera de la ventana sería una plantilla que Meta cobra.
+        if wrote_again is not None or oq.created_at < now - timedelta(hours=23):
+            continue
+        reply = await _compose_customer_reply(advertiser, oq.question, answer)
+        wamid, err = await send_whatsapp(oq.customer_phone, reply, advertiser=advertiser)
+        db.add(Message(
+            advertiser_id=advertiser.id,
+            contact_id=contact_id,
+            direction="outbound",
+            content=reply,
+            status="sent" if wamid else "failed",
+            wa_message_id=wamid,
+            error_code=None if wamid else err,
+            sent_at=now if wamid else None,
+        ))
+    return closed
+
+
 async def learn_answer(db: AsyncSession, advertiser_id, question: str, answer: str) -> None:
     chunk = f"Pregunta: {question}\nRespuesta: {answer}"
     try:
@@ -207,6 +261,27 @@ async def learn_answer(db: AsyncSession, advertiser_id, question: str, answer: s
             is_active=True,
         )
     )
+
+
+async def _learned_answers(pending: str, question: str, answer: str) -> bool:
+    """¿La respuesta que el dueño guardó contesta esta pregunta pendiente?
+    Al revés que _answers_question: si la IA falla se asume que NO, para no
+    mandarle al cliente una respuesta de otra cosa."""
+    system = (
+        "Un cliente le hizo una pregunta a un negocio. El dueño acaba de guardar una "
+        "respuesta para otra pregunta. Decide si esa respuesta guardada contesta la "
+        "pregunta del cliente. Responde solo SI o NO."
+    )
+    prompt = (f"Pregunta del cliente: {pending}\n"
+              f"Pregunta guardada: {question}\nRespuesta guardada: {answer}")
+    try:
+        verdict = await chat_completion(
+            [{"role": "user", "content": prompt}], system=system, max_tokens=5, temperature=0
+        )
+    except Exception:
+        logger.warning("[OWNER Q] learned-answer classifier failed — leaving it pending", exc_info=True)
+        return False
+    return verdict.strip().upper().startswith("SI") or verdict.strip().upper().startswith("SÍ")
 
 
 async def _answers_question(question: str, message: str) -> bool:
