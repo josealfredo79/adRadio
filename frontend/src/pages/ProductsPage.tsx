@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { getApiError } from '@/lib/api'
 import { Package, Plus, Trash2, Pencil, ImageUp, ImageOff, Link2, Check } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatPesos } from '@/lib/utils'
 import SEO from '@/components/SEO'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -23,7 +23,7 @@ const EMPTY_FORM = { name: '', description: '', price: '', category: '', active:
 const formatPrice = (price: string | null) =>
   price === null
     ? 'Cotizar'
-    : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(price))
+    : formatPesos(Number(price))
 
 export default function ProductsPage() {
   const qc = useQueryClient()
