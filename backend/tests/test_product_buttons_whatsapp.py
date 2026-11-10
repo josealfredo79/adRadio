@@ -475,3 +475,18 @@ async def test_el_mismo_toque_dos_veces_no_crea_dos_pedidos():
         assert len(orders) == 1
     finally:
         await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
+async def test_tocar_su_nombre_guarda_el_nombre_completo_aunque_el_boton_lo_corte():
+    """Prueba local 2026-11-09: "Jose Alfredo Roman Cruz" quedaba "Jose Alfredo Roman"."""
+    user_id, bocina = await _seed(contact_name="Jose Alfredo Roman Cruz")
+    try:
+        phone = _Phone()
+        await phone.says(user_id, f"want:{bocina}")
+        assert phone.buttons.await_args.args[2] == ["✅ Jose Alfredo Roman"]
+        await phone.says(user_id, "✅ Jose Alfredo Roman")
+        order, _ = await _order(user_id)
+        assert order.customer_name == "Jose Alfredo Roman Cruz"
+    finally:
+        await _cleanup(user_id)

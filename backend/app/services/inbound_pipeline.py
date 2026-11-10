@@ -1132,7 +1132,7 @@ async def process_inbound_message(
 
         elif pending_order.state == "collecting_name" and not advertiser.delivers_home:
             # Sin entrega a domicilio (o sin definir): no se pide dirección.
-            pending_order.customer_name = pb.plain(body_text) or body_text.strip()
+            pending_order.customer_name = pb.chosen_name(body_text, contact)
             pending_order.state = "collecting_payment"
             order_buttons = pb.PAYMENT_BUTTONS
             _first = (pending_order.customer_name.split() or ["👋"])[0]
@@ -1143,7 +1143,7 @@ async def process_inbound_message(
         elif pending_order.state == "collecting_name":
             # Con domicilio: primero si se lo llevan o pasa por él (botones);
             # si escribe su dirección de una vez, también sirve.
-            pending_order.customer_name = pb.plain(body_text) or body_text.strip()
+            pending_order.customer_name = pb.chosen_name(body_text, contact)
             pending_order.state = "collecting_address"
             order_buttons = pb.DELIVERY_BUTTONS
             _first = (pending_order.customer_name.split() or ["👋"])[0]

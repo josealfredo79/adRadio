@@ -84,6 +84,14 @@ def name_buttons(contact: Contact | None) -> list[str]:
     return [f"✅ {name}"[:20]]
 
 
+def chosen_name(text: str | None, contact: Contact | None) -> str:
+    """El nombre del pedido. Si tocó el botón de su nombre (cortado a 20
+    letras por WhatsApp), va el nombre completo de su WhatsApp."""
+    if contact is not None and name_buttons(contact) == [(text or "").strip()]:
+        return contact.name.strip()
+    return plain(text) or (text or "").strip()
+
+
 def delivery_choice(text: str | None) -> str | None:
     """"home" = quiere domicilio sin dar dirección aún; "pickup" = recoge;
     None = escribió otra cosa (se toma como su dirección)."""
