@@ -41,7 +41,7 @@ async def _seed():
     await engine.dispose()
     await close_redis()
     async with AsyncSessionLocal() as db:
-        user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x", business_name="Barbería Toño",
+        user = User(email=f"{uuid.uuid4()}@test.com", password_hash="x", business_name="Barbería Toño", business_category="Barbería",
                     customer_agent_enabled=True)
         db.add(user)
         await db.flush()

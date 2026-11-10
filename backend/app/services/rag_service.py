@@ -15,7 +15,8 @@ from app.services.embedding_service import get_embedding
 
 # Para negocios que no dan citas (chat_quick_asks.takes_appointments).
 NO_APPOINTMENTS_FACT = (
-    "Este negocio NO da citas: nunca ofrezcas agendar una cita ni preguntes qué día le acomoda. "
+    "Este negocio NO da citas ni agenda servicios: nunca ofrezcas agendar una cita, una reparación ni una visita, "
+    "ni preguntes qué día le acomoda. "
     "Ofrece los productos, apartarlos o hacer un pedido."
 )
 

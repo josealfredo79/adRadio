@@ -38,6 +38,9 @@ _BOOKING_WORDS = (
     "medic", "médic", "dental", "dentist", "clinica", "clínica", "veterin", "psicolog", "nutri",
     "fisio", "masaj", "tatu", "abogad", "notar", "taller", "clases", "academ",
 )
+# Restaurantes apartan mesa (el agente web lo hace con proponer_cita). Decidido
+# por el dueño 2026-11-10 al quitarle "agendar" a las tiendas.
+_TABLE_WORDS = ("restaur", "fonda", "taquer", "cafeter", "comida", "cocina", "marisc", "pizz")
 
 ASK_PRODUCTS = {"icon": "🛍️", "text": "¿Qué productos tienen?"}
 ASK_HOURS = {"icon": "🕒", "text": "¿Cuál es su horario?"}
@@ -79,7 +82,7 @@ async def takes_appointments(db: AsyncSession, user: User) -> bool:
     """¿El negocio da citas? Servicios de cita, giro de citas o una cita real
     de un cliente. Lo usan los botones del chat y las instrucciones del bot."""
     category = (user.business_category or "").lower()
-    if user.appointment_services or any(w in category for w in _BOOKING_WORDS):
+    if user.appointment_services or any(w in category for w in _BOOKING_WORDS + _TABLE_WORDS):
         return True
     return await _has_real_appointment(db, user)
 
@@ -96,7 +99,11 @@ async def chat_quick_asks_for(db: AsyncSession, user: User) -> list[dict]:
     ) is not None
     asks = [ASK_PRODUCTS, ASK_HOURS]
     if await takes_appointments(db, user):
-        asks.append(ASK_APPOINTMENT)
+        # Sin botón para restaurantes: "apartar" a secas arranca un pedido en el
+        # flujo fijo; la mesa se aparta platicando con el agente.
+        category = (user.business_category or "").lower()
+        if user.appointment_services or not any(w in category for w in _TABLE_WORDS):
+            asks.append(ASK_APPOINTMENT)
     if has_products:
         asks.append(ASK_ORDER)
     for extra in ([ASK_DELIVERY] if user.delivers_home else []) + [ASK_WHERE]:
