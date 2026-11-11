@@ -8,6 +8,7 @@ import BubbleTail from '@/components/BubbleTail'
 import InlineJoin from '@/components/InlineJoin'
 import { renderChatText } from '@/lib/chatText'
 import ChatNotifyOffer from '@/components/ChatNotifyOffer'
+import AvisameJoin from '@/components/AvisameJoin'
 import OnboardingFlow from '@/components/OnboardingFlow'
 import { parseChatOptions } from '@/lib/chatOptions'
 import { speakable } from '@/lib/speakable'
@@ -328,6 +329,10 @@ export default function AgentChat({
     (acc, t, k) => (t.role === 'assistant' && /^✅\s*\*?¡?Cita confirmada/i.test(t.content.trim()) ? k : acc),
     -1
   )
+
+  // Primera tarjeta de producto de esta plática: ahí se ofrecen los avisos, una
+  // sola vez, para que el seguimiento le llegue gratis (spec 2026-11-10).
+  const productAt = turns.findIndex((t, k) => k >= historyCount && t.role === 'assistant' && (t.cards?.length ?? 0) > 0)
 
   const onJoined = (token: string, firstName: string) => {
     setJoinedToken(token)
@@ -750,6 +755,13 @@ export default function AgentChat({
                           </div>
                         ))}
                       </div>
+                    )}
+                    {i === productAt && bookedAt < historyCount && (
+                      knownToken ? (
+                        <ChatNotifyOffer token={knownToken} pal={pal} color={color} reason="product" />
+                      ) : joinSlug ? (
+                        <AvisameJoin slug={joinSlug} pal={pal} color={color} onVerified={onJoined} />
+                      ) : null
                     )}
                   </div>
                 )}

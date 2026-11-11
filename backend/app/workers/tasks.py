@@ -1013,7 +1013,7 @@ def send_followups():
 
         from app.config import settings
         from app.database import CeleryAsyncSessionLocal as AsyncSessionLocal
-        from app.services.followup_service import run_followups
+        from app.services.followup_service import run_followups, run_second_followups
 
         redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
         try:
@@ -1021,6 +1021,10 @@ def send_followups():
                 counts = await run_followups(db, redis)
             if any(counts.values()):
                 logger.info("[FOLLOWUP] sent %s", counts)
+            async with AsyncSessionLocal() as db:
+                second = await run_second_followups(db)
+            if second:
+                logger.info("[FOLLOWUP-2] sent %s", second)
         finally:
             await redis.aclose()
 

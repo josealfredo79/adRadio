@@ -7,7 +7,26 @@ import { detectNotifyState, enablePush, type NotifyState } from '@/lib/webPushCl
 // Recién confirmada la cita en el chat: "¿Te aviso un día antes?". Es el mejor
 // momento para pedir permiso (hay una razón concreta), y el recordatorio por
 // aviso web es gratis — si no, sale por WhatsApp (cobrado) o no sale.
-export default function ChatNotifyOffer({ token, pal, color }: { token: string; pal: ChatPalette; color: string }) {
+// reason="product": tras la tarjeta de un producto, para que el seguimiento le
+// llegue gratis (spec 2026-11-10-avisame-y-segundo-recordatorio). Si ya los
+// tenía activados no se muestra nada.
+const TEXTS = {
+  appointment: { ask: '¿Te aviso un día antes de tu cita?', done: 'Listo, te aviso un día antes de tu cita.' },
+  product: { ask: '¿Te aviso por aquí de esto y de las promos?', done: 'Listo, te aviso al celular.' },
+}
+
+export default function ChatNotifyOffer({
+  token,
+  pal,
+  color,
+  reason = 'appointment',
+}: {
+  token: string
+  pal: ChatPalette
+  color: string
+  reason?: keyof typeof TEXTS
+}) {
+  const texts = TEXTS[reason]
   const [state, setState] = useState<NotifyState>('loading')
   const [publicKey, setPublicKey] = useState('')
   const [busy, setBusy] = useState(false)
@@ -29,12 +48,13 @@ export default function ChatNotifyOffer({ token, pal, color }: { token: string; 
       if (!alive) return
       if (!push?.available || !push.public_key) return setState('unsupported')
       setPublicKey(push.public_key)
-      setState(s)
+      // Ya los tenía: por un producto no hay nada que ofrecer.
+      setState(reason === 'product' && s === 'on' ? 'unsupported' : s)
     })
     return () => {
       alive = false
     }
-  }, [token])
+  }, [token, reason])
 
   const enable = async () => {
     setBusy(true)
@@ -55,12 +75,12 @@ export default function ChatNotifyOffer({ token, pal, color }: { token: string; 
     <div ref={rootRef} className="mt-2.5 max-w-[82%] rounded-lg p-3 shadow-sm" style={{ background: pal.incoming, color: pal.text }}>
       {state === 'on' ? (
         <p className="text-sm">
-          🔔 Listo, te aviso un día antes de tu cita.{stamped ? ' ¡Y ganaste un sello de regalo! 🎁' : ''}
+          🔔 {texts.done}{stamped ? ' ¡Y ganaste un sello de regalo! 🎁' : ''}
         </p>
       ) : (
         <>
           <p className="flex items-center gap-2 text-sm font-semibold">
-            <BellRing size={16} style={{ color }} /> ¿Te aviso un día antes de tu cita?
+            <BellRing size={16} style={{ color }} /> {texts.ask}
           </p>
           <p className="mt-0.5 text-xs" style={{ color: pal.meta }}>Te llega al celular, sin abrir nada.</p>
           <div className="mt-2 flex gap-2">

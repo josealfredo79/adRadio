@@ -9,6 +9,10 @@ UN mensaje ~20 h después de su último mensaje, sobre lo que preguntó:
   dueño ("preguntaron y no compraron").
 Uno por cliente por semana (contacts.last_followup_at), nunca de 9 pm a 9 am,
 y el dueño lo apaga en Configuración (users.followup_enabled).
+
+Segundo recordatorio (spec docs/specs/2026-11-10-avisame-y-segundo-recordatorio.md):
+a los 3 días de su último mensaje, SOLO por aviso web (gratis), si no volvió a
+escribir ni compró. Nunca por WhatsApp. Ver run_second_followups.
 """
 import logging
 import re
@@ -41,6 +45,11 @@ DAY_START, DAY_END = 9, 21
 PENDING_FOLLOWUP = "owner_pending_followup:"
 PENDING_TTL = 2 * 24 * 3600
 FALLBACK = "¡Hola, {name}! ¿Pudiste resolver lo que buscabas? Aquí estoy para ayudarte 🙂"
+SECOND_AFTER = timedelta(days=3)
+SECOND_LIMIT = timedelta(days=4)
+# El primero pudo salir hasta 72 h después (por la web): que no lleguen juntos.
+SECOND_GAP = timedelta(hours=24)
+SECOND_FALLBACK = "¡Hola, {name}! ¿Sigues interesado en lo que me preguntaste? Aquí estoy para ayudarte 🙂"
 
 
 def is_daytime(now: datetime) -> bool:
@@ -83,23 +92,32 @@ async def _converted(db: AsyncSession, advertiser_id, contact_id, since: datetim
     return False
 
 
-async def write_message(advertiser: User, contact: Contact, conv: Conversation) -> str:
+async def write_message(advertiser: User, contact: Contact, conv: Conversation, *, second: bool = False) -> str:
     """Un mensaje corto sobre lo que preguntó, con la cadena barata de IA. Si
-    falla o sale raro, el mensaje fijo (caso 11)."""
+    falla o sale raro, el mensaje fijo (caso 11). `second`: el de los 3 días."""
     from app.services.llm_client import chat_completion
 
     name = _first_name(contact)
-    fallback = FALLBACK.format(name=name) if name else FALLBACK.replace(", {name}", "")
+    base = SECOND_FALLBACK if second else FALLBACK
+    fallback = base.format(name=name) if name else base.replace(", {name}", "")
     turns = [t for t in (conv.messages or []) if t.get("role") in ("user", "assistant")][-8:]
     if not turns:
         return fallback
     transcript = "\n".join(
         f"{'Cliente' if t['role'] == 'user' else 'Negocio'}: {str(t.get('content') or '')[:300]}" for t in turns
     )
-    system = (
-        f"Eres el asistente de {advertiser.business_name or 'el negocio'}. El cliente{f' {name}' if name else ''} "
+    when = (
+        "preguntó algo hace unos días, ya le escribiste una vez y no contestó ni compró. Escribe UN último "
+        "mensaje, distinto al anterior y sin presionar: máximo 2 frases, que mencione lo que preguntó y le "
+        "ofrezca ayudarle si todavía le interesa. No digas que sigue disponible ni que quedan pocos, ni que ya "
+        "tienes una respuesta que no está en la plática. "
+        if second else
         "preguntó algo ayer y no compró ni agendó. Escribe UN mensaje de seguimiento: máximo 2 frases, que "
         "mencione lo que preguntó y le ofrezca ayudarle a concretarlo (apartarlo, pedirlo o agendar). "
+    )
+    system = (
+        f"Eres el asistente de {advertiser.business_name or 'el negocio'}. El cliente{f' {name}' if name else ''} "
+        f"{when}"
         "No inventes precios, descuentos, existencias ni horarios que no estén en la plática. "
         "Español de México, cálido, máximo 1 emoji. Responde solo con el mensaje."
     )
@@ -216,3 +234,68 @@ async def run_followups(db: AsyncSession, redis, now: datetime | None = None) ->
         await db.commit()
         logger.info("[FOLLOWUP] advertiser=%s contact=%s channel=%s", advertiser.id, contact.id, channel or "owner")
     return counts
+
+
+async def run_second_followups(db: AsyncSession, now: datetime | None = None) -> int:
+    """El segundo recordatorio, a los 3 días, solo por aviso web. Regresa cuántos
+    salieron. Elegible si el primero salió después de su último mensaje (no
+    volvió a escribir), no compró, y tiene avisos web activados."""
+    from app.services.trial_lifecycle import is_paused
+    from app.services.web_conversation import log_turns
+    from app.services.web_push import contacts_with_push
+
+    now = now or datetime.now(timezone.utc)
+    if not is_daytime(now):
+        return 0
+    rows = (await db.execute(
+        select(Conversation, User, Contact)
+        .join(User, User.id == Conversation.advertiser_id)
+        .join(Contact, Contact.id == Conversation.contact_id)
+        .where(
+            Conversation.status == "active",
+            Conversation.lead_score.in_(("warm", "hot")),
+            User.followup_enabled.is_(True),
+            Contact.status == "active",
+            Contact.last_followup_at.is_not(None),
+            Contact.last_followup_at <= now - SECOND_GAP,
+            Contact.last_followup_at >= now - SECOND_LIMIT,
+        )
+    )).all()
+    if not rows:
+        return 0
+    with_push = await contacts_with_push(db, [contact.id for _, _, contact in rows])
+    sent = 0
+    for conv, advertiser, contact in rows:
+        if contact.id not in with_push or is_paused(advertiser, now):
+            continue
+        last = await _last_inbound(db, contact.id)
+        if last is None:
+            continue
+        age = now - last.created_at
+        first_gap = contact.last_followup_at - last.created_at
+        # Volvió a escribir (first_gap < 0) o este ya fue el segundo (>= 3 días).
+        if not (SECOND_AFTER <= age <= SECOND_LIMIT) or not (timedelta(0) < first_gap < SECOND_AFTER):
+            continue
+        if await _converted(db, advertiser.id, contact.id, last.created_at - EPISODE, now):
+            continue
+        # El primero le tuvo que LLEGAR (no solo listarse al dueño en su resumen):
+        # si no, el segundo diría "ya te escribí" sin que fuera cierto.
+        first = (await db.execute(
+            select(Message.id).where(
+                Message.contact_id == contact.id, Message.direction == "outbound",
+                Message.sent_at >= last.created_at + FOLLOWUP_AFTER - timedelta(hours=1),
+            ).limit(1)
+        )).first()
+        if first is None:
+            continue
+        text = await write_message(advertiser, contact, conv, second=True)
+        if not await _send_web(db, advertiser, contact, text):
+            continue
+        log_turns(conv, {"role": "assistant", "content": text, "channel": "web"})
+        db.add(Message(advertiser_id=advertiser.id, contact_id=contact.id, direction="outbound", content=text,
+                       status="sent", sent_at=now, channel="web"))
+        contact.last_followup_at = now
+        await db.commit()
+        sent += 1
+        logger.info("[FOLLOWUP-2] advertiser=%s contact=%s", advertiser.id, contact.id)
+    return sent
