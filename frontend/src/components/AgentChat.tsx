@@ -334,6 +334,9 @@ export default function AgentChat({
   // sola vez, para que el seguimiento le llegue gratis (spec 2026-11-10).
   const productAt = turns.findIndex((t, k) => k >= historyCount && t.role === 'assistant' && (t.cards?.length ?? 0) > 0)
 
+  // Sesión del chat anónimo (la del /widget/chat): el registro se la pasa al servidor.
+  const anonSession = () => sessionRef.current ?? Promise.resolve(null)
+
   const onJoined = (token: string, firstName: string) => {
     setJoinedToken(token)
     // Desde aquí la plática ya es del cliente verificado (como en su portal).
@@ -712,7 +715,7 @@ export default function AgentChat({
                       </div>
                     )}
                     {t.needsContact && joinSlug && i === lastNeedsContact && !joinedToken && (
-                      <InlineJoin slug={joinSlug} color={color} onBrand={pal.onBrand} pal={pal} onVerified={onJoined} />
+                      <InlineJoin slug={joinSlug} color={color} onBrand={pal.onBrand} pal={pal} onVerified={onJoined} getSessionId={anonSession} />
                     )}
                     {t.needsContact && !joinSlug && whatsappHref && (
                       <a
@@ -760,7 +763,7 @@ export default function AgentChat({
                       knownToken ? (
                         <ChatNotifyOffer token={knownToken} pal={pal} color={color} reason="product" />
                       ) : joinSlug ? (
-                        <AvisameJoin slug={joinSlug} pal={pal} color={color} onVerified={onJoined} />
+                        <AvisameJoin slug={joinSlug} pal={pal} color={color} onVerified={onJoined} getSessionId={anonSession} />
                       ) : null
                     )}
                   </div>

@@ -82,3 +82,20 @@ cuando pregunta por un producto, con un toque, y agrega un segundo recordatorio 
 - Frontend: 278/278 (`src/__tests__/AgentChatAvisame.test.tsx`, casos 1-5: 10/10); tsc y eslint limpios.
 - IA real (Gemini 3.5 flash-lite) con el texto del segundo recordatorio: 5/5 sin "disponible", descuentos ni datos
   personales. Ajuste: "ni que ya tienes una respuesta que no está en la plática" (salía "¿pude conseguirte el dato…").
+
+## Prueba e2e en local con navegador real (2026-11-10)
+Chromium real + backend real + Postgres/Redis desechables; envío web push real (cifrado VAPID)
+hacia un receptor local que lo descifra; reloj adelantado para los recordatorios. Resultado ✅:
+pregunta → tarjeta → "🔔 Avísame" → nombre/WhatsApp → código → "Sí, avísame" → "Listo";
+primer aviso a las ~20 h y segundo a los 3 días llegaron descifrados; 15 min después, 0.
+
+Encontró y se arregló:
+- **El registro con código no pasaba la plática anónima** a la cuenta: el cliente activaba avisos
+  y el seguimiento nunca tenía qué recordarle. Ahora `/public/join/{slug}/verify` recibe
+  `session_id` y `adopt_anonymous_chat` la pasa (prueba `tests/test_join_adopts_chat.py`).
+- **"Sí, avísame" se quedaba girando en `/sitio`** (también el de la cita, que ya estaba en
+  producción): `navigator.serviceWorker.ready` no se resuelve fuera de `/c/`. Ahora se espera al
+  registro (`untilActive`, prueba `webPushUntilActive.test.ts`).
+- El cuadro "Avísame" quedaba fuera de la vista: ahora el chat baja para mostrarlo.
+
+Resultados finales: backend 2,182 ✅, frontend 281 ✅.

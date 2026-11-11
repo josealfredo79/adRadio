@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BellRing } from 'lucide-react'
 import InlineJoin from '@/components/InlineJoin'
 import type { ChatPalette } from '@/lib/chatLook'
@@ -13,15 +13,22 @@ export default function AvisameJoin({
   pal,
   color,
   onVerified,
+  getSessionId,
 }: {
   slug: string
   pal: ChatPalette
   color: string
   onVerified: (portalToken: string, name: string) => void
+  getSessionId?: () => Promise<string | null>
 }) {
   const [supported, setSupported] = useState(false)
   const [open, setOpen] = useState(false)
   const [dismissed, setDismissed] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  // Sale debajo de la tarjeta del producto: que el chat baje para que se vea.
+  useEffect(() => {
+    if (supported) rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [supported])
 
   useEffect(() => {
     let alive = true
@@ -35,10 +42,10 @@ export default function AvisameJoin({
   }, [])
 
   if (!supported || dismissed) return null
-  if (open) return <InlineJoin slug={slug} color={color} onBrand={pal.onBrand} pal={pal} onVerified={onVerified} />
+  if (open) return <InlineJoin slug={slug} color={color} onBrand={pal.onBrand} pal={pal} onVerified={onVerified} getSessionId={getSessionId} />
 
   return (
-    <div className="mt-2.5 max-w-[82%] rounded-lg p-3 shadow-sm" style={{ background: pal.incoming, color: pal.text }}>
+    <div ref={rootRef} className="mt-2.5 max-w-[82%] rounded-lg p-3 shadow-sm" style={{ background: pal.incoming, color: pal.text }}>
       <p className="flex items-center gap-2 text-sm font-semibold">
         <BellRing size={16} style={{ color }} /> ¿Te aviso por aquí de esto y de las promos?
       </p>

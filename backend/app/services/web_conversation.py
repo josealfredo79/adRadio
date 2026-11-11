@@ -86,3 +86,51 @@ async def push_owner_reply(db: AsyncSession, business_name: str, contact_id: uui
     except Exception:
         logger.warning("[WEB-CONV] owner reply push failed contact=%s", contact_id, exc_info=True)
         return 0
+
+
+# La misma llave que el chat anónimo de /sitio (api/v1/widget.py CHAT_REDIS_PREFIX).
+ANON_CHAT_PREFIX = "widget_chat:"
+
+
+async def adopt_anonymous_chat(db: AsyncSession, redis, advertiser_id: uuid.UUID, contact_id: uuid.UUID,
+                               session_id: str | None) -> int:
+    """El visitante que platicaba sin registrarse confirmó su número con código
+    (InlineJoin / "🔔 Avísame"): lo que ya platicó en ESA sesión pasa a su
+    plática, para que el dueño lo vea en el Inbox y el seguimiento sepa qué
+    preguntó (spec 2026-11-10-avisame-y-segundo-recordatorio). Sin esto el
+    cliente activaba avisos y nunca le llegaba un recordatorio. Regresa cuántos
+    turnos se pasaron. No hace commit."""
+    import json
+
+    from app.services.lead_score import calculate_lead_score
+
+    if not (redis and session_id):
+        return 0
+    key = f"{ANON_CHAT_PREFIX}{advertiser_id}:{session_id}"
+    raw = await redis.get(key)
+    if not raw:
+        return 0
+    try:
+        transcript = [t for t in json.loads(raw)
+                      if t.get("role") in ("user", "assistant") and str(t.get("content") or "").strip()]
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        return 0
+    if not transcript:
+        return 0
+    conv = await open_conversation(db, advertiser_id, contact_id)
+    start = datetime.now(timezone.utc) - timedelta(milliseconds=len(transcript))
+    rank = {"cold": 0, "warm": 1, "hot": 2}
+    score = conv.lead_score or "cold"
+    for k, turn in enumerate(transcript):
+        inbound = turn["role"] == "user"
+        db.add(Message(advertiser_id=advertiser_id, contact_id=contact_id,
+                       direction="inbound" if inbound else "outbound", content=str(turn["content"]),
+                       status="delivered", channel="web", created_at=start + timedelta(milliseconds=k)))
+        if inbound:
+            new = calculate_lead_score(str(turn["content"]), len(conv.messages or []) + k)
+            if new and rank.get(new, 0) > rank.get(score, 0):
+                score = new
+    log_turns(conv, *({"role": t["role"], "content": str(t["content"]), "channel": "web"} for t in transcript))
+    conv.lead_score = score
+    await redis.delete(key)
+    return len(transcript)

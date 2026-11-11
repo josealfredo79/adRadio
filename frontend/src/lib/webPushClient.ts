@@ -26,12 +26,34 @@ export function detectNotifyState(): NotifyState | Promise<NotifyState> {
     .catch((): NotifyState => 'off')
 }
 
+/** Espera a que el service worker recién registrado quede activo (hace falta para suscribir). */
+export function untilActive(reg: ServiceWorkerRegistration, timeoutMs = 10000): Promise<void> {
+  if (reg.active) return Promise.resolve()
+  const sw = reg.installing ?? reg.waiting
+  if (!sw) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('service worker no se activó')), timeoutMs)
+    sw.addEventListener('statechange', () => {
+      if (sw.state === 'activated') {
+        clearTimeout(timer)
+        resolve()
+      } else if (sw.state === 'redundant') {
+        clearTimeout(timer)
+        reject(new Error('service worker descartado'))
+      }
+    })
+  })
+}
+
 /** Pide permiso y suscribe. Regresa el nuevo estado y si cayó el sello de regalo. */
 export async function enablePush(token: string, publicKey: string): Promise<{ state: NotifyState; stamped: boolean }> {
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') return { state: permission === 'denied' ? 'denied' : 'off', stamped: false }
-  await navigator.serviceWorker.register('/portal-sw.js', { scope: '/c/' })
-  const reg = await navigator.serviceWorker.ready
+  // No `navigator.serviceWorker.ready`: solo se resuelve con un service worker
+  // que controle ESTA página, y el del portal vive en /c/. Desde el chat de
+  // /sitio se quedaba esperando para siempre (botón "Sí, avísame" girando).
+  const reg = await navigator.serviceWorker.register('/portal-sw.js', { scope: '/c/' })
+  await untilActive(reg)
   const sub =
     (await reg.pushManager.getSubscription()) ??
     (await reg.pushManager.subscribe({

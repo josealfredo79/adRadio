@@ -163,4 +163,15 @@ async def join_verify(
     # Si se había dado de baja de WhatsApp se queda así: usar su tarjeta en
     # la web no es pedir promociones por WhatsApp otra vez (anti-baneo).
 
+    # Se registró desde el chat: lo que ya platicó en esa sesión es suyo.
+    if body.get("session_id"):
+        from app.services.web_conversation import adopt_anonymous_chat
+
+        try:
+            if await adopt_anonymous_chat(db, redis, user.id, contact.id, str(body["session_id"])[:100]):
+                await db.commit()
+        except Exception:
+            await db.rollback()
+            logger.warning("[JOIN] could not adopt the anonymous chat", exc_info=True)
+
     return {"portal_path": f"/c/{make_portal_token(contact.id)}", "account_token": make_account_token(phone)}

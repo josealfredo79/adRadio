@@ -18,12 +18,15 @@ export default function InlineJoin({
   onBrand,
   pal,
   onVerified,
+  getSessionId,
 }: {
   slug: string
   color: string
   onBrand: string
   pal: ChatPalette
   onVerified: (portalToken: string, name: string) => void
+  // La sesión del chat anónimo: al verificar, lo que ya platicó pasa a su cuenta.
+  getSessionId?: () => Promise<string | null>
 }) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -55,7 +58,10 @@ export default function InlineJoin({
     setBusy(true)
     setError(null)
     try {
-      const { data } = await api.post(`/public/join/${slug}/verify`, { name, phone, code: value, ref: readRef(slug) })
+      const sessionId = getSessionId ? await getSessionId().catch(() => null) : null
+      const { data } = await api.post(`/public/join/${slug}/verify`, {
+        name, phone, code: value, ref: readRef(slug), ...(sessionId ? { session_id: sessionId } : {}),
+      })
       saveAccountToken(data.account_token)
       const token = String(data.portal_path || '').replace(/^\/c\//, '')
       onVerified(token, name.trim().split(/\s+/)[0] || '')
