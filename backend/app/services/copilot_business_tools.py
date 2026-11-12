@@ -623,6 +623,17 @@ async def preview_change(db: AsyncSession, user: User, tool_name: str, args: dic
         name = _clean_text(args.get("name"), 200)
         if not name:
             return None, None, "Falta el nombre del producto."
+        # Uno con el mismo nombre ya existe: un duplicado confunde al bot y a la
+        # promo (12-nov: "Cargador marca" a $120 y otro a $99, ninguno servía).
+        same = None if db is None else (await db.execute(
+            select(Product).where(Product.advertiser_id == user.id, Product.active.is_(True),
+                                  func.lower(func.trim(Product.name)) == name.strip().lower()).limit(1)
+        )).scalar_one_or_none()
+        if same:
+            return None, None, (
+                f"Ya tienes «{same.name}» en tu catálogo a {_money(same.price)}; no lo agrego otra vez. "
+                "Si quieres cambiarle el precio, dime el precio nuevo. Si es una promo, dime "
+                "«haz una promo de …» y la armamos sin tocar el catálogo.")
         price = _price(args.get("price"))
         photo = _own_photo(user, args.get("photo_url"))
         resolved = {

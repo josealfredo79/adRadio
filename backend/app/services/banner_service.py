@@ -1358,8 +1358,19 @@ def _seal(img: Image.Image, cx: float, cy: float, R: float, offer: "OfferCopy", 
         d.text((cx, py + pf.size * 0.62), nl[0], font=nf, fill=ink, anchor="mm")
 
 
+# «Otra versión» del cartel: los colores van rotando desde el del giro y, con
+# foto, el sello del precio cambia de lado (antes salía idéntico, 12-nov).
+_LOOK_PALETTES = ("rojo", "azul", "verde", "morado", "oscuro", "naranja")
+
+
+def offer_look(palette_name: str, look: int) -> tuple[str, bool]:
+    """(paleta, sello a la izquierda) de la versión `look` (0 = la del giro)."""
+    order = [palette_name] + [p for p in _LOOK_PALETTES if p != palette_name]
+    return order[look % len(order)], look % 2 == 1
+
+
 def offer_banner_png(offer: OfferCopy, palette_name: str = "promo", photo: bytes | None = None,
-                     logo: bytes | None = None) -> bytes:
+                     logo: bytes | None = None, seal_left: bool = False) -> bytes:
     """Cartel de oferta 1080×1080 (spec docs/specs/2026-11-12-cartel-que-convence.md).
     Con foto: la foto ocupa todo, abajo el producto y la fecha sobre un
     degradado, y el sello con el precio. Sin foto: el precio enorme al centro
@@ -1420,9 +1431,11 @@ def offer_banner_png(offer: OfferCopy, palette_name: str = "promo", photo: bytes
         col_w = W - 2 * pad - (2 * R + 30 * S if R else 0)
         pf, lines = _offer_fit(product, 96 * S, col_w, 3, 900, 48 * S)
         if R:
-            _seal(img, W - pad - R, y - R, R, offer, big, accent, S)
+            _seal(img, pad + R if seal_left else W - pad - R, y - R, R, offer, big, accent, S)
+        # Con el sello a la izquierda, el producto se alinea a la derecha.
+        tx, anchor = (W - pad, "rs") if seal_left and R else (pad, "ls")
         for ln in reversed(lines):
-            _shadow_text(img, (pad, y), ln, pf, (255, 255, 255), "ls", S)
+            _shadow_text(img, (tx, y), ln, pf, (255, 255, 255), anchor, S)
             y -= pf.size * 1.02
     else:
         top = pad + 170 * S

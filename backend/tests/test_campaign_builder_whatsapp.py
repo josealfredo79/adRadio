@@ -209,6 +209,8 @@ class TestLaPlaticaPorWhatsApp:
             assert state["builder"]["step"] == "preview"
             assert si.call_args.args[1] == camp.image_url  # la misma que verá el cliente
             assert await _products(uid) == []
+            # «Poner mi logo» abre la galería del panel: por WhatsApp no sale.
+            assert "logo" not in {c["id"] for c in state["builder"]["choices"]}
         finally:
             await _clean(uid)
 

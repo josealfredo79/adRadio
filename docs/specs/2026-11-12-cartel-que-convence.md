@@ -57,6 +57,21 @@ los negocios) y la mitad del texto no se lee a 300 px, que es como se ve en What
     cargador).
     — prueba: `test_nombre_corto_encuentra_el_unico_producto` ✅
 
+15. (Agregado 12-nov tras la prueba real.) Si el negocio no tiene logo, en la vista previa del
+    cartel sale el botón «🏷️ Poner mi logo»: abre la galería, lo guarda en su perfil (el mismo de
+    «Mi página») y redibuja el cartel con el logo. Con logo ya no sale. Por WhatsApp no sale (no
+    hay galería). — prueba: `test_caso15_sin_logo_ofrece_ponerlo_y_redibuja`,
+    `test_caso15_el_texto_y_el_audio_no_ofrecen_logo`, frontend `caso 15` ✅
+16. (Agregado 12-nov: el Copiloto creó un segundo "Cargador marca" a $99 al pegar la promo.) El
+    Copiloto no agrega al Catálogo un producto con el mismo nombre que uno que ya existe: dice que
+    ya lo tiene y ofrece cambiarle el precio o hacer la promo.
+    — prueba: `test_create_product_does_not_duplicate_a_name` ✅
+
+17. (Agregado 12-nov: «Otra versión» sacaba la misma imagen.) Cada «Otra versión» del cartel
+    cambia los colores (empieza por los del giro y rota) y, con foto, el sello del precio pasa al
+    otro lado. El texto de abajo también cambia, como antes.
+    — prueba: `test_otra_version_cambia_colores_y_lado_del_sello`, `test_otra_version_del_cartel_es_otra_imagen` ✅
+
 ## Fuera de alcance
 - Imágenes generadas con IA o quitar el fondo de la foto.
 - Crear productos en el Catálogo desde la promo (caso 4).

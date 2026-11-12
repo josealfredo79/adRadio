@@ -54,6 +54,7 @@ export function CampaignBuilderChat({ initial, onDone }: { initial?: BuilderStep
   const [recording, setRecording] = useState(false)
   const recorder = useRef<VoiceSession | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const logoRef = useRef<HTMLInputElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
   // campaignId null: empezar otra o retomar (el backend decide cuál).
@@ -101,6 +102,10 @@ export function CampaignBuilderChat({ initial, onDone }: { initial?: BuilderStep
       fileRef.current?.click()
       return
     }
+    if (c.id === 'logo') {
+      logoRef.current?.click()
+      return
+    }
     const fresh = c.id === 'new' || c.id.startsWith('resume:')
     void turn({ choice: c.id }, c.label.replace(/^🔒 /, ''), fresh ? null : step?.campaign_id ?? null)
   }
@@ -125,6 +130,27 @@ export function CampaignBuilderChat({ initial, onDone }: { initial?: BuilderStep
     } catch (err) {
       setBusy(null)
       setError(getApiError(err, 'No se pudo subir la foto.'))
+    }
+  }
+
+  // El logo se guarda en su perfil (/me/logo, el mismo de «Mi página») y el
+  // cartel se vuelve a dibujar con él. Un PNG con fondo transparente no se
+  // pasa a JPEG (quedaría con fondo negro): solo si pasa del límite de 5 MB.
+  const uploadLogo = async (file: File | undefined) => {
+    if (!file) return
+    setBusy('Subiendo tu logo…')
+    setError('')
+    try {
+      const form = new FormData()
+      form.append('file', file.size > 4.5 * 1024 * 1024 ? await shrinkPhoto(file) : file)
+      await api.post('/me/logo', form)
+      setBusy(null)
+      await turn({ choice: 'logo' }, '🏷️ Mi logo')
+    } catch (err) {
+      setBusy(null)
+      setError(getApiError(err, 'No se pudo subir el logo.'))
+    } finally {
+      if (logoRef.current) logoRef.current.value = ''
     }
   }
 
@@ -207,6 +233,8 @@ export function CampaignBuilderChat({ initial, onDone }: { initial?: BuilderStep
 
       <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
              aria-label="Tomar o subir una foto" onChange={(e) => void upload(e.target.files?.[0])} />
+      <input ref={logoRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+             aria-label="Subir tu logo" onChange={(e) => void uploadLogo(e.target.files?.[0])} />
 
       {textInput && (
         <div className="flex gap-2">

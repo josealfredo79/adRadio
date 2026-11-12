@@ -103,6 +103,24 @@ describe('CampaignBuilderChat', () => {
       { campaign_id: 'c1', choice: 'upload', text: 'https://cdn.test/subida.jpg' }))
   })
 
+  it('caso 15: «Poner mi logo» lo sube a su perfil y redibuja el cartel', async () => {
+    post.mockImplementation((url: string) => Promise.resolve(url === '/me/logo'
+      ? { data: {} }
+      : { data: step({ step: 'preview', text: 'Ya con tu logo.', preview: { kind: 'image', text: 'Cargador a $99', image_url: 'https://cdn.test/b.jpg', audio_url: null } }) }))
+    renderChat(step({ step: 'preview', text: 'Así la ve tu cliente.', preview: { kind: 'image', text: 'Cargador a $99', image_url: 'https://cdn.test/a.jpg', audio_url: null },
+                      choices: [ch('ok', 'Así está bien'), ch('logo', '🏷️ Poner mi logo')] }))
+    // El botón abre la galería, no manda nada todavía.
+    fireEvent.click(screen.getByText('🏷️ Poner mi logo'))
+    expect(post).not.toHaveBeenCalled()
+    const file = new File(['logo'], 'logo.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText('Subir tu logo'), { target: { files: [file] } })
+    expect(await screen.findByText('Ya con tu logo.')).toBeDefined()
+    // El PNG chico se sube tal cual (no se pasa a JPEG: perdería la transparencia).
+    const form = post.mock.calls.find((c) => c[0] === '/me/logo')?.[1] as FormData
+    expect((form.get('file') as File).type).toBe('image/png')
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/campaigns/builder', { campaign_id: 'c1', choice: 'logo' }))
+  })
+
   it('caso 5: el texto se lee y "Otra versión" pide otra', async () => {
     post.mockResolvedValue({ data: step({
       step: 'preview', text: 'Así le llega a tu cliente. ¿Así está bien?',

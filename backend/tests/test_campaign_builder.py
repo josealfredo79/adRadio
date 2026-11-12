@@ -817,6 +817,60 @@ class TestCartelQueConvence:
             await _clean(user_id)
 
     @pytest.mark.asyncio
+    async def test_caso15_sin_logo_ofrece_ponerlo_y_redibuja(self, ai):
+        user_id, _ = await _owner()
+        try:
+            r = await self._to_photo(user_id, "audífonos bluetooth a $250")
+            r = await _turn(user_id, r["campaign_id"], "poster")
+            assert r["step"] == "preview" and r["choices"][-1] == {"id": "logo", "label": "🏷️ Poner mi logo",
+                                                                     "locked": False}
+            first = r["preview"]["image_url"]
+            # Tocó el botón pero no subió nada: lo dice y no cambia el cartel.
+            r = await _turn(user_id, r["campaign_id"], "logo")
+            assert "No me llegó tu logo" in r["text"] and r["preview"]["image_url"] == first
+            # El panel lo subió a /me/logo: se redibuja con él y ya no se ofrece.
+            async with AsyncSessionLocal() as db:
+                (await db.get(User, user_id)).logo_url = _mine(user_id)
+                await db.commit()
+            r = await _turn(user_id, r["campaign_id"], "logo")
+            assert r["step"] == "preview" and r["preview"]["image_url"] != first
+            assert "logo" not in {c["id"] for c in r["choices"]}
+            ai["read"].assert_any_await(_mine(user_id))
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_otra_version_del_cartel_es_otra_imagen(self, ai, monkeypatch):
+        from app.services import banner_service
+        drawn = []
+        real = banner_service.offer_banner_png
+
+        def spy(offer, palette, photo=None, logo=None, seal_left=False):
+            drawn.append((palette, seal_left))
+            return real(offer, palette, photo, logo, seal_left)
+
+        monkeypatch.setattr(banner_service, "offer_banner_png", spy)
+        user_id, _ = await _owner()
+        try:
+            r = await self._to_photo(user_id, "audífonos bluetooth a $250")
+            r = await _turn(user_id, r["campaign_id"], "poster")
+            r = await _turn(user_id, r["campaign_id"], "other")
+            r = await _turn(user_id, r["campaign_id"], "other")
+            assert r["step"] == "preview" and len(drawn) == 3 and len(set(drawn)) == 3
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso15_el_texto_y_el_audio_no_ofrecen_logo(self, ai):
+        user_id, _ = await _owner()
+        try:
+            r = await _turn(user_id, text="2x1 en micas este viernes")
+            r = await _turn(user_id, r["campaign_id"], "f:text")
+            assert r["step"] == "preview" and "logo" not in {c["id"] for c in r["choices"]}
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
     async def test_caso4_si_no_esta_en_el_catalogo_no_se_crea(self, ai):
         user_id, _ = await _owner()
         try:

@@ -126,6 +126,26 @@ async def test_create_product_waits_for_yes_and_only_takes_own_photos():
 
 
 @pytest.mark.asyncio
+async def test_create_product_does_not_duplicate_a_name():
+    """12-nov: "Cargador marca" a $120 y otro a $99 — la promo ya no sabía cuál era."""
+    user_id = await _seed_user()
+    try:
+        async with AsyncSessionLocal() as db:
+            db.add(Product(advertiser_id=user_id, name="Cargador marca", price=Decimal(120), active=True))
+            await db.commit()
+            user = await _user(db, user_id)
+            summary, args, err = await _preview_confirm_tool(
+                db, user, "create_product", {"name": " cargador MARCA ", "price": 99})
+            assert summary is None and args is None
+            assert "Ya tienes «Cargador marca»" in err and "$120" in err
+            # Otro nombre sí se agrega.
+            _, _, err = await _preview_confirm_tool(db, user, "create_product", {"name": "Cargador tipo C", "price": 99})
+            assert err is None
+    finally:
+        await _cleanup(user_id)
+
+
+@pytest.mark.asyncio
 async def test_price_change_also_fixes_the_bot_instructions():
     user_id = await _seed_user(bot_instructions=INSTRUCTIONS)
     try:

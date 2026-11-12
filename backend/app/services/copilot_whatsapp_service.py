@@ -286,6 +286,8 @@ async def _send_question(to: str, step: dict, business: str | None = None) -> No
 async def _render_step(owner: User, to: str, step: dict, state: dict, redis, business: str | None = None) -> None:
     """Dibuja un paso: primero la vista previa (cuña, imagen o texto) y luego
     la pregunta con botones/lista."""
+    # «Poner mi logo» abre la galería en el panel; por WhatsApp no aplica.
+    step = {**step, "choices": [c for c in step.get("choices") or [] if c.get("id") != "logo"]}
     text = step.get("text") or ""
     preview = step.get("preview") or {}
     kind = preview.get("kind")

@@ -28,6 +28,7 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
+LOGO = "logo"  # botón «Poner mi logo» de la vista previa del cartel
 FORMATS = (("text", "Texto"), ("photo", "Con foto"), ("audio", "Audio de radio"))
 # Los 7 estilos de cuña con nombres que entiende el dueño (campaign_mode → nombre).
 STYLES = (
@@ -370,6 +371,7 @@ async def _make_photo(db, user, camp, state) -> str | None:
     from app.services.banner_service import (
         concrete_caption,
         offer_banner_png,
+        offer_look,
         select_design,
     )
     from app.services.storage_service import upload_bytes
@@ -385,7 +387,8 @@ async def _make_photo(db, user, camp, state) -> str | None:
             return "No pude abrir esa foto. Tómale otra o toca «Sin foto»."
         # El texto de abajo dice la misma fecha que el cartel.
         camp.message_text = concrete_caption(camp.message_text, *_send_day())
-        png, ext, ctype = offer_banner_png(offer, design.palette, photo, logo), "jpg", "image/jpeg"
+        palette, seal_left = offer_look(design.palette, state.get("look", 0))
+        png, ext, ctype = offer_banner_png(offer, palette, photo, logo, seal_left), "jpg", "image/jpeg"
         image_url = await upload_bytes(png, f"campaign_banners/{user.id}/{uuid.uuid4()}.{ext}", ctype)
     except Exception:
         logger.warning("[BUILDER] photo failed user=%s", user.id, exc_info=True)
@@ -403,8 +406,10 @@ async def _make_content(db, user, camp, state, fresh: bool = False) -> str | Non
     if fmt == "audio":
         return await _make_audio(user, camp, state)
     if fmt == "photo":
-        if fresh and state.get("variants"):
-            state["vi"] = state.get("vi", 0) + 1
+        if fresh:
+            state["look"] = state.get("look", 0) + 1  # otros colores y el sello del otro lado
+            if state.get("variants"):
+                state["vi"] = state.get("vi", 0) + 1
         return await _make_photo(db, user, camp, state)
     if fresh and state.get("variants"):
         state["vi"] = state.get("vi", 0) + 1
@@ -468,6 +473,11 @@ async def _ask(db: AsyncSession, user: User, camp: Campaign, note: str = "") -> 
         ask = {"audio": "Escúchala. ¿Así está bien?", "photo": "Así la ve tu cliente. ¿Así está bien?"}.get(
             kind, "Así le llega a tu cliente. ¿Así está bien?")
         choices = [_choice("ok", "Así está bien"), _choice("other", "Otra versión"), _choice("edit", "Cambiar el texto")]
+        # Sin logo, el cartel lleva el nombre en letras: se lo ofrece subir ahí
+        # mismo (se guarda en su perfil y sirve para su página y las próximas).
+        # Solo en el panel: por WhatsApp no hay botón que abra la galería.
+        if kind == "photo" and not user.logo_url:
+            choices.append(_choice(LOGO, "🏷️ Poner mi logo"))
         return _reply(camp, step, f"{lead}{ask}", choices, preview=_preview(camp, state))
 
     if step == "edit":
@@ -697,6 +707,13 @@ async def handle(db: AsyncSession, user: User, campaign_id: str | None = None, c
         note = await _goto_content(db, user, camp, state) or ""
     elif step == "preview" and choice == "ok":
         await _after_content(db, user, camp, state)
+    elif step == "preview" and choice == LOGO and state.get("format") == "photo":
+        # El panel ya subió el logo a /me/logo; aquí solo se redibuja.
+        await db.refresh(user)
+        if user.logo_url:
+            note = await _make_content(db, user, camp, state) or ""
+        else:
+            note = "No me llegó tu logo. Tócalo otra vez y escoge la imagen."
     elif step == "preview" and choice == "other":
         note = await _make_content(db, user, camp, state, fresh=True) or ""
     elif step == "preview" and choice == "edit":

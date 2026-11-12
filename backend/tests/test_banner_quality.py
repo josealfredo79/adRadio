@@ -311,3 +311,17 @@ def test_caso8_nota_larga_no_se_corta_en_el_sello():
     o = bs.OfferCopy(product="Hamburguesas", price="$99", price_note="2 hamburguesas", when="Solo hoy · jueves 12",
                      business_name="Burger")
     assert bs.offer_banner_png(o, "rojo", _photo())[:3] == b"\xff\xd8\xff"
+
+
+def test_otra_version_cambia_colores_y_lado_del_sello():
+    """12-nov: «Otra versión» sacaba el mismo cartel; ahora rota colores y lado."""
+    looks = [bs.offer_look("rojo", k) for k in range(7)]
+    assert looks[0] == ("rojo", False) and looks[1] == ("azul", True)
+    assert len({p for p, _ in looks[:6]}) == 6 and looks[6] == looks[0]
+    assert bs.offer_look("azul", 0) == ("azul", False) and bs.offer_look("azul", 1)[0] != "azul"
+    o = bs.OfferCopy(product="Cargador", price="$99", old_price="$120", when="Solo hoy · jueves 12")
+    right = bs.offer_banner_png(o, "rojo", _photo())
+    left = bs.offer_banner_png(o, "rojo", _photo(), seal_left=True)
+    # El sello (blanco por fuera) cae de un lado o del otro.
+    assert _px(left, (64 + 8, 700)) != _px(right, (64 + 8, 700)) or _px(left, (1080 - 64 - 8, 700)) != _px(
+        right, (1080 - 64 - 8, 700))
