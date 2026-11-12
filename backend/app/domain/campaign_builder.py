@@ -211,7 +211,10 @@ def _send_day(now_local: datetime | None = None):
 
     now_local = now_local or datetime.now(timezone(timedelta(hours=-6)))
     at = now_local if _is_human_hour_at(now_local) else _next_human_hour_after(now_local)
-    return now_local.date(), at.date()
+    # De madrugada (antes de las 5) el dueño aún no se ha dormido: "mañana"
+    # escrito a las 00:30 del jueves quiere decir el jueves, no el viernes.
+    written = now_local - timedelta(hours=5) if now_local.hour < 5 else now_local
+    return written.date(), at.date()
 
 
 async def _offer_details(db, user, what: str):
@@ -225,6 +228,10 @@ async def _offer_details(db, user, what: str):
     offer = await generate_offer_copy(user.business_name or "", what)
     today, send_day = _send_day()
     offer.when = concrete_when(offer.when, today, send_day)
+    # "Ven hoy" con una oferta que es otro día ("Solo el viernes 13") se contradice.
+    if re.search(r"\bhoy\b", offer.cta, re.IGNORECASE) and offer.when \
+            and not re.search(r"\bhoy\b", offer.when, re.IGNORECASE):
+        offer.cta = "Aparta el tuyo"
 
     async def _read(url):
         # Una foto o logo que no se puede leer no tumba el cartel: va sin ella.

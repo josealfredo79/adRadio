@@ -697,3 +697,27 @@ class TestCartelDeOferta:
             assert offer.old_price == "$80" and photo is None and logo is None
         finally:
             await _clean(user_id)
+
+    def test_de_madrugada_manana_es_el_mismo_dia(self):
+        """"Solo mañana" a las 00:01 del jueves quiere decir el jueves."""
+        from app.services.banner_service import concrete_when
+        tz = timezone(timedelta(hours=-6))
+        today, send = cb._send_day(datetime(2026, 11, 12, 0, 1, tzinfo=tz))
+        assert (today.day, send.day) == (11, 12)
+        assert concrete_when("Solo mañana", today, send) == "Solo hoy · jueves 12"
+        # "Solo hoy" escrito de madrugada no se vuelve una fecha que ya pasó.
+        assert concrete_when("Solo hoy", today, send) == "Solo hoy"
+
+    @pytest.mark.asyncio
+    async def test_ven_hoy_no_choca_con_otro_dia(self, ai, monkeypatch):
+        import datetime as dt
+        user_id, _ = await _owner()
+        ai["offer"].return_value = OfferCopy(product="Cargador", price="$100", when="Este viernes", cta="Ven hoy")
+        monkeypatch.setattr(cb, "_send_day", lambda: (dt.date(2026, 11, 11), dt.date(2026, 11, 11)))
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                offer, _, _ = await cb._offer_details(db, user, "cargador a $100 este viernes")
+            assert offer.when == "El viernes 13" and offer.cta == "Aparta el tuyo"
+        finally:
+            await _clean(user_id)

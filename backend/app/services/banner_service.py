@@ -992,8 +992,8 @@ def concrete_when(when: str, today, send_day) -> str:
                     return when  # "hasta el lunes" dicho en lunes: ¿hoy o el otro? No se adivina.
                 target = today + timedelta(days=(i - today.weekday()) % 7)
                 break
-    if target is None:
-        return when
+    if target is None or target < send_day:
+        return when  # nunca dibujar una fecha que ya pasó cuando llegue el mensaje
     label = f"{_DAYS[target.weekday()]} {target.day}"
     if "hasta" in plain:
         return f"Hasta hoy · {label}" if target == send_day else f"Hasta el {label}"
