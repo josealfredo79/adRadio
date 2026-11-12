@@ -17,7 +17,7 @@ from app.services import copilot_whatsapp_service as cw
 from app.services import platform_whatsapp as pw
 from app.services.banner_service import BannerCopy
 from app.services.meta_client import MetaApiError
-from tests.test_campaign_builder import AUDIO, PHOTO, VARIANTS, _camp, _clean, _owner
+from tests.test_campaign_builder import AUDIO, VARIANTS, _camp, _clean, _mine, _owner
 from tests.test_copilot_whatsapp import FakeRedis
 from tests.test_web_push import _add_subs
 
@@ -203,7 +203,7 @@ class TestLaPlaticaPorWhatsApp:
             _, st, *_ = await _run(uid, "Subir una foto", redis)
             assert "Mándame la foto" in st.call_args.args[1]
 
-            _, _, _, _, si, _ = await _run(uid, "", redis, photo_url=PHOTO)
+            _, _, _, _, si, _ = await _run(uid, "", redis, photo_url=_mine(uid))
             state = _state(redis, uid)
             camp = await _camp(state["builder"]["campaign_id"])
             assert state["builder"]["step"] == "preview"
@@ -391,7 +391,7 @@ class TestLaPlaticaPorWhatsApp:
             step = await _start(uid, {"what": "2x1 en micas", "format": "photo"})
             redis = FakeRedis()
             await _run(uid, "x", redis, chat=_action(step))
-            hc, st, *_ = await _run(uid, "", redis, photo_url=PHOTO)
+            hc, st, *_ = await _run(uid, "", redis, photo_url=_mine(uid))
             hc.assert_not_awaited()  # no pasó por el Copiloto de productos
             sent = [c.args[1] for c in st.await_args_list]
             assert cw._PHOTO_PROMPT not in sent

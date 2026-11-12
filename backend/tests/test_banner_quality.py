@@ -3,6 +3,7 @@
 import io
 import json
 import os
+from itertools import pairwise
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -168,11 +169,11 @@ def test_cartel_con_foto_y_logo():
     buf = io.BytesIO()
     Image.new("RGB", (640, 480), (200, 200, 200)).save(buf, "JPEG")
     o = bs.OfferCopy(product="Cargador marca", price="$100", old_price="$120", when="Solo hoy · jueves 12",
-                     business_name="CityCell", contact="WhatsApp 953 172 4341", delivery="A domicilio")
+                     business_name="CityCell")
     png = bs.offer_banner_png(o, "rojo", buf.getvalue(), buf.getvalue())
     assert Image.open(io.BytesIO(png)).size == (1080, 1080)
     # Una foto rota no tumba el cartel.
-    assert bs.offer_banner_png(o, "rojo", b"no es imagen", b"tampoco")[:4] == b"\x89PNG"
+    assert bs.offer_banner_png(o, "rojo", b"no es imagen", b"tampoco")[:3] == b"\xff\xd8\xff"
 
 
 def test_rangos_de_dias_no_se_acortan():
@@ -212,3 +213,83 @@ async def test_con_ia_la_fecha_tampoco_va_en_el_nombre():
     raw = json.dumps({"product": "Cargador marca a solo mañana", "price": "$100", "when": ""})
     o = await _offer(raw, "cargador marca a $100 solo mañana")
     assert o.product == "Cargador marca" and o.when == "Solo mañana"
+
+
+# ── Cartel que convence (docs/specs/2026-11-12-cartel-que-convence.md) ─────────
+
+def _photo(color=(0, 200, 0), size=(800, 800)) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", size, color).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+def _px(png: bytes, xy: tuple) -> tuple:
+    return Image.open(io.BytesIO(png)).convert("RGB").getpixel(xy)
+
+
+OFERTA = bs.OfferCopy(product="Cargador marca", price="$100", old_price="$120",
+                      when="Solo hoy · jueves 12", business_name="CityCell")
+
+
+def test_caso6_con_foto_la_foto_ocupa_el_cartel():
+    png = bs.offer_banner_png(OFERTA, "rojo", _photo((0, 200, 0)))
+    r, g, b = _px(png, (540, 380))  # el centro de arriba es la foto, sin tapar
+    assert g > 150 and r < 60 and b < 60
+    r, g, b = _px(png, (900, 700))  # abajo a la derecha, el sello con el precio
+    assert (r, g, b) != _px(png, (540, 380))
+
+
+def test_caso7_sin_foto_fondo_liso_sin_rayas():
+    png = bs.offer_banner_png(OFERTA, "rojo")
+    img = Image.open(io.BytesIO(png)).convert("L")
+    row = [img.getpixel((x, 175)) for x in range(560, 1040)]  # zona sin texto
+    assert max(abs(a - b) for a, b in pairwise(row)) <= 3  # degradado suave, sin rayas
+    col = [img.getpixel((1050, y)) for y in range(20, 900)]  # orilla derecha, de arriba abajo
+    assert max(abs(a - b) for a, b in pairwise(col)) <= 3  # sin escalones
+
+
+@pytest.mark.parametrize("photo", [None, "foto"])
+def test_caso8_ningun_texto_mas_chico_que_44_px(monkeypatch, photo):
+    sizes = []
+    real = bs._offer_font
+
+    def spy(size, weight=900):
+        sizes.append(size)
+        return real(size, weight)
+
+    monkeypatch.setattr(bs, "_offer_font", spy)
+    o = bs.OfferCopy(product="Corte de cabello y barba degradado", price="$1,250", old_price="$1,500",
+                     price_note="por persona", when="De lunes a viernes por la tarde",
+                     business_name="Barbería El Güero de Tlaxiaco")
+    bs.offer_banner_png(o, "elegante", _photo() if photo else None)
+    assert min(sizes) >= 44 * 2  # se dibuja al doble y se reduce
+
+
+def test_caso9_sin_contacto_ni_barra_de_abajo():
+    o = bs.OfferCopy(product="Micas", price="$60", business_name="CityCell")
+    assert not hasattr(o, "contact") and not hasattr(o, "delivery")
+    png = bs.offer_banner_png(o, "rojo")
+    # Ya no hay franja blanca abajo con "Escríbenos" y el WhatsApp.
+    assert sum(_px(png, (540, 1060))) < 600
+
+
+def test_caso10_logo_en_circulo_o_nombre():
+    con = bs.offer_banner_png(OFERTA, "rojo", logo=_photo((0, 0, 255)))
+    r, _, b = _px(con, (64 + 70, 64 + 70))  # el centro del círculo es el logo
+    assert b > 180 and r < 60
+    sin = bs.offer_banner_png(OFERTA, "rojo")
+    assert _px(sin, (64 + 20, 64 + 40)) == (255, 255, 255)  # la cinta blanca con el nombre
+
+
+def test_caso11_foto_vertical_se_recorta_y_una_rota_no_tumba_el_cartel():
+    tall = bs.offer_banner_png(OFERTA, "rojo", _photo((0, 200, 0), (600, 1400)))
+    assert Image.open(io.BytesIO(tall)).size == (1080, 1080)
+    assert bs.offer_banner_png(OFERTA, "rojo", b"no es foto")[:3] == b"\xff\xd8\xff"  # JPEG
+
+
+def test_caso8_nota_larga_no_se_corta_en_el_sello():
+    assert bs._note_fits_seal("3 tacos", 175 * 2, 2)
+    assert not bs._note_fits_seal("2 hamburguesas", 175 * 2, 2)
+    o = bs.OfferCopy(product="Hamburguesas", price="$99", price_note="2 hamburguesas", when="Solo hoy · jueves 12",
+                     business_name="Burger")
+    assert bs.offer_banner_png(o, "rojo", _photo())[:3] == b"\xff\xd8\xff"

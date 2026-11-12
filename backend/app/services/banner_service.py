@@ -10,7 +10,6 @@ Pipeline:
 import io
 import json
 import logging
-import math
 import random
 import re
 from pathlib import Path
@@ -930,7 +929,7 @@ Responde ÚNICAMENTE con un JSON con estas claves (sin texto extra):
         )
 
 
-# ── Cartel de oferta (Copiloto, "Cartel de colores") ─────────────────────────
+# ── Cartel de oferta (Copiloto; con foto del producto o sin foto) ────────────
 # Precio grande en estrella, precio de antes tachado y cinta de "cuándo".
 # La IA solo SEPARA el texto del dueño en partes; nada se inventa: un precio
 # que no está en su texto no se dibuja (spec: el bot no inventa precios).
@@ -943,8 +942,7 @@ _TRAILING_RE = re.compile(r"(?:\s+(?:a|en|por|de|x|baja|bajan|solo|desde|hasta))
 
 class OfferCopy:
     def __init__(self, product: str = "", price: str = "", old_price: str = "", when: str = "",
-                 price_note: str = "", sub: str = "", cta: str = "", business_name: str = "",
-                 contact: str = "", delivery: str = ""):
+                 price_note: str = "", sub: str = "", cta: str = "", business_name: str = ""):
         self.product = product
         self.price = price
         self.old_price = old_price
@@ -953,9 +951,6 @@ class OfferCopy:
         self.sub = sub
         self.cta = cta
         self.business_name = business_name
-        # Datos reales del negocio para la barra de abajo (no de la IA).
-        self.contact = contact
-        self.delivery = delivery
 
 
 _DAYS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
@@ -1211,15 +1206,6 @@ Responde ÚNICAMENTE con el JSON de la promoción de arriba (las 7 claves, sub y
     )
 
 
-def _star(cx: float, cy: float, r_out: float, r_in: float, n: int = 18, rot: float = 0.1) -> list:
-    pts = []
-    for i in range(n * 2):
-        r = r_out if i % 2 == 0 else r_in
-        a = rot + math.pi * i / n
-        pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
-    return pts
-
-
 def _darker(c: tuple, k: float = 0.55) -> tuple:
     return tuple(int(v * k) for v in c)
 
@@ -1237,209 +1223,223 @@ def _square(photo: bytes | None, side: int) -> Image.Image | None:
     return img.crop((left, top, left + m, top + m)).resize((side, side), Image.LANCZOS)
 
 
-def _rounded(img: Image.Image, radius: int) -> Image.Image:
-    mask = Image.new("L", img.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, img.width - 1, img.height - 1], radius=radius, fill=255)
-    out = img.convert("RGBA")
-    out.putalpha(mask)
-    return out
+def _soft(img: Image.Image, box: tuple, blur: float, draw_fn) -> None:
+    """Sombra difuminada solo en el pedazo que la necesita (difuminar el
+    cartel completo de 2160 px tardaba ~1 s por sombra)."""
+    m = int(blur * 3) + 2
+    x0, y0 = max(0, int(box[0]) - m), max(0, int(box[1]) - m)
+    x1, y1 = min(img.width, int(box[2]) + m), min(img.height, int(box[3]) + m)
+    if x1 <= x0 or y1 <= y0:
+        return
+    lay = Image.new("RGBA", (x1 - x0, y1 - y0), (0, 0, 0, 0))
+    draw_fn(ImageDraw.Draw(lay), -x0, -y0)
+    lay = lay.filter(ImageFilter.GaussianBlur(blur))
+    img.paste(lay, (x0, y0), lay)
 
 
 def _paste_shadow(img: Image.Image, box: tuple, radius: int, S: int, round_: bool = False) -> None:
-    x0, y0, x1, y1 = box
-    sh = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    d = ImageDraw.Draw(sh)
-    if round_:
-        d.ellipse([x0 + 10 * S, y0 + 18 * S, x1 + 10 * S, y1 + 18 * S], fill=(0, 0, 0, 120))
-    else:
-        d.rounded_rectangle([x0 + 10 * S, y0 + 18 * S, x1 + 10 * S, y1 + 18 * S], radius=radius, fill=(0, 0, 0, 110))
-    sh = sh.filter(ImageFilter.GaussianBlur(18 * S))
-    img.paste(sh, (0, 0), sh)
+    x0, y0, x1, y1 = box[0] + 10 * S, box[1] + 18 * S, box[2] + 10 * S, box[3] + 18 * S
+
+    def draw(d, dx, dy):
+        b = [x0 + dx, y0 + dy, x1 + dx, y1 + dy]
+        if round_:
+            d.ellipse(b, fill=(0, 0, 0, 120))
+        else:
+            d.rounded_rectangle(b, radius=radius, fill=(0, 0, 0, 110))
+
+    _soft(img, (x0, y0, x1, y1), 18 * S, draw)
+
+
+def _ink(color: tuple) -> tuple:
+    """Letra que se lee sobre ese color: oscura sobre claros, blanca sobre oscuros."""
+    r, g, b = color[:3]
+    return (25, 25, 25) if (0.299 * r + 0.587 * g + 0.114 * b) > 165 else (255, 255, 255)
+
+
+def _shadow_text(img: Image.Image, xy: tuple, text: str, font, fill, anchor: str, S: int,
+                 strength: int = 150) -> None:
+    """Texto con sombra suave para que se lea sobre foto o degradado."""
+    sx, sy = xy[0] + 3 * S, xy[1] + 5 * S
+    box = ImageDraw.Draw(img).textbbox((sx, sy), text, font=font, anchor=anchor)
+    _soft(img, box, 8 * S, lambda d, dx, dy: d.text((sx + dx, sy + dy), text, font=font,
+                                                    fill=(0, 0, 0, strength), anchor=anchor))
+    ImageDraw.Draw(img).text(xy, text, font=font, fill=fill, anchor=anchor)
+
+
+def _struck(draw: ImageDraw.ImageDraw, xy: tuple, text: str, font, fill, S: int) -> None:
+    """"Antes $120" centrado y tachado."""
+    draw.text(xy, text, font=font, fill=fill, anchor="mm")
+    w = font.getlength(text)
+    x, y = xy
+    draw.line([(x - w / 2 - 6 * S, y + 6 * S), (x + w / 2 + 6 * S, y - 6 * S)], fill=fill, width=6 * S)
+
+
+def _pill(img: Image.Image, center: tuple, text: str, size: int, max_w: int, fill, S: int,
+          anchor_left: bool = False) -> tuple:
+    """Cinta redondeada con texto (la fecha, o el nombre del negocio). Regresa su caja."""
+    f, lines = _offer_fit(text, size, max_w - 60 * S, 1, 850, 44 * S)
+    t = " ".join(lines) if f.getlength(" ".join(lines)) <= max_w - 60 * S else (lines[0] if lines else text)
+    w, h = f.getlength(t) + 60 * S, f.size + 34 * S
+    x0 = center[0] if anchor_left else center[0] - w / 2
+    y0 = center[1] - h / 2
+    box = (x0, y0, x0 + w, y0 + h)
+    _paste_shadow(img, box, int(h / 2), S // 2 or 1)
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle(box, radius=int(h / 2), fill=fill)
+    d.text((x0 + w / 2, y0 + h / 2), t, font=f, fill=_ink(fill), anchor="mm")
+    return box
+
+
+def _header(img: Image.Image, offer: "OfferCopy", logo: bytes | None, c1: tuple, S: int, pad: int) -> None:
+    """Arriba a la izquierda: el logo en un círculo, o el nombre en una cinta blanca."""
+    W_ = img.width
+    logo_img = _square(logo, 128 * S)
+    if logo_img:
+        ring = 140 * S
+        _paste_shadow(img, (pad, pad, pad + ring, pad + ring), 0, S // 2 or 1, round_=True)
+        d = ImageDraw.Draw(img)
+        d.ellipse([pad, pad, pad + ring, pad + ring], fill=(255, 255, 255))
+        m = Image.new("L", logo_img.size, 0)
+        ImageDraw.Draw(m).ellipse([0, 0, logo_img.width - 1, logo_img.height - 1], fill=255)
+        img.paste(logo_img, (pad + 6 * S, pad + 6 * S), m)
+    elif offer.business_name:
+        _pill(img, (pad, pad + 40 * S), offer.business_name.upper(), 44 * S, W_ - 2 * pad, (255, 255, 255), S,
+              anchor_left=True)
+
+
+def _note_fits_seal(note: str, R: float, S: int) -> bool:
+    """"3 TACOS" cabe en el sello; "2 HAMBURGUESAS" no (quedaría solo "2")."""
+    return _offer_font(44 * S, 800).getlength(note.upper()) <= (R - 12 * S) * 1.3
+
+
+def _seal(img: Image.Image, cx: float, cy: float, R: float, offer: "OfferCopy", big: str,
+          accent: tuple, S: int) -> None:
+    """Sello redondo con el precio (y el de antes tachado)."""
+    sb = (cx - R + 8 * S, cy - R + 16 * S, cx + R + 8 * S, cy + R + 16 * S)
+    _soft(img, sb, 16 * S, lambda d, dx, dy: d.ellipse([sb[0] + dx, sb[1] + dy, sb[2] + dx, sb[3] + dy],
+                                                        fill=(0, 0, 0, 130)))
+    d = ImageDraw.Draw(img)
+    d.ellipse([cx - R, cy - R, cx + R, cy + R], fill=(255, 255, 255))
+    r = R - 12 * S
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=accent)
+    ink = _ink(accent)
+    has_old = bool(offer.old_price and offer.price)
+    has_note = bool(offer.price_note and offer.price) and _note_fits_seal(offer.price_note, R, S)
+    py = cy + (16 if has_old else 0) * S - (22 if has_note else 0) * S
+    pf, _ = _offer_fit(big, int(R * 0.78), int(r * 1.62), 1, 900, 60 * S)
+    d.text((cx, py), big, font=pf, fill=ink, anchor="mm")
+    if has_old:
+        of = _offer_font(48 * S, 750)
+        # En el sello cabe ~1.4 radios a esa altura; si no, solo el precio tachado.
+        t = f"Antes {offer.old_price}"
+        if of.getlength(t) > r * 1.4:
+            t = offer.old_price
+        _struck(d, (cx, py - pf.size * 0.62), t, of, ink, S)
+    if has_note:
+        nf, nl = _offer_fit(offer.price_note.upper(), 44 * S, int(r * 1.3), 1, 800, 44 * S)
+        d.text((cx, py + pf.size * 0.62), nl[0], font=nf, fill=ink, anchor="mm")
 
 
 def offer_banner_png(offer: OfferCopy, palette_name: str = "promo", photo: bytes | None = None,
                      logo: bytes | None = None) -> bytes:
-    """Cartel de oferta 1080×1080, dibujado al doble y reducido (bordes suaves).
-    Con foto: la foto del producto en una tarjeta y la estrella encima de su
-    esquina. Sin foto: la estrella grande a la derecha."""
+    """Cartel de oferta 1080×1080 (spec docs/specs/2026-11-12-cartel-que-convence.md).
+    Con foto: la foto ocupa todo, abajo el producto y la fecha sobre un
+    degradado, y el sello con el precio. Sin foto: el precio enorme al centro
+    sobre un degradado liso del color del giro. Solo lo esencial y nada más
+    chico que 44 px, para que se lea a 300 px en WhatsApp."""
     c1, c2, accent = PALETTES.get(palette_name, PALETTES["promo"])
     S, size = 2, 1080
     W = H = size * S
-    deep = _darker(c1, 0.6)
-    pad = 70 * S
-    bar_h = 200 * S
-    bar_y = H - bar_h
-
-    # Fondo: degradado radial, rayas diagonales y semitono en una esquina.
-    mask = Image.radial_gradient("L").resize((int(W * 1.6), int(H * 1.6)))
-    mask = mask.crop((int(W * 0.15), int(H * 0.25), int(W * 0.15) + W, int(H * 0.25) + H))
-    img = Image.composite(Image.new("RGB", (W, H), deep), Image.new("RGB", (W, H), c2), mask)
-    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(lay)
-    for x in range(-H, W, 70 * S):
-        ld.line([(x, H), (x + H, 0)], fill=(255, 255, 255, 14), width=18 * S)
-    for gy in range(0, 380 * S, 26 * S):
-        for gx in range(0, 380 * S, 26 * S):
-            r = max(0.0, (380 * S - math.hypot(gx, gy)) / (380 * S)) * 6 * S
-            if r > 0.6 * S:
-                x, y = gx, bar_y - 20 * S - gy
-                ld.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, 30))
-    img.paste(lay, (0, 0), lay)
-    draw = ImageDraw.Draw(img)
-
+    pad = 64 * S
     big = offer.price or (offer.price_note if len(offer.price_note) <= 6 else "")
-    pic = _square(photo, 420 * S)
-    text_w = (450 if (big or pic) else 940) * S
-    if pic:
-        text_w = 470 * S
+    pic = _square(photo, W)
 
-    # Encabezado: logo redondo + nombre, o la etiqueta blanca con el nombre.
-    logo_img = _square(logo, 104 * S)
-    top = 60 * S
-    if logo_img:
-        ring = 112 * S
-        _paste_shadow(img, (pad, top, pad + ring, top + ring), 0, S // 2 or 1, round_=True)
-        draw = ImageDraw.Draw(img)
-        draw.ellipse([pad, top, pad + ring, top + ring], fill=(255, 255, 255))
-        lm = Image.new("L", logo_img.size, 0)
-        ImageDraw.Draw(lm).ellipse([0, 0, logo_img.width - 1, logo_img.height - 1], fill=255)
-        img.paste(logo_img, (pad + 4 * S, top + 4 * S), lm)
-        if offer.business_name:
-            nf, nl = _offer_fit(offer.business_name.upper(), 34 * S, 760 * S, 1, 800, 20 * S)
-            draw.text((pad + ring + 24 * S, top + ring / 2), nl[0], font=nf, fill=(255, 255, 255), anchor="lm")
-        y = top + ring + 50 * S
+    if pic:
+        img = pic
+        # Degradado abajo (para el texto) y uno leve arriba (para el logo).
+        fade = Image.new("L", (1, H), 0)
+        for y in range(H):
+            t = y / H
+            a = 235 * max(0.0, (t - 0.42) / 0.58) ** 1.3 + 110 * max(0.0, (0.2 - t) / 0.2)
+            fade.putpixel((0, y), int(min(235, a)))
+        fade = fade.resize((W, H))
+        img = Image.composite(Image.new("RGB", (W, H), _darker(c1, 0.35)), img, fade)
     else:
-        if offer.business_name:
-            bf, blines = _offer_fit(offer.business_name.upper(), 30 * S, 760 * S, 1, 800, 20 * S)
-            bw = bf.getlength(blines[0])
-            draw.rounded_rectangle([pad, top + 4 * S, pad + bw + 56 * S, top + 66 * S], radius=31 * S,
-                                   fill=(255, 255, 255))
-            draw.text((pad + 28 * S, top + 35 * S), blines[0], font=bf, fill=deep, anchor="lm")
-        y = top + 130 * S
+        # El degradado y el brillo se calculan chicos y se agrandan (son suaves:
+        # se ven igual y tarda 0.1 s en vez de 1 s).
+        q = W // 4
+        g = Image.linear_gradient("L").resize((q * 2, q * 2)).rotate(-35, resample=Image.BICUBIC)
+        g = g.crop((q // 2, q // 2, q // 2 + q, q // 2 + q)).resize((W, H), Image.BICUBIC)
+        img = Image.composite(Image.new("RGB", (W, H), _darker(c1, 0.55)), Image.new("RGB", (W, H), _darker(c2, 0.9)), g)
+        glow = Image.new("L", (q, q), 255)
+        # radial_gradient vale 128 en el borde del círculo: ×2 para que llegue a
+        # 255 (sin brillo) justo ahí y no quede un escalón.
+        disk = Image.radial_gradient("L").point(lambda v: min(255, v * 2))
+        glow.paste(disk.resize((int(q * 1.1), int(q * 1.1))), (int(-q * 0.05), int(q * 0.08)))
+        glow = glow.point(lambda v: int((255 - v) * 0.2)).resize((W, H), Image.BICUBIC)
+        img.paste(Image.new("RGB", (W, H), (255, 255, 255)), (0, 0), glow)
 
-    # Producto + cinta, centrados en el alto libre de la izquierda.
-    pf, lines = _offer_fit((offer.product or "Oferta").upper(), 116 * S, text_w, 3, 900, 48 * S)
-    block = len(lines) * pf.size * 1.02 + (130 * S if offer.when else 0)
-    free_top, free_bot = y, bar_y - 40 * S
-    y = max(free_top, free_top + (free_bot - free_top - block) / 2 - 30 * S)
-    for ln in lines:
-        draw.text((pad + 5 * S, y + 6 * S), ln, font=pf, fill=_darker(deep, 0.6))
-        draw.text((pad, y), ln, font=pf, fill=(255, 255, 255))
-        y += pf.size * 1.02
-    if offer.when:
-        wf, wl = _offer_fit(offer.when.upper(), 40 * S, text_w - 70 * S, 1, 900, 24 * S)
-        tw = wf.getlength(wl[0])
-        tag = Image.new("RGBA", (int(tw + 70 * S), 84 * S), (0, 0, 0, 0))
-        td = ImageDraw.Draw(tag)
-        td.rounded_rectangle([0, 0, tag.width - 1, tag.height - 1], radius=14 * S, fill=(255, 255, 255))
-        td.text((tag.width / 2, tag.height / 2), wl[0], font=wf, fill=c1, anchor="mm")
-        tag = tag.rotate(4, expand=True, resample=Image.BICUBIC)
-        img.paste(tag, (pad - 6 * S, int(y + 30 * S)), tag)
-        draw = ImageDraw.Draw(img)
+    _header(img, offer, logo, c1, S, pad)
+    product = (offer.product or "Oferta").upper()
+    pill_fill = accent if sum(accent) < 720 else (255, 255, 255)
 
-    # Foto del producto en tarjeta blanca (derecha).
     if pic:
-        px, py = W - pad - pic.width, 130 * S
-        card = (px - 12 * S, py - 12 * S, px + pic.width + 12 * S, py + pic.height + 12 * S)
-        _paste_shadow(img, card, 34 * S, S)
-        draw = ImageDraw.Draw(img)
-        draw.rounded_rectangle(card, radius=34 * S, fill=(255, 255, 255))
-        rp = _rounded(pic, 26 * S)
-        img.paste(rp, (px, py), rp)
-        draw = ImageDraw.Draw(img)
-
-    # Estrella con el precio: grande sola, o más chica sobre la esquina de la foto.
-    if big:
-        if pic:
-            cx, cy, ro = W - pad - pic.width / 2, 130 * S + pic.height + 90 * S, 165 * S
+        # Abajo, de abajo hacia arriba: la fecha a todo lo ancho; encima, el
+        # producto a la izquierda y el sello con el precio a la derecha.
+        R = 175 * S if big else 0
+        y = H - pad
+        # Una nota larga ("2 hamburguesas") no cabe en el sello: va en la cinta.
+        note_out = bool(R and offer.price and offer.price_note and not _note_fits_seal(offer.price_note, R, S))
+        ribbons = [t for t in ((offer.price_note if note_out else ""), offer.when) if t]
+        joined = " · ".join(ribbons).upper()
+        if len(ribbons) > 1 and _offer_font(44 * S, 850).getlength(joined) <= W - 2 * pad - 60 * S:
+            ribbons = [joined]  # caben juntas en una sola cinta
+        for t in reversed(ribbons):  # si no, una encima de otra (la fecha abajo)
+            box = _pill(img, (pad, y - 40 * S), t.upper(), 46 * S, W - 2 * pad, pill_fill, S, anchor_left=True)
+            y = box[1] - 18 * S
+        if ribbons:
+            y -= 8 * S
+        col_w = W - 2 * pad - (2 * R + 30 * S if R else 0)
+        pf, lines = _offer_fit(product, 96 * S, col_w, 3, 900, 48 * S)
+        if R:
+            _seal(img, W - pad - R, y - R, R, offer, big, accent, S)
+        for ln in reversed(lines):
+            _shadow_text(img, (pad, y), ln, pf, (255, 255, 255), "ls", S)
+            y -= pf.size * 1.02
+    else:
+        top = pad + 170 * S
+        if big:
+            pf, lines = _offer_fit(product, 92 * S, W - 2 * pad, 2, 900, 48 * S)
+            y = top
+            for ln in lines:
+                _shadow_text(img, (W / 2, y), ln, pf, (255, 255, 255), "mt", S)
+                y += pf.size * 1.04
+            mid = (y + (H - pad - 120 * S)) / 2
+            has_old = bool(offer.old_price and offer.price)
+            has_note = bool(offer.price_note and offer.price)
+            bf, _ = _offer_fit(big, 300 * S, W - 2 * pad, 1, 900, 120 * S)
+            py = mid + (30 if has_old else 0) * S - (30 if has_note else 0) * S
+            _shadow_text(img, (W / 2, py), big, bf, (255, 255, 255), "mm", S, 170)
+            d = ImageDraw.Draw(img)
+            if has_old:
+                _struck(d, (W / 2, py - bf.size * 0.6), f"Antes {offer.old_price}", _offer_font(56 * S, 750),
+                        (255, 255, 255), S)
+            if has_note:
+                nf, nl = _offer_fit(offer.price_note.upper(), 52 * S, W - 2 * pad, 1, 800, 44 * S)
+                d.text((W / 2, py + bf.size * 0.62), nl[0], font=nf, fill=(255, 255, 255), anchor="mm")
         else:
-            cx, cy, ro = 790 * S, (free_top + free_bot) / 2, 255 * S
-        sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        ImageDraw.Draw(sh).polygon(_star(cx + 14 * S, cy + 20 * S, ro, ro * 0.86), fill=(0, 0, 0, 120))
-        sh = sh.filter(ImageFilter.GaussianBlur(18 * S))
-        img.paste(sh, (0, 0), sh)
-        draw = ImageDraw.Draw(img)
-        draw.polygon(_star(cx, cy, ro, ro * 0.86), fill=accent)
-        draw.ellipse([cx - ro * 0.74, cy - ro * 0.74, cx + ro * 0.74, cy + ro * 0.74],
-                     outline=_darker(accent, 0.85), width=4 * S)
-        price_col = _darker(c1, 0.75) if sum(accent) > 400 else (255, 255, 255)
-        k = ro / (255 * S)
-        if offer.old_price and offer.price:
-            of = _offer_font(int(40 * S * k), 700)
-            t = f"Antes {offer.old_price}"
-            oy = cy - 112 * S * k
-            draw.text((cx, oy), t, font=of, fill=price_col, anchor="mm")
-            tw = of.getlength(t)
-            draw.line([(cx - tw / 2 - 6 * S, oy + 4 * S), (cx + tw / 2 + 6 * S, oy - 4 * S)],
-                      fill=price_col, width=max(3, int(5 * S * k)))
-        prf, _ = _offer_fit(big, int(170 * S * k), int(330 * S * k), 1, 900, 40 * S)
-        draw.text((cx, cy + 10 * S * k), big, font=prf, fill=price_col, anchor="mm")
-        if offer.price_note and offer.price:
-            nf, nl = _offer_fit(offer.price_note.upper(), int(30 * S * k), int(300 * S * k), 1, 800, 16 * S)
-            draw.text((cx, cy + 120 * S * k), nl[0], font=nf, fill=price_col, anchor="mm")
-
-    # Barra de abajo: la acción y cómo comprar (datos reales del negocio).
-    draw.rectangle([0, bar_y, W, H], fill=(255, 255, 255))
-    draw.rectangle([0, bar_y, W, bar_y + 10 * S], fill=accent if sum(accent) < 700 else c2)
-    info = [t for t in (offer.delivery, offer.contact) if t] or ([offer.sub] if offer.sub else [])
-    text_max = W - pad * 2 - 130 * S
-    cf, cl = _offer_fit((offer.cta or "Escríbenos hoy").upper(), 44 * S, text_max, 1, 900, 26 * S)
-    cta_y = bar_y + (62 if info else 105) * S
-    draw.text((pad, cta_y), cl[0], font=cf, fill=c1, anchor="lm")
-    iy = cta_y + 56 * S
-    for t in info[:2]:
-        f, tl = _offer_fit(t, 28 * S, text_max, 1, 600, 18 * S)
-        draw.text((pad, iy), tl[0], font=f, fill=(80, 80, 80), anchor="lm")
-        iy += 40 * S
-    # Flecha (no ▶: en WhatsApp parece video y la gente lo toca).
-    ax, ay = W - pad - 50 * S, bar_y + 105 * S
-    draw.ellipse([ax - 50 * S, ay - 50 * S, ax + 50 * S, ay + 50 * S], fill=c1)
-    draw.line([(ax - 22 * S, ay), (ax + 18 * S, ay)], fill=(255, 255, 255), width=9 * S)
-    draw.polygon([(ax + 26 * S, ay), (ax + 4 * S, ay - 20 * S), (ax + 4 * S, ay + 20 * S)], fill=(255, 255, 255))
+            pf, lines = _offer_fit(product, 150 * S, W - 2 * pad, 3, 900, 60 * S)
+            block = len(lines) * pf.size * 1.04
+            y = (H - block) / 2 - 20 * S
+            for ln in lines:
+                _shadow_text(img, (W / 2, y), ln, pf, (255, 255, 255), "mt", S, 170)
+                y += pf.size * 1.04
+        if offer.when:
+            _pill(img, (W / 2, H - pad - 40 * S), offer.when.upper(), 50 * S, W - 2 * pad, pill_fill, S)
 
     img = img.resize((size, size), Image.LANCZOS)
     buf = io.BytesIO()
-    img.save(buf, format="PNG", optimize=True)
-    return buf.getvalue()
-
-
-# ── Foto real del producto con la promo encima (campaña que pregunta) ──────────
-
-def photo_banner_png(photo: bytes, headline: str, price: str = "", business_name: str = "") -> bytes:
-    """La foto del producto del dueño, cuadrada, con una franja abajo con la
-    promo y el precio. Nada inventado: la foto es la suya y el texto sale de
-    su catálogo (spec docs/specs/2026-10-29-campana-que-pregunta.md)."""
-    size = 1080
-    img = Image.open(io.BytesIO(photo)).convert("RGB")
-    side = min(img.size)
-    left, top = (img.width - side) // 2, (img.height - side) // 2
-    img = img.crop((left, top, left + side, top + side)).resize((size, size))
-
-    band_h = 330 if price else 260
-    overlay = Image.new("RGBA", (size, band_h), (0, 0, 0, 0))
-    od = ImageDraw.Draw(overlay)
-    for y in range(band_h):  # degradado: transparente arriba, oscuro abajo
-        od.line([(0, y), (size, y)], fill=(0, 0, 0, int(40 + 190 * y / band_h)))
-    img.paste(overlay, (0, size - band_h), overlay)
-
-    draw = ImageDraw.Draw(img)
-    font = _load_font(_FONT_BOLD, 64)
-    lines = _wrap_text(headline.strip(), font, size - 120)[:3]
-    y = size - band_h + 40
-    for line in lines:
-        draw.text((60, y), line, font=font, fill=(255, 255, 255))
-        y += 76
-    if price:
-        pf = _load_font(_FONT_BOLD, 72)
-        bbox = draw.textbbox((0, 0), price, font=pf)
-        pw, ph = bbox[2] - bbox[0] + 48, bbox[3] - bbox[1] + 36
-        _draw_rounded_rect(draw, (60, y + 6, 60 + pw, y + 6 + ph), 20, (230, 57, 70))
-        draw.text((84, y + 14), price, font=pf, fill=(255, 255, 255))
-    if business_name:
-        bf = _load_font(_FONT_REGULAR, 34)
-        bbox = draw.textbbox((0, 0), business_name, font=bf)
-        draw.text((size - 60 - (bbox[2] - bbox[0]), size - 60), business_name, font=bf, fill=(230, 230, 230))
-
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=88)
+    # JPEG: con foto pesa ~1/4 que PNG (datos del cliente) y se guarda en
+    # 0.1 s en vez de 2 s. 4:4:4 para que el texto rojo no se vea borroso.
+    img.save(buf, format="JPEG", quality=90, subsampling=0, optimize=True)
     return buf.getvalue()

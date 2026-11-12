@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from PIL import Image
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.config import settings
 from app.database import AsyncSessionLocal
@@ -32,6 +32,11 @@ VARIANTS = ["📱 2x1 en micas este viernes en CityCell. Pídelo aquí.", "Otra 
 AUDIO = "https://cdn.test/cuna.ogg"
 PHOTO = f"{settings.BASE_URL}/api/v1/radio/audio/products/mica.jpg"
 DELAY = "app.workers.tasks.schedule_campaign.delay"
+
+
+def _mine(user_id) -> str:
+    """Una foto que ese dueño subió (products/<su id>/…)."""
+    return f"{settings.BASE_URL}/api/v1/radio/audio/products/{user_id}/foto.jpg"
 
 
 def _jpeg() -> bytes:
@@ -158,13 +163,13 @@ class TestCampanaQuePregunta:
             r = await _turn(user_id, text="2x1 en micas este viernes")
             r = await _turn(user_id, r["campaign_id"], "f:photo")
             assert r["step"] == "photo" and r["input"] == "photo"
-            assert [c["label"] for c in r["choices"]] == ["Foto de Mica templada", "Subir una foto", "Cartel de colores"]
+            assert [c["label"] for c in r["choices"]] == ["Foto de Mica templada", "📷 Tomar otra foto", "Sin foto"]
             r = await _turn(user_id, r["campaign_id"], r["choices"][0]["id"])
             assert r["step"] == "preview" and r["preview"]["kind"] == "image"
             assert r["preview"]["image_url"].endswith(".jpg") and r["preview"]["text"] == VARIANTS[0]
-            ai["read"].assert_awaited_with(PHOTO)
+            ai["read"].assert_any_await(PHOTO)
             content = ai["upload"].await_args.args[0]
-            assert Image.open(io.BytesIO(content)).size == (1080, 1080)  # su foto, cuadrada, con la franja
+            assert Image.open(io.BytesIO(content)).size == (1080, 1080)  # su foto en el cartel de oferta
             camp = await _camp(r["campaign_id"])
             assert camp.ab_test["photo_fixed"] is True and camp.ab_test["campaign_mode"] == "banner"
         finally:
@@ -438,12 +443,13 @@ class TestPruebasFinales:
         try:
             r = await _turn(user_id, text="2x1 en micas")
             r = await _turn(user_id, r["campaign_id"], "f:photo")
-            assert [c["label"] for c in r["choices"]] == ["Subir una foto", "Cartel de colores"]
+            assert [c["label"] for c in r["choices"]] == ["📷 Tomar foto", "Sin foto"]
+            assert "¿Le tomas una foto?" in r["text"]
             r = await _turn(user_id, r["campaign_id"], "poster")
             assert r["step"] == "preview" and r["preview"]["kind"] == "image"
-            assert r["preview"]["image_url"].endswith(".png")
+            assert r["preview"]["image_url"].endswith(".jpg")
             ai["read"].assert_not_awaited()  # el cartel se dibuja en el servidor
-            assert ai["upload"].await_args.args[0].startswith(b"\x89PNG")
+            assert ai["upload"].await_args.args[0].startswith(b"\xff\xd8\xff")
             camp = await _camp(r["campaign_id"])
             assert camp.ab_test["photo_fixed"] is True and camp.ab_test["campaign_mode"] == "banner"
         finally:
@@ -455,10 +461,11 @@ class TestPruebasFinales:
         try:
             r = await _turn(user_id, text="2x1 en micas")
             r = await _turn(user_id, r["campaign_id"], "f:photo")
-            r = await _turn(user_id, r["campaign_id"], "upload", text=PHOTO)
+            mine = _mine(user_id)
+            r = await _turn(user_id, r["campaign_id"], "upload", text=mine)
             assert r["step"] == "preview" and r["preview"]["kind"] == "image"
             assert r["preview"]["text"] == VARIANTS[0]
-            ai["read"].assert_awaited_with(PHOTO)
+            ai["read"].assert_awaited_with(mine)
             content = ai["upload"].await_args.args[0]
             assert Image.open(io.BytesIO(content)).size == (1080, 1080)
         finally:
@@ -619,13 +626,10 @@ class TestCartelDeOferta:
         try:
             async with AsyncSessionLocal() as db:
                 user = await db.get(User, user_id)
-                user.slug, user.delivers_home = "citycell-prueba", True
-                user.meta_display_phone_number = "+52 1 953 172 4341"
-                offer, photo, logo = await cb._offer_details(db, user, "mica templada a $60 solo mañana")
+                mica = (await db.execute(select(Product).where(Product.advertiser_id == user_id))).scalar_one()
+                offer, photo, logo = await cb._offer_details(db, user, "mica templada a $60 solo mañana", f"p:{mica.id}")
             assert offer.old_price == "$80" and offer.price == "$60"
             assert photo is not None and logo is None
-            assert "953 172 4341" in offer.contact and "/sitio/citycell-prueba" in offer.contact
-            assert "domicilio" in offer.delivery
             assert offer.when != "Solo mañana" and offer.when.lower().startswith(("solo hoy · ", "solo el "))
         finally:
             await _clean(user_id)
@@ -708,16 +712,147 @@ class TestCartelDeOferta:
         # "Solo hoy" escrito de madrugada no se vuelve una fecha que ya pasó.
         assert concrete_when("Solo hoy", today, send) == "Solo hoy"
 
+
+class TestCartelQueConvence:
+    """docs/specs/2026-11-12-cartel-que-convence.md: el cartel lleva la foto del
+    producto; si el Catálogo no la tiene, se le pide al dueño y se guarda."""
+
+    @staticmethod
+    async def _add(user_id, name, price, photo=None):
+        async with AsyncSessionLocal() as db:
+            p = Product(advertiser_id=user_id, name=name, price=Decimal(price), photo_url=photo)
+            db.add(p)
+            await db.commit()
+            return p.id
+
+    @staticmethod
+    async def _to_photo(user_id, what):
+        r = await _turn(user_id, text=what)
+        return await _turn(user_id, r["campaign_id"], "f:photo")
+
     @pytest.mark.asyncio
-    async def test_ven_hoy_no_choca_con_otro_dia(self, ai, monkeypatch):
-        import datetime as dt
-        user_id, _ = await _owner()
-        ai["offer"].return_value = OfferCopy(product="Cargador", price="$100", when="Este viernes", cta="Ven hoy")
-        monkeypatch.setattr(cb, "_send_day", lambda: (dt.date(2026, 11, 11), dt.date(2026, 11, 11)))
+    async def test_caso1_con_foto_en_el_catalogo_es_el_primer_boton(self, ai):
+        user_id, _ = await _owner(photo=True)  # Mica templada $80 con foto
         try:
+            r = await self._to_photo(user_id, "mica templada a $60 solo mañana")
+            assert r["choices"][0]["label"] == "Foto de Mica templada"
+            r = await _turn(user_id, r["campaign_id"], r["choices"][0]["id"])
+            assert r["step"] == "preview" and r["preview"]["image_url"].endswith(".jpg")
+            ai["read"].assert_any_await(PHOTO)
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso2_sin_foto_pide_tomarla_y_no_ofrece_fotos_de_otra_cosa(self, ai):
+        user_id, _ = await _owner()
+        await self._add(user_id, "Cargador marca", 120)  # sin foto
+        await self._add(user_id, "Funda roja", 90, PHOTO)  # otra cosa, con foto
+        try:
+            r = await self._to_photo(user_id, "cargador marca a $100 solo mañana")
+            assert r["step"] == "photo"
+            assert "¿Le tomas una foto? Con la foto de «Cargador marca»" in r["text"]
+            assert [c["label"] for c in r["choices"]] == ["📷 Tomar foto", "Sin foto"]
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso3_la_foto_tomada_se_guarda_en_el_catalogo(self, ai):
+        user_id, _ = await _owner()
+        pid = await self._add(user_id, "Cargador marca", 120)
+        try:
+            r = await self._to_photo(user_id, "cargador marca a $100 solo mañana")
+            r = await _turn(user_id, r["campaign_id"], "upload", text=_mine(user_id))
+            assert r["step"] == "preview"
             async with AsyncSessionLocal() as db:
-                user = await db.get(User, user_id)
-                offer, _, _ = await cb._offer_details(db, user, "cargador a $100 este viernes")
-            assert offer.when == "El viernes 13" and offer.cta == "Aparta el tuyo"
+                assert (await db.get(Product, pid)).photo_url == _mine(user_id)
+            # La próxima promo de ese producto ya no la pide.
+            r = await self._to_photo(user_id, "cargador marca a $90 este viernes")
+            assert r["choices"][0]["label"] == "Foto de Cargador marca"
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso3_no_cambia_la_foto_que_ya_tenia(self, ai):
+        user_id, _ = await _owner(photo=True)
+        try:
+            r = await self._to_photo(user_id, "mica templada a $60")
+            r = await _turn(user_id, r["campaign_id"], "upload", text=_mine(user_id))
+            async with AsyncSessionLocal() as db:
+                mica = (await db.execute(select(Product).where(Product.advertiser_id == user_id))).scalar_one()
+            assert mica.photo_url == PHOTO
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso4_si_no_esta_en_el_catalogo_no_se_crea(self, ai):
+        user_id, _ = await _owner()
+        try:
+            r = await self._to_photo(user_id, "audífonos bluetooth a $250")
+            r = await _turn(user_id, r["campaign_id"], "upload", text=_mine(user_id))
+            assert r["step"] == "preview" and r["preview"]["kind"] == "image"
+            async with AsyncSessionLocal() as db:
+                rows = (await db.execute(select(Product).where(Product.advertiser_id == user_id))).scalars().all()
+            assert rows == []
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso5_sin_foto_sale_el_cartel_de_letras(self, ai):
+        user_id, _ = await _owner()
+        try:
+            r = await self._to_photo(user_id, "2x1 en micas")
+            r = await _turn(user_id, r["campaign_id"], "poster")
+            assert r["step"] == "preview" and r["preview"]["kind"] == "image"
+            ai["read"].assert_not_awaited()
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso11_foto_de_otro_negocio_no_se_abre(self, ai):
+        user_id, _ = await _owner()
+        try:
+            r = await self._to_photo(user_id, "2x1 en micas")
+            other = f"{settings.BASE_URL}/api/v1/radio/audio/products/{uuid.uuid4()}/foto.jpg"
+            r = await _turn(user_id, r["campaign_id"], "upload", text=other)
+            assert r["step"] == "photo" and r["text"].startswith("No pude abrir esa foto")
+            assert [c["label"] for c in r["choices"]] == ["📷 Tomar foto", "Sin foto"]
+            ai["read"].assert_not_awaited()
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso2_palabras_de_relleno_no_ofrecen_otra_foto(self, ai):
+        """"Mica para iPhone" no es la "Funda para Samsung" (solo comparten "para")."""
+        user_id, _ = await _owner()
+        await self._add(user_id, "Funda para Samsung", 200, PHOTO)
+        try:
+            r = await self._to_photo(user_id, "Mica para iPhone a $50")
+            assert [c["label"] for c in r["choices"]] == ["📷 Tomar foto", "Sin foto"]
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso3_la_foto_se_guarda_segun_el_texto_del_dueno_no_de_la_ia(self, ai):
+        user_id, _ = await _owner()
+        fid = await self._add(user_id, "Funda Samsung", 200)  # sin foto
+        ai["offer"].return_value = OfferCopy(product="Funda Samsung", price="$150")  # la IA se equivoca
+        try:
+            r = await self._to_photo(user_id, "cargador para samsung a $150")
+            await _turn(user_id, r["campaign_id"], "upload", text=_mine(user_id))
+            async with AsyncSessionLocal() as db:
+                assert (await db.get(Product, fid)).photo_url is None
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_caso11_direccion_disfrazada_de_otro_negocio_no_se_abre(self, ai):
+        user_id, _ = await _owner()
+        try:
+            r = await self._to_photo(user_id, "2x1 en micas")
+            fake = (f"{settings.BASE_URL}/api/v1/radio/audio/products/{uuid.uuid4()}/x.jpg"
+                    f"?a=/products/{user_id}/")
+            r = await _turn(user_id, r["campaign_id"], "upload", text=fake)
+            assert r["step"] == "photo" and r["text"].startswith("No pude abrir esa foto")
+            ai["read"].assert_not_awaited()
         finally:
             await _clean(user_id)

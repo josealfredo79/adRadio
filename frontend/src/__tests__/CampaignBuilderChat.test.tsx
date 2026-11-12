@@ -94,9 +94,9 @@ describe('CampaignBuilderChat', () => {
     post.mockImplementation((url: string) => Promise.resolve(url === '/copilot/photo'
       ? { data: { url: 'https://cdn.test/subida.jpg' } }
       : { data: step({ step: 'preview', text: 'Así la ve tu cliente.', preview: { kind: 'image', text: '2x1 en micas', image_url: 'https://cdn.test/subida.jpg', audio_url: null } }) }))
-    renderChat(step({ step: 'photo', text: '¿Con qué foto?', input: 'photo', choices: [ch('upload', 'Subir una foto'), ch('poster', 'Cartel de colores')] }))
+    renderChat(step({ step: 'photo', text: '¿Con qué foto?', input: 'photo', choices: [ch('upload', '📷 Tomar foto'), ch('poster', 'Sin foto')] }))
     const file = new File(['foto'], 'mica.jpg', { type: 'image/jpeg' })
-    fireEvent.change(screen.getByLabelText('Subir una foto'), { target: { files: [file] } })
+    fireEvent.change(screen.getByLabelText('Tomar o subir una foto'), { target: { files: [file] } })
     expect(await screen.findByText('Así la ve tu cliente.')).toBeDefined()
     expect(post).toHaveBeenCalledWith('/copilot/photo', expect.any(FormData))
     await waitFor(() => expect(post).toHaveBeenCalledWith('/campaigns/builder',

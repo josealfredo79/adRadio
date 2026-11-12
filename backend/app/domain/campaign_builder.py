@@ -217,21 +217,39 @@ def _send_day(now_local: datetime | None = None):
     return written.date(), at.date()
 
 
-async def _offer_details(db, user, what: str):
-    """Lo que el cartel de oferta saca del negocio, no de la IA: el producto
-    del catálogo (foto y precio normal → "Antes $X"), el logo, la fecha
-    concreta y cómo comprar."""
+def _own_upload(user, url: str | None) -> bool:
+    """Una foto que el dueño subió por el Copiloto (products/<su id>/…), no la
+    de otro negocio: la ruta debe EMPEZAR así, sin "?…" ni "#…" que la disfracen."""
+    from urllib.parse import urlsplit
+
     from app.config import settings
+
+    if not _own_file(url):
+        return False
+    parts = urlsplit(url)
+    if parts.query or parts.fragment or ".." in parts.path:
+        return False
+    clean = url.split("?")[0].split("#")[0]
+    roots = [f"{settings.BASE_URL}/api/v1/radio/audio/products/{user.id}/"]
+    public = (settings.CF_R2_PUBLIC_URL or "").rstrip("/")
+    if public:
+        roots.append(f"{public}/products/{user.id}/")
+    return any(clean.startswith(r) for r in roots)
+
+
+async def _offer_details(db, user, what: str, source: str = "poster"):
+    """Lo que el cartel de oferta saca del negocio, no de la IA: el precio
+    normal del Catálogo ("Antes $X"), la foto escogida, el logo y la fecha
+    concreta (spec docs/specs/2026-11-12-cartel-que-convence.md).
+    source: "poster" (sin foto), "p:<id>" (foto del Catálogo) o la URL de la
+    foto que acaba de subir; si el producto del Catálogo no tenía foto, se le
+    guarda esa (la próxima promo ya no la pide)."""
     from app.services.banner_service import _amount, concrete_when, generate_offer_copy
     from app.services.storage_service import read_bytes
 
     offer = await generate_offer_copy(user.business_name or "", what)
     today, send_day = _send_day()
     offer.when = concrete_when(offer.when, today, send_day)
-    # "Ven hoy" con una oferta que es otro día ("Solo el viernes 13") se contradice.
-    if re.search(r"\bhoy\b", offer.cta, re.IGNORECASE) and offer.when \
-            and not re.search(r"\bhoy\b", offer.when, re.IGNORECASE):
-        offer.cta = "Aparta el tuyo"
 
     async def _read(url):
         # Una foto o logo que no se puede leer no tumba el cartel: va sin ella.
@@ -244,30 +262,25 @@ async def _offer_details(db, user, what: str):
             return None
 
     product = await _offer_product(db, user, f"{what} {offer.product}")
-    photo = None
     if product:
         catalog = _amount(_price(product))
         if offer.price and not offer.old_price and catalog > _amount(offer.price):
             offer.old_price = _price(product)
-        photo = await _read(product.photo_url)
+
+    photo = None
+    if source.startswith("p:"):
+        chosen = await db.get(Product, uuid.UUID(source[2:]))
+        if chosen and chosen.advertiser_id == user.id:
+            photo = await _read(chosen.photo_url)
+    elif source != "poster" and _own_upload(user, source):
+        photo = await _read(source)
+        # Dónde se guarda se decide solo con el texto del dueño (como al pedir
+        # la foto): el nombre que sacó la IA podría señalar otro producto.
+        target = await _offer_product(db, user, what) if photo else None
+        if target and not target.photo_url:
+            target.photo_url = source
     logo = await _read(user.logo_url)
-
-    if user.delivers_home is True:
-        offer.delivery = "Recoge en tienda o te lo llevamos a domicilio"
-    contact = []
-    if user.meta_display_phone_number:
-        contact.append(f"WhatsApp {_pretty_phone(user.meta_display_phone_number)}")
-    if user.slug:
-        host = re.sub(r"^https?://(www\.)?", "", settings.BASE_URL.rstrip("/"))
-        contact.append(f"{host}/sitio/{user.slug}")
-    offer.contact = " · ".join(contact)
     return offer, photo, logo
-
-
-def _pretty_phone(raw: str) -> str:
-    """"+52 1 953 172 4341" / "529531724341" → "953 172 4341"."""
-    digits = re.sub(r"\D", "", raw or "")[-10:]
-    return f"{digits[:3]} {digits[3:6]} {digits[6:]}" if len(digits) == 10 else raw
 
 
 _STOP = {"para", "solo", "desde", "hasta", "como", "todo", "todos", "toda", "todas", "este", "esta",
@@ -310,41 +323,30 @@ async def _offer_product(db, user, what: str) -> Product | None:
 
 async def _make_photo(db, user, camp, state) -> str | None:
     from app.services.banner_service import (
+        concrete_caption,
         offer_banner_png,
-        photo_banner_png,
         select_design,
     )
-    from app.services.storage_service import read_bytes, upload_bytes
+    from app.services.storage_service import upload_bytes
 
     error = await _make_text(db, user, camp, state)
     if error:
         return error
     source = state.get("photo") or "poster"
     try:
-        if source == "poster":
-            design = select_design(user.business_category, "promo")
-            offer, photo, logo = await _offer_details(db, user, state["what"])
-            # El texto de abajo dice la misma fecha que el cartel.
-            from app.services.banner_service import concrete_caption
-            camp.message_text = concrete_caption(camp.message_text, *_send_day())
-            png, ext, ctype = offer_banner_png(offer, design.palette, photo, logo), "png", "image/png"
-        else:
-            product = None
-            url = source
-            if source.startswith("p:"):
-                product = await db.get(Product, uuid.UUID(source[2:]))
-                url = product.photo_url if product and product.advertiser_id == user.id else ""
-            raw = await read_bytes(url) if _own_file(url) else None
-            if not raw:
-                return "No pude abrir esa foto. Escoge otra o toca «Cartel de colores»."
-            png = photo_banner_png(raw, camp.name, _price(product), user.business_name or "")
-            ext, ctype = "jpg", "image/jpeg"
+        design = select_design(user.business_category, "promo")
+        offer, photo, logo = await _offer_details(db, user, state["what"], source)
+        if source != "poster" and not photo:
+            return "No pude abrir esa foto. Tómale otra o toca «Sin foto»."
+        # El texto de abajo dice la misma fecha que el cartel.
+        camp.message_text = concrete_caption(camp.message_text, *_send_day())
+        png, ext, ctype = offer_banner_png(offer, design.palette, photo, logo), "jpg", "image/jpeg"
         image_url = await upload_bytes(png, f"campaign_banners/{user.id}/{uuid.uuid4()}.{ext}", ctype)
     except Exception:
         logger.warning("[BUILDER] photo failed user=%s", user.id, exc_info=True)
         image_url = None
     if not image_url:
-        return "No pude armar la imagen ahorita. Toca «Otra versión» o «Cartel de colores»."
+        return "No pude armar la imagen ahorita. Toca «Otra versión» o «Sin foto»."
     camp.image_url = image_url
     # photo_fixed: se manda esta misma imagen a todos (no una por cliente).
     _save(camp, state, campaign_mode="banner", photo_fixed=True, banner_caption=camp.message_text)
@@ -404,10 +406,17 @@ async def _ask(db: AsyncSession, user: User, camp: Campaign, note: str = "") -> 
         return _reply(camp, step, f"{lead}¿De qué estilo la cuña?", [_choice(f"s:{m}", _label(STYLES, m)) for m in order])
 
     if step == "photo":
-        products = await _photo_products(db, user, state["what"])
-        choices = [_choice(f"p:{p.id}", f"Foto de {p.name}"[:40]) for p in products]
-        choices += [_choice("upload", "Subir una foto"), _choice("poster", "Cartel de colores")]
-        return _reply(camp, step, f"{lead}¿Con qué foto?", choices, input_="photo")
+        # Con la foto del producto el cartel antoja; sin ella es un letrero de
+        # precios. Si el Catálogo no la tiene, se le pide al dueño.
+        products = await _photo_products(db, user, state["what"], only_matches=True)
+        if products:
+            choices = [_choice(f"p:{p.id}", f"Foto de {p.name}"[:40]) for p in products]
+            choices += [_choice("upload", "📷 Tomar otra foto"), _choice("poster", "Sin foto")]
+            return _reply(camp, step, f"{lead}¿Con qué foto?", choices, input_="photo")
+        name = await _offer_name(db, user, state["what"])
+        ask = f"¿Le tomas una foto? Con la foto {name} tu promo se ve mucho mejor."
+        choices = [_choice("upload", "📷 Tomar foto"), _choice("poster", "Sin foto")]
+        return _reply(camp, step, f"{lead}{ask}", choices, input_="photo")
 
     if step == "preview":
         kind = state["format"]
@@ -466,19 +475,33 @@ async def _ask_send(db, user, camp, lead: str) -> dict:
     return _reply(camp, "send", text, choices)
 
 
-async def _photo_products(db, user, what: str, limit: int = 3) -> list[Product]:
+async def _offer_name(db, user, what: str) -> str:
+    """"de «Cargador marca»" para pedir la foto (sin "al/a la": no sabemos el
+    género): el nombre del Catálogo si se encuentra sin duda, si no lo que
+    escribió el dueño sin precio ni fecha."""
+    from app.services.banner_service import _offer_from_text
+
+    product = await _offer_product(db, user, what)
+    name = product.name if product else _offer_from_text(what, "").product
+    name = (name or "").strip()
+    return f"de «{name[:1].upper()}{name[1:]}»" if name and len(name) <= 40 else "de tu producto"
+
+
+async def _photo_products(db, user, what: str, limit: int = 3, only_matches: bool = False) -> list[Product]:
     rows = (await db.execute(
         select(Product).where(Product.advertiser_id == user.id, Product.active.is_(True),
                               Product.photo_url.is_not(None), Product.photo_url != "")
     )).scalars().all()
-    words = {w for w in re.findall(r"\w{3,}", what.lower())}
+    said = _words(what)
 
     def score(p: Product) -> int:
-        name = p.name.lower()
-        # "micas" ~ "mica": basta con que la palabra empiece igual (4 letras).
-        return sum(1 for w in words if w[:4] in name)
+        # Palabras reales del nombre (sin "para", "con"…), singular ~ plural:
+        # "Mica para iPhone" no comparte nada con "Funda para Samsung".
+        return sum(1 for n in _words(p.name) if any(_same_word(n, w) for w in said))
 
-    return [p for p in sorted(rows, key=score, reverse=True) if score(p) > 0][:limit] or rows[:limit]
+    matches = [p for p in sorted(rows, key=score, reverse=True) if score(p) > 0][:limit]
+    # Para escoger foto solo sirven las del producto de la promo, no otras.
+    return matches if only_matches else (matches or rows[:limit])
 
 
 # ── Avanzar ────────────────────────────────────────────────────────────────────

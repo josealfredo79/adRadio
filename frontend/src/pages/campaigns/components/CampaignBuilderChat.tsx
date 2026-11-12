@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Mic, Send, Square } from 'lucide-react'
 import api, { getApiError } from '@/lib/api'
 import { canRecordVoice, micErrorMessage, startVoiceRecording, type VoiceSession } from '@/lib/voiceRecorder'
+import { shrinkPhoto } from '@/lib/shrinkPhoto'
 
 // La campaña que pregunta (docs/specs/2026-10-29-campana-que-pregunta.md): el
 // bot pregunta una cosa a la vez con botones. La lógica vive en el backend
@@ -117,7 +118,7 @@ export function CampaignBuilderChat({ initial, onDone }: { initial?: BuilderStep
     setError('')
     try {
       const form = new FormData()
-      form.append('file', file)
+      form.append('file', await shrinkPhoto(file))
       const { data } = await api.post<{ url: string }>('/copilot/photo', form)
       setBusy(null)
       await turn({ choice: 'upload', text: data.url }, '📷 Mi foto')
@@ -205,7 +206,7 @@ export function CampaignBuilderChat({ initial, onDone }: { initial?: BuilderStep
       )}
 
       <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
-             aria-label="Subir una foto" onChange={(e) => void upload(e.target.files?.[0])} />
+             aria-label="Tomar o subir una foto" onChange={(e) => void upload(e.target.files?.[0])} />
 
       {textInput && (
         <div className="flex gap-2">
