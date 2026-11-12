@@ -201,9 +201,108 @@ def _own_file(url: str | None) -> bool:
     return bool(public) and url.startswith(f"{public}/")
 
 
+def _send_day(now_local: datetime | None = None):
+    """El día (hora de México) en que el mensaje le llega al cliente: hoy, o
+    el siguiente horario de envío si ya es de noche o domingo."""
+    from app.services.messaging_throttle import (
+        _is_human_hour_at,
+        _next_human_hour_after,
+    )
+
+    now_local = now_local or datetime.now(timezone(timedelta(hours=-6)))
+    at = now_local if _is_human_hour_at(now_local) else _next_human_hour_after(now_local)
+    return now_local.date(), at.date()
+
+
+async def _offer_details(db, user, what: str):
+    """Lo que el cartel de oferta saca del negocio, no de la IA: el producto
+    del catálogo (foto y precio normal → "Antes $X"), el logo, la fecha
+    concreta y cómo comprar."""
+    from app.config import settings
+    from app.services.banner_service import _amount, concrete_when, generate_offer_copy
+    from app.services.storage_service import read_bytes
+
+    offer = await generate_offer_copy(user.business_name or "", what)
+    today, send_day = _send_day()
+    offer.when = concrete_when(offer.when, today, send_day)
+
+    async def _read(url):
+        # Una foto o logo que no se puede leer no tumba el cartel: va sin ella.
+        if not _own_file(url):
+            return None
+        try:
+            return await read_bytes(url)
+        except Exception:
+            logger.warning("[BUILDER] offer image unreadable url=%s", url, exc_info=True)
+            return None
+
+    product = await _offer_product(db, user, f"{what} {offer.product}")
+    photo = None
+    if product:
+        catalog = _amount(_price(product))
+        if offer.price and not offer.old_price and catalog > _amount(offer.price):
+            offer.old_price = _price(product)
+        photo = await _read(product.photo_url)
+    logo = await _read(user.logo_url)
+
+    if user.delivers_home is True:
+        offer.delivery = "Recoge en tienda o te lo llevamos a domicilio"
+    contact = []
+    if user.meta_display_phone_number:
+        contact.append(f"WhatsApp {_pretty_phone(user.meta_display_phone_number)}")
+    if user.slug:
+        host = re.sub(r"^https?://(www\.)?", "", settings.BASE_URL.rstrip("/"))
+        contact.append(f"{host}/sitio/{user.slug}")
+    offer.contact = " · ".join(contact)
+    return offer, photo, logo
+
+
+def _pretty_phone(raw: str) -> str:
+    """"+52 1 953 172 4341" / "529531724341" → "953 172 4341"."""
+    digits = re.sub(r"\D", "", raw or "")[-10:]
+    return f"{digits[:3]} {digits[3:6]} {digits[6:]}" if len(digits) == 10 else raw
+
+
+_STOP = {"para", "solo", "desde", "hasta", "como", "todo", "todos", "toda", "todas", "este", "esta",
+          "estos", "estas", "nuevo", "nueva", "promo", "oferta", "precio", "pesos", "cada", "unos", "unas",
+          "con", "sin", "por", "del", "las", "los", "una", "uno"}
+
+
+def _words(text: str) -> set[str]:
+    plain = (text or "").lower().translate(str.maketrans("áéíóúü", "aeiouu"))
+    return {w for w in re.findall(r"[a-zñ0-9]{3,}", plain) if w not in _STOP}
+
+
+def _same_word(a: str, b: str) -> bool:
+    """Igual, o singular/plural ("mica" ~ "micas", "cargador" ~ "cargadores")."""
+    short, long_ = sorted((a, b), key=len)
+    return long_.startswith(short) and len(long_) - len(short) <= 2
+
+
+async def _offer_product(db, user, what: str) -> Product | None:
+    """El producto del catálogo del que habla la promo, solo si no hay duda:
+    TODAS las palabras del nombre del catálogo deben estar en el texto (si no,
+    "cargador para samsung" escogería "Funda para Samsung" y su "Antes $X").
+    Con dos igual de específicos no se escoge ninguno."""
+    rows = (await db.execute(
+        select(Product).where(Product.advertiser_id == user.id, Product.active.is_(True))
+    )).scalars().all()
+    said = _words(what)
+    full = []
+    for p in rows:
+        need = _words(p.name)
+        if need and all(any(_same_word(n, s) for s in said) for n in need):
+            full.append((len(need), p))
+    if not full:
+        return None
+    full.sort(key=lambda t: t[0], reverse=True)
+    if len(full) > 1 and full[1][0] == full[0][0]:
+        return None
+    return full[0][1]
+
+
 async def _make_photo(db, user, camp, state) -> str | None:
     from app.services.banner_service import (
-        generate_offer_copy,
         offer_banner_png,
         photo_banner_png,
         select_design,
@@ -217,8 +316,8 @@ async def _make_photo(db, user, camp, state) -> str | None:
     try:
         if source == "poster":
             design = select_design(user.business_category, "promo")
-            offer = await generate_offer_copy(user.business_name or "", state["what"])
-            png, ext, ctype = offer_banner_png(offer, design.palette), "png", "image/png"
+            offer, photo, logo = await _offer_details(db, user, state["what"])
+            png, ext, ctype = offer_banner_png(offer, design.palette, photo, logo), "png", "image/png"
         else:
             product = None
             url = source

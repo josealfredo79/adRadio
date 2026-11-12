@@ -943,7 +943,8 @@ _TRAILING_RE = re.compile(r"(?:\s+(?:a|en|por|de|x|baja|bajan|solo|desde|hasta))
 
 class OfferCopy:
     def __init__(self, product: str = "", price: str = "", old_price: str = "", when: str = "",
-                 price_note: str = "", sub: str = "", cta: str = "", business_name: str = ""):
+                 price_note: str = "", sub: str = "", cta: str = "", business_name: str = "",
+                 contact: str = "", delivery: str = ""):
         self.product = product
         self.price = price
         self.old_price = old_price
@@ -952,6 +953,54 @@ class OfferCopy:
         self.sub = sub
         self.cta = cta
         self.business_name = business_name
+        # Datos reales del negocio para la barra de abajo (no de la IA).
+        self.contact = contact
+        self.delivery = delivery
+
+
+_DAYS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+_DAYS_PLAIN = ("lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo")
+
+
+def concrete_when(when: str, today, send_day) -> str:
+    """"Solo mañana" escrito de noche sale a las 8:00 del día siguiente: el
+    cliente leería "mañana" = pasado mañana. Se cambia por la fecha concreta
+    contada desde el día en que el dueño la escribió (today), y se dice "hoy"
+    si cae el día en que llega el mensaje (send_day)."""
+    from datetime import timedelta
+
+    if not when:
+        return when
+    low = when.lower()
+    plain = low.translate(str.maketrans("áéíóúñ", "aeioun"))
+    # Rangos o repeticiones ("de lunes a viernes", "todos los martes", "hoy y
+    # mañana", "desde mañana") se dejan tal cual: una sola fecha los acortaría.
+    named = sum(1 for d in (*_DAYS_PLAIN, "hoy", "manana") if re.search(rf"\b{d}\b", plain))
+    if named > 1 or re.search(r"\b(a|al|y|e|o|todos|todas|los|las|desde|cada|entre|diario|semana)\b", plain):
+        return when
+    target = None
+    if "pasado manana" in plain:
+        target = today + timedelta(days=2)
+    elif re.search(r"\bmanana\b", plain) and not re.search(r"\b(la|las|en|por|de)\s+manana", plain):
+        target = today + timedelta(days=1)
+    elif re.search(r"\bhoy\b", plain):
+        target = today
+    else:
+        for i, day in enumerate(_DAYS_PLAIN):
+            if re.search(rf"\b{day}\b", plain):
+                if i == today.weekday():
+                    return when  # "hasta el lunes" dicho en lunes: ¿hoy o el otro? No se adivina.
+                target = today + timedelta(days=(i - today.weekday()) % 7)
+                break
+    if target is None:
+        return when
+    label = f"{_DAYS[target.weekday()]} {target.day}"
+    if "hasta" in plain:
+        return f"Hasta hoy · {label}" if target == send_day else f"Hasta el {label}"
+    solo = "Solo " if "solo" in plain or "unicamente" in plain else ""
+    if target == send_day:
+        return f"{solo}hoy · {label}".capitalize()
+    return f"{solo}el {label}".capitalize()
 
 
 def _offer_font(size: int, weight: int = 900) -> ImageFont.FreeTypeFont:
@@ -1110,13 +1159,51 @@ def _darker(c: tuple, k: float = 0.55) -> tuple:
     return tuple(int(v * k) for v in c)
 
 
-def offer_banner_png(offer: OfferCopy, palette_name: str = "promo") -> bytes:
-    """Cartel 1080×1080 dibujado al doble y reducido (bordes suaves)."""
+def _square(photo: bytes | None, side: int) -> Image.Image | None:
+    if not photo:
+        return None
+    try:
+        img = Image.open(io.BytesIO(photo)).convert("RGB")
+    except Exception:
+        logger.warning("[BANNER] offer photo unreadable", exc_info=True)
+        return None
+    m = min(img.size)
+    left, top = (img.width - m) // 2, (img.height - m) // 2
+    return img.crop((left, top, left + m, top + m)).resize((side, side), Image.LANCZOS)
+
+
+def _rounded(img: Image.Image, radius: int) -> Image.Image:
+    mask = Image.new("L", img.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, img.width - 1, img.height - 1], radius=radius, fill=255)
+    out = img.convert("RGBA")
+    out.putalpha(mask)
+    return out
+
+
+def _paste_shadow(img: Image.Image, box: tuple, radius: int, S: int, round_: bool = False) -> None:
+    x0, y0, x1, y1 = box
+    sh = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(sh)
+    if round_:
+        d.ellipse([x0 + 10 * S, y0 + 18 * S, x1 + 10 * S, y1 + 18 * S], fill=(0, 0, 0, 120))
+    else:
+        d.rounded_rectangle([x0 + 10 * S, y0 + 18 * S, x1 + 10 * S, y1 + 18 * S], radius=radius, fill=(0, 0, 0, 110))
+    sh = sh.filter(ImageFilter.GaussianBlur(18 * S))
+    img.paste(sh, (0, 0), sh)
+
+
+def offer_banner_png(offer: OfferCopy, palette_name: str = "promo", photo: bytes | None = None,
+                     logo: bytes | None = None) -> bytes:
+    """Cartel de oferta 1080×1080, dibujado al doble y reducido (bordes suaves).
+    Con foto: la foto del producto en una tarjeta y la estrella encima de su
+    esquina. Sin foto: la estrella grande a la derecha."""
     c1, c2, accent = PALETTES.get(palette_name, PALETTES["promo"])
     S, size = 2, 1080
     W = H = size * S
     deep = _darker(c1, 0.6)
     pad = 70 * S
+    bar_h = 200 * S
+    bar_y = H - bar_h
 
     # Fondo: degradado radial, rayas diagonales y semitono en una esquina.
     mask = Image.radial_gradient("L").resize((int(W * 1.6), int(H * 1.6)))
@@ -1130,36 +1217,50 @@ def offer_banner_png(offer: OfferCopy, palette_name: str = "promo") -> bytes:
         for gx in range(0, 380 * S, 26 * S):
             r = max(0.0, (380 * S - math.hypot(gx, gy)) / (380 * S)) * 6 * S
             if r > 0.6 * S:
-                x, y = gx, H - 150 * S - gy
+                x, y = gx, bar_y - 20 * S - gy
                 ld.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, 30))
     img.paste(lay, (0, 0), lay)
     draw = ImageDraw.Draw(img)
 
-    # Sin precio, una oferta corta ("2x1", "20%") también va en la estrella.
     big = offer.price or (offer.price_note if len(offer.price_note) <= 6 else "")
-    has_price = bool(big)
-    text_w = (450 if has_price else 940) * S
+    pic = _square(photo, 420 * S)
+    text_w = (450 if (big or pic) else 940) * S
+    if pic:
+        text_w = 470 * S
 
-    # Etiqueta con el nombre del negocio
-    if offer.business_name:
-        bf, blines = _offer_fit(offer.business_name.upper(), 30 * S, 760 * S, 1, 800, 20 * S)
-        bw = bf.getlength(blines[0])
-        draw.rounded_rectangle([pad, 64 * S, pad + bw + 56 * S, 126 * S], radius=31 * S, fill=(255, 255, 255))
-        draw.text((pad + 28 * S, 95 * S), blines[0], font=bf, fill=deep, anchor="lm")
+    # Encabezado: logo redondo + nombre, o la etiqueta blanca con el nombre.
+    logo_img = _square(logo, 104 * S)
+    top = 60 * S
+    if logo_img:
+        ring = 112 * S
+        _paste_shadow(img, (pad, top, pad + ring, top + ring), 0, S // 2 or 1, round_=True)
+        draw = ImageDraw.Draw(img)
+        draw.ellipse([pad, top, pad + ring, top + ring], fill=(255, 255, 255))
+        lm = Image.new("L", logo_img.size, 0)
+        ImageDraw.Draw(lm).ellipse([0, 0, logo_img.width - 1, logo_img.height - 1], fill=255)
+        img.paste(logo_img, (pad + 4 * S, top + 4 * S), lm)
+        if offer.business_name:
+            nf, nl = _offer_fit(offer.business_name.upper(), 34 * S, 760 * S, 1, 800, 20 * S)
+            draw.text((pad + ring + 24 * S, top + ring / 2), nl[0], font=nf, fill=(255, 255, 255), anchor="lm")
+        y = top + ring + 50 * S
+    else:
+        if offer.business_name:
+            bf, blines = _offer_fit(offer.business_name.upper(), 30 * S, 760 * S, 1, 800, 20 * S)
+            bw = bf.getlength(blines[0])
+            draw.rounded_rectangle([pad, top + 4 * S, pad + bw + 56 * S, top + 66 * S], radius=31 * S,
+                                   fill=(255, 255, 255))
+            draw.text((pad + 28 * S, top + 35 * S), blines[0], font=bf, fill=deep, anchor="lm")
+        y = top + 130 * S
 
-    kf = _offer_font(30 * S, 700)
-    kx = pad
-    for ch in "OFERTA ESPECIAL":
-        draw.text((kx, 190 * S), ch, font=kf, fill=accent)
-        kx += kf.getlength(ch) + 5 * S
-
-    pf, lines = _offer_fit((offer.product or "Oferta").upper(), 120 * S, text_w, 3, 900, 48 * S)
-    y = 240 * S
+    # Producto + cinta, centrados en el alto libre de la izquierda.
+    pf, lines = _offer_fit((offer.product or "Oferta").upper(), 116 * S, text_w, 3, 900, 48 * S)
+    block = len(lines) * pf.size * 1.02 + (130 * S if offer.when else 0)
+    free_top, free_bot = y, bar_y - 40 * S
+    y = max(free_top, free_top + (free_bot - free_top - block) / 2 - 30 * S)
     for ln in lines:
         draw.text((pad + 5 * S, y + 6 * S), ln, font=pf, fill=_darker(deep, 0.6))
         draw.text((pad, y), ln, font=pf, fill=(255, 255, 255))
         y += pf.size * 1.02
-
     if offer.when:
         wf, wl = _offer_fit(offer.when.upper(), 40 * S, text_w - 70 * S, 1, 900, 24 * S)
         tw = wf.getlength(wl[0])
@@ -1169,9 +1270,25 @@ def offer_banner_png(offer: OfferCopy, palette_name: str = "promo") -> bytes:
         td.text((tag.width / 2, tag.height / 2), wl[0], font=wf, fill=c1, anchor="mm")
         tag = tag.rotate(4, expand=True, resample=Image.BICUBIC)
         img.paste(tag, (pad - 6 * S, int(y + 30 * S)), tag)
+        draw = ImageDraw.Draw(img)
 
-    if has_price:
-        cx, cy, ro = 790 * S, 560 * S, 255 * S
+    # Foto del producto en tarjeta blanca (derecha).
+    if pic:
+        px, py = W - pad - pic.width, 130 * S
+        card = (px - 12 * S, py - 12 * S, px + pic.width + 12 * S, py + pic.height + 12 * S)
+        _paste_shadow(img, card, 34 * S, S)
+        draw = ImageDraw.Draw(img)
+        draw.rounded_rectangle(card, radius=34 * S, fill=(255, 255, 255))
+        rp = _rounded(pic, 26 * S)
+        img.paste(rp, (px, py), rp)
+        draw = ImageDraw.Draw(img)
+
+    # Estrella con el precio: grande sola, o más chica sobre la esquina de la foto.
+    if big:
+        if pic:
+            cx, cy, ro = W - pad - pic.width / 2, 130 * S + pic.height + 90 * S, 165 * S
+        else:
+            cx, cy, ro = 790 * S, (free_top + free_bot) / 2, 255 * S
         sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         ImageDraw.Draw(sh).polygon(_star(cx + 14 * S, cy + 20 * S, ro, ro * 0.86), fill=(0, 0, 0, 120))
         sh = sh.filter(ImageFilter.GaussianBlur(18 * S))
@@ -1181,31 +1298,39 @@ def offer_banner_png(offer: OfferCopy, palette_name: str = "promo") -> bytes:
         draw.ellipse([cx - ro * 0.74, cy - ro * 0.74, cx + ro * 0.74, cy + ro * 0.74],
                      outline=_darker(accent, 0.85), width=4 * S)
         price_col = _darker(c1, 0.75) if sum(accent) > 400 else (255, 255, 255)
-        if offer.old_price:
-            of = _offer_font(40 * S, 700)
+        k = ro / (255 * S)
+        if offer.old_price and offer.price:
+            of = _offer_font(int(40 * S * k), 700)
             t = f"Antes {offer.old_price}"
-            draw.text((cx, cy - 115 * S), t, font=of, fill=price_col, anchor="mm")
+            oy = cy - 112 * S * k
+            draw.text((cx, oy), t, font=of, fill=price_col, anchor="mm")
             tw = of.getlength(t)
-            draw.line([(cx - tw / 2 - 6 * S, cy - 112 * S), (cx + tw / 2 + 6 * S, cy - 118 * S)],
-                      fill=price_col, width=5 * S)
-        prf, _ = _offer_fit(big, 170 * S, 330 * S, 1, 900, 60 * S)
-        draw.text((cx, cy + 10 * S), big, font=prf, fill=price_col, anchor="mm")
+            draw.line([(cx - tw / 2 - 6 * S, oy + 4 * S), (cx + tw / 2 + 6 * S, oy - 4 * S)],
+                      fill=price_col, width=max(3, int(5 * S * k)))
+        prf, _ = _offer_fit(big, int(170 * S * k), int(330 * S * k), 1, 900, 40 * S)
+        draw.text((cx, cy + 10 * S * k), big, font=prf, fill=price_col, anchor="mm")
         if offer.price_note and offer.price:
-            nf, nl = _offer_fit(offer.price_note.upper(), 30 * S, 300 * S, 1, 800, 20 * S)
-            draw.text((cx, cy + 120 * S), nl[0], font=nf, fill=price_col, anchor="mm")
+            nf, nl = _offer_fit(offer.price_note.upper(), int(30 * S * k), int(300 * S * k), 1, 800, 16 * S)
+            draw.text((cx, cy + 120 * S * k), nl[0], font=nf, fill=price_col, anchor="mm")
 
-    # Barra de abajo con la acción
-    bar_y = H - 170 * S
+    # Barra de abajo: la acción y cómo comprar (datos reales del negocio).
     draw.rectangle([0, bar_y, W, H], fill=(255, 255, 255))
     draw.rectangle([0, bar_y, W, bar_y + 10 * S], fill=accent if sum(accent) < 700 else c2)
-    if offer.sub:
-        sf, sl = _offer_fit(offer.sub, 30 * S, 800 * S, 1, 600, 22 * S)
-        draw.text((pad, bar_y + 55 * S), sl[0], font=sf, fill=(70, 70, 70), anchor="lm")
-    cf, cl = _offer_fit((offer.cta or "Pídelo aquí").upper(), 40 * S, 780 * S, 1, 900, 26 * S)
-    draw.text((pad, bar_y + (112 if offer.sub else 88) * S), cl[0], font=cf, fill=c1, anchor="lm")
-    ax, ay = W - pad - 50 * S, bar_y + 90 * S
+    info = [t for t in (offer.delivery, offer.contact) if t] or ([offer.sub] if offer.sub else [])
+    text_max = W - pad * 2 - 130 * S
+    cf, cl = _offer_fit((offer.cta or "Escríbenos hoy").upper(), 44 * S, text_max, 1, 900, 26 * S)
+    cta_y = bar_y + (62 if info else 105) * S
+    draw.text((pad, cta_y), cl[0], font=cf, fill=c1, anchor="lm")
+    iy = cta_y + 56 * S
+    for t in info[:2]:
+        f, tl = _offer_fit(t, 28 * S, text_max, 1, 600, 18 * S)
+        draw.text((pad, iy), tl[0], font=f, fill=(80, 80, 80), anchor="lm")
+        iy += 40 * S
+    # Flecha (no ▶: en WhatsApp parece video y la gente lo toca).
+    ax, ay = W - pad - 50 * S, bar_y + 105 * S
     draw.ellipse([ax - 50 * S, ay - 50 * S, ax + 50 * S, ay + 50 * S], fill=c1)
-    draw.polygon([(ax - 14 * S, ay - 22 * S), (ax + 22 * S, ay), (ax - 14 * S, ay + 22 * S)], fill=(255, 255, 255))
+    draw.line([(ax - 22 * S, ay), (ax + 18 * S, ay)], fill=(255, 255, 255), width=9 * S)
+    draw.polygon([(ax + 26 * S, ay), (ax + 4 * S, ay - 20 * S), (ax + 4 * S, ay + 20 * S)], fill=(255, 255, 255))
 
     img = img.resize((size, size), Image.LANCZOS)
     buf = io.BytesIO()

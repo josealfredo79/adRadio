@@ -150,3 +150,33 @@ async def test_precios_al_reves_se_acomodan():
     raw = json.dumps({"product": "Cargador", "price": "$120", "old_price": "$100"})
     o = await _offer(raw, "cargador de $120 a $100")
     assert o.price == "$100" and o.old_price == "$120"
+
+
+def test_fecha_concreta():
+    import datetime as dt
+    today, send = dt.date(2026, 11, 11), dt.date(2026, 11, 12)  # escrito miércoles de noche
+    assert bs.concrete_when("Solo mañana", today, send) == "Solo hoy · jueves 12"
+    assert bs.concrete_when("Hasta el sábado", today, send) == "Hasta el sábado 14"
+    assert bs.concrete_when("Este viernes", today, send) == "El viernes 13"
+    assert bs.concrete_when("en la mañana", today, send) == "en la mañana"
+    assert bs.concrete_when("todo noviembre", today, send) == "todo noviembre"
+    assert bs.concrete_when("Solo mañana", today, today + dt.timedelta(days=0)) == "Solo el jueves 12"
+
+
+def test_cartel_con_foto_y_logo():
+    buf = io.BytesIO()
+    Image.new("RGB", (640, 480), (200, 200, 200)).save(buf, "JPEG")
+    o = bs.OfferCopy(product="Cargador marca", price="$100", old_price="$120", when="Solo hoy · jueves 12",
+                     business_name="CityCell", contact="WhatsApp 953 172 4341", delivery="A domicilio")
+    png = bs.offer_banner_png(o, "rojo", buf.getvalue(), buf.getvalue())
+    assert Image.open(io.BytesIO(png)).size == (1080, 1080)
+    # Una foto rota no tumba el cartel.
+    assert bs.offer_banner_png(o, "rojo", b"no es imagen", b"tampoco")[:4] == b"\x89PNG"
+
+
+def test_rangos_de_dias_no_se_acortan():
+    import datetime as dt
+    today, send = dt.date(2026, 11, 11), dt.date(2026, 11, 12)  # miércoles
+    for t in ("De lunes a viernes", "Sábado y domingo", "Todos los martes", "Desde mañana",
+              "Hoy y mañana", "Hasta el miércoles"):
+        assert bs.concrete_when(t, today, send) == t

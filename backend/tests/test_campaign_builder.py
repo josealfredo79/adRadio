@@ -606,3 +606,94 @@ class TestPruebasFinales:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             r = await client.post("/api/v1/campaigns/builder", json={"text": "2x1 en micas"})
         assert r.status_code == 401
+
+
+class TestCartelDeOferta:
+    """El cartel de oferta toma del negocio lo que la IA no puede inventar:
+    foto y precio normal del catálogo, logo, contacto y la fecha concreta."""
+
+    @pytest.mark.asyncio
+    async def test_precio_de_antes_y_foto_salen_del_catalogo(self, ai):
+        user_id, _ = await _owner(photo=True)  # Mica templada $80 con foto
+        ai["offer"].return_value = OfferCopy(product="Mica templada", price="$60", when="Solo mañana")
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                user.slug, user.delivers_home = "citycell-prueba", True
+                user.meta_display_phone_number = "+52 1 953 172 4341"
+                offer, photo, logo = await cb._offer_details(db, user, "mica templada a $60 solo mañana")
+            assert offer.old_price == "$80" and offer.price == "$60"
+            assert photo is not None and logo is None
+            assert "953 172 4341" in offer.contact and "/sitio/citycell-prueba" in offer.contact
+            assert "domicilio" in offer.delivery
+            assert offer.when != "Solo mañana" and offer.when.lower().startswith(("solo hoy · ", "solo el "))
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_precio_del_catalogo_menor_no_se_pone_como_antes(self, ai):
+        user_id, _ = await _owner(photo=True)  # $80
+        ai["offer"].return_value = OfferCopy(product="Mica templada", price="$90")
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                offer, _, _ = await cb._offer_details(db, user, "mica templada a $90")
+            assert offer.old_price == ""
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_dos_productos_igual_de_parecidos_no_se_escoge_ninguno(self, ai):
+        user_id, _ = await _owner()
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add(Product(advertiser_id=user_id, name="Cargador Samsung", price=Decimal(150)))
+                db.add(Product(advertiser_id=user_id, name="Cargador Xiaomi", price=Decimal(200)))
+                await db.commit()
+                user = await db.get(User, user_id)
+                assert await cb._offer_product(db, user, "cargador a $100") is None
+                assert (await cb._offer_product(db, user, "cargador xiaomi a $100")).name == "Cargador Xiaomi"
+        finally:
+            await _clean(user_id)
+
+    def test_dia_de_envio_de_noche_es_manana(self):
+        tz = timezone(timedelta(hours=-6))
+        today, send = cb._send_day(datetime(2026, 11, 11, 22, 30, tzinfo=tz))  # miércoles noche
+        assert (today.day, send.day) == (11, 12)
+        today, send = cb._send_day(datetime(2026, 11, 11, 12, 0, tzinfo=tz))
+        assert today == send
+
+    @pytest.mark.asyncio
+    async def test_palabras_comunes_no_escogen_otro_producto(self, ai):
+        """"cargador para samsung" no es la "Funda para Samsung" (foto y Antes falsos)."""
+        user_id, _ = await _owner()
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add(Product(advertiser_id=user_id, name="Funda para Samsung", price=Decimal(200)))
+                db.add(Product(advertiser_id=user_id, name="Cargador tipo C", price=Decimal(250)))
+                db.add(Product(advertiser_id=user_id, name="Pantalla iPhone 11", price=Decimal(1200)))
+                await db.commit()
+                user = await db.get(User, user_id)
+                assert await cb._offer_product(db, user, "cargador para samsung a $150") is None
+                assert await cb._offer_product(db, user, "Reparación de pantalla a $500") is None
+                assert (await cb._offer_product(db, user, "cargadores tipo c a $150")).name == "Cargador tipo C"
+        finally:
+            await _clean(user_id)
+
+    @pytest.mark.asyncio
+    async def test_logo_ilegible_no_tumba_el_cartel(self, ai, monkeypatch):
+        user_id, _ = await _owner(photo=True)
+        ai["offer"].return_value = OfferCopy(product="Mica templada", price="$60")
+
+        async def boom(url):
+            raise OSError("no está")
+
+        monkeypatch.setattr("app.services.storage_service.read_bytes", boom)
+        try:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(User, user_id)
+                user.logo_url = PHOTO
+                offer, photo, logo = await cb._offer_details(db, user, "mica templada a $60")
+            assert offer.old_price == "$80" and photo is None and logo is None
+        finally:
+            await _clean(user_id)
