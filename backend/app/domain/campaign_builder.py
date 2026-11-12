@@ -203,8 +203,8 @@ def _own_file(url: str | None) -> bool:
 
 async def _make_photo(db, user, camp, state) -> str | None:
     from app.services.banner_service import (
-        generate_banner_copy_with_claude,
-        generate_banner_png,
+        generate_offer_copy,
+        offer_banner_png,
         photo_banner_png,
         select_design,
     )
@@ -217,11 +217,8 @@ async def _make_photo(db, user, camp, state) -> str | None:
     try:
         if source == "poster":
             design = select_design(user.business_category, "promo")
-            copy = await generate_banner_copy_with_claude(
-                business_name=user.business_name or "", contact_name="", promo_description=state["what"],
-                business_category=user.business_category,
-            )
-            png, ext, ctype = generate_banner_png(copy, design.palette, design.layout), "png", "image/png"
+            offer = await generate_offer_copy(user.business_name or "", state["what"])
+            png, ext, ctype = offer_banner_png(offer, design.palette), "png", "image/png"
         else:
             product = None
             url = source

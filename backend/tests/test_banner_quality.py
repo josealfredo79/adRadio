@@ -1,8 +1,12 @@
 """El cartel de colores del Copiloto salía con el título en letra de 10 px
 (fuente que no existía en la imagen web) y con "¡Hola, !" sin nombre."""
+import io
+import json
 import os
+from unittest.mock import AsyncMock, patch
 
-from PIL import ImageFont
+import pytest
+from PIL import Image, ImageFont
 
 from app.services import banner_service as bs
 
@@ -49,3 +53,100 @@ def test_todos_los_disenos_generan_png_sin_nombre():
     for layout in bs._RENDERERS:
         png = bs.generate_banner_png(copy, "rojo", layout)
         assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+# ── Cartel de oferta (estrella con precio) ───────────────────────────────────
+def test_fuente_de_oferta_viene_en_el_repo():
+    assert os.path.exists(bs._FONT_OFFER)
+    f = bs._offer_font(80, 900)
+    assert "Montserrat" in f.getname()[0]
+
+
+def test_oferta_sin_ia_saca_precios_del_texto():
+    o = bs._offer_from_text("Cargador marca de $120 a $100", "CityCell")
+    assert o.price == "$100" and o.old_price == "$120"
+    o = bs._offer_from_text("2x1 en micas", "CityCell")
+    assert o.price == "" and o.product == "2x1 en micas"
+
+
+def test_precio_sin_centavos():
+    assert bs._clean_price("$100.00") == "$100"
+    assert bs._clean_price("$1500") == "$1,500"
+
+
+async def _offer(raw: str, promo: str) -> "bs.OfferCopy":
+    with patch("app.services.llm_client.chat_completion", AsyncMock(return_value=raw)):
+        return await bs.generate_offer_copy("CityCell", promo)
+
+
+@pytest.mark.asyncio
+async def test_ia_separa_la_promo():
+    raw = json.dumps({"product": "Cargador marca", "price": "$100.00", "old_price": "$120",
+                      "when": "Solo mañana", "price_note": "", "sub": "Aprovecha", "cta": "Pídelo"})
+    o = await _offer(raw, "cargador marca baja de $120 a $100 solo mañana")
+    assert (o.product, o.price, o.old_price, o.when) == ("Cargador marca", "$100", "$120", "Solo mañana")
+
+
+@pytest.mark.asyncio
+async def test_precio_inventado_por_la_ia_no_se_dibuja():
+    raw = json.dumps({"product": "Micas", "price": "$99", "old_price": "$150", "when": ""})
+    o = await _offer("```json\n" + raw + "\n```", "2x1 en micas este viernes")
+    assert o.price == "" and o.old_price == ""
+
+
+@pytest.mark.asyncio
+async def test_ia_caida_usa_el_texto():
+    with patch("app.services.llm_client.chat_completion", AsyncMock(side_effect=RuntimeError("429"))):
+        o = await bs.generate_offer_copy("CityCell", "Tacos al pastor 3 por $50")
+    assert o.price == "$50" and o.product
+
+
+@pytest.mark.parametrize("price", ["$100", ""])
+def test_cartel_de_oferta_1080(price):
+    o = bs.OfferCopy(product="Corte de cabello degradado premium extra largo", price=price,
+                     old_price="$120" if price else "", when="Hasta el sábado por la tarde",
+                     price_note="3 tacos", sub="Aparta tu lugar desde el chat", cta="Pídelo por WhatsApp",
+                     business_name="Taquería y Barbería Don Pepe de Tlaxiaco")
+    for palette in bs.PALETTES:
+        png = bs.offer_banner_png(o, palette)
+        assert Image.open(io.BytesIO(png)).size == (1080, 1080)
+
+
+@pytest.mark.asyncio
+async def test_limpia_palabras_sueltas_y_frase_repetida():
+    raw = json.dumps({"product": "Cargador marca baja", "price": "$100", "price_note": "3 por",
+                      "sub": "Cargador marca baja de $120 a $100", "cta": "Pídelo"})
+    o = await _offer(raw, "cargador marca baja de $120 a $100")
+    assert o.product == "Cargador marca" and o.price_note == "" and o.sub == ""
+
+
+def test_dos_por_uno_va_en_la_estrella():
+    con = bs.offer_banner_png(bs.OfferCopy(product="Micas", price_note="2x1", business_name="CityCell"))
+    sin = bs.offer_banner_png(bs.OfferCopy(product="Micas", business_name="CityCell"))
+    assert con != sin
+
+
+def test_precios_con_punto_o_coma():
+    assert bs._clean_price("$1.500") == "$1,500"
+    assert bs._clean_price("$1,500") == "$1,500"
+    assert bs._clean_price("$1,50") == "$1.50"
+
+
+@pytest.mark.asyncio
+async def test_oferta_o_fecha_inventadas_no_salen():
+    raw = json.dumps({"product": "Micas", "price": "", "price_note": "30%", "when": "Solo hoy"})
+    o = await _offer(raw, "Micas en oferta este viernes")
+    assert o.price_note == "" and o.when == ""
+    raw = json.dumps({"product": "Micas", "price_note": "2x1", "when": "Este viernes"})
+    o = await _offer(raw, "2x1 en micas este viernes")
+    assert o.price_note == "2x1" and o.when == "Este viernes"
+    raw = json.dumps({"product": "Tacos", "price": "$50", "price_note": "3 tacos", "when": "Hasta el sábado"})
+    o = await _offer(raw, "Tacos al pastor 3 por $50 hasta el sábado")
+    assert o.price_note == "3 tacos" and o.when == "Hasta el sábado"
+
+
+@pytest.mark.asyncio
+async def test_precios_al_reves_se_acomodan():
+    raw = json.dumps({"product": "Cargador", "price": "$120", "old_price": "$100"})
+    o = await _offer(raw, "cargador de $120 a $100")
+    assert o.price == "$100" and o.old_price == "$120"

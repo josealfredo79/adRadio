@@ -8,10 +8,14 @@ Pipeline:
   4. Se retorna bytes PNG listo para subir a R2
 """
 import io
+import json
 import logging
+import math
 import random
+import re
+from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 logger = logging.getLogger(__name__)
 
@@ -924,6 +928,289 @@ Responde ÚNICAMENTE con un JSON con estas claves (sin texto extra):
             contact_name=contact_name,
             business_name=business_name,
         )
+
+
+# ── Cartel de oferta (Copiloto, "Cartel de colores") ─────────────────────────
+# Precio grande en estrella, precio de antes tachado y cinta de "cuándo".
+# La IA solo SEPARA el texto del dueño en partes; nada se inventa: un precio
+# que no está en su texto no se dibuja (spec: el bot no inventa precios).
+
+_FONT_OFFER = str(Path(__file__).resolve().parents[1] / "assets" / "fonts" / "Montserrat-Variable.ttf")
+_PRICE_RE = re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?")
+# Palabras sueltas al final que la IA arrastra: "Cargador marca baja", "3 por".
+_TRAILING_RE = re.compile(r"(?:\s+(?:a|en|por|de|x|baja|bajan|solo|desde|hasta))+\s*$", re.IGNORECASE)
+
+
+class OfferCopy:
+    def __init__(self, product: str = "", price: str = "", old_price: str = "", when: str = "",
+                 price_note: str = "", sub: str = "", cta: str = "", business_name: str = ""):
+        self.product = product
+        self.price = price
+        self.old_price = old_price
+        self.when = when
+        self.price_note = price_note
+        self.sub = sub
+        self.cta = cta
+        self.business_name = business_name
+
+
+def _offer_font(size: int, weight: int = 900) -> ImageFont.FreeTypeFont:
+    try:
+        f = ImageFont.truetype(_FONT_OFFER, size)
+        f.set_variation_by_axes([weight])
+        return f
+    except Exception:
+        logger.exception("[BANNER] offer font failed")
+        return _load_font(_FONT_BOLD if weight >= 700 else _FONT_REGULAR, size)
+
+
+def _offer_fit(text: str, size: int, max_width: int, max_lines: int, weight: int = 900,
+               min_size: int = 40) -> tuple[ImageFont.FreeTypeFont, list[str]]:
+    while True:
+        f = _offer_font(size, weight)
+        lines = _wrap_text(text, f, max_width)
+        fits = len(lines) <= max_lines and all(f.getlength(ln) <= max_width for ln in lines)
+        if fits or size <= min_size:
+            return f, lines[:max_lines]
+        size -= 4
+
+
+def _clean_price(value: str) -> str:
+    """"$100.00" → "$100"; "$1500" y "$1.500" → "$1,500"; "$1,50" → "$1.50"."""
+    raw = re.sub(r"[^\d.,]", "", value or "").strip(".,")
+    if re.fullmatch(r"\d{1,3}(\.\d{3})+", raw):  # punto de miles: 1.500
+        raw = raw.replace(".", "")
+    elif re.fullmatch(r"\d+,\d{1,2}", raw):  # coma decimal: 1,50
+        raw = raw.replace(",", ".")
+    digits = raw.replace(",", "")
+    if not digits:
+        return ""
+    try:
+        n = float(digits)
+    except ValueError:
+        return ""
+    return f"${n:,.0f}" if n.is_integer() else f"${n:,.2f}"
+
+
+def _amount(price: str) -> float:
+    try:
+        return float(price.replace("$", "").replace(",", ""))
+    except ValueError:
+        return 0.0
+
+
+def _said(value: str, text: str, numbers_only: bool = False) -> bool:
+    """¿Lo que puso la IA viene del texto del dueño? Números siempre; palabras
+    (de 3+ letras) solo si numbers_only es False."""
+    if not value:
+        return True
+    low = (text or "").lower()
+    nums = re.findall(r"\d+", value)
+    if numbers_only:
+        squeezed = re.sub(r"\s+", "", low)
+        return bool(nums) and all(n in re.findall(r"\d+", low) for n in nums) and (
+            "x" not in value.lower() or re.sub(r"\s+", "", value.lower()) in squeezed)
+    words = [w for w in re.findall(r"[a-záéíóúñü]+", value.lower()) if len(w) > 2]
+    return all(n in low for n in nums) and all(w in low for w in words)
+
+
+def _prices_in(text: str) -> list[str]:
+    return [_clean_price(m) for m in _PRICE_RE.findall(text or "")]
+
+
+def _offer_from_text(promo: str, business_name: str) -> OfferCopy:
+    """Sin IA: el precio sale del texto ($…); el último es el de ahora."""
+    prices = _prices_in(promo)
+    product = _PRICE_RE.sub("", promo).strip(" .,:;-!¡")
+    product = re.sub(r"\s+(a|en|por|de)\s*$", "", product, flags=re.IGNORECASE)
+    return OfferCopy(
+        product=product[:40] or promo[:40], price=prices[-1] if prices else "",
+        old_price=prices[0] if len(prices) > 1 else "", cta="Escríbenos hoy", business_name=business_name,
+    )
+
+
+async def generate_offer_copy(business_name: str, promo_description: str) -> OfferCopy:
+    from app.services.llm_client import chat_completion
+
+    prompt = f"""Separa esta promoción de un negocio en partes para un cartel.
+Negocio: {business_name}
+Promoción: {promo_description}
+
+Reglas:
+- Usa SOLO palabras de la promoción. No agregues adjetivos ni datos (nada de
+  "premium", "original", "garantía", "envío gratis").
+- product: SOLO el nombre del producto o servicio (máx. 4 palabras), sin
+  verbos ("baja", "llega"), precio ni fecha. "cargador marca baja a $100" →
+  "Cargador marca".
+- price: el precio de AHORA tal como está escrito ($100). Vacío si no hay.
+- old_price: el precio de antes solo si la promoción lo dice. Si no, vacío.
+- when: cuándo vale ("Solo mañana", "Hasta el sábado"). Vacío si no lo dice.
+- price_note: cantidad o tipo de oferta si lo dice: "3 tacos" (de "3 por
+  $50"), "2x1", "20%". Si no, vacío.
+- sub: frase corta (máx. 7 palabras) que invite SIN repetir producto, precio
+  ni fecha (ej: "Aprovecha antes de que se acabe"). Puede ir vacía.
+- cta: acción de máx. 3 palabras (ej: "Pídelo por WhatsApp", "Aparta el tuyo").
+
+Ejemplo. Promoción: "Tacos al pastor 3 por $50 hasta el sábado"
+{{"product": "Tacos al pastor", "price": "$50", "old_price": "", "when": "Hasta el sábado", "price_note": "3 tacos", "sub": "Recién hechos, ven por los tuyos", "cta": "Haz tu pedido"}}
+
+Responde ÚNICAMENTE con el JSON de la promoción de arriba (las 7 claves, sub y cta siempre llenos)."""
+    fallback = _offer_from_text(promo_description, business_name)
+    try:
+        raw = await chat_completion([{"role": "user", "content": prompt}], max_tokens=400, temperature=0.3)
+        match = re.search(r"\{.*\}", raw or "", re.DOTALL)
+        data = json.loads(match.group(0) if match else raw)
+    except Exception as e:
+        logger.warning("[BANNER] offer copy failed: %s", e)
+        return fallback
+
+    def field(key: str, limit: int) -> str:
+        value = data.get(key) or ""
+        return str(value).strip()[:limit] if isinstance(value, (str, int, float)) else ""
+
+    in_text = set(_prices_in(promo_description))
+    # Un precio que no está en el texto del dueño no se dibuja.
+    price = _clean_price(field("price", 20))
+    price = price if price in in_text else fallback.price
+    old = _clean_price(field("old_price", 20))
+    old = old if old in in_text and old != price else ""
+    if old and price and _amount(old) < _amount(price):  # vinieron al revés
+        price, old = old, price
+    product = _TRAILING_RE.sub("", field("product", 40)) or fallback.product
+    note = _TRAILING_RE.sub("", field("price_note", 20))
+    if note.isdigit():  # "3" solo no dice nada; "3 tacos" sí
+        note = ""
+    # Ni la oferta ("30%", "2x1") ni el "cuándo" se inventan: sus números y
+    # palabras tienen que venir en el texto del dueño.
+    if not _said(note, promo_description, numbers_only=True):
+        note = ""
+    when = field("when", 24)
+    if not _said(when, promo_description):
+        when = ""
+    sub = field("sub", 60)
+    # La frase de abajo no repite la promo (ya está en grande arriba).
+    if _PRICE_RE.search(sub) or (product and product.lower() in sub.lower()):
+        sub = ""
+    return OfferCopy(
+        product=product, price=price, old_price=old, when=when, price_note=note,
+        sub=sub, cta=field("cta", 28) or "Escríbenos hoy", business_name=business_name,
+    )
+
+
+def _star(cx: float, cy: float, r_out: float, r_in: float, n: int = 18, rot: float = 0.1) -> list:
+    pts = []
+    for i in range(n * 2):
+        r = r_out if i % 2 == 0 else r_in
+        a = rot + math.pi * i / n
+        pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return pts
+
+
+def _darker(c: tuple, k: float = 0.55) -> tuple:
+    return tuple(int(v * k) for v in c)
+
+
+def offer_banner_png(offer: OfferCopy, palette_name: str = "promo") -> bytes:
+    """Cartel 1080×1080 dibujado al doble y reducido (bordes suaves)."""
+    c1, c2, accent = PALETTES.get(palette_name, PALETTES["promo"])
+    S, size = 2, 1080
+    W = H = size * S
+    deep = _darker(c1, 0.6)
+    pad = 70 * S
+
+    # Fondo: degradado radial, rayas diagonales y semitono en una esquina.
+    mask = Image.radial_gradient("L").resize((int(W * 1.6), int(H * 1.6)))
+    mask = mask.crop((int(W * 0.15), int(H * 0.25), int(W * 0.15) + W, int(H * 0.25) + H))
+    img = Image.composite(Image.new("RGB", (W, H), deep), Image.new("RGB", (W, H), c2), mask)
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(lay)
+    for x in range(-H, W, 70 * S):
+        ld.line([(x, H), (x + H, 0)], fill=(255, 255, 255, 14), width=18 * S)
+    for gy in range(0, 380 * S, 26 * S):
+        for gx in range(0, 380 * S, 26 * S):
+            r = max(0.0, (380 * S - math.hypot(gx, gy)) / (380 * S)) * 6 * S
+            if r > 0.6 * S:
+                x, y = gx, H - 150 * S - gy
+                ld.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, 30))
+    img.paste(lay, (0, 0), lay)
+    draw = ImageDraw.Draw(img)
+
+    # Sin precio, una oferta corta ("2x1", "20%") también va en la estrella.
+    big = offer.price or (offer.price_note if len(offer.price_note) <= 6 else "")
+    has_price = bool(big)
+    text_w = (450 if has_price else 940) * S
+
+    # Etiqueta con el nombre del negocio
+    if offer.business_name:
+        bf, blines = _offer_fit(offer.business_name.upper(), 30 * S, 760 * S, 1, 800, 20 * S)
+        bw = bf.getlength(blines[0])
+        draw.rounded_rectangle([pad, 64 * S, pad + bw + 56 * S, 126 * S], radius=31 * S, fill=(255, 255, 255))
+        draw.text((pad + 28 * S, 95 * S), blines[0], font=bf, fill=deep, anchor="lm")
+
+    kf = _offer_font(30 * S, 700)
+    kx = pad
+    for ch in "OFERTA ESPECIAL":
+        draw.text((kx, 190 * S), ch, font=kf, fill=accent)
+        kx += kf.getlength(ch) + 5 * S
+
+    pf, lines = _offer_fit((offer.product or "Oferta").upper(), 120 * S, text_w, 3, 900, 48 * S)
+    y = 240 * S
+    for ln in lines:
+        draw.text((pad + 5 * S, y + 6 * S), ln, font=pf, fill=_darker(deep, 0.6))
+        draw.text((pad, y), ln, font=pf, fill=(255, 255, 255))
+        y += pf.size * 1.02
+
+    if offer.when:
+        wf, wl = _offer_fit(offer.when.upper(), 40 * S, text_w - 70 * S, 1, 900, 24 * S)
+        tw = wf.getlength(wl[0])
+        tag = Image.new("RGBA", (int(tw + 70 * S), 84 * S), (0, 0, 0, 0))
+        td = ImageDraw.Draw(tag)
+        td.rounded_rectangle([0, 0, tag.width - 1, tag.height - 1], radius=14 * S, fill=(255, 255, 255))
+        td.text((tag.width / 2, tag.height / 2), wl[0], font=wf, fill=c1, anchor="mm")
+        tag = tag.rotate(4, expand=True, resample=Image.BICUBIC)
+        img.paste(tag, (pad - 6 * S, int(y + 30 * S)), tag)
+
+    if has_price:
+        cx, cy, ro = 790 * S, 560 * S, 255 * S
+        sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(sh).polygon(_star(cx + 14 * S, cy + 20 * S, ro, ro * 0.86), fill=(0, 0, 0, 120))
+        sh = sh.filter(ImageFilter.GaussianBlur(18 * S))
+        img.paste(sh, (0, 0), sh)
+        draw = ImageDraw.Draw(img)
+        draw.polygon(_star(cx, cy, ro, ro * 0.86), fill=accent)
+        draw.ellipse([cx - ro * 0.74, cy - ro * 0.74, cx + ro * 0.74, cy + ro * 0.74],
+                     outline=_darker(accent, 0.85), width=4 * S)
+        price_col = _darker(c1, 0.75) if sum(accent) > 400 else (255, 255, 255)
+        if offer.old_price:
+            of = _offer_font(40 * S, 700)
+            t = f"Antes {offer.old_price}"
+            draw.text((cx, cy - 115 * S), t, font=of, fill=price_col, anchor="mm")
+            tw = of.getlength(t)
+            draw.line([(cx - tw / 2 - 6 * S, cy - 112 * S), (cx + tw / 2 + 6 * S, cy - 118 * S)],
+                      fill=price_col, width=5 * S)
+        prf, _ = _offer_fit(big, 170 * S, 330 * S, 1, 900, 60 * S)
+        draw.text((cx, cy + 10 * S), big, font=prf, fill=price_col, anchor="mm")
+        if offer.price_note and offer.price:
+            nf, nl = _offer_fit(offer.price_note.upper(), 30 * S, 300 * S, 1, 800, 20 * S)
+            draw.text((cx, cy + 120 * S), nl[0], font=nf, fill=price_col, anchor="mm")
+
+    # Barra de abajo con la acción
+    bar_y = H - 170 * S
+    draw.rectangle([0, bar_y, W, H], fill=(255, 255, 255))
+    draw.rectangle([0, bar_y, W, bar_y + 10 * S], fill=accent if sum(accent) < 700 else c2)
+    if offer.sub:
+        sf, sl = _offer_fit(offer.sub, 30 * S, 800 * S, 1, 600, 22 * S)
+        draw.text((pad, bar_y + 55 * S), sl[0], font=sf, fill=(70, 70, 70), anchor="lm")
+    cf, cl = _offer_fit((offer.cta or "Pídelo aquí").upper(), 40 * S, 780 * S, 1, 900, 26 * S)
+    draw.text((pad, bar_y + (112 if offer.sub else 88) * S), cl[0], font=cf, fill=c1, anchor="lm")
+    ax, ay = W - pad - 50 * S, bar_y + 90 * S
+    draw.ellipse([ax - 50 * S, ay - 50 * S, ax + 50 * S, ay + 50 * S], fill=c1)
+    draw.polygon([(ax - 14 * S, ay - 22 * S), (ax + 22 * S, ay), (ax - 14 * S, ay + 22 * S)], fill=(255, 255, 255))
+
+    img = img.resize((size, size), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
 
 
 # ── Foto real del producto con la promo encima (campaña que pregunta) ──────────

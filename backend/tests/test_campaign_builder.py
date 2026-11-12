@@ -19,7 +19,7 @@ from app.models.product import Product
 from app.models.sale import Sale
 from app.models.user import User
 from app.services import campaign_quota
-from app.services.banner_service import BannerCopy
+from app.services.banner_service import BannerCopy, OfferCopy
 from tests.test_campaign_quick import _sale
 from tests.test_web_push import (  # noqa: F401 — _keys es fixture autouse
     _add_subs,
@@ -52,6 +52,8 @@ def ai(monkeypatch):
         "read": AsyncMock(return_value=_jpeg()),
         "copy": AsyncMock(return_value=BannerCopy(headline="2x1 en micas", subheadline="Este viernes",
                                                   cta="Pídelo", business_name="CityCell")),
+        "offer": AsyncMock(return_value=OfferCopy(product="Micas", price="", when="Este viernes",
+                                                  price_note="2x1", cta="Pídelo", business_name="CityCell")),
         "later": MagicMock(return_value=None),
     }
     with patch("app.services.claude_service.generate_campaign_variants", mocks["variants"]), \
@@ -60,6 +62,7 @@ def ai(monkeypatch):
          patch("app.services.storage_service.upload_bytes", mocks["upload"]), \
          patch("app.services.storage_service.read_bytes", mocks["read"]), \
          patch("app.services.banner_service.generate_banner_copy_with_claude", mocks["copy"]), \
+         patch("app.services.banner_service.generate_offer_copy", mocks["offer"]), \
          patch("app.services.messaging_throttle.send_starts_label", mocks["later"]):
         yield mocks
 
