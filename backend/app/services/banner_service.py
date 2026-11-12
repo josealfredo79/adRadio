@@ -1003,6 +1003,33 @@ def concrete_when(when: str, today, send_day) -> str:
     return f"{solo}el {label}".capitalize()
 
 
+_CAPTION_DAY_RE = re.compile(r"\b((?:solo|sólo|únicamente|hasta)\s+)?(pasado\s+mañana|mañana)\b", re.IGNORECASE)
+
+
+def concrete_caption(text: str, today, send_day) -> str:
+    """El texto que acompaña al cartel debe decir la misma fecha que el
+    cartel: "solo mañana" escrito de noche → "solo hoy, jueves 12". Solo se
+    toca un "mañana" suelto (no "en la mañana", "desde mañana", "hoy y mañana")."""
+    if not text:
+        return text
+    hits = list(_CAPTION_DAY_RE.finditer(text))
+    if len(hits) != 1:
+        return text
+    m = hits[0]
+    before = text[:m.start()].lower().rstrip()
+    if re.search(r"\b(la|las|en|por|de|desde|partir|y|a)$", before) or re.search(r"\bhoy\b", text, re.IGNORECASE):
+        return text
+    new = concrete_when(m.group(0), today, send_day)
+    if new == m.group(0):
+        return text
+    new = new.replace(" · ", ", ")
+    if not text[:m.start()].strip() or text[:m.start()].rstrip().endswith((".", "!", "?")):
+        new = new[0].upper() + new[1:]
+    else:
+        new = new[0].lower() + new[1:]
+    return text[:m.start()] + new + text[m.end():]
+
+
 def _offer_font(size: int, weight: int = 900) -> ImageFont.FreeTypeFont:
     try:
         f = ImageFont.truetype(_FONT_OFFER, size)

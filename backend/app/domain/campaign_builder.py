@@ -317,6 +317,9 @@ async def _make_photo(db, user, camp, state) -> str | None:
         if source == "poster":
             design = select_design(user.business_category, "promo")
             offer, photo, logo = await _offer_details(db, user, state["what"])
+            # El texto de abajo dice la misma fecha que el cartel.
+            from app.services.banner_service import concrete_caption
+            camp.message_text = concrete_caption(camp.message_text, *_send_day())
             png, ext, ctype = offer_banner_png(offer, design.palette, photo, logo), "png", "image/png"
         else:
             product = None

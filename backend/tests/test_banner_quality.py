@@ -180,3 +180,15 @@ def test_rangos_de_dias_no_se_acortan():
     for t in ("De lunes a viernes", "Sábado y domingo", "Todos los martes", "Desde mañana",
               "Hoy y mañana", "Hasta el miércoles"):
         assert bs.concrete_when(t, today, send) == t
+
+
+def test_texto_dice_la_misma_fecha_que_el_cartel():
+    import datetime as dt
+    today, send = dt.date(2026, 11, 11), dt.date(2026, 11, 12)  # miércoles de noche
+    t = "🔋 Cargador marca a $100 solo mañana. Es tu oportunidad. Pídelo aquí."
+    assert bs.concrete_caption(t, today, send) == "🔋 Cargador marca a $100 solo hoy, jueves 12. Es tu oportunidad. Pídelo aquí."
+    assert bs.concrete_caption("Mañana 2x1 en micas", today, send) == "Hoy, jueves 12 2x1 en micas"
+    for same in ("Te esperamos en la mañana", "Desde mañana 2x1", "Hoy y mañana 2x1", "Solo hoy 2x1", ""):
+        assert bs.concrete_caption(same, today, send) == same
+    # De día sale hoy mismo: "mañana" es el jueves, sin "hoy".
+    assert bs.concrete_caption("Solo mañana", today, today) == "Solo el jueves 12"

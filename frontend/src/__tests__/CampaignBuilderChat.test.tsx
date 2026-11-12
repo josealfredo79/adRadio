@@ -143,4 +143,15 @@ describe('CampaignBuilderChat', () => {
     expect(startsAtLabel('2026-10-29T14:00:00+00:00', new Date('2026-10-29T04:34:00Z'))).toMatch(/^mañana a las 8:00/)
     expect(startsAtLabel('2026-11-02T14:00:00+00:00', new Date('2026-11-01T04:00:00Z'))).toMatch(/^el lunes a las 8:00/)
   })
+
+  it('«Otra versión» de un cartel dice que arma la imagen, no que graba una cuña', async () => {
+    post.mockReturnValue(new Promise(() => {}))
+    renderChat(step({
+      step: 'preview', text: '¿Así está bien?', choices: [ch('ok', 'Así está bien'), ch('other', 'Otra versión')],
+      preview: { kind: 'image', text: 'Mica a $60', image_url: 'https://x/y.png', audio_url: null },
+    }))
+    fireEvent.click(screen.getByRole('button', { name: 'Otra versión' }))
+    expect(await screen.findByText('Armando tu imagen…')).toBeInTheDocument()
+    expect(screen.queryByText('Grabando tu cuña…')).not.toBeInTheDocument()
+  })
 })

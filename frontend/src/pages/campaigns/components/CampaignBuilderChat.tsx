@@ -24,8 +24,14 @@ export interface BuilderStep {
 interface Bubble { from: 'bot' | 'me'; text: string; preview?: BuilderPreview | null }
 
 // Lo que tarda: grabar una cuña o dibujar una foto toma unos segundos.
-function waitText(step: string, choice?: string): string {
-  if (step === 'style' || (choice === 'other' && step === 'preview')) return 'Grabando tu cuña…'
+// «Otra versión» rehace lo que hay en la vista previa: cuña, imagen o texto.
+function waitText(step: string, choice?: string, kind?: BuilderPreview['kind']): string {
+  if (step === 'style') return 'Grabando tu cuña…'
+  if (choice === 'other' && step === 'preview') {
+    if (kind === 'audio') return 'Grabando tu cuña…'
+    if (kind === 'image') return 'Armando tu imagen…'
+    return 'Armando tu promo…'
+  }
   if (step === 'photo') return 'Armando tu imagen…'
   if (step === 'what' || step === 'format') return 'Armando tu promo…'
   return 'Un momento…'
@@ -51,7 +57,7 @@ export function CampaignBuilderChat({ initial, onDone }: { initial?: BuilderStep
 
   // campaignId null: empezar otra o retomar (el backend decide cuál).
   const turn = async (body: { choice?: string; text?: string }, said?: string, campaignId = step?.campaign_id ?? null) => {
-    const wait = waitText(step?.step ?? 'what', body.choice)
+    const wait = waitText(step?.step ?? 'what', body.choice, step?.preview?.kind)
     if (said) setBubbles((b) => [...b, { from: 'me', text: said }])
     setBusy(wait)
     setError('')
