@@ -66,7 +66,7 @@ def test_oferta_sin_ia_saca_precios_del_texto():
     o = bs._offer_from_text("Cargador marca de $120 a $100", "CityCell")
     assert o.price == "$100" and o.old_price == "$120"
     o = bs._offer_from_text("2x1 en micas", "CityCell")
-    assert o.price == "" and o.product == "2x1 en micas"
+    assert o.price == "" and o.product == "Micas" and o.price_note == "2x1"
 
 
 def test_precio_sin_centavos():
@@ -136,7 +136,8 @@ def test_precios_con_punto_o_coma():
 async def test_oferta_o_fecha_inventadas_no_salen():
     raw = json.dumps({"product": "Micas", "price": "", "price_note": "30%", "when": "Solo hoy"})
     o = await _offer(raw, "Micas en oferta este viernes")
-    assert o.price_note == "" and o.when == ""
+    # El "Solo hoy" inventado no sale; sale la fecha que sí escribió el dueño.
+    assert o.price_note == "" and o.when == "Este viernes"
     raw = json.dumps({"product": "Micas", "price_note": "2x1", "when": "Este viernes"})
     o = await _offer(raw, "2x1 en micas este viernes")
     assert o.price_note == "2x1" and o.when == "Este viernes"
@@ -192,3 +193,22 @@ def test_texto_dice_la_misma_fecha_que_el_cartel():
         assert bs.concrete_caption(same, today, send) == same
     # De día sale hoy mismo: "mañana" es el jueves, sin "hoy".
     assert bs.concrete_caption("Solo mañana", today, today) == "Solo el jueves 12"
+
+
+def test_sin_ia_la_fecha_no_se_pega_al_producto():
+    """La cadena gratis no contestó: "a solo mañana" salía como parte del nombre."""
+    o = bs._offer_from_text("cargador marca a $100 solo mañana", "CityCell")
+    assert (o.product, o.price, o.when) == ("Cargador marca", "$100", "Solo mañana")
+    o = bs._offer_from_text("2x1 en micas hasta el sábado", "CityCell")
+    assert (o.product, o.price_note, o.when) == ("Micas", "2x1", "Hasta el sábado")
+    o = bs._offer_from_text("Tacos al pastor 3 por $50 de lunes a viernes", "X")
+    assert (o.product, o.price_note, o.when) == ("Tacos al pastor", "3 por", "De lunes a viernes")
+    o = bs._offer_from_text("Reparación de pantalla en la mañana $500", "X")
+    assert o.when == "" and o.product == "Reparación de pantalla en la mañana"
+
+
+@pytest.mark.asyncio
+async def test_con_ia_la_fecha_tampoco_va_en_el_nombre():
+    raw = json.dumps({"product": "Cargador marca a solo mañana", "price": "$100", "when": ""})
+    o = await _offer(raw, "cargador marca a $100 solo mañana")
+    assert o.product == "Cargador marca" and o.when == "Solo mañana"

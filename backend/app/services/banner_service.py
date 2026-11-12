@@ -1094,14 +1094,49 @@ def _prices_in(text: str) -> list[str]:
     return [_clean_price(m) for m in _PRICE_RE.findall(text or "")]
 
 
+_DAY_WORDS = r"(?:pasado\s+mañana|mañana|hoy|lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo|fin\s+de\s+semana)"
+_WHEN_RE = re.compile(
+    rf"(?<!\bla )(?<!\blas )(?<!\bpor )\b(?:(?:solo|sólo|únicamente|unicamente|hasta|desde|de|este|esta|todo\s+el|todos\s+los)\s+)*(?:el\s+|los\s+)?{_DAY_WORDS}\b"
+    rf"(?:\s+(?:y|a|al)\s+(?:el\s+)?{_DAY_WORDS}\b)?",
+    re.IGNORECASE,
+)
+_DEAL_RE = re.compile(r"\b(\d+\s*x\s*\d+|\d+\s*%|\d+\s+por(?=\s*\$))", re.IGNORECASE)
+_FILLER_RE = re.compile(r"\b(?:a|en|por|de|del|con|solo|sólo|baja|bajan|bajó|llega|llegan|nuevo|precio)\b",
+                        re.IGNORECASE)
+
+
+def _strip_when(product: str, when: str) -> str:
+    """Quita del nombre la fecha y las palabras sueltas que quedan ("a", "de")."""
+    if when:
+        product = re.sub(re.escape(when), " ", product, flags=re.IGNORECASE)
+    product = _WHEN_RE.sub(" ", product)
+    words = product.split()
+    while words and _FILLER_RE.fullmatch(words[-1]):
+        words.pop()
+    while words and _FILLER_RE.fullmatch(words[0]):
+        words.pop(0)
+    return " ".join(words).strip(" .,:;-!¡")
+
+
 def _offer_from_text(promo: str, business_name: str) -> OfferCopy:
-    """Sin IA: el precio sale del texto ($…); el último es el de ahora."""
+    """Sin IA (la cadena gratis no contestó): se separa a mano el precio ($…,
+    el último es el de ahora), la fecha ("solo mañana") y la oferta ("2x1")."""
     prices = _prices_in(promo)
-    product = _PRICE_RE.sub("", promo).strip(" .,:;-!¡")
-    product = re.sub(r"\s+(a|en|por|de)\s*$", "", product, flags=re.IGNORECASE)
+    m = _WHEN_RE.search(promo)
+    when = m.group(0).strip() if m else ""
+    deal = _DEAL_RE.search(promo)
+    note = deal.group(1).lower() if deal else ""
+    if "por" not in note:
+        note = re.sub(r"\s+", "", note)  # "2 x 1" → "2x1"
+    rest = _PRICE_RE.sub(" ", promo)
+    if deal:
+        rest = rest.replace(deal.group(1), " ")
+    product = _strip_when(rest, when)
+    product = product[:1].upper() + product[1:]
     return OfferCopy(
         product=product[:40] or promo[:40], price=prices[-1] if prices else "",
-        old_price=prices[0] if len(prices) > 1 else "", cta="Escríbenos hoy", business_name=business_name,
+        old_price=prices[0] if len(prices) > 1 else "", when=when[:1].upper() + when[1:],
+        price_note=note, cta="Escríbenos hoy", business_name=business_name,
     )
 
 
@@ -1163,6 +1198,9 @@ Responde ÚNICAMENTE con el JSON de la promoción de arriba (las 7 claves, sub y
     when = field("when", 24)
     if not _said(when, promo_description):
         when = ""
+    when = when or fallback.when
+    # La fecha va en su cinta, no pegada al nombre ("Cargador marca a solo mañana").
+    product = _strip_when(product, when) or fallback.product
     sub = field("sub", 60)
     # La frase de abajo no repite la promo (ya está en grande arriba).
     if _PRICE_RE.search(sub) or (product and product.lower() in sub.lower()):
