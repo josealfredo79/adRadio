@@ -16,7 +16,10 @@ from PIL import Image, ImageDraw, ImageFont
 logger = logging.getLogger(__name__)
 
 # ── Fuentes del sistema ───────────────────────────────────────────────────────
-_FONT_BOLD = "/usr/share/fonts/truetype/ubuntu/UbuntuSans[wdth,wght].ttf"
+# DejaVu viene en fonts-dejavu-core, instalado en las dos imágenes (web y
+# worker). La Ubuntu que se usaba antes no existía en la imagen web: Pillow
+# caía a su letra de emergencia de 10 px y el título salía diminuto.
+_FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 _FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 # Dimensiones WhatsApp-friendly (ratio ~1:1)
@@ -165,8 +168,35 @@ def _load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
     try:
         return ImageFont.truetype(path, size)
     except Exception:
-        logger.warning("[BANNER] Failed to load font %s", path, exc_info=True)
-        return ImageFont.load_default()
+        logger.exception("[BANNER] Failed to load font %s", path)
+        # Con tamaño: la de emergencia sin tamaño mide 10 px y no se lee.
+        return ImageFont.load_default(size=size)
+
+
+def _greeting(name: str, formal: bool = False) -> str:
+    """El cartel del Copiloto es uno para todos y no trae nombre: sin nombre
+    se saluda solo "¡Hola!", nunca "¡Hola, !"."""
+    name = (name or "").strip()
+    if formal:
+        return f"Hola, {name}." if name else "Hola."
+    return f"¡Hola, {name}!" if name else "¡Hola!"
+
+
+def _fit_font(text: str, font: ImageFont.FreeTypeFont, max_width: int, max_lines: int,
+              min_size: int = 40) -> ImageFont.FreeTypeFont:
+    """Achica la letra del título hasta que quepa en max_lines renglones, para
+    que el precio o el "solo mañana" del final no se corten."""
+    size = int(getattr(font, "size", 0) or 0)
+    path = getattr(font, "path", None)
+    def too_big(f: ImageFont.FreeTypeFont) -> bool:
+        lines = _wrap_text(text, f, max_width)
+        # Una palabra sola más ancha que el espacio tampoco cabe (se sale).
+        return len(lines) > max_lines or any(f.getlength(ln) > max_width for ln in lines)
+
+    while path and size > min_size and too_big(font):
+        size -= 4
+        font = _load_font(path, size)
+    return font
 
 
 def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
@@ -262,12 +292,13 @@ def _render_clasico(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: 
     draw.rectangle([0, split_y - 4, BANNER_W, split_y + 4], fill=(255, 255, 255))
 
     # BLOQUE SUPERIOR: Greeting + Headline
-    greeting = f"¡Hola, {copy.contact_name}!"
+    greeting = _greeting(copy.contact_name)
     # greeting en accent; si accent es muy claro usar blanco
     greet_color = accent if sum(accent) < 600 else (255, 255, 255)
     draw.text((pad, 46), greeting, font=font_greeting, fill=greet_color)
 
     shadow_color = tuple(max(0, c - 40) for c in c1)  # sombra: tono más oscuro del fondo
+    font_headline = _fit_font(copy.headline.upper(), font_headline, BANNER_W - pad * 2, 2)
     lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
     y_cur = 100
     for line in lines[:2]:
@@ -333,11 +364,12 @@ def _render_centrado(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2:
     font_cta = _load_font(_FONT_BOLD, 32)
 
     # Greeting — zona oscura (arriba)
-    greeting = f"¡Hola, {copy.contact_name}!"
+    greeting = _greeting(copy.contact_name)
     draw.text((pad, 46), greeting, font=font_greeting, fill=(*accent, 200))
 
     # Headline grande — zona oscura (arriba-derecha)
     shadow_diag = tuple(max(0, c - 40) for c in c1)
+    font_headline = _fit_font(copy.headline.upper(), font_headline, BANNER_W - pad * 2, 2)
     lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
     y_cur = 100
     for line in lines[:2]:
@@ -430,10 +462,11 @@ def _render_split(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tu
     rx = divider_x_bot + pad_r
     max_w = BANNER_W - rx - 30
 
-    greeting = f"¡Hola, {copy.contact_name}!"
+    greeting = _greeting(copy.contact_name)
     draw.text((rx, 50), greeting, font=font_greeting, fill=(*accent, 190))
 
     shadow_sp = tuple(max(0, c - 40) for c in c1)
+    font_headline = _fit_font(copy.headline.upper(), font_headline, max_w, 3)
     lines = _wrap_text(copy.headline.upper(), font_headline, max_w)
     y_cur = 98
     for line in lines[:3]:
@@ -492,7 +525,7 @@ def _render_minimal(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: 
 
     # BANDA SUPERIOR: greeting + nombre del negocio
     txt_band = c1 if sum(accent) > 400 else (255, 255, 255)
-    greeting = f"Hola, {copy.contact_name}."
+    greeting = _greeting(copy.contact_name, formal=True)
     draw.text((pad, band_h // 2 - 40), greeting, font=font_greeting, fill=txt_band)
     draw.text((pad, band_h // 2 + 4), copy.business_name.upper(), font=font_biz, fill=(*c1, 180) if sum(accent) > 400 else (255, 255, 255, 200))
 
@@ -502,6 +535,7 @@ def _render_minimal(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: 
 
     # CUERPO: headline grande
     shadow_ed = tuple(max(0, c - 50) for c in c1)
+    font_headline = _fit_font(copy.headline.upper(), font_headline, BANNER_W - pad * 2, 2)
     lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
     y_cur = band_h + 40
     for line in lines[:2]:
@@ -571,10 +605,11 @@ def _render_ticker(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: t
 
     # Greeting
     greet_col = accent if sum(accent) < 600 else (255, 255, 255)
-    draw.text((pad, 50), f"¡Hola, {copy.contact_name}!", font=font_greeting, fill=greet_col)
+    draw.text((pad, 50), _greeting(copy.contact_name), font=font_greeting, fill=greet_col)
 
     # Headline extra grande en zona oscura
     shadow = tuple(max(0, c - 30) for c in c1)
+    font_headline = _fit_font(copy.headline.upper(), font_headline, BANNER_W - pad * 2, 2)
     lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
     y_cur = 110
     for line in lines[:2]:
@@ -592,7 +627,8 @@ def _render_ticker(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: t
     cta_h = cta_bbox[3] - cta_bbox[1]
     cx = BANNER_W - cta_w - pad
     cy = ticker_y + (ticker_h - cta_h) // 2
-    draw.text((cx - 46, cy), ">>", font=font_cta, fill=txt_tk)
+    arrow_w = draw.textbbox((0, 0), ">> ", font=font_cta)[2]
+    draw.text((cx - arrow_w, cy), ">>", font=font_cta, fill=txt_tk)
     draw.text((cx, cy), copy.cta, font=font_cta, fill=txt_tk)
 
 
@@ -622,9 +658,10 @@ def _render_neon(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tup
     glow = tuple(min(255, c + 90) for c in accent)
 
     # Greeting
-    draw.text((pad, 48), f"¡Hola, {copy.contact_name}!", font=font_greeting, fill=accent)
+    draw.text((pad, 48), _greeting(copy.contact_name), font=font_greeting, fill=accent)
 
     # Headline con efecto glow: 8 trazos desplazados en color brillante + texto blanco encima
+    font_headline = _fit_font(copy.headline.upper(), font_headline, BANNER_W - pad * 2, 2)
     lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
     y_cur = 106
     for line in lines[:2]:
@@ -709,13 +746,14 @@ def _render_arco(draw: ImageDraw.ImageDraw, copy: BannerCopy, c1: tuple, c2: tup
 
     # Greeting dentro del arco (zona acento visible)
     txt_arch = tuple(max(0, c - 70) for c in accent) if sum(accent) > 400 else (255, 255, 255)
-    greeting = f"Hola, {copy.contact_name}."
+    greeting = _greeting(copy.contact_name, formal=True)
     g_bbox = draw.textbbox((0, 0), greeting, font=font_greeting)
     g_x = (BANNER_W - (g_bbox[2] - g_bbox[0])) // 2
     draw.text((g_x, 36), greeting, font=font_greeting, fill=txt_arch)
 
     # Headline centrado debajo del arco
     shadow = tuple(max(0, c - 40) for c in c1)
+    font_headline = _fit_font(copy.headline.upper(), font_headline, BANNER_W - pad * 2, 2)
     lines = _wrap_text(copy.headline.upper(), font_headline, BANNER_W - pad * 2)
     y_cur = 228
     for line in lines[:2]:
@@ -847,6 +885,12 @@ Negocio: {business_name}
 Contacto: {contact_name}
 Promoción: {promo_description}
 Estilo: {vibe_tone}
+
+Reglas:
+- Usa SOLO lo que dice la promoción. No agregues adjetivos ni datos que no
+  estén ahí (nada de "premium", "original", "garantía", "envío gratis").
+- Si la promoción trae precio, el headline lo lleva EXACTO, sin centavos ($100, no $100.00).
+- Si dice cuándo vale ("solo mañana", "hasta el sábado"), ponlo en el subheadline.
 
 Responde ÚNICAMENTE con un JSON con estas claves (sin texto extra):
 {{
