@@ -276,11 +276,30 @@ async def _offer_details(db, user, what: str, source: str = "poster"):
         photo = await _read(source)
         # Dónde se guarda se decide solo con el texto del dueño (como al pedir
         # la foto): el nombre que sacó la IA podría señalar otro producto.
-        target = await _offer_product(db, user, what) if photo else None
+        # Y solo con el nombre completo: con el nombre corto ("cargador") la
+        # foto podría ser de otro cargador que no está en el Catálogo.
+        target = await _offer_product(db, user, what, short=False) if photo else None
         if target and not target.photo_url:
             target.photo_url = source
     logo = await _read(user.logo_url)
+    offer.contact = _poster_contact(user)
     return offer, photo, logo
+
+
+def _poster_contact(user) -> str:
+    """El teléfono que va en el cartel: el WhatsApp del negocio si lo tiene
+    conectado (como el sitio público) y, si no, el teléfono de su perfil (el
+    dueño lo ve en la vista previa). Nunca whatsapp_number: es donde le llegan
+    los avisos y el sitio público tampoco lo muestra."""
+    if getattr(user, "meta_connection_status", None) == "connected" and user.meta_display_phone_number:
+        return f"WhatsApp {_pretty_phone(user.meta_display_phone_number)}"
+    return f"Tel. {_pretty_phone(user.phone)}" if user.phone else ""
+
+
+def _pretty_phone(raw: str) -> str:
+    """"+52 1 953 172 4341" / "529531724341" → "953 172 4341"."""
+    digits = re.sub(r"\D", "", raw or "")[-10:]
+    return f"{digits[:3]} {digits[3:6]} {digits[6:]}" if len(digits) == 10 else raw
 
 
 _STOP = {"para", "solo", "desde", "hasta", "como", "todo", "todos", "toda", "todas", "este", "esta",
@@ -299,7 +318,33 @@ def _same_word(a: str, b: str) -> bool:
     return long_.startswith(short) and len(long_) - len(short) <= 2
 
 
-async def _offer_product(db, user, what: str) -> Product | None:
+# Palabras de fecha y de promo que no dicen de qué producto se habla.
+_FILLER = {"hoy", "manana", "pasado", "semana", "fin", "dia", "dias", "mes", "quincena", "ahora", "nomas",
+           "solamente", "aprovecha", "descuento", "especial", "rebaja", "ultimos", "ultimas", "piezas",
+           "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo",
+           "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
+           "octubre", "noviembre", "diciembre"}
+
+
+def _short_name_product(rows, said: set[str]) -> Product | None:
+    """"cargador a $99" es el "Cargador marca" si es el único cargador: el dueño
+    nombra el producto corto. Solo si TODO lo que dijo del producto está en
+    ese nombre ("cargador samsung" no es el "Cargador iPhone") y empieza igual
+    ("samsung" solo no es la "Funda para Samsung"); con dos, ninguno."""
+    told = {w for w in said if not w.isdigit() and w not in _FILLER}
+    if not told:
+        return None
+    hits = []
+    for p in rows:
+        names = [w for w in re.findall(r"[a-zñ0-9]{3,}", (p.name or "").lower().translate(
+            str.maketrans("áéíóúü", "aeiouu"))) if w not in _STOP]
+        if names and any(_same_word(names[0], w) for w in told) and \
+                all(any(_same_word(w, n) for n in names) for w in told):
+            hits.append(p)
+    return hits[0] if len(hits) == 1 else None
+
+
+async def _offer_product(db, user, what: str, short: bool = True) -> Product | None:
     """El producto del catálogo del que habla la promo, solo si no hay duda:
     TODAS las palabras del nombre del catálogo deben estar en el texto (si no,
     "cargador para samsung" escogería "Funda para Samsung" y su "Antes $X").
@@ -314,7 +359,7 @@ async def _offer_product(db, user, what: str) -> Product | None:
         if need and all(any(_same_word(n, s) for s in said) for n in need):
             full.append((len(need), p))
     if not full:
-        return None
+        return _short_name_product(rows, said) if short else None
     full.sort(key=lambda t: t[0], reverse=True)
     if len(full) > 1 and full[1][0] == full[0][0]:
         return None

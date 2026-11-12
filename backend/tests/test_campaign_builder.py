@@ -660,6 +660,39 @@ class TestCartelDeOferta:
         finally:
             await _clean(user_id)
 
+    @pytest.mark.asyncio
+    async def test_nombre_corto_encuentra_el_unico_producto(self, ai):
+        """"cargador a $99" es el "Cargador marca" de CityCell (prueba real 12-nov)."""
+        user_id, _ = await _owner()
+        try:
+            async with AsyncSessionLocal() as db:
+                db.add(Product(advertiser_id=user_id, name="Cargador marca", price=Decimal(120)))
+                db.add(Product(advertiser_id=user_id, name="Funda para Samsung", price=Decimal(200)))
+                await db.commit()
+                user = await db.get(User, user_id)
+                for said in ("Promo: cargador a $99, solo hoy", "cargadores a 99 hasta el domingo 15",
+                             "Cargador marca a $99 mañana"):
+                    assert (await cb._offer_product(db, user, said)).name == "Cargador marca", said
+                # Lo que dice de más no está en ese nombre: no es ese producto.
+                assert await cb._offer_product(db, user, "cargador samsung a $99") is None
+                assert await cb._offer_product(db, user, "samsung a $99") is None
+                assert await cb._offer_product(db, user, "quiero sacar una promo a $99") is None
+                # La foto tomada solo se guarda con el nombre completo.
+                assert await cb._offer_product(db, user, "cargador a $99", short=False) is None
+        finally:
+            await _clean(user_id)
+
+    def test_telefono_del_cartel(self):
+        from types import SimpleNamespace as N
+        meta = {"meta_display_phone_number": "+52 1 953 172 4341", "whatsapp_number": "9539999999"}
+        assert cb._poster_contact(N(meta_connection_status="connected", phone="9530000000", **meta)) \
+            == "WhatsApp 953 172 4341"
+        # WhatsApp desconectado: el número de Meta ya no contesta; va el de su perfil.
+        assert cb._poster_contact(N(meta_connection_status="not_connected", phone="+529531112233", **meta)) \
+            == "Tel. 953 111 2233"
+        # El número personal de avisos (whatsapp_number) nunca sale en el cartel.
+        assert cb._poster_contact(N(meta_connection_status="not_connected", phone=None, **meta)) == ""
+
     def test_dia_de_envio_de_noche_es_manana(self):
         tz = timezone(timedelta(hours=-6))
         today, send = cb._send_day(datetime(2026, 11, 11, 22, 30, tzinfo=tz))  # miércoles noche

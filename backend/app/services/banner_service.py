@@ -942,7 +942,9 @@ _TRAILING_RE = re.compile(r"(?:\s+(?:a|en|por|de|x|baja|bajan|solo|desde|hasta))
 
 class OfferCopy:
     def __init__(self, product: str = "", price: str = "", old_price: str = "", when: str = "",
-                 price_note: str = "", sub: str = "", cta: str = "", business_name: str = ""):
+                 price_note: str = "", sub: str = "", cta: str = "", business_name: str = "",
+                 contact: str = ""):
+        self.contact = contact  # "WhatsApp 953 172 4341": lo pone el sistema, nunca la IA
         self.product = product
         self.price = price
         self.old_price = old_price
@@ -1275,12 +1277,12 @@ def _struck(draw: ImageDraw.ImageDraw, xy: tuple, text: str, font, fill, S: int)
 
 
 def _pill(img: Image.Image, center: tuple, text: str, size: int, max_w: int, fill, S: int,
-          anchor_left: bool = False) -> tuple:
+          anchor_left: bool = False, anchor_right: bool = False) -> tuple:
     """Cinta redondeada con texto (la fecha, o el nombre del negocio). Regresa su caja."""
     f, lines = _offer_fit(text, size, max_w - 60 * S, 1, 850, 44 * S)
     t = " ".join(lines) if f.getlength(" ".join(lines)) <= max_w - 60 * S else (lines[0] if lines else text)
     w, h = f.getlength(t) + 60 * S, f.size + 34 * S
-    x0 = center[0] if anchor_left else center[0] - w / 2
+    x0 = center[0] if anchor_left else center[0] - w if anchor_right else center[0] - w / 2
     y0 = center[1] - h / 2
     box = (x0, y0, x0 + w, y0 + h)
     _paste_shadow(img, box, int(h / 2), S // 2 or 1)
@@ -1291,8 +1293,15 @@ def _pill(img: Image.Image, center: tuple, text: str, size: int, max_w: int, fil
 
 
 def _header(img: Image.Image, offer: "OfferCopy", logo: bytes | None, c1: tuple, S: int, pad: int) -> None:
-    """Arriba a la izquierda: el logo en un círculo, o el nombre en una cinta blanca."""
+    """Arriba a la izquierda: el logo en un círculo, o el nombre en una cinta
+    blanca. Arriba a la derecha: el teléfono, para que el cartel sirva aunque
+    se reenvíe o se suba a estados sin el texto que lo acompaña."""
     W_ = img.width
+    name_w = W_ - 2 * pad
+    if offer.contact:
+        box = _pill(img, (W_ - pad, pad + 40 * S), offer.contact, 44 * S, W_ - 2 * pad - 200 * S,
+                    (255, 255, 255), S, anchor_right=True)
+        name_w = int(box[0] - pad - 20 * S)
     logo_img = _square(logo, 128 * S)
     if logo_img:
         ring = 140 * S
@@ -1303,8 +1312,17 @@ def _header(img: Image.Image, offer: "OfferCopy", logo: bytes | None, c1: tuple,
         ImageDraw.Draw(m).ellipse([0, 0, logo_img.width - 1, logo_img.height - 1], fill=255)
         img.paste(logo_img, (pad + 6 * S, pad + 6 * S), m)
     elif offer.business_name:
-        _pill(img, (pad, pad + 40 * S), offer.business_name.upper(), 44 * S, W_ - 2 * pad, (255, 255, 255), S,
-              anchor_left=True)
+        # Lo que quepa junto al teléfono ("REFACCIONARIA Y FERRETERÍA…" →
+        # "REFACCIONARIA Y"); si ni una palabra cabe, va solo el teléfono.
+        f = _offer_font(44 * S, 850)
+        words = offer.business_name.upper().split()
+        while words and f.getlength(" ".join(words)) > name_w - 60 * S:
+            words.pop()
+        if words and words[-1] in {"Y", "DE", "DEL", "LA", "EL", "LOS", "LAS", "E"}:
+            words.pop()
+        if words:
+            _pill(img, (pad, pad + 40 * S), " ".join(words), 44 * S, name_w, (255, 255, 255), S,
+                  anchor_left=True)
 
 
 def _note_fits_seal(note: str, R: float, S: int) -> bool:

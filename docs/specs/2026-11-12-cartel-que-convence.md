@@ -12,7 +12,8 @@ los negocios) y la mitad del texto no se lee a 300 px, que es como se ve en What
 - ¿Cómo se consigue la imagen del producto? → Pedírsela al dueño (botón de cámara) y guardarla en
   el Catálogo para la próxima. Nada de imágenes hechas con IA.
 - ¿Qué va en el cartel? → Solo lo esencial: producto, precio grande, precio de antes, fecha y
-  logo o nombre. WhatsApp, liga y "a domicilio" se quitan (ya van en el texto del mensaje).
+  logo o nombre. Liga y "a domicilio" se quitan (ya van en el texto del mensaje). El teléfono
+  sí va (cambio del 12-nov tras ver el cartel real).
 
 ## Casos (cada uno lleva su prueba)
 1. Si el producto de la promo está en el Catálogo con foto, entonces el primer botón es «Foto de
@@ -34,14 +35,27 @@ los negocios) y la mitad del texto no se lee a 300 px, que es como se ve en What
    — prueba: `test_caso7_sin_foto_fondo_liso_sin_rayas` ✅
 8. En el cartel no va ningún texto más chico que 44 px (en la imagen de 1080), para que se lea a
    300 px. El precio de antes tachado mide al menos 48 px. — prueba: `test_caso8_ningun_texto_mas_chico_que_44_px` ✅ (si "Antes $1,500" no cabe en el sello, sale solo "$1,500" tachado)
-9. El cartel no lleva WhatsApp, liga, "a domicilio" ni barra de "Escríbenos": eso va en el texto
-   que acompaña la imagen. — prueba: `test_caso9_sin_contacto_ni_barra_de_abajo` ✅
+9. El cartel no lleva liga, "a domicilio" ni barra de "Escríbenos": eso va en el texto que
+   acompaña la imagen. — prueba: `test_caso9_sin_domicilio_ni_barra_de_abajo` ✅
 10. Si el negocio tiene logo, entonces sale arriba en un círculo; si no, el nombre del negocio en
     letras chicas pero legibles (44 px). — prueba: `test_caso10_logo_en_circulo_o_nombre` ✅
 11. Si la foto que sube el dueño está oscura o es vertical, entonces se recorta al centro y no se
     deforma; si no se puede abrir, el Copiloto pide otra o sale «Sin foto». — prueba: `test_caso11_foto_vertical_se_recorta_y_una_rota_no_tumba_el_cartel`, `test_caso11_foto_de_otro_negocio_no_se_abre` ✅
 12. Siguen las reglas de hoy: el precio y el "Antes" solo salen del texto del dueño o del
     Catálogo; la fecha concreta ("Solo hoy · jueves 12"); `$120`, no `$120.00`. — prueba: las de `test_banner_quality.py` y `test_campaign_builder.py` siguen verdes ✅
+
+13. (Agregado 12-nov tras la prueba real: el dueño pidió el teléfono.) Arriba a la derecha va el
+    teléfono en una cinta blanca: «WhatsApp 953 …» si el negocio tiene su número de Meta
+    conectado; si no, «Tel. …» del teléfono de su perfil. Nunca el número personal de avisos
+    (`whatsapp_number`), igual que el sitio público. Si el nombre del negocio no cabe al lado, se recorta o sale solo el
+    teléfono. No hay campo de dirección en el perfil, así que la dirección no va.
+    — prueba: `test_caso13_telefono_arriba_a_la_derecha`, `test_caso13_nombre_largo_no_se_encima_con_el_telefono`, `test_telefono_del_cartel` ✅
+14. (Agregado 12-nov tras la prueba real.) Si el dueño nombra el producto corto ("cargador a $99")
+    y en el Catálogo hay un solo producto que empieza así ("Cargador marca"), se usa ese (su foto y
+    su "Antes"). Si dice algo que no está en ese nombre ("cargador samsung") o hay dos, ninguno.
+    La foto tomada solo se guarda en el Catálogo con el nombre completo (podría ser de otro
+    cargador).
+    — prueba: `test_nombre_corto_encuentra_el_unico_producto` ✅
 
 ## Fuera de alcance
 - Imágenes generadas con IA o quitar el fondo de la foto.

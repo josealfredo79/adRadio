@@ -265,12 +265,30 @@ def test_caso8_ningun_texto_mas_chico_que_44_px(monkeypatch, photo):
     assert min(sizes) >= 44 * 2  # se dibuja al doble y se reduce
 
 
-def test_caso9_sin_contacto_ni_barra_de_abajo():
-    o = bs.OfferCopy(product="Micas", price="$60", business_name="CityCell")
-    assert not hasattr(o, "contact") and not hasattr(o, "delivery")
+def test_caso9_sin_domicilio_ni_barra_de_abajo():
+    o = bs.OfferCopy(product="Micas", price="$60", business_name="CityCell", contact="WhatsApp 953 172 4341")
+    assert not hasattr(o, "delivery")
     png = bs.offer_banner_png(o, "rojo")
     # Ya no hay franja blanca abajo con "Escríbenos" y el WhatsApp.
     assert sum(_px(png, (540, 1060))) < 600
+
+
+def test_caso13_telefono_arriba_a_la_derecha():
+    sin = bs.offer_banner_png(OFERTA, "rojo")
+    o = bs.OfferCopy(product="Micas", price="$60", business_name="CityCell", contact="WhatsApp 953 172 4341")
+    con = bs.offer_banner_png(o, "rojo")
+    assert _px(con, (1080 - 64 - 20, 64 + 40)) == (255, 255, 255)  # la cinta blanca del teléfono
+    assert _px(sin, (1080 - 64 - 20, 64 + 40)) != (255, 255, 255)
+    assert _px(con, (64 + 20, 64 + 40)) == (255, 255, 255)  # el nombre sigue a la izquierda
+
+
+def test_caso13_nombre_largo_no_se_encima_con_el_telefono():
+    o = bs.OfferCopy(product="Micas", price="$60", business_name="Refaccionaria y Ferretería Hermanos López",
+                     contact="WhatsApp 953 172 4341")
+    con = Image.open(io.BytesIO(bs.offer_banner_png(o, "rojo"))).convert("RGB")
+    # Entre el nombre y el teléfono queda fondo (no una cinta blanca corrida).
+    row = [con.getpixel((x, 64 + 40)) for x in range(64, 1080 - 64)]
+    assert any(sum(p) < 600 for p in row)
 
 
 def test_caso10_logo_en_circulo_o_nombre():
