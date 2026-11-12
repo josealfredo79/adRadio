@@ -84,13 +84,30 @@ def guess(what: str) -> dict:
     return out
 
 
+def _what_with_price(what: str, last: str) -> str:
+    """El cartel solo dibuja precios que vienen en el texto: si la IA resumió
+    la promo y se le cayó el precio o la fecha del dueño ("Cargador marca solo
+    hoy" de "Promo: Cargador marca a $99, solo hoy", Gemini 12-nov), se usa lo
+    que él escribió tal cual."""
+    from app.services.banner_service import _WHEN_RE, _prices_in
+
+    if not what or not last:
+        return what or last
+    lost_price = set(_prices_in(last)) - set(_prices_in(what))
+    lost_when = bool(_WHEN_RE.search(last)) and not _WHEN_RE.search(what)
+    # Solo si su mensaje habla del mismo producto: "sí, para mañana" o "mejor
+    # a 120" contestan otra cosa y la promo se quedaría sin producto.
+    same = _words(what) & _words(last)
+    return last.strip() if (lost_price or lost_when) and same else what
+
+
 def keep_said(args: dict, owner_texts: list[str]) -> dict:
     """Del Copiloto solo se queda lo que el dueño dijo: con la IA real (Gemini)
     "haz una campaña de 2x1" llegaba con format="text" y se saltaba la
     pregunta "¿Cómo se lo mando?". Igual que keep_asked_discount."""
     said = " ".join(owner_texts)
     g = guess(said)
-    out = {"what": args.get("what") or said}
+    out = {"what": _what_with_price(args.get("what") or "", owner_texts[-1] if owner_texts else "") or said}
     for key in ("format", "style", "audience"):
         if args.get(key) and g.get(key) == args[key]:
             out[key] = args[key]

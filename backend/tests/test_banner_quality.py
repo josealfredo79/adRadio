@@ -325,3 +325,43 @@ def test_otra_version_cambia_colores_y_lado_del_sello():
     # El sello (blanco por fuera) cae de un lado o del otro.
     assert _px(left, (64 + 8, 700)) != _px(right, (64 + 8, 700)) or _px(left, (1080 - 64 - 8, 700)) != _px(
         right, (1080 - 64 - 8, 700))
+
+
+def test_precio_sin_signo_de_pesos():
+    """12-nov: "Cargador marca a 99, solo hoy" salió sin precio en el cartel."""
+    cases = {
+        "Cargador marca a 99, solo hoy": ["$99"], "cargador marca a 99 solo hoy": ["$99"],
+        "micas a 1,200 hasta el domingo": ["$1,200"], "fundas 99 pesos": ["$99"], "cargador a 99": ["$99"],
+        "cargador de 20 W a 150": ["$150"], "memoria de 64 GB en 199": ["$199"], "iPhone 13 en 2500": ["$2,500"],
+        "Promo: mica a 60. Solo hoy": ["$60"], "cargador a $99": ["$99"],
+    }
+    for text, want in cases.items():
+        assert bs._prices_in(text) == want, text
+
+
+def test_numeros_que_no_son_precio():
+    """revisor-dinero 12-nov: un número suelto casi siempre es otra cosa."""
+    for text in ("iPhone 13 a 12 msi", "Cambio de pantalla en 40 minutos", "Estamos a 15 min del centro",
+                 "Fundas en 10 colores", "Pagos a 10 semanas", "Crédito a 12 quincenas", "Horario de 10 a 7",
+                 "Abrimos de 10 a 20 hrs", "Liquidación en 2025", "Galaxy A54 en 128 y 256", "Celulares de 2000 a 5000",
+                 "a 3 meses sin intereses", "a las 10", "el 15 de noviembre", "llámame al 953 172 4341",
+                 "2x1 en micas", "20% en fundas", "3 por 50 tacos"):
+        assert bs._prices_in(text) == [], text
+    for text in ("iPhone 15 en 256, solo hoy", "Galaxy A54 en 128"):  # la memoria
+        assert bs._prices_in(text) == [], text
+    # Miles enteros, nunca cortados ("$15" de "15,999").
+    assert bs._prices_in("Galaxy S23 Ultra a 15,999 antes 18,999") == ["$15,999"]
+    o = bs._offer_from_text("Galaxy S23 Ultra a 15,999 antes 18,999", "X")
+    assert (o.price, o.old_price) == ("$15,999", "")  # "antes 18,999" sin "a": no se adivina
+    assert bs._prices_in("Galaxy S23 Ultra a 15,999, antes 18,999") == ["$15,999"]
+    assert bs._prices_in("iPhone 14 a 12,500 con funda de regalo") == []
+    assert bs._prices_in("Moto Edge a 10.999 solo hoy") == ["$10,999"]
+    # Con "$" gana lo que el dueño marcó como precio.
+    assert bs._prices_in("Galaxy A54 en 128, a $4,500") == ["$4,500"]
+    # Sin "antes" en el texto, dos números no son un "Antes $X" (memoria, rangos).
+    for text in ("Galaxy A06 de 64 a 2,499", "Redmi 13C de 128 a 2799 solo hoy", "Cargador a $99 y cable a $50"):
+        assert bs._offer_from_text(text, "X").old_price == "", text
+    o = bs._offer_from_text("Mica a 99 pesos antes 150 pesos", "X")
+    assert (o.price, o.old_price) == ("$99", "$150")
+    o = bs._offer_from_text("cargador marca de $120 a $99", "X")
+    assert (o.price, o.old_price) == ("$99", "$120")

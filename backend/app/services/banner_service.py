@@ -1087,8 +1087,39 @@ def _said(value: str, text: str, numbers_only: bool = False) -> bool:
     return all(n in low for n in nums) and all(w in low for w in words)
 
 
+# Precio sin "$" ("Cargador marca a 99, solo hoy": Gemini y los dueños lo
+# escriben así, 12-nov). Solo en casos claros, porque un número suelto suele
+# ser otra cosa ("a 12 msi", "en 40 minutos", "de 64 a 2,499" = memoria):
+#   · "99 pesos";
+#   · "a 99" / "en 99" / "cuesta 99" / "vale 99" que cierra la frase (fin,
+#     coma, punto, o sigue la fecha: "solo hoy", "hasta el sábado", "mañana").
+# El número entero o nada: "a 15,999 antes…" no puede quedarse en "15".
+_NUM = r"(\d{1,3}(?:[.,]\d{3})+(?:\.\d{1,2})?|\d{2,}(?:\.\d{1,2})?)(?![.,]?\d)"
+_BARE_PRICE_RE = re.compile(
+    rf"\b{_NUM}\s*(?:pesos|varos|mxn)\b"
+    rf"|\b(?:a|en|cuesta|vale)\s+{_NUM}(?=\s*(?:$|[,.;!)]|(?:solo|sólo|hasta|hoy|mañana|nom[aá]s|antes|"
+    r"este|esta|todo|toda|el\s+(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo))\b))",
+    re.IGNORECASE)
+
+
+_MEMORY_SIZES = {"16", "32", "64", "128", "256", "512", "1024"}
+
+
 def _prices_in(text: str) -> list[str]:
-    return [_clean_price(m) for m in _PRICE_RE.findall(text or "")]
+    text = text or ""
+    found = [_clean_price(m) for m in _PRICE_RE.findall(text)]
+    if found:  # con "$" el dueño ya dijo cuál es el precio; un número suelto es otra cosa
+        return found
+    plain = text
+    for m in _BARE_PRICE_RE.finditer(plain):
+        num = m.group(1) or m.group(2)
+        # "de 2000 a 5000" es un rango; "en 2025" es un año.
+        # "de 2000 a 5000" es un rango; "en 2025" un año; "en 256" la memoria.
+        if (re.search(r"\bde\s+[\d.,]+\s*$", plain[:m.start()], re.IGNORECASE) or re.fullmatch(r"20[1-4]\d", num)
+                or num in _MEMORY_SIZES):
+            continue
+        found.append(_clean_price("$" + num))
+    return found
 
 
 _DAY_WORDS = r"(?:pasado\s+mañana|mañana|hoy|lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo|fin\s+de\s+semana)"
@@ -1115,6 +1146,9 @@ def _strip_when(product: str, when: str) -> str:
     return " ".join(words).strip(" .,:;-!¡")
 
 
+_SAYS_BEFORE = re.compile(r"\b(?:antes|era|eran|normal|regular)\b|\bde\s*\$", re.IGNORECASE)
+
+
 def _offer_from_text(promo: str, business_name: str) -> OfferCopy:
     """Sin IA (la cadena gratis no contestó): se separa a mano el precio ($…,
     el último es el de ahora), la fecha ("solo mañana") y la oferta ("2x1")."""
@@ -1126,13 +1160,22 @@ def _offer_from_text(promo: str, business_name: str) -> OfferCopy:
     if "por" not in note:
         note = re.sub(r"\s+", "", note)  # "2 x 1" → "2x1"
     rest = _PRICE_RE.sub(" ", promo)
+    # "a 99" / "99 pesos": el número sale del nombre ("a" lo quita _strip_when).
+    rest = _BARE_PRICE_RE.sub(" ", rest)
     if deal:
         rest = rest.replace(deal.group(1), " ")
-    product = _strip_when(rest, when)
+    # "Antes $X" solo si el texto lo dice ("antes", "era", "de $150 a $99");
+    # dos números sueltos pueden ser otra cosa (un rango, dos productos).
+    price, old = (prices[-1] if prices else ""), ""
+    if len(prices) > 1 and _SAYS_BEFORE.search(promo):
+        old = prices[0]
+        if _amount(old) < _amount(price):
+            price, old = old, price
+    product = _TRAILING_RE.sub("", _strip_when(rest, when)).strip(" ,.:")
+    product = re.sub(r"^(?:promo(?:ci[oó]n)?|oferta)\s*(?:de(?:l)?\s+)?:?\s*", "", product, flags=re.IGNORECASE)
     product = product[:1].upper() + product[1:]
     return OfferCopy(
-        product=product[:40] or promo[:40], price=prices[-1] if prices else "",
-        old_price=prices[0] if len(prices) > 1 else "", when=when[:1].upper() + when[1:],
+        product=product[:40] or promo[:40], price=price, old_price=old, when=when[:1].upper() + when[1:],
         price_note=note, cta="Escríbenos hoy", business_name=business_name,
     )
 
@@ -1179,9 +1222,15 @@ Responde ÚNICAMENTE con el JSON de la promoción de arriba (las 7 claves, sub y
     in_text = set(_prices_in(promo_description))
     # Un precio que no está en el texto del dueño no se dibuja.
     price = _clean_price(field("price", 20))
-    price = price if price in in_text else fallback.price
+    dollars = {_clean_price(m) for m in _PRICE_RE.findall(promo_description)}
+    # Si la IA no vio precio, solo se rellena con uno escrito con "$" (un
+    # número suelto es dudoso; ver _BARE_PRICE_RE).
+    price = price if price in in_text else (fallback.price if fallback.price in dollars else "")
     old = _clean_price(field("old_price", 20))
     old = old if old in in_text and old != price else ""
+    # Un "Antes" que no vino con "$" solo si el texto dice "antes/era/normal".
+    if old and old not in dollars and not _SAYS_BEFORE.search(promo_description):
+        old = ""
     if old and price and _amount(old) < _amount(price):  # vinieron al revés
         price, old = old, price
     product = _TRAILING_RE.sub("", field("product", 40)) or fallback.product

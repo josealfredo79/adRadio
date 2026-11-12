@@ -388,6 +388,19 @@ def test_del_copiloto_solo_se_queda_lo_que_dijo_el_dueno():
     assert cb.keep_said({"what": "fundas", "audience": "one", "contact": "Lupe"}, ["mándale a Lupe una promo de fundas"])["contact"] == "Lupe"
 
 
+def test_si_la_ia_pierde_el_precio_se_usa_lo_que_escribio_el_dueno():
+    """Gemini 12-nov: el cartel salió sin precio porque el resumen no lo traía."""
+    owner = "Promo: Cargador marca a $99, solo hoy"
+    assert cb.keep_said({"what": "Cargador marca solo hoy"}, [owner])["what"] == owner
+    assert cb.keep_said({"what": "Cargador marca a $99"}, [owner])["what"] == owner  # perdió "solo hoy"
+    # Si el resumen trae todo, se queda el resumen (el nombre de la campaña sale de ahí).
+    assert cb.keep_said({"what": "Cargador marca a $99 solo hoy"}, [owner])["what"] == "Cargador marca a $99 solo hoy"
+    assert cb.keep_said({"what": "2x1 en micas"}, ["haz una campaña de 2x1 en micas"])["what"] == "2x1 en micas"
+    # Una respuesta corta no reemplaza la promo (se quedaría sin producto).
+    assert cb.keep_said({"what": "Cargador marca a $99"}, [owner, "sí, para mañana"])["what"] == "Cargador marca a $99"
+    assert cb.keep_said({"what": "Cargador marca a $99"}, [owner, "iPhone 13 a 12 msi"])["what"] == "Cargador marca a $99"
+
+
 class TestLoQueVioRevisorDinero:
     @pytest.mark.asyncio
     async def test_mandar_dos_veces_sale_una_sola_vez(self):

@@ -72,6 +72,15 @@ los negocios) y la mitad del texto no se lee a 300 px, que es como se ve en What
     otro lado. El texto de abajo también cambia, como antes.
     — prueba: `test_otra_version_cambia_colores_y_lado_del_sello`, `test_otra_version_del_cartel_es_otra_imagen` ✅
 
+18. (Agregado 12-nov: el cartel salió sin precio con "Cargador marca a 99, solo hoy".) Un precio
+    sin "$" se reconoce solo en casos claros: "99 pesos", o "a/en/cuesta 99" que cierra la frase
+    (fin, coma, punto o sigue la fecha: "solo hoy", "hasta el sábado"). Nunca "a 12 msi", "en 40
+    minutos", "en 10 colores", "de 64 a 2,499" (memoria), rangos ni años (revisor-dinero). Sin la
+    palabra "antes" en el texto no se pone "Antes $X". Si el resumen del Copiloto pierde el precio
+    o la fecha que escribió el dueño en un mensaje sobre el mismo producto, se usa su texto.
+    — prueba: `test_precio_sin_signo_de_pesos`, `test_numeros_que_no_son_precio`,
+    `test_si_la_ia_pierde_el_precio_se_usa_lo_que_escribio_el_dueno` ✅
+
 ## Fuera de alcance
 - Imágenes generadas con IA o quitar el fondo de la foto.
 - Crear productos en el Catálogo desde la promo (caso 4).
