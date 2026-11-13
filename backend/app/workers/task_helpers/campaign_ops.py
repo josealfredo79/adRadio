@@ -317,7 +317,10 @@ async def _offer_or_queue(
     # charge=False (see inbound_pipeline.py) so it isn't billed twice. The
     # caller's loop only reaches here with messages_remaining >= 1 (its gate),
     # so this never goes negative.
-    advertiser.messages_remaining -= 1
+    # Resta en la base, no "valor leído − 1": esta sesión vive toda la corrida y
+    # ahora guarda contacto por contacto; con el valor viejo pisaría los
+    # descuentos que las tareas de envío hacen mientras tanto.
+    await _charge_one_message(db, advertiser)
 
     if _cap is not None:
         db.add(RecipientSend(advertiser_id=advertiser.id, contact_id=contact.id))
@@ -470,6 +473,38 @@ async def _paused_now(db, campaign) -> bool:
     return status == "paused"
 
 
+async def _charge_one_message(db, advertiser) -> None:
+    """Descuenta 1 mensaje en la base (messages_remaining - 1), no escribiendo
+    el valor que esta sesión leyó al empezar la corrida: así no pisa los
+    descuentos que las tareas de envío hacen mientras tanto."""
+    from sqlalchemy import inspect as sa_inspect
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    from app.models.user import User
+
+    if sa_inspect(advertiser, raiseerr=False) is None:  # objeto de prueba, no de la base
+        advertiser.messages_remaining -= 1
+        return
+    await db.execute(
+        sa_update(User).where(User.id == advertiser.id)
+        .values(messages_remaining=User.messages_remaining - 1)
+        # Sin esto SQLAlchemy ya resta 1 al objeto y set_committed_value restaba otro:
+        # el bucle creía que el saldo se acababa a la mitad de la lista.
+        .execution_options(synchronize_session=False)
+    )
+    set_committed_value(advertiser, "messages_remaining", advertiser.messages_remaining - 1)
+
+
+async def _commit_then_send(db, task, **opts) -> None:
+    """Guarda a este contacto y luego encola su envío. Antes todo se guardaba al
+    final de la corrida: si algo tronaba a media lista (un corte de la base), la
+    tarea se reintentaba y a quien ya le había salido la plantilla (que Meta
+    cobra) o la promo se le mandaba otra vez, y la tarea de envío podía correr
+    sin encontrar su Message (salía sin revisar saldo ni pausa)."""
+    await db.commit()
+    task.apply_async(**opts)
+
+
 async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay):
     """Send banner-style campaign messages."""
     from app.models.message import Message
@@ -520,6 +555,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             and await _push_campaign(db, campaign, advertiser, contact, ab, ring=contact.id not in rang)
         ):
             pushed_count += 1
+            await db.commit()
             continue
         if web_only:
             # "Solo por web": quien no tiene notificaciones no recibe nada por
@@ -527,6 +563,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             # en su chat sin sonar. No es un fallo: contarlo en skipped_count
             # pausaba sola la campaña.
             await _push_campaign(db, campaign, advertiser, contact, ab, ring=False)
+            await db.commit()
             continue
         if advertiser.messages_remaining - charged <= 0:
             if push_contacts:
@@ -602,6 +639,7 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
             ))
             contact.last_campaign_sent_at = datetime.now(timezone.utc)
             invited_count += 1
+            await db.commit()
             continue
 
         # "open" — window already open, send now
@@ -617,12 +655,13 @@ async def send_banner_messages(db, campaign, contacts, advertiser, ab, ban_delay
         db.add(msg)
         await db.flush()
 
-        send_whatsapp_image_message.apply_async(
+        contact.last_campaign_sent_at = datetime.now(timezone.utc)
+        await _commit_then_send(
+            db, send_whatsapp_image_message,
             args=[str(msg.id), contact.phone, banner_url, body_text],
             countdown=ban_delay,
             queue="whatsapp",
         )
-        contact.last_campaign_sent_at = datetime.now(timezone.utc)
         charged += 1
         ban_delay += anti_ban_delay()
         sent_count += 1
@@ -679,10 +718,12 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
             and await _push_campaign(db, campaign, advertiser, contact, ab, ring=contact.id not in rang)
         ):
             pushed_count += 1
+            await db.commit()
             continue
         if web_only:
             # "solo por web": ver send_banner_messages
             await _push_campaign(db, campaign, advertiser, contact, ab, ring=False)
+            await db.commit()
             continue
         if advertiser.messages_remaining - charged <= 0:
             if push_contacts:
@@ -729,6 +770,7 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
             ))
             contact.last_campaign_sent_at = datetime.now(timezone.utc)
             invited_count += 1
+            await db.commit()
             continue
 
         # "open"
@@ -739,14 +781,15 @@ async def send_radio_messages(db, campaign, contacts, advertiser, ab, ban_delay)
         )
         db.add(msg)
         await db.flush()
-        send_whatsapp_voice_note.apply_async(
+        contact.last_campaign_sent_at = datetime.now(timezone.utc)
+        await _commit_then_send(
+            db, send_whatsapp_voice_note,
             args=[str(msg.id), contact.phone, audio_url, radio_script],
             countdown=ban_delay,
             queue="whatsapp",
         )
         sent_count += 1
 
-        contact.last_campaign_sent_at = datetime.now(timezone.utc)
         charged += 1
         ban_delay += anti_ban_delay()
 
@@ -819,6 +862,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             and await _push_campaign(db, campaign, advertiser, contact, ab, ring=contact.id not in rang)
         ):
             pushed_count += 1
+            await db.commit()
             continue
         if web_only:
             # "Solo por web": quien no tiene notificaciones no recibe nada por
@@ -826,6 +870,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             # en su chat sin sonar. No es un fallo: contarlo en skipped_count
             # pausaba sola la campaña.
             await _push_campaign(db, campaign, advertiser, contact, ab, ring=False)
+            await db.commit()
             continue
         if advertiser.messages_remaining - charged <= 0:
             if push_contacts:
@@ -925,6 +970,7 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             ))
             contact.last_campaign_sent_at = datetime.now(timezone.utc)
             invited_count += 1
+            await db.commit()
             continue
 
         if audio_url:
@@ -940,7 +986,9 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             db.add(msg)
             await db.flush()
 
-            send_whatsapp_voice_note.apply_async(
+            contact.last_campaign_sent_at = datetime.now(timezone.utc)
+            await _commit_then_send(
+                db, send_whatsapp_voice_note,
                 args=[str(msg.id), contact.phone, audio_url, text_body],
                 countdown=ban_delay,
                 queue="whatsapp",
@@ -959,7 +1007,9 @@ async def send_regular_messages(db, campaign, contacts, advertiser, ab, messages
             db.add(msg)
             await db.flush()
 
-            send_whatsapp_message.apply_async(
+            contact.last_campaign_sent_at = datetime.now(timezone.utc)
+            await _commit_then_send(
+                db, send_whatsapp_message,
                 args=[str(msg.id), contact.phone, text_body],
                 countdown=ban_delay,
                 queue="whatsapp",
@@ -1127,6 +1177,7 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
             ))
             contact.last_campaign_sent_at = datetime.now(timezone.utc)
             invited_count += 1
+            await db.commit()
             continue
 
         # "open"
@@ -1141,12 +1192,13 @@ async def send_parrilla_messages(db, advertiser, contacts, audio_url, script, da
         db.add(msg)
         await db.flush()
 
-        send_whatsapp_voice_note.apply_async(
+        contact.last_campaign_sent_at = datetime.now(timezone.utc)
+        await _commit_then_send(
+            db, send_whatsapp_voice_note,
             args=[str(msg.id), contact.phone, audio_url, script[:200]],
             countdown=ban_delay,
             queue="whatsapp",
         )
-        contact.last_campaign_sent_at = datetime.now(timezone.utc)
         charged += 1
         ban_delay += anti_ban_delay()
         sent += 1
